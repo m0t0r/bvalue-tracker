@@ -1,0 +1,52 @@
+<html>
+  <title>Catalogo_Sismico</title>
+   <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://code.jquery.com/jquery-1.12.3.js"></script>
+    <script type="text/javascript" language="javascript" src="js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/1.2.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.flash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/2.5.0/jszip.min.js"></script>
+    <script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/pdfmake.min.js"></script>
+    <script src="https://cdn.rawgit.com/bpampuch/pdfmake/0.1.18/build/vfs_fonts.js"></script>
+    <script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/1.2.2/js/buttons.print.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="../Experta_RNAC/css/dataTables.css">
+    <link href="https://cdn.datatables.net/buttons/1.2.2/css/buttons.dataTables.min.css" type="text/css" rel="stylesheet"></script>
+    <script src="https://cdn.datatables.net/1.10.16/js/dataTables.bootstrap4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0/css/bootstrap.css"></script>
+    <script src="https://cdn.datatables.net/1.10.16/css/dataTables.bootstrap4.min.css"></script>
+    <link rel="stylesheet" type="text/css" href="css/jquery.datetimepicker.css"/>
+    <script>
+    $(document).ready(function() {
+        $('#example').DataTable( {
+            dom: 'Bfrtip',
+            buttons: [
+                'copy', 'csv', 'excel', 'print'
+            ]
+        } );
+    } );
+    </script>
+
+
+     <script>
+
+        $(document).ready(function() {
+            $('#example').DataTable( {
+                paging: false
+                dom: 'Bfrtip',
+                buttons: [
+               {
+                extend: 'excelHtml5',
+                exportOptions: {
+                     columns: [ 0,1,2,3,4,5 ]
+                }
+            }
+        ]
+    } );
+   } );
+   </script>
+   </head> 
+
+  <br><br><table border=1 cellspacing=0 cellpadding=0 width="500" align="center" bgcolor="white" ><tr><td bgcolor="#8ca448" colspan=2><B><font color="white"> <font size=2 face=verdana> Total de registros:</font> </B></FONT></td><td colspan=2>0</td></tr><tr><td bgcolor="#8ca448"  colspan=2><B><font color="white"> <font size=2 face=verdana> Graficar:</font> </B></FONT><td  colspan=2><A HREF=mapa_sismicidad_experta.php?total=0&id=499>Ver Mapa Sismicidad</A><br></td></tr><tr><td bgcolor="#8ca448"  colspan=2><B><font color="white"> <font size=2 face=verdana> Generar KML:</font> </B></FONT><td  colspan=2><A HREF=generar_kml.php?id=499>Generar KML</A><br></td></tr><tr><td bgcolor="#8ca448"  colspan=2><B><font color="white"> <font size=2 face=verdana> Generar Excel:</font> </B></FONT><td  colspan=2><A HREF=descargar_exel_experta.php?longitudStart=-77.4&lat=&longitudEnd=-76.1&latitudStart=4.1&latitudEnd=5.6&magnitudStart=0&magnitudEnd=9&depthStart=0&depthEnd=700&rmsStart=0&rmsEnd=10&inicial=2026-10-08&final1=2026-18-09&contipo=cuadrante&longcentral=&latcentral=&radio=&departamento=&municipio=&gapinicio=0&gapfinal=360&num_registros=0&eprof=0&eprofm=999&elat=0&elatm=999&elong=0&elongm=999&id=499>Generar Excel</A></td></tr><tr><td bgcolor="#8ca448"  colspan=2><B><font color="white"> <font size=2 face=verdana> Tipo de consulta:</font> </B></FONT><td  colspan=2> <B>cuadrante</B></td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Departamento:</font> </B></FONT></td><td  colspan=1></td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Municipio:</font> </B></FONT><td  colspan=1></td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Fecha inicial:</font> </B></FONT></td><td  colspan=1>2026-10-08</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Fecha final:</font> </B></FONT><td  colspan=1>2026-18-09</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Longitud mínima</font> </B></FONT></td><td  colspan=1>-77.4 °</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Longitud máxima:</font> </B></FONT><td  colspan=1>-76.1 °</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Latitud mínima:</font> </B></FONT></td><td  colspan=1>4.1 °</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Latitud máxima:</font> </B></FONT><td  colspan=1>5.6 °</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Magnitud miníma:</font> </B></FONT></td><td  colspan=1>0</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Magnitud máxima:</font> </B></FONT><td  colspan=1>9</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Prof. min.:</font> </B></FONT></td><td  colspan=1>0</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Prof. máx.:</font> </B></FONT><td  colspan=1>700</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> RMS min.:</font> </B></FONT></td><td  colspan=1>0</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> RMS máx.o:</font> </B></FONT><td  colspan=1>10</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Gap min.:</font> </B></FONT></td><td  colspan=1>0</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Gap máx.:</font> </B></FONT><td  colspan=1>360</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Error prof. min.:</font> </B></FONT></td><td  colspan=1>0</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Error prof. máx.:</font> </B></FONT><td  colspan=1>999</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Error long. min.:</font> </B></FONT></td><td  colspan=1>0</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Error long. máx.:</font> </B></FONT><td  colspan=1>999</td></tr><tr><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Error lat. min.:</font> </B></FONT></td><td  colspan=1>0</td><td bgcolor="#EAE9E9"  colspan=1><B><font color="black"> <font size=2 face=verdana> Error lati. máx.:</font> </B></FONT><td  colspan=1>999</td></tr></table><br><br><table id="example" class="display" cellspacing="0" width="100%"><thead><tr><th>Fecha-Hora <br> (UTC)</th><th>Lat<br>(°)</th><th>Long<br>(°)</th><th>Prof<br>(Km)</th><th>Mag.</th><th>Tipo <br>Mag.</th><th>Fases</th><th>Rms<br>(Seg)</th><th>Gap<br>(°)</th><th>Error Lat<br>(Km)</th><th>Error Long<br>(Km)</th><th>Error Prof<br>(Km)</th><th>Region</th><th>QuakeML</th><th>Fases</th><th>Mapa</th><th>Estado</th></tr></thead><tfoot><tr><th>Fecha-Hora<br> (UTC)</th><th>Latitud<br>(°)</th><th>Longitud<br>(°)</th><th>Prof<br>(Km)</th><th>Mag.</th><th>Tipo <br>Mag.</th><th>Fases</th><th>Rms<br>(Seg)</th><th>Gap<br>(°)</th><th>Error Lat<br>(Km)</th><th>Error Long<br>(Km)</th><th>Error Prof<br>(Km)</th><th>Region</th><th>QuakeML</th><th>Fases</th><th>Mapa</th><th>Estado</th></tr></tfoot><tbody></tbody></table>  </body>
+</html>
