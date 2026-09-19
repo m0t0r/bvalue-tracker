@@ -573,7 +573,7 @@ colour, motion). Keep to them:
   vanish with it. The comparison was tried inside the b card
   first (as rows on its b scale): the card grew to ~1,400 px, the groups landed far below the
   fold and the chart beside it was left mostly empty, so it has its own card. Shallow is the
-  page's blue and deep the neutral grey (`--chart-1`, `--chart-3`) everywhere; orange stays the
+  page's blue and deep the teal (`--chart-1`, `--chart-4`) everywhere; orange stays the
   mainshock's. "Grupo", never "cúmulo" or "enjambre". The 7-day counts are counts: nothing in
   that card may read as a forecast.
 - **What the page is narrowed by is said once, in two places** (`src/components/filter-scope.tsx`).
@@ -638,7 +638,44 @@ colour, motion). Keep to them:
   theme and language change.
 - Map colours stay as hex constants because MapLibre cannot parse the `oklch`
   tokens. Dots carry an outline that contrasts with the basemap, so neither end of
-  the depth ramp disappears.
+  the depth ramp disappears. `--chart-2` is the one token in `index.css` written as hex
+  for the same reason — `event-map.tsx` reads it through `getComputedStyle` for the
+  mainshock ring. Everything else in that file is `oklch`; keep it that way.
+- **The two clusters must differ in lightness, not only in hue** (colour review,
+  2026-09-19). Shallow blue and deep grey were both mid-lightness — `oklch(0.575)`
+  against `oklch(0.556)`, a measured 1.07:1 — and the one place they touch is the
+  stacked "eventos por día" bars, where the boundary was invisible in light mode.
+  The deep cluster moved off the recessive grey onto its own `--chart-4`, a teal
+  (`oklch(0.4 0.068 195)` light, `oklch(0.85 0.085 195)` dark) set **60° from the
+  blue in hue and 0.175 / 0.228 away in lightness**. Both halves are load-bearing:
+  a teal at the blue's own lightness is a different colour to most readers and the
+  *same* colour to a tritanope, because tritanopia takes the blue–teal difference
+  away and leaves nothing behind. Lightness is what survives every kind of colour
+  blindness, so any hue chosen here needs a lightness gap as well.
+  `--chart-3` stays the recessive neutral and is now used by one thing only: the
+  frequency–magnitude chart's per-bin squares, which must sit *below* the blue
+  cumulative curve in emphasis. Do not merge the two back together.
+- **Check a new chart colour against three pairs, under simulated colour blindness**,
+  not just against the card. The deep cluster meets the shallow blue (they touch in
+  the stacked bars), the mainshock orange (same scatter chart) and `--chart-3`. Measured
+  as OKLab ΔE after a Viénot simulation, a pair below **0.10** reads as one colour, and
+  the WCAG ratio will not tell you — it only sees lightness, so two hues at equal
+  lightness score 1.0 whatever they look like. Today's worst case is 0.130 (light) and
+  0.144 (dark). Candidates that failed, and are not worth retrying as they stand:
+  teal, green and purple *at the blue's lightness* (0.02–0.08 against the blue), and
+  plum, which is fine against the blue but lands on **0.006 against the mainshock star
+  in dark mode for a tritanope** — the pair that is easiest to forget, since the two
+  share the scatter chart. A throwaway prototype that shows all of this live is on the
+  `prototype/cluster-colour` branch.
+- `--chart-2` is `oklch(0.62 … 49.7)` in light and `oklch(0.719 … 49.9)` in dark —
+  lighter in dark mode, as an accent on a dark ground should be. It was the other way
+  round, and in dark mode it had exactly the blue's lightness. Its hue also sits 21°
+  (light) and 28° (dark) from `--destructive`; it was 12° in light, close enough to
+  read as red on a page whose rule is "red means something failed".
+- `--chart-5` and the eight `--sidebar-*` tokens were deleted: nothing imported them,
+  `--chart-4`/`--chart-5` had identical light and dark values, and `--sidebar-primary`
+  was a vivid blue in dark against a neutral in light — a stock shadcn default that
+  would have rendered wrong the day a sidebar was added.
 - Numeric table columns align to the trailing edge, use `tabular-nums` (set once on
   the page root) and a true minus sign (`fmtNum`).
 - Every control has an accessible name; sliders get theirs through
