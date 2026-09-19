@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, InfoIcon, MoonIcon, SunIcon } from "lucide-react";
 import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { BSummary } from "@/components/b-summary";
+import { BSummary, type BScope } from "@/components/b-summary";
 import { BOverTimeChart } from "@/components/charts/b-over-time";
 import { FmdChart } from "@/components/charts/fmd";
 import { MagnitudeTimeChart } from "@/components/charts/magnitude-time";
@@ -17,7 +17,7 @@ import { getEvents, getStatus, type StoredEvent } from "@/lib/api";
 import { DEFAULT_FILTERS, applyFilters, type Filters } from "@/lib/filters";
 import { useI18n } from "@/lib/i18n";
 import { toggleTheme, useIsDark } from "@/lib/theme";
-import { useStats } from "@/lib/use-stats";
+import { dominantMagType, useStats } from "@/lib/use-stats";
 
 const EventMap = lazy(() => import("@/components/event-map"));
 const NO_EVENTS: StoredEvent[] = [];
@@ -50,7 +50,17 @@ export function App() {
     () => applyFilters(events.data ?? NO_EVENTS, { from, to, minMag, manualOnly, excludeMainshock, mc: null }),
     [events.data, from, to, minMag, manualOnly, excludeMainshock],
   );
-  const stats = useStats(shown, filters.mc);
+  const allStats = useStats(shown, filters.mc);
+  // The b card's tabs: every magnitude type, or only the commonest one. Both use the Mc of the
+  // all-types fit, so the two values differ only in which magnitudes they count. The b charts
+  // follow the tab; the map, the table and the magnitude chart always show every event.
+  const [bScope, setBScope] = useState<BScope>("all");
+  const magType = useMemo(() => dominantMagType(shown), [shown]);
+  const ofType = useMemo(() => (magType === null ? shown : shown.filter((e) => e.magType === magType)), [shown, magType]);
+  const typeStats = useStats(ofType, allStats.mc);
+  const oneType = bScope === "type" && magType !== null;
+  const stats = oneType ? typeStats : allStats;
+  const heavyMagType = useDeferredValue(oneType ? magType : null);
   // The numbers update at once; the charts, map and table follow in an interruptible render. Drawn
   // together they hold the main thread for ~300ms per slider step, which starves the rolling
   // digits of frames so they appear to jump.
@@ -103,12 +113,13 @@ export function App() {
             {/* The number the reader came for leads; the controls that shape it follow. */}
             {shown.length > 0 ? (
               <div className="enter grid gap-6 lg:grid-cols-3">
-                <BSummary stats={stats} incomplete={incomplete} />
-                <div className="lg:col-span-2"><BOverTimeChart stats={heavyStats} /></div>
+                <BSummary stats={stats} incomplete={incomplete}
+                  scope={{ value: bScope, onChange: setBScope, magType, typeCount: ofType.length, total: shown.length }} />
+                <div className="lg:col-span-2"><BOverTimeChart stats={heavyStats} magType={heavyMagType} /></div>
               </div>
             ) : null}
 
-            <FiltersCard mcAuto={stats.mcMaxc} onChange={setFilters} />
+            <FiltersCard mcAuto={allStats.mcMaxc} onChange={setFilters} />
 
             {shown.length === 0 ? (
               <Card>
@@ -124,7 +135,7 @@ export function App() {
             ) : (
               <>
                 <div className="enter grid gap-6 lg:grid-cols-2" style={row(1)}>
-                  <FmdChart stats={heavyStats} />
+                  <FmdChart stats={heavyStats} magType={heavyMagType} />
                   <Suspense fallback={<Skeleton className="h-full min-h-[31rem] w-full" />}><EventMap events={heavyShown} /></Suspense>
                 </div>
                 <div className="enter" style={row(2)}><MagnitudeTimeChart events={heavyShown} /></div>
