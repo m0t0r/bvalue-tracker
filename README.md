@@ -582,8 +582,18 @@ colour, motion). Keep to them:
   strip widens its tile instead of scrolling, the width it measures grows, and it flips back out
   of scrolling mode.
 - "Detalle técnico" is one component (`technical-detail.tsx`, on shadcn `Collapsible`), used by
-  the load error, the failed-ingest alert and the groups card. `CardDescription` caps itself at
-  75ch; a card that wants a full-width subtitle passes `max-w-none`.
+  the load error, the failed-ingest alert, the groups card and the b card. It takes a `className`
+  for the body's type size: `text-sm` for prose meant to be read, the default `text-xs` for a raw
+  error string. `CardDescription` caps itself at 75ch; a card that wants a full-width subtitle
+  passes `max-w-none`.
+- **The b card's fine print is collapsed** — the magnitude-scale caveat and the goodness-of-fit
+  Mc. Open, it made the card half again as tall as "Valor b en el tiempo" beside it, and because
+  the two share a grid row the chart was stretched to match: 189 px of its card was empty. Folded,
+  the row is 593 px instead of 779 px. Fold nothing whose only other home is that card: the
+  mixed magnitude types and "no es un pronóstico" stay in the open under "Cómo leer estas cifras",
+  which is what makes hiding them here safe. The chart itself keeps its fixed `h-80` and stays
+  centred in whatever height the row has; letting it grow to fill would steepen the slope of a
+  b-value decline the page is careful not to oversell.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
 - Charts and the map redraw on every filter change, so they do not animate. The

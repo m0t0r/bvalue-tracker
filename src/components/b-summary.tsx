@@ -1,5 +1,6 @@
 import { AlertTriangleIcon } from "lucide-react";
 import { FlowNumber } from "@/components/flow-number";
+import { TechnicalDetail } from "@/components/technical-detail";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -80,11 +81,29 @@ export function BSummary({ stats, incomplete, scope, cluster }: { stats: Stats; 
   const dim = few || incomplete;
   const first = windows[0], last = windows.at(-1);
   const span = (w: { from: string; to: string }) => `${fmtDay(Date.parse(w.from), lang)} – ${fmtDay(Date.parse(w.to), lang)}`;
-  const scopeHelp = magType === null ? null : (
-    <div className="flex flex-col gap-2 text-pretty text-muted-foreground">
-      <p>{scope.value === "all" ? t.bScopeAllHelp(magType) : t.bScopeOneHelp(magType, scope.typeCount.toLocaleString(lang), scope.total.toLocaleString(lang))}</p>
-      <p>{t.bScopeBoth}</p>
-    </div>
+  // The fine print under the headline: which magnitudes it used, and what the other Mc estimator says.
+  // Collapsed, because open it made this card half again as tall as the chart beside it, which then sat
+  // in a card of empty space. Nothing is lost by folding it: "Cómo leer estas cifras" keeps the mixed
+  // magnitude types and "no es un pronóstico" in the open, further down the page.
+  const gft = fitGft && mcGft !== null ? (
+    <p>
+      {t.bGft} ({mcGft.toFixed(1)}):{" "}
+      <span className="whitespace-nowrap">b = {fitGft.b.toFixed(2)} ± {fitGft.sigmaB.toFixed(2)}</span>,{" "}
+      <span className="whitespace-nowrap">n = {fitGft.n.toLocaleString(lang)}</span>
+    </p>
+  ) : null;
+  const detail = magType === null && gft === null ? null : (
+    <TechnicalDetail className="text-sm">
+      <div className="flex flex-col gap-2 text-pretty text-muted-foreground">
+        {magType === null ? null : (
+          <>
+            <p>{scope.value === "all" ? t.bScopeAllHelp(magType) : t.bScopeOneHelp(magType, scope.typeCount.toLocaleString(lang), scope.total.toLocaleString(lang))}</p>
+            <p>{t.bScopeBoth}</p>
+          </>
+        )}
+        {gft}
+      </div>
+    </TechnicalDetail>
   );
   const body = fit === null || mc === null ? (
     <p className="text-sm text-pretty text-muted-foreground">{t.bNone}</p>
@@ -103,14 +122,7 @@ export function BSummary({ stats, incomplete, scope, cluster }: { stats: Stats; 
           {few ? <Badge variant="outline"><AlertTriangleIcon data-icon="inline-start" />{t.bFew}</Badge> : null}
           {incomplete ? <Badge variant="outline"><AlertTriangleIcon data-icon="inline-start" />{t.backfillShort}</Badge> : null}
         </div>
-        {scopeHelp}
-        {fitGft && mcGft !== null ? (
-          <p className="text-sm text-pretty text-muted-foreground">
-            {t.bGft} ({mcGft.toFixed(1)}):{" "}
-            <span className="whitespace-nowrap">b = {fitGft.b.toFixed(2)} ± {fitGft.sigmaB.toFixed(2)}</span>,{" "}
-            <span className="whitespace-nowrap">n = {fitGft.n.toLocaleString(lang)}</span>
-          </p>
-        ) : null}
+        {detail}
       </div>
       {/* Needs two separate windows to say anything about change; with fewer, the headline stands alone. */}
       {first && last && first !== last ? (

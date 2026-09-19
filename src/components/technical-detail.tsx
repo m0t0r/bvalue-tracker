@@ -3,9 +3,14 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
-/** The collapsed "Detalle técnico" under a plain-language message: a raw error string, or the test behind a sentence. */
-export function TechnicalDetail({ children }: { children: ReactNode }) {
+/**
+ * The collapsed "Detalle técnico" under a plain-language message: a raw error string, the test behind a
+ * sentence, or the fine print under a headline number. `className` sets the body's type size — prose the
+ * reader is meant to sit and read takes `text-sm`; the default `text-xs` suits a short string.
+ */
+export function TechnicalDetail({ children, className }: { children: ReactNode; className?: string }) {
   const { t } = useI18n();
   return (
     <Collapsible className="flex flex-col items-start gap-1">
@@ -16,7 +21,7 @@ export function TechnicalDetail({ children }: { children: ReactNode }) {
           {t.technicalDetail}
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="text-xs break-words">{children}</CollapsibleContent>
+      <CollapsibleContent className={cn("text-xs break-words", className)}>{children}</CollapsibleContent>
     </Collapsible>
   );
 }
