@@ -102,15 +102,20 @@
     }
   html {
     @apply font-sans antialiased;
-    /* Room for the scope bar, which is fixed to the top of the window. Tabbing backwards scrolls
-       up, which is exactly what brings the bar in, so without this the browser can put the newly
-       focused control underneath it. */
+    /* Room for the scope bar, which is fixed to the top of the window and is there for the whole
+       page below the scope notice; without this the browser can scroll a control the reader has
+       just tabbed to underneath it. */
     scroll-padding-top: 4rem;
     }
 }
 :root {
   /* Stronger than the built-in ease-out: fast start, so the UI feels like it answers immediately. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* For a surface that travels in from an edge, where the movement itself is the message. It
+     spends its time in the middle of the distance instead of at the end, so the eye follows the
+     edge across; `--ease-out` puts 90% of the travel in its first 95 ms, which a panel reads as a
+     pop rather than a slide. */
+  --ease-slide: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* Content that replaces a skeleton eases in instead of popping. Seen once per load, so it may animate. */
