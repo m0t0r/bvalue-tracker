@@ -473,6 +473,15 @@ than commit SHAs.
   explicit weekly `ticks`, shared with the bar chart below it — see the scrolling
   mobile chart under [Interface conventions](#interface-conventions) for how the tick
   spacing and the pinned y axes work.
+- **Recharts silently drops a tick whose label would cross the edge of the plot**
+  (`isVisible` in its `TickUtils`), and passing explicit `ticks` does not override it.
+  That hid the first date on "Magnitud en el tiempo" — 10 August, the day of the
+  mainshock, which sits exactly on the domain's left edge. The fix is `padding` on the
+  `XAxis` (`FIRST_TICK_PAD`, half a date label wide): it moves the scale, so the label
+  stays centred on its own day. `interval="preserveStartEnd"` also shows it, but by
+  nudging the label inward, and the room it takes then costs the *second* tick on a
+  phone — checked in a browser, since jsdom measures every label as 0 wide and hides
+  nothing.
 - pnpm 12 blocks dependency build scripts. `pnpm-workspace.yaml` allows `esbuild`,
   `workerd` and `sharp`; without that, installs fail with `ERR_PNPM_IGNORED_BUILDS`.
 - TypeScript is split into `tsconfig.app.json` (DOM), `tsconfig.worker.json`

@@ -26,6 +26,10 @@ const AXIS_W = 28; // the y axis itself, the width it has always had
 const AXIS_COL = 36; // the column pinned to the left: that axis plus a little air before the plot
 const X_AXIS_H = 30; // pinned and scrolling charts must reserve the same strip, or their y ticks drift apart
 const TICK_GAP = 64; // horizontal room one date label needs
+// Recharts hides a tick whose label would cross the edge of the plot, which dropped the first one —
+// the day of the mainshock, sitting exactly on the domain's left edge. Half a date label of padding
+// moves the scale, not the label, so every tick stays centred on its own day and none is lost.
+const FIRST_TICK_PAD = { left: 20 };
 // Left margin so a dot — and the mainshock's much larger star — on the first day is not half cut
 // off by the edge of its own svg. The y axis used to provide that room; it is a separate chart now.
 const SCATTER_MARGIN = { left: 10, right: 12, top: 8 };
@@ -118,7 +122,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
   const xAxis = (labels: boolean) => (
     <XAxis dataKey="t" type="number" scale="time" domain={domain} ticks={ticks} height={X_AXIS_H}
       tickFormatter={(ms: number) => fmtDay(ms, lang)} tick={labels}
-      tickLine={false} axisLine={false} tickMargin={8} minTickGap={40} />
+      tickLine={false} axisLine={false} tickMargin={8} minTickGap={40} padding={FIRST_TICK_PAD} />
   );
   const yMag = (pinned: boolean) => (
     <YAxis dataKey="mag" type="number" domain={[1, 8]} ticks={[2, 3, 4, 5, 6, 7]}
