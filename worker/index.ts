@@ -39,11 +39,12 @@ function isSameOrigin(c: Context<{ Bindings: Env }>): boolean {
 
 /**
  * The page's own security headers come from public/_headers, which is the static-asset
- * layer; /api/* runs worker-first and never passes through it. These are the three that
- * mean anything for a JSON or CSV response: no MIME sniffing, no Referer sent onward,
- * and the same HSTS promise the page makes — a host makes it once, for every response.
+ * layer; /api/* runs worker-first and never passes through it, and neither does the 404 for
+ * a path that matches no asset. These are the three that mean anything for a response with
+ * no markup in it: no MIME sniffing, no Referer sent onward, and the same HSTS promise the
+ * page makes — a host makes it once, for every response.
  */
-app.use("/api/*", async (c, next) => {
+app.use("*", async (c, next) => {
   await next();
   c.header("x-content-type-options", "nosniff");
   c.header("referrer-policy", "no-referrer");
@@ -224,6 +225,16 @@ app.post("/api/refresh", async (c) => {
 });
 
 app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
+
+/**
+ * Anything else only reaches the Worker when the asset layer found no file for it
+ * (`not_found_handling: "none"`), so it is a real 404 and says so, rather than handing back
+ * the whole page with a 200 and letting a crawler believe the path exists.
+ */
+app.all("*", (c) => {
+  c.header("cache-control", "no-store");
+  return c.text("not found\n", 404);
+});
 
 app.onError((err, c) => {
   if (err instanceof BadCluster) {
