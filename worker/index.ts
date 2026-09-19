@@ -31,6 +31,19 @@ function isSameOrigin(c: Context<{ Bindings: Env }>): boolean {
 }
 
 /**
+ * The page's own security headers come from public/_headers, which is the static-asset
+ * layer; /api/* runs worker-first and never passes through it. These are the three that
+ * mean anything for a JSON or CSV response: no MIME sniffing, no Referer sent onward,
+ * and the same HSTS promise the page makes — a host makes it once, for every response.
+ */
+app.use("/api/*", async (c, next) => {
+  await next();
+  c.header("x-content-type-options", "nosniff");
+  c.header("referrer-policy", "no-referrer");
+  c.header("strict-transport-security", "max-age=63072000; includeSubDomains; preload");
+});
+
+/**
  * Rate limit first, then the origin check: a caller that ignores both still cannot
  * spend more than its share of D1 reads and Worker CPU. Every read route does a
  * full-table scan and /api/stats recomputes the whole fit, so volume is the cost.

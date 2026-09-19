@@ -4,6 +4,22 @@
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
+  # The site is HTTPS-only (workers.dev has no HTTP listener of its own worth using).
+  # Two years, and `preload` states the intent; the name cannot actually be submitted to
+  # the browser preload list, because workers.dev is a public suffix and the list takes
+  # registrable domains only. Browsers ignore the token until a name is on the list, so
+  # it costs nothing and is what securityheaders.com looks for.
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  # The page asks for no device permissions at all: no geolocation (the map has no
+  # locate control), no camera, microphone or clipboard. Deny the lot, so a future
+  # dependency cannot quietly start using one. Unknown feature names are ignored by
+  # browsers, so this list is safe to keep ahead of what any one browser implements.
+  Permissions-Policy: accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), browsing-topics=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()
+  # We open no cross-origin windows and nothing should embed our assets. COEP is
+  # deliberately absent: tiles.openfreemap.org sends no CORP header, so require-corp
+  # would blank the map.
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
   # Verified against the running page on 2026-09-19: basemap tiles, sprites, glyphs, the
   # event dots and the chart axis labels all render with this policy on. It is narrow,
   # so re-check the map and charts if any of these change:

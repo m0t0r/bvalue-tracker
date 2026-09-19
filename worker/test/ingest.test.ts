@@ -180,6 +180,15 @@ describe("sweep", () => {
 });
 
 describe("API", () => {
+  it("sends the security headers the static-asset layer cannot reach on /api/*", async () => {
+    // Refusals and 404s carry them too: the middleware wraps everything under /api/.
+    for (const res of [await call("/api/status"), await callRaw("/api/status"), await call("/api/nope")]) {
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(res.headers.get("strict-transport-security")).toBe("max-age=63072000; includeSubDomains; preload");
+    }
+  });
+
   it("reports the reference statistics for the captured catalogue", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     const stats = (await (await call("/api/stats")).json()) as any;

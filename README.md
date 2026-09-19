@@ -41,7 +41,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 87 tests, offline
+pnpm test                 # 93 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -293,6 +293,28 @@ A full source audit lives outside the repo in `~/security-audit-skill/sgc-swarm/
   `blob:` for its worker, the shadcn chart needs `style-src 'unsafe-inline'`, and the
   basemap needs `tiles.openfreemap.org`. Re-check the map and the chart axis labels if
   you touch it.
+- **The response headers are the two files below, and nothing else sets them**
+  (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
+
+  | | `public/_headers` (the page) | `worker/index.ts` middleware (`/api/*`) |
+  |---|---|---|
+  | CSP, X-Frame-Options, Permissions-Policy, COOP, CORP | yes | no — a JSON body renders nothing |
+  | HSTS, X-Content-Type-Options, Referrer-Policy | yes | yes, including on 403/429/404/500 |
+
+  `Permissions-Policy` denies every feature: the page asks for no geolocation, camera,
+  microphone or clipboard, and the map has no locate control, so an allow-list anywhere
+  in it would be a mistake. `Strict-Transport-Security` is two years with
+  `includeSubDomains`; the `preload` token is there for the grader's sake and is inert —
+  `workers.dev` is a public suffix, so this name cannot be submitted to the browser
+  preload list. `Cross-Origin-Embedder-Policy` is deliberately **absent**:
+  `tiles.openfreemap.org` sends no `Cross-Origin-Resource-Policy`, so `require-corp`
+  would blank the map.
+  This is what takes securityheaders.com from B to A+; it was B because HSTS and
+  `Permissions-Policy` were missing (2026-09-19).
+  `_headers` does **not** apply under `pnpm dev` — Vite serves the assets itself there,
+  and it drops the Worker's own headers too. Check headers against `pnpm preview`, which
+  runs the built Worker in workerd and prints `Parsed 1 valid header rule` if the file
+  is well formed.
 
 Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
 regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use
