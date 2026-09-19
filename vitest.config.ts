@@ -12,7 +12,10 @@ export default defineConfig({
         // be typechecked by the Node one, which has none of them. vitest.config.ts replaces
         // vite.config.ts rather than extending it, so the alias has to be repeated here too.
         resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
-        test: { name: "page", include: ["src/**/*.test.ts"] },
+        // `happy-dom` is here for the one seam that cannot be reached without a renderer: that the
+        // page's scope hook hands the map, the table and the charts the *same* array when only Mc
+        // moves. Everything else in this project is a pure function and does not touch the DOM.
+        test: { name: "page", include: ["src/**/*.test.ts"], environment: "happy-dom" },
       },
       {
         plugins: [

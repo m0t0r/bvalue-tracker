@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, InfoIcon, MoonIcon, SunIcon } from "lucide-react";
-import { lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { BSummary, type BScope } from "@/components/b-summary";
+import { lazy, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { BSummary } from "@/components/b-summary";
 import { ClustersCard } from "@/components/clusters-card";
 import { Deferred } from "@/components/deferred";
 import { EventsTable } from "@/components/events-table";
@@ -14,13 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getEvents, getStatus, type StoredEvent } from "@/lib/api";
-import { DEFAULT_FILTERS, activeFilterChips, applyFilters, type ClusterChoice, type Filters } from "@/lib/filters";
+import { getEvents, getStatus } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { scopeChips, useScope } from "@/lib/scope";
 import { toggleTheme, useIsDark } from "@/lib/theme";
-import { useNow } from "@/lib/use-now";
-import { dominantMagType, useStats } from "@/lib/use-stats";
-import { clusterOf, computeClusterStats } from "../core/clusters";
 
 // The three Recharts cards and the map are the page's heavy chunks; `Deferred` says why they
 // are only fetched once the reader is near them. Everything above the b-value — the number
@@ -29,13 +26,11 @@ const BOverTimeChart = lazy(() => import("@/components/charts/b-over-time").then
 const FmdChart = lazy(() => import("@/components/charts/fmd").then((m) => ({ default: m.FmdChart })));
 const MagnitudeTimeChart = lazy(() => import("@/components/charts/magnitude-time").then((m) => ({ default: m.MagnitudeTimeChart })));
 const EventMap = lazy(() => import("@/components/event-map"));
-const NO_EVENTS: StoredEvent[] = [];
 const row = (i: number) => ({ "--i": i }) as CSSProperties;
 
 export function App() {
   const { t, lang, setLang } = useI18n();
   const dark = useIsDark();
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   // The Worker's cron updates the database every 5 minutes; an open page picks that up by itself.
   // Status is the cheap heartbeat: polled every minute, and again whenever the tab comes back to the
   // front, because interval polling pauses while a tab is hidden. Events are refetched when status
@@ -52,48 +47,13 @@ export function App() {
     seenIngest.current = lastIngest;
   }, [lastIngest, qc]);
 
-  // Keyed on the fields that select events, not on `filters`: moving Mc must not hand the map,
-  // the table and the magnitude chart a new array to redraw.
-  const { from, to, minMag, manualOnly, excludeMainshock } = filters;
-  const base = useMemo(
-    () => applyFilters(events.data ?? NO_EVENTS, { from, to, minMag, manualOnly, excludeMainshock, mc: null }),
-    [events.data, from, to, minMag, manualOnly, excludeMainshock],
-  );
-  // The two depth clusters. Both are fitted above the Mc of every event that passes the filters, so
-  // narrowing the page to one cluster changes which events are counted and nothing else.
-  const [cluster, setCluster] = useState<ClusterChoice>("all");
-  const selection = useMemo(() => ({ cluster, onChange: setCluster }), [cluster]);
-  // "The last 7 days" is measured from the clock, not from the data, so it needs one: without it the
-  // count would freeze for as long as the events themselves did not change. An hour is fine enough.
-  const hour = Math.floor(useNow() / 3_600_000) * 3_600_000;
-  const clusterStats = useMemo(() => computeClusterStats(base, filters.mc, hour + 3_600_000), [base, filters.mc, hour]);
-  const shown = useMemo(() => (cluster === "all" ? base : base.filter((e) => clusterOf(e) === cluster)), [base, cluster]);
-  const allStats = cluster === "all" ? clusterStats.all : clusterStats[cluster].stats;
-  // The b card's tabs: every magnitude type, or only the commonest one. Both use the Mc of the
-  // all-types fit, so the two values differ only in which magnitudes they count. The b charts
-  // follow the tab; the map, the table and the magnitude chart always show every event.
-  const [bScope, setBScope] = useState<BScope>("all");
-  const magType = useMemo(() => dominantMagType(shown), [shown]);
-  const ofType = useMemo(() => (magType === null ? shown : shown.filter((e) => e.magType === magType)), [shown, magType]);
-  const typeStats = useStats(ofType, clusterStats.all.mc);
-  const oneType = bScope === "type" && magType !== null;
-  const stats = oneType ? typeStats : allStats;
-  const heavyMagType = useDeferredValue(oneType ? magType : null);
-  // The numbers update at once; the charts, map and table follow in an interruptible render. Drawn
-  // together they hold the main thread for ~300ms per slider step, which starves the rolling
-  // digits of frames so they appear to jump.
-  const heavyCluster = useDeferredValue(cluster === "all" ? null : cluster);
-  const heavyShown = useDeferredValue(shown);
-  const heavyBase = useDeferredValue(base);
-  const heavyStats = useDeferredValue(stats);
+  // What the page is narrowed to, and every figure read off it. `deferred` is the same view one
+  // render behind, for the drawings that must not hold up the rolling digits — `src/lib/scope.ts`
+  // says why, and holds the rule that every b-value here shares the catalogue's Mc.
+  const { scope, view, deferred, selectCluster, magTabs, setFilters, clear } = useScope(events.data);
+  const chips = useMemo(() => scopeChips(scope, t, lang), [scope, t, lang]);
   const incomplete = !!status.data && status.data.backfill.done < status.data.backfill.total;
   const other = lang === "es" ? "en" : "es";
-
-  // Everything the page is narrowed by, in one place, so the scope bar can name it and clear it.
-  // The filters form keeps its own values, so clearing them is a request, not an assignment.
-  const [resetSignal, setResetSignal] = useState(0);
-  const chips = useMemo(() => activeFilterChips(filters, cluster, t, lang), [filters, cluster, t, lang]);
-  const clearScope = useCallback(() => { setCluster("all"); setResetSignal((n) => n + 1); }, []);
 
   return (
     <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
@@ -117,9 +77,9 @@ export function App() {
       </header>
 
       <main className="contents">
-        <StatusBar status={status.data} shown={events.data ? shown.length : null} />
+        <StatusBar status={status.data} shown={events.data ? view.shown.length : null} />
         {events.data ? (
-          <FilterScope chips={chips} cluster={cluster} shown={shown.length} total={events.data.length} onClear={clearScope} />
+          <FilterScope chips={chips} cluster={scope.cluster} shown={view.shown.length} total={events.data.length} onClear={clear} />
         ) : null}
 
         {events.isError ? (
@@ -138,23 +98,22 @@ export function App() {
         {events.data ? (
           <>
             {/* The number the reader came for leads; the controls that shape it follow. */}
-            {shown.length > 0 ? (
+            {view.shown.length > 0 ? (
               <div className="enter grid gap-6 lg:grid-cols-3">
-                <BSummary stats={stats} incomplete={incomplete}
-                  cluster={cluster === "all" ? null : cluster}
-                  scope={{ value: bScope, onChange: setBScope, magType, typeCount: ofType.length, total: shown.length }} />
+                <BSummary stats={view.stats} incomplete={incomplete}
+                  cluster={scope.cluster === "all" ? null : scope.cluster} tabs={magTabs} />
                 <div className="lg:col-span-2">
                   <Deferred title={t.bTimeTitle}>
-                    <BOverTimeChart stats={heavyStats} magType={heavyMagType} cluster={heavyCluster} />
+                    <BOverTimeChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
                   </Deferred>
                 </div>
               </div>
             ) : null}
 
-            {base.length > 0 ? <ClustersCard events={heavyBase} stats={clusterStats} selection={selection} /> : null}
-            <FiltersCard mcAuto={clusterStats.all.mcMaxc} onChange={setFilters} resetSignal={resetSignal} />
+            {view.base.length > 0 ? <ClustersCard events={deferred.base} stats={view.clusters} selection={selectCluster} /> : null}
+            <FiltersCard mcAuto={view.clusters.all.mcMaxc} value={scope.filters} onChange={setFilters} />
 
-            {shown.length === 0 ? (
+            {view.shown.length === 0 ? (
               <Card>
                 <CardContent>
                   <Empty>
@@ -169,19 +128,19 @@ export function App() {
               <>
                 <div className="enter grid gap-6 lg:grid-cols-2" style={row(1)}>
                   <Deferred title={t.fmdTitle}>
-                    <FmdChart stats={heavyStats} magType={heavyMagType} cluster={heavyCluster} />
+                    <FmdChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
                   </Deferred>
                   {/* h-96 canvas plus the depth/magnitude legend under it. */}
                   <Deferred title={t.mapTitle} height="h-[26rem]">
-                    <EventMap events={heavyShown} />
+                    <EventMap events={deferred.shown} />
                   </Deferred>
                 </div>
                 <div className="enter" style={row(2)}>
                   <Deferred title={t.magTimeTitle}>
-                    <MagnitudeTimeChart events={heavyShown} />
+                    <MagnitudeTimeChart events={deferred.shown} />
                   </Deferred>
                 </div>
-                <div className="enter" style={row(3)}><EventsTable events={heavyShown} /></div>
+                <div className="enter" style={row(3)}><EventsTable events={deferred.shown} /></div>
               </>
             )}
           </>

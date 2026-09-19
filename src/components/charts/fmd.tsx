@@ -3,7 +3,7 @@ import { CartesianGrid, ComposedChart, Line, ReferenceLine, Scatter, XAxis, YAxi
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { useI18n } from "@/lib/i18n";
-import type { Stats } from "@/lib/use-stats";
+import type { Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
 
 /** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */

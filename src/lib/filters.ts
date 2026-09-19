@@ -6,12 +6,21 @@ import { MAINSHOCK_ID } from "../../core/seiscomp";
 
 export { MAINSHOCK_ID };
 
-export interface Filters {
+/**
+ * The settings that decide which events are counted. Mc is deliberately not one of them: it moves
+ * the fit, never the selection, and `applyFilters` takes this narrower type so that it cannot.
+ * That is what lets the page keep one array of events across a drag of the Mc slider, instead of
+ * handing the map, the table and the magnitude chart a new one to redraw on every step.
+ */
+export interface EventFilters {
   from: string;
   to: string;
   minMag: number;
   manualOnly: boolean;
   excludeMainshock: boolean;
+}
+
+export interface Filters extends EventFilters {
   /** null = use the maximum-curvature estimate. */
   mc: number | null;
 }
@@ -20,7 +29,7 @@ export const DEFAULT_FILTERS: Filters = {
   from: "2026-08-10", to: "", minMag: 0, manualOnly: false, excludeMainshock: false, mc: null,
 };
 
-export function applyFilters(events: readonly StoredEvent[], f: Filters): StoredEvent[] {
+export function applyFilters(events: readonly StoredEvent[], f: EventFilters): StoredEvent[] {
   // The date fields are Colombian calendar days, like every other date on the page.
   const from = f.from ? dayBounds(f.from)[0] : "";
   const to = f.to ? dayBounds(f.to)[1] : "9999";
