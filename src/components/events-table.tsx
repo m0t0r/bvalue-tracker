@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toCsv } from "../../core/csv";
 import type { StoredEvent } from "@/lib/api";
 import { downloadCsv } from "@/lib/download";
-import { fmtIsoDateTime, fmtNum, fmtRegion, fmtUtc } from "@/lib/format";
+import { fmtIsoDateTime, fmtNum, fmtRegion, fmtUtc, sgcEventUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -26,8 +26,6 @@ const num = (v: number | null, d: number) => (v === null ? "—" : v.toFixed(d))
 // Numbers align to the trailing edge so place values line up down a column.
 const NUMERIC = new Set(["mag", "depthKm", "lat", "lon", "phases", "rmsS", "gapDeg", "errH", "errDepthKm"]);
 
-const sgcUrl = (id: string) => `https://www.sgc.gov.co/detallesismo/${id}/resumen`;
-
 export const EventsTable = memo(function EventsTable({ events }: { events: StoredEvent[] }) {
   const { t, lang } = useI18n();
   const columns = useMemo(
@@ -36,7 +34,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
         header: t.colTime,
         cell: (c) => (
           // The UTC form, as SGC and the CSV give it, stays one hover away for matching a row against them.
-          <a className="underline underline-offset-4" href={sgcUrl(c.row.original.id)} target="_blank" rel="noreferrer"
+          <a className="underline underline-offset-4" href={sgcEventUrl(c.row.original.id)} target="_blank" rel="noreferrer"
             title={fmtUtc(c.getValue())}>
             {fmtIsoDateTime(c.getValue())}
           </a>

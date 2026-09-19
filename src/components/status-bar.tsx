@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse } from "@/lib/api";
-import { fmtDateTime, relativeTime } from "@/lib/format";
+import { fmtDateTime, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
 
@@ -92,6 +92,16 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
     : stoodDown && !failed ? t.refreshWait
     : "";
 
+  // The newest event's time reaches SGC's own page for it, the same link the table's time column
+  // carries, with the same UTC form one hover away. An event with no id cannot happen — the id is
+  // the primary key — but the status API types it as nullable, so it falls back to plain text.
+  const newestEvent = !status?.newestEventTime ? null : status.newestEventId ? (
+    <a className="underline underline-offset-4" href={sgcEventUrl(status.newestEventId)} target="_blank" rel="noreferrer"
+      title={fmtUtc(status.newestEventTime)}>
+      {fmtDateTime(status.newestEventTime, lang)}
+    </a>
+  ) : fmtDateTime(status.newestEventTime, lang);
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -102,8 +112,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
           <div className="grid grid-cols-2 gap-x-6 gap-y-4 [&>*:nth-child(odd):last-child]:col-span-2 sm:flex sm:flex-wrap sm:gap-x-10">
             <Stat label={t.events} value={shown === null ? null : <FlowNumber value={shown} lang={lang} />}
               hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined} />
-            <Stat label={t.newestEvent}
-              value={status ? (status.newestEventTime ? fmtDateTime(status.newestEventTime, lang) : "—") : null}
+            <Stat label={t.newestEvent} value={status ? (newestEvent ?? "—") : null}
               hint={status?.newestEventTime ? relativeTime(status.newestEventTime, lang, now) : undefined} />
             <Stat label={t.lastUpdate}
               value={status ? (ok?.finishedAt ? relativeTime(ok.finishedAt, lang, now) : t.never) : null}

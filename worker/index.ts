@@ -124,9 +124,16 @@ async function status(db: D1Database): Promise<StatusResponse> {
   const agg = await db
     .prepare("SELECT COUNT(*) AS n, MAX(time) AS newest FROM events WHERE removed_at IS NULL")
     .first<{ n: number; newest: string | null }>();
+  // Its id, in its own query rather than as a bare column beside MAX(time): SQLite would answer
+  // that, but only while exactly one min/max aggregate is in the statement. One indexed row
+  // (events_time, walked backwards) costs less than that rule being broken silently later.
+  const newest = await db
+    .prepare("SELECT id FROM events WHERE removed_at IS NULL ORDER BY time DESC LIMIT 1")
+    .first<{ id: string }>();
   return {
     totalEvents: agg?.n ?? 0,
     newestEventTime: agg?.newest ?? null,
+    newestEventId: newest?.id ?? null,
     lastRun: await lastRun(db, false),
     lastSuccessfulRun: await lastRun(db, true),
     backfill: await backfillProgress(db, new Date()),
