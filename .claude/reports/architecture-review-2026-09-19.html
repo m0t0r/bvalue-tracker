@@ -35,7 +35,7 @@
           <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 deepbox"></span> deep module</span>
           <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 bg-amber-100 border border-amber-400"></span> unguarded / duplicated</span>
         </div>
-        <p class="text-sm text-slate-600 max-w-3xl">Eight candidates. Two carry a failure reproduced in this worktree; those are marked <span class="font-semibold text-rose-700">verified</span>. Nothing here re-opens a decision README settles — the single cron pattern, the one <code>computeStats</code> pipeline, the atomic claim, the <code>ingest_runs</code> indexes, deferred loading, the shy scope bar, or <code>src/components/ui/*</code>.</p>
+        <p class="text-sm text-slate-600 max-w-3xl">Eight candidates. Two carry a failure reproduced in this worktree; those are marked <span class="font-semibold text-rose-700">verified</span>. <span class="font-semibold text-slate-800">01 is done</span> (2026-09-19); the other seven still stand. Nothing here re-opens a decision README settles — the single cron pattern, the one <code>computeStats</code> pipeline, the atomic claim, the <code>ingest_runs</code> indexes, deferred loading, the shy scope bar, or <code>src/components/ui/*</code>.</p>
       </header>
 
       <!-- ─────────────────────────────── CANDIDATES ─────────────────────────────── -->
@@ -45,13 +45,26 @@
         <article id="c1" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div class="border-b border-slate-100 px-7 py-5 space-y-3">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-slate-800 text-white text-xs font-semibold px-3 py-1">Done · 2026-09-19</span>
               <span class="rounded-full bg-rose-100 text-rose-800 text-xs font-semibold px-3 py-1">verified failure</span>
               <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
               <span class="ml-auto font-mono text-xs text-slate-400">01 · core</span>
             </div>
-            <h2 class="font-serif text-2xl">Admit events through one gate, not three</h2>
+            <h2 class="font-serif text-2xl"><s class="decoration-slate-300">Admit events through one gate, not three</s></h2>
             <p class="font-mono text-sm text-slate-500 leading-relaxed">core/seiscomp.ts:59-73,188-191 · core/csv.ts:69-82 · worker/db.ts:27-35 · core/gr.ts:25 · core/cli.ts:68</p>
+            <p class="text-sm text-slate-600 leading-relaxed border-l-2 border-slate-800 pl-3">
+              <strong>Landed</strong> on <span class="font-mono text-xs">worktree-arch-01-event-gate</span> as
+              <span class="font-mono text-xs">core/admit.ts</span> — <span class="font-mono text-xs">admitEvent(raw) → SeismicEvent</span>,
+              throwing <span class="font-mono text-xs">EventRejected</span>. <span class="font-mono text-xs">requireRange</span> and
+              <span class="font-mono text-xs">requireNum</span> left the parser and the <span class="font-mono text-xs">as unknown as</span>
+              cast left <span class="font-mono text-xs">fromCsv</span>; the gate also closes the id shape, the timestamp and missing
+              CSV columns. 53 tests added, 188 pass.
+              <strong>Two doors, not three:</strong> <span class="font-mono text-xs">toStored</span> was deliberately left out — the parser
+              is the only writer of <span class="font-mono text-xs">events</span>, while that map sits on the full-table scan four read
+              routes share, so re-checking ~800 rows per request would spend the 10 ms CPU budget on a door nothing untrusted reaches.
+              A CSV rejects the whole file where the HTML page skips the row: a stuck ingest row freezes live figures, a CSV is read once
+              by someone who can edit it.
+            </p>
           </div>
 
           <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
@@ -593,13 +606,13 @@ flowchart TD
       <!-- ─────────────────────────────── TOP RECOMMENDATION ─────────────────────────────── -->
       <section id="top-recommendation">
         <div class="rounded-xl deepbox text-white px-8 py-8 shadow-lg space-y-4">
-          <p class="lbl text-emerald-400">Top recommendation</p>
-          <h2 class="font-serif text-3xl"><a href="#c1" class="underline decoration-emerald-500 decoration-2 underline-offset-4">01 — Admit events through one gate</a></h2>
-          <p class="text-slate-300 leading-relaxed max-w-3xl">It is the only candidate whose failure I reproduced rather than inferred, the smallest in blast radius, and the one that makes the others cheaper: once events have one admission gate, candidate 08 has somewhere to put the field table and candidate 07 can assume its input is plausible. It also <em>deletes</em> interface — two private helpers leave <code>seiscomp.ts</code>, which shrinks to reading HTML shape.</p>
+          <p class="lbl text-emerald-400">Next recommendation</p>
+          <h2 class="font-serif text-3xl"><a href="#c2" class="underline decoration-emerald-500 decoration-2 underline-offset-4">02 — Make one module decide what ingest is due now</a></h2>
+          <p class="text-slate-300 leading-relaxed max-w-3xl"><a href="#c1" class="underline decoration-slate-600 underline-offset-2">01 was done on 2026-09-19</a>, so the other verified candidate is next: it closes the one rule the two callers state differently, and it is the rule README is most careful about. 01 also made the rest cheaper — candidate 08 now has <code>core/admit.ts</code> to put the field table in, and 07 can assume its input is plausible.</p>
           <div class="grid sm:grid-cols-3 gap-3 pt-2">
             <div class="rounded-lg bg-white/5 border border-white/10 px-4 py-3">
-              <p class="lbl text-slate-400 mb-1">then</p>
-              <p class="text-sm"><a href="#c2" class="underline decoration-slate-600 underline-offset-2">02 — what ingest is due</a><br><span class="text-slate-400 text-xs">closes the one live rule divergence</span></p>
+              <p class="lbl text-slate-400 mb-1">done</p>
+              <p class="text-sm"><a href="#c1" class="underline decoration-slate-600 underline-offset-2">01 — one admission gate</a><br><span class="text-slate-400 text-xs">core/admit.ts, 2026-09-19</span></p>
             </div>
             <div class="rounded-lg bg-white/5 border border-white/10 px-4 py-3">
               <p class="lbl text-slate-400 mb-1">then</p>
@@ -614,7 +627,7 @@ flowchart TD
       </section>
 
       <footer class="text-xs text-slate-400 font-mono pt-4 border-t border-slate-200">
-        Read-only review. No files changed. Worktree <span class="text-slate-600">.claude/worktrees/arch-review</span>.
+        Review was read-only; candidate 01 was implemented separately on <span class="text-slate-600">worktree-arch-01-event-gate</span> (2026-09-19). Reviewed from <span class="text-slate-600">.claude/worktrees/arch-review</span>.
       </footer>
     </main>
   </body>

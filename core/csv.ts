@@ -1,3 +1,4 @@
+import { admitEvent } from "./admit.ts";
 import type { BWindow } from "./gr.ts";
 import type { SeismicEvent } from "./types.ts";
 
@@ -22,10 +23,6 @@ const WINDOW_COLUMNS: Record<CsvLang, string> = {
   en: "from,to,n,mc,b,sigmaB,a,meanMag",
   es: "desde,hasta,n,mc,b,sigma_b,a,magnitud_media",
 };
-
-const NUMERIC = new Set<string>([
-  "lat", "lon", "depthKm", "mag", "phases", "rmsS", "gapDeg", "errLatKm", "errLonKm", "errDepthKm",
-]);
 
 // A cell starting with one of these is a formula to a spreadsheet, not text.
 const FORMULA_LEAD = /^[=+\-@\t\r]/;
@@ -65,19 +62,27 @@ function splitLine(line: string): string[] {
   return out;
 }
 
-/** Reads back what toCsv wrote, in either header language (fields never contain newlines). */
+/**
+ * Reads back what toCsv wrote, in either header language (fields never contain newlines).
+ * Every row goes through `admitEvent`, so a hand-edited catalogue fails here rather than
+ * three modules later inside the statistics. A CSV is read once by someone who can fix it,
+ * so one bad line rejects the file: skipping it would have the CLI print a confident
+ * b-value from a catalogue it had quietly edited.
+ */
 export function fromCsv(csv: string): SeismicEvent[] {
   const [header, ...rows] = csv.split(/\r?\n/).filter((l) => l !== "");
   if (!header) return [];
   const cols = splitLine(header).map((c) => FROM_ES.get(c) ?? c);
-  return rows.map((row) => {
+  return rows.map((row, i) => {
     const cells = splitLine(row);
     const rec: Record<string, unknown> = {};
-    cols.forEach((c, i) => {
-      const v = cells[i] ?? "";
-      rec[c] = NUMERIC.has(c) ? (v === "" ? null : Number(v)) : c === "solutionStamp" && v === "" ? null : v;
-    });
-    return rec as unknown as SeismicEvent;
+    cols.forEach((c, j) => { rec[c] = cells[j] ?? ""; });
+    try {
+      return admitEvent(rec);
+    } catch (err) {
+      // The line number in the file the reader will open: the header is line 1.
+      throw new Error(`line ${i + 2}: ${(err as Error).message}`, { cause: err });
+    }
   });
 }
 

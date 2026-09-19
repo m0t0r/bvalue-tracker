@@ -93,3 +93,64 @@ describe("csv", () => {
     expect(windowsToCsv([], "es")).toBe("desde,hasta,n,mc,b,sigma_b,a,magnitud_media\n");
   });
 });
+
+// `pnpm cli bvalue --input` reads a file a person can edit, so fromCsv is a door into core
+// exactly as the SGC parser is. It used to end in `as unknown as SeismicEvent`: a magnitude
+// cell of "1e7" reached `new Array(hi - lo + 1)` in fmd and threw RangeError on a number
+// nobody could see was wrong. Both doors go through admitEvent now.
+describe("fromCsv admits only plausible events", () => {
+  const HEAD = "id,time,lat,lon,depthKm,mag,magType,phases,rmsS,gapDeg,errLatKm,errLonKm,errDepthKm,region,status,solutionStamp";
+  const row = (over: Partial<Record<string, string>> = {}) => {
+    const cells: Record<string, string> = {
+      id: "SGC2026aaaaaa", time: "2026-09-01T00:00:00Z", lat: "5.1", lon: "-76.5", depthKm: "40",
+      mag: "2.5", magType: "MLr_1", phases: "12", rmsS: "0.4", gapDeg: "90",
+      errLatKm: "1", errLonKm: "1", errDepthKm: "2", region: "Istmina", status: "manual",
+      solutionStamp: "", ...over,
+    };
+    return HEAD.split(",").map((c) => cells[c] ?? "").join(",");
+  };
+  const csv = (...rows: string[]) => [HEAD, ...rows].join("\n") + "\n";
+
+  it("rejects a magnitude that is numeric but physically impossible", () => {
+    expect(() => fromCsv(csv(row(), row({ id: "SGC2026bbbbbb", mag: "1e7" })))).toThrow(
+      /line 3: mag out of range \[-2, 10\]: 10000000/,
+    );
+  });
+
+  it("rejects a magnitude that is not a number, instead of carrying NaN into the statistics", () => {
+    expect(() => fromCsv(csv(row({ mag: "abc" })))).toThrow(/line 2: mag is not numeric: "abc"/);
+  });
+
+  // The failure the architecture review reproduced: "abc" gave b=undefined from a catalogue
+  // that still counted the row, and "1e7" reached `new Array(hi - lo + 1)` in fmd.
+  it("never hands computeStats a catalogue it cannot bin", () => {
+    for (const mag of ["abc", "1e7", "-99", ""]) {
+      expect(() => computeStats(fromCsv(csv(row(), row({ id: "SGC2026bbbbbb", mag }))))).toThrow(/^line 3:/);
+    }
+  });
+
+  it("rejects a file that is missing a column the event needs", () => {
+    const withoutMag = "id,time,lat,lon,depthKm,magType,region,status\nSGC2026aaaaaa,2026-09-01T00:00:00Z,5.1,-76.5,40,MLr_1,Istmina,manual\n";
+    expect(() => fromCsv(withoutMag)).toThrow(/line 2: mag is not numeric/);
+  });
+
+  it("keeps only the event's own fields, whatever else the file carries", () => {
+    const extra = fromCsv(`${HEAD},notes\n${row()},hand-added\n`);
+    expect(Object.keys(extra[0]!).sort()).toEqual(HEAD.split(",").sort());
+  });
+
+  // src/lib/format.ts builds an outbound SGC link from the id. That it cannot become a
+  // scheme used to rest on the parser's extraction regex, two layers and a door away.
+  it("rejects an id that is not an SGC event id", () => {
+    expect(() => fromCsv(csv(row({ id: "javascript:alert(1)" })))).toThrow(
+      /line 2: id is not an SGC event id/,
+    );
+  });
+
+  it("rejects a timestamp that is shaped right but is not a real instant", () => {
+    expect(() => fromCsv(csv(row({ time: "2026-02-30T00:00:00Z" })))).toThrow(
+      /line 2: time is not a UTC instant/,
+    );
+    expect(() => fromCsv(csv(row({ time: "01/09/2026" })))).toThrow(/line 2: time is not a UTC instant/);
+  });
+});

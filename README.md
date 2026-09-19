@@ -23,7 +23,7 @@ changing anything. Most of it was found the hard way and is not visible in the c
 
 | Path | What |
 |---|---|
-| `core/` | Shared, runtime-neutral logic: SGC request + HTML parser (`seiscomp.ts`), statistics (`gr.ts`, including the one `computeStats` pipeline), CSV, CLI. Used by the Worker, the browser and Node. |
+| `core/` | Shared, runtime-neutral logic: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), statistics (`gr.ts`, including the one `computeStats` pipeline), CSV, CLI. Used by the Worker, the browser and Node. |
 | `worker/` | Hono API (`index.ts`), ingest rules (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`). |
 | `src/` | React page: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL. `lib/i18n.tsx` holds every user-facing string in `es` and `en`. |
 | `migrations/` | D1 schema. |
@@ -42,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 140 tests, offline
+pnpm test                 # 188 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -388,10 +388,32 @@ A full source audit lives outside the repo in `~/security-audit-skill/sgc-swarm/
   an hour. It now collects `skippedRows` and keeps the rest, and still throws when a
   *majority* is unparsable — that means we are misreading the page, not that SGC had a typo.
   A layout change, a missing table and a row-count mismatch are all still hard failures.
+- **Every event enters through one gate, `admitEvent` in `core/admit.ts`** (architecture
+  review candidate 01, 2026-09-19). The range checks used to live inside `parseCatalogHtml`,
+  so the other door was unguarded: `fromCsv` ended in `rec as unknown as SeismicEvent`, and
+  `pnpm cli bvalue --input` on a hand-edited catalogue counted a magnitude of `"abc"` as an
+  event while dropping it from the distribution, or threw `RangeError` on `1e7`. Both doors
+  now hand their raw cells to the gate and it decides. Rules that belong to it, not to a
+  caller: the field list, string coercion, the four bounds, the SGC id shape (which is what
+  keeps `sgcEventUrl` from becoming a `javascript:` link) and "a UTC instant" — `new Date`
+  rolls 30 February over into March rather than refusing it, so the gate reads the instant
+  back out. **Do not add a check at a door**; add it there.
+  - **A CSV rejects the whole file, the HTML page skips the row.** Deliberate, and not a
+    symmetry worth fixing: `ingestTrailing` recomputes the same window every tick, so a
+    stuck row freezes live figures, while a CSV is read once by someone who can edit it —
+    and silently dropping rows would have the CLI print a confident b-value from a
+    catalogue it had quietly edited.
+  - **The D1 read path is deliberately outside the gate.** `parseCatalogHtml` is the only
+    writer of `events` (no seed script, no `INSERT` in any migration, no admin route), while
+    `toStored` sits on the full-table scan that `/api/events`, `/api/events.csv`,
+    `/api/stats` and `/api/b-windows.csv` all share. Re-validating ~800 rows per request
+    would spend the 10 ms CPU budget on a door nothing untrusted reaches.
 - **Numeric fields are range-checked, not just `Number.isFinite`.** An absurd but finite
   magnitude would be stored and then size `new Array(hi - lo + 1)` in `fmd`, throwing
-  `RangeError` on every `/api/stats` call and blanking the page. `requireRange` bounds
-  lat, lon, depth and mag at the parser, the last trusted point before storage.
+  `RangeError` on every `/api/stats` call and blanking the page. lat, lon, depth and mag are
+  bounded to what the quantity can physically be. The solution-quality columns (phases, RMS,
+  GAP, the three errors) are deliberately *not* bounded: they reach no array size, and SGC
+  leaves them blank often enough that a missing one must not cost us the event.
 - **CSV cells must not start a formula.** `quote()` did RFC4180 escaping only, so an SGC
   `region`/`magType`/`status` beginning `=`, `+`, `-`, `@`, tab or CR reached both the
   server CSV and the page's download button intact. It is prefixed with `'` now — **except
