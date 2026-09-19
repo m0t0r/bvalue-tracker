@@ -9,10 +9,11 @@ import { downloadCsv } from "@/lib/download";
 import { fmtDateTime, fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { WINDOW_SIZE, type Stats } from "@/lib/use-stats";
+import type { Cluster } from "../../../core/clusters";
 import { windowsToCsv } from "../../../core/csv";
 
-/** `magType` is set while the b card limits the statistics to one magnitude type. */
-export const BOverTimeChart = memo(function BOverTimeChart({ stats, magType }: { stats: Stats; magType: string | null }) {
+/** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
+export const BOverTimeChart = memo(function BOverTimeChart({ stats, magType, cluster }: { stats: Stats; magType: string | null; cluster: Cluster | null }) {
   const { t, lang } = useI18n();
   const config = {
     b: { label: t.bTitle, color: "var(--chart-1)" },
@@ -32,10 +33,10 @@ export const BOverTimeChart = memo(function BOverTimeChart({ stats, magType }: {
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.bTimeTitle}</CardTitle>
-        <CardDescription>{magType !== null ? `${t.bScopeNote(magType)} ` : ""}{t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—")}</CardDescription>
+        <CardDescription>{cluster !== null ? `${t.clusterNote(t.clusterName[cluster])} ` : ""}{magType !== null ? `${t.bScopeNote(magType)} ` : ""}{t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—")}</CardDescription>
         <CardAction>
           <Button variant="outline" size="sm" aria-label={t.downloadBCsv} disabled={stats.windows.length === 0}
-            onClick={() => downloadCsv(magType !== null ? `sgc-choco-b-windows-${magType}.csv` : "sgc-choco-b-windows.csv", windowsToCsv(stats.windows, lang))}>
+            onClick={() => downloadCsv(`sgc-choco-b-windows${cluster !== null ? `-${cluster}` : ""}${magType !== null ? `-${magType}` : ""}.csv`, windowsToCsv(stats.windows, lang))}>
             <DownloadIcon data-icon="inline-start" />
             {t.downloadCsv}
           </Button>
@@ -43,7 +44,10 @@ export const BOverTimeChart = memo(function BOverTimeChart({ stats, magType }: {
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-center">
         {data.length < 2 ? (
-          <Empty><EmptyHeader><EmptyDescription>{t.bTimeEmpty(WINDOW_SIZE)}</EmptyDescription></EmptyHeader></Empty>
+          <Empty><EmptyHeader><EmptyDescription>
+            {/* A whole cluster with too few events is not something a wider date range can fix, so it gets its own words. */}
+            {cluster !== null && stats.fit && stats.fit.n < WINDOW_SIZE ? t.bTimeEmptyCluster(stats.fit.n.toLocaleString(lang), WINDOW_SIZE) : t.bTimeEmpty(WINDOW_SIZE)}
+          </EmptyDescription></EmptyHeader></Empty>
         ) : (
           <ChartContainer config={config} className="aspect-auto h-80 w-full">
             <ComposedChart data={data} margin={{ left: 0, right: 12, top: 16 }} title={t.bTimeTitle}

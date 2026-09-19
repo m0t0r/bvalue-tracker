@@ -94,6 +94,20 @@ export function mcGoodnessOfFit(
   return null;
 }
 
+export interface BDifference {
+  /** Gain in AIC from giving the two samples separate b-values. About 2 or more favours a real difference. */
+  dAic: number;
+  /** Probability that one shared b-value would produce a difference this large. */
+  p: number;
+}
+
+/** Utsu's (1992) test for whether two b-values differ, from each sample's size and b. */
+export function bDifference(x: { n: number; b: number }, y: { n: number; b: number }): BDifference {
+  const n = x.n + y.n;
+  const dAic = -2 * n * Math.log(n) + 2 * x.n * Math.log(x.n + (y.n * x.b) / y.b) + 2 * y.n * Math.log((x.n * y.b) / x.b + y.n) - 2;
+  return { dAic, p: Math.min(1, Math.exp(-dAic / 2 - 2)) };
+}
+
 export interface BWindow extends BValue {
   /** ISO times of the first and last event in the window. */
   from: string;

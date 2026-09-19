@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
-import { computeStats } from "../core/gr.ts";
+import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
+import { computeStats, type CatalogStats } from "../core/gr.ts";
 import { MAINSHOCK_ID } from "../core/seiscomp.ts";
 import type { StatusResponse, StoredEvent } from "./api-types.ts";
 import { lastRun, runInFlight, toStored, type EventRow } from "./db.ts";
@@ -130,8 +131,19 @@ app.get("/api/status", async (c) => {
   return c.json(await status(c.env.DB));
 });
 
+/** `cluster=shallow|deep` narrows a response to one depth cluster. Anything else is refused rather than silently ignored. */
+class BadCluster extends Error {}
+function parseCluster(q: Record<string, string>): Cluster | null {
+  if (q.cluster === undefined || q.cluster === "") return null;
+  if (q.cluster === "shallow" || q.cluster === "deep") return q.cluster;
+  throw new BadCluster();
+}
+const ofCluster = (events: StoredEvent[], cluster: Cluster | null) =>
+  cluster === null ? events : events.filter((e) => clusterOf(e) === cluster);
+
 app.get("/api/events", async (c) => {
-  const events = await queryEvents(c.env.DB, parseFilter(c.req.query()));
+  const q = c.req.query();
+  const events = ofCluster(await queryEvents(c.env.DB, parseFilter(q)), parseCluster(q));
   // Always revalidate: the page refetches right after a refresh and must not get the old body.
   c.header("cache-control", "no-cache");
   return c.json(events);
@@ -142,7 +154,7 @@ const csvLang = (q: Record<string, string>): CsvLang => (q.lang === "es" ? "es" 
 
 app.get("/api/events.csv", async (c) => {
   const q = c.req.query();
-  const events = await queryEvents(c.env.DB, parseFilter(q));
+  const events = ofCluster(await queryEvents(c.env.DB, parseFilter(q)), parseCluster(q));
   return c.body(toCsv(events, csvLang(q)), 200, {
     "content-type": "text/csv; charset=utf-8",
     "content-disposition": 'attachment; filename="sgc-choco-events.csv"',
@@ -153,17 +165,25 @@ app.get("/api/events.csv", async (c) => {
 const givenMc = (q: Record<string, string>): number | null =>
   q.mc !== undefined && Number.isFinite(Number(q.mc)) ? Number(q.mc) : null;
 
+/**
+ * A cluster's statistics come from computeClusterStats, never from computeStats on the cluster's own
+ * events: that would give the cluster its own Mc, and the page, which shares one Mc, would disagree.
+ */
+async function statsFor(db: D1Database, q: Record<string, string>): Promise<CatalogStats> {
+  const cluster = parseCluster(q);
+  const events = await queryEvents(db, parseFilter(q));
+  return cluster === null ? computeStats(events, givenMc(q)) : computeClusterStats(events, givenMc(q))[cluster].stats;
+}
+
 app.get("/api/stats", async (c) => {
-  const q = c.req.query();
-  const events = await queryEvents(c.env.DB, parseFilter(q));
+  const stats = await statsFor(c.env.DB, c.req.query());
   c.header("cache-control", "no-cache");
-  return c.json(computeStats(events, givenMc(q)));
+  return c.json(stats);
 });
 
 app.get("/api/b-windows.csv", async (c) => {
   const q = c.req.query();
-  const events = await queryEvents(c.env.DB, parseFilter(q));
-  return c.body(windowsToCsv(computeStats(events, givenMc(q)).windows, csvLang(q)), 200, {
+  return c.body(windowsToCsv((await statsFor(c.env.DB, q)).windows, csvLang(q)), 200, {
     "content-type": "text/csv; charset=utf-8",
     "content-disposition": 'attachment; filename="sgc-choco-b-windows.csv"',
     "cache-control": "no-cache",
@@ -200,6 +220,10 @@ app.post("/api/refresh", async (c) => {
 app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
 
 app.onError((err, c) => {
+  if (err instanceof BadCluster) {
+    c.header("cache-control", "no-store");
+    return c.json({ error: "cluster must be shallow or deep" }, 400);
+  }
   console.error(err);
   c.header("cache-control", "no-store");
   return c.json({ error: "internal error" }, 500);

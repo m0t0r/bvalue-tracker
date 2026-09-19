@@ -201,6 +201,22 @@ describe("API", () => {
     expect(stats.windows.at(-1).b).toBeCloseTo(0.58, 2);
     expect(stats.windows.at(-1).n).toBe(150);
 
+    // Each cluster is fitted above the Mc of the whole catalogue, as on the page; together they account for every event.
+    const shallow = (await (await call("/api/stats?cluster=shallow")).json()) as any;
+    const deep = (await (await call("/api/stats?cluster=deep")).json()) as any;
+    expect([shallow.mc, deep.mc]).toEqual([stats.mc, stats.mc]);
+    expect(shallow.count + deep.count).toBe(786);
+    expect(shallow.fit.n + deep.fit.n).toBe(528);
+    expect(shallow.fit.b).toBeCloseTo(0.738, 3);
+    expect(deep.fit.b).toBeCloseTo(0.816, 3);
+    expect(deep.windows).toHaveLength(0);
+    expect(((await (await call("/api/events?cluster=deep")).json()) as any[]).every((e) => e.depthKm >= 70)).toBe(true);
+    expect((await (await call("/api/events.csv?cluster=shallow")).text()).trim().split("\n")).toHaveLength(639 + 1);
+    expect((await (await call("/api/b-windows.csv?cluster=shallow")).text()).trim().split("\n")).toHaveLength(29 + 1);
+    const bad = await call("/api/stats?cluster=middle");
+    expect(bad.status).toBe(400);
+    expect(bad.headers.get("cache-control")).toBe("no-store");
+
     const manual = (await (await call("/api/stats?mc=2.5")).json()) as any;
     expect(manual.mc).toBe(2.5);
     expect(manual.fit.mc).toBe(2.5);

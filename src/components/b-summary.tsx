@@ -2,11 +2,13 @@ import { AlertTriangleIcon } from "lucide-react";
 import { FlowNumber } from "@/components/flow-number";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { MIN_RELIABLE_N, WINDOW_SIZE, type Stats } from "@/lib/use-stats";
 import { cn } from "@/lib/utils";
+import type { Cluster } from "../../core/clusters";
 
 interface Row { label: string; sub?: string; b: number; sigma: number; main: boolean }
 
@@ -47,7 +49,8 @@ function BScale({ rows }: { rows: Row[] }) {
         </div>
       </div>
       {/* Always visible rather than a tooltip: it has to work on a phone and for a reader who never hovers. */}
-      <ul aria-hidden className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
+      <Separator />
+      <ul aria-hidden className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-(--chart-1)" />{t.bLegendValue}</li>
         <li className="flex items-center gap-1.5"><span className="h-2 w-5 rounded-full bg-(--chart-1)/35" />{t.bLegendError}</li>
         <li className="flex items-center gap-1.5"><span className="h-3 w-px bg-muted-foreground" />{t.bLegendOne}</li>
@@ -68,7 +71,8 @@ export interface BScopeChoice {
   total: number;
 }
 
-export function BSummary({ stats, incomplete, scope }: { stats: Stats; incomplete: boolean; scope: BScopeChoice }) {
+/** `cluster` is set while the page is narrowed to one depth cluster; the card then says whose b it is showing. */
+export function BSummary({ stats, incomplete, scope, cluster }: { stats: Stats; incomplete: boolean; scope: BScopeChoice; cluster: Cluster | null }) {
   const { t, lang } = useI18n();
   const { fit, fitGft, mc, mcGft, windows } = stats;
   const { magType } = scope;
@@ -127,7 +131,7 @@ export function BSummary({ stats, incomplete, scope }: { stats: Stats; incomplet
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.bTitle}</CardTitle>
-        <CardDescription>Gutenberg–Richter · Aki–Utsu</CardDescription>
+        <CardDescription>{cluster !== null ? `${t.clusterName[cluster]} · ` : ""}Gutenberg–Richter · Aki–Utsu</CardDescription>
       </CardHeader>
       {magType === null ? <CardContent className={BODY}>{body}</CardContent> : (
         <CardContent className="flex flex-1 flex-col">

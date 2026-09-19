@@ -41,7 +41,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 93 tests, offline
+pnpm test                 # 113 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -53,6 +53,7 @@ pnpm cli fetch --out data/events.csv
 pnpm cli bvalue --input data/events.csv --windows
 pnpm cli bvalue --input data/events.csv --windows-out data/b-windows.csv
 pnpm cli bvalue --input data/events.csv --mc 2.5 --manual-only --exclude-mainshock
+pnpm cli bvalue --input data/events.csv --cluster shallow --windows   # always prints both clusters; --cluster narrows the windows
 pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 ```
 
@@ -78,7 +79,9 @@ events is not trusted for removals.
 `GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/b-windows.csv` (b over time, one
 row per window), `/api/status`, `POST /api/refresh`.
 Filters: `from`, `to` (a bare date is inclusive of that day), `minMag`, `status`,
-`includeRemoved=1`, `excludeMainshock=1`, and `mc` on `/api/stats` and `/api/b-windows.csv`.
+`includeRemoved=1`, `excludeMainshock=1`, `cluster=shallow|deep` (anything else is a 400), and `mc`
+on `/api/stats` and `/api/b-windows.csv`. With `cluster`, the statistics keep the Mc of the whole
+filtered catalogue, as the page does.
 
 **`/api/*` is same-origin only.** The Worker serves a request only when it carries
 `Sec-Fetch-Site: same-origin`, or an `Origin` equal to its own; anything else gets 403.
@@ -210,10 +213,42 @@ Dead ends, do not retry:
   each (`dominantMagType` in `core/gr.ts`); both use the all-types Mc so that only the
   magnitudes differ, and the b charts follow the tab. A proper fix is converting to
   one scale, which needs published SGC conversion relations: do not invent them.
-- **There are two clusters**, visible on the map: a shallower one (~40 km) under
-  Istmina/Sipí that was still producing M4.6–4.9 events in mid-September, and the
-  deep one (~100 km) around the mainshock. They probably deserve separate b-values;
-  nothing computes that yet.
+- **There are two clusters, and depth alone separates them** (`core/clusters.ts`, cut at
+  `CLUSTER_DEPTH_KM` = 70). Measured on production, 2026-09-19, 799 events: depth is bimodal
+  with a near-empty gap (286 events at 40–45 km; 5, 5, 1, 6 in the four 5-km bins from 55 to
+  75 km; 33–39 per bin at 80–95 km), and the groups are also apart on the map — shallow at
+  4.3–4.6 N, 76.6–76.8 W under Istmina/Sipí, deep at 4.7–4.9 N, 76.2–76.5 W around the
+  mainshock (itself at 103 km). Any cut from 55 to 75 km moves shallow b by 0.003 and deep b by
+  0.011; a test holds that on the fixture, so if SGC's revisions ever put a population on the
+  cut, it fails. 70 km is used because it is also the conventional shallow/intermediate
+  boundary. No lat/lon term and no clustering algorithm: the data does not need one and the
+  page could not explain it.
+  - Shared Mc 2.3: shallow **b = 0.732 ± 0.031** (n = 447), deep **b = 0.816 ± 0.112** (n = 90).
+    Fixture figures, which the tests pin: 0.738 ± 0.032 (n = 438) and 0.816 ± 0.112 (n = 90).
+    All were recomputed independently in Python.
+  - **The two b-values cannot be told apart** (Utsu 1992 test, p = 0.24; `bDifference` in
+    `core/gr.ts`). The page says that in words. "Two different b-values" is not the finding.
+  - **The September slide in b is inside the shallow cluster and is not a mixing artefact**:
+    1.08 ± 0.07 → 0.59 ± 0.04 over its own 150-event windows, stronger than in the mixture.
+    The magnitude-type caveat above still applies inside the cluster: with MLr_1 only, the
+    shallow windows end at 0.82. The split does not settle that, and the page must not imply it.
+  - **What really differs is activity.** The deep cluster is a finished aftershock decay: 73 of
+    its 90 events ≥ Mc came in the first week, none in the sixth, and its three M ≥ 4 events were
+    all over by 13 August. The shallow cluster is all of the current activity and its large
+    events are becoming more frequent (20 of its 25 M ≥ 4 events since 8 September). For a reader
+    who is not a seismologist this is the useful part, so the "Dos grupos de eventos" card leads
+    with it and the daily-count bars are stacked by cluster.
+  - **Both clusters use the Mc of the whole filtered catalogue**, like the magnitude-type tabs,
+    so only the population differs. `computeClusterStats` is the one place that rule lives; the
+    page, `/api/stats?cluster=` and the CLI all go through it. Never call `computeStats` on a
+    cluster's own events, which would give it its own Mc. A cluster whose own maximum-curvature
+    Mc is higher than the shared one gets a caution badge (b would be biased low); today both
+    are 2.3.
+  - The deep cluster has too few events for 150-event windows, and smaller windows (±0.11–0.16)
+    say nothing a reader should act on. It gets one b with its error bar, and the chart says why.
+  - "Low b is common for intermediate-depth sequences" used to be on the page as context for the
+    slide. It was misplaced: the low b is in the *shallow* cluster. The caveat now describes the
+    two groups instead.
 - It is a mainshock–aftershock **sequence**, not a swarm. The UI says "secuencia
   sísmica"; "enjambre" would read as technically wrong to a seismologist. The repo
   name predates that.
@@ -421,6 +456,24 @@ colour, motion). Keep to them:
   The view starts at the newest events and stays there through a refresh unless the
   reader has scrolled away from the right edge. Date ticks go from weekly to whatever
   fits in `TICK_GAP` while it scrolls. Above 768 px nothing changes.
+- **Choosing a cluster narrows the whole page**, like a filter: "Ver solo este grupo" in the
+  "Dos grupos de eventos" card. While it is on, a notice under the status bar names the group and
+  offers "Ver todos"; it sits outside the cards because a cluster can be emptied by the other
+  filters, and the control must not vanish with it. The comparison was tried inside the b card
+  first (as rows on its b scale): the card grew to ~1,400 px, the groups landed far below the
+  fold and the chart beside it was left mostly empty, so it has its own card. Shallow is the
+  page's blue and deep the neutral grey (`--chart-1`, `--chart-3`) everywhere; orange stays the
+  mainshock's. "Grupo", never "cúmulo" or "enjambre". The 7-day counts are counts: nothing in
+  that card may read as a forecast.
+- **The per-group daily strips in that card scroll sideways when narrow**, on the same idea as
+  "Magnitud en el tiempo": below `MIN_BAR` (10 px) per day each day gets `PX_PER_DAY` (28 px), the
+  strip starts at the newest day, each bar carries its count and every third day its date, and
+  one gesture moves both strips. Every ancestor up to the tile needs `min-w-0`; without it the
+  strip widens its tile instead of scrolling, the width it measures grows, and it flips back out
+  of scrolling mode.
+- "Detalle técnico" is one component (`technical-detail.tsx`, on shadcn `Collapsible`), used by
+  the load error, the failed-ingest alert and the groups card. `CardDescription` caps itself at
+  75ch; a card that wants a full-width subtitle passes `max-w-none`.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
 - Charts and the map redraw on every filter change, so they do not animate. The
@@ -462,7 +515,7 @@ Safari, and the back-fill and ingest-failure alerts in their live states.
   decaying like a textbook sequence, so model the clusters separately. Present any
   such number as an unofficial estimate with its uncertainty, name SGC as the
   authority, and have the researcher check the method before it goes public.
-- Per-cluster b-value, rate and depth over time; migration plots; cumulative
+- Per-cluster depth over time; migration plots; cumulative
   seismic moment; filtering by RMS/GAP/location error; a view of SGC's revisions,
   which our database records and SGC does not publish.
 - Notifications (for example M ≥ 4.5) are a small addition to the cron. Do not

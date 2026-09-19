@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bValue, bValueWindows, dominantMagType, fmd, mcGoodnessOfFit, mcMaxCurvature } from "../core/gr.ts";
+import { bDifference, bValue, bValueWindows, dominantMagType, fmd, mcGoodnessOfFit, mcMaxCurvature } from "../core/gr.ts";
 
 function mulberry32(seed: number): () => number {
   let a = seed;
@@ -124,5 +124,34 @@ describe("dominantMagType", () => {
   it("is null when there is nothing to separate", () => {
     expect(dominantMagType([])).toBeNull();
     expect(dominantMagType([{ magType: "MLr_1" }, { magType: "MLr_1" }])).toBeNull();
+  });
+});
+
+describe("bDifference", () => {
+  it("matches Utsu's formula worked by hand", () => {
+    // N = 537: -2·537·ln 537 + 2·447·ln(447 + 90·0.732/0.816) + 2·90·ln(447·0.816/0.732 + 90) - 2
+    const d = bDifference({ n: 447, b: 0.732 }, { n: 90, b: 0.816 });
+    expect(d.dAic).toBeCloseTo(-1.137, 3);
+    expect(d.p).toBeCloseTo(0.239, 3);
+  });
+
+  it("does not care which sample comes first", () => {
+    const x = { n: 447, b: 0.732 }, y = { n: 90, b: 0.816 };
+    expect(bDifference(x, y).dAic).toBeCloseTo(bDifference(y, x).dAic, 10);
+  });
+
+  it("charges identical b-values the full penalty for the extra parameter, and never reports p above 1", () => {
+    const d = bDifference({ n: 300, b: 0.9 }, { n: 120, b: 0.9 });
+    expect(d.dAic).toBeCloseTo(-2, 10);
+    expect(d.p).toBeCloseTo(Math.exp(-1), 10);
+    expect(bDifference({ n: 2, b: 1 }, { n: 2, b: 1.0001 }).p).toBeLessThanOrEqual(1);
+  });
+
+  it("sees a real difference and mostly ignores chance ones", () => {
+    const fit = (b: number, seed: number) => bValue(synthetic(500, b, 2.0, seed), 2.0);
+    expect(bDifference(fit(0.7, 1), fit(1.1, 2)).p).toBeLessThan(0.001);
+    let falseAlarms = 0;
+    for (let seed = 0; seed < 200; seed++) if (bDifference(fit(0.9, 1000 + seed), fit(0.9, 5000 + seed)).p < 0.05) falseAlarms++;
+    expect(falseAlarms / 200).toBeLessThan(0.08);
   });
 });
