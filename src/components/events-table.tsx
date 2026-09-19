@@ -3,7 +3,7 @@ import {
   rowPaginationFeature, rowSortingFeature, sortFn_alphanumeric, sortFn_basic, sortFn_text, tableFeatures, useTable,
 } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,8 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toCsv } from "../../core/csv";
 import type { StoredEvent } from "@/lib/api";
-import { fmtDateTime, fmtNum } from "@/lib/format";
+import { downloadCsv } from "@/lib/download";
+import { fmtIsoDateTime, fmtNum, fmtUtc } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -27,24 +28,17 @@ const NUMERIC = new Set(["mag", "depthKm", "lat", "lon", "phases", "rmsS", "gapD
 
 const sgcUrl = (id: string) => `https://www.sgc.gov.co/detallesismo/${id}/resumen`;
 
-function download(events: readonly StoredEvent[]) {
-  const url = URL.createObjectURL(new Blob([toCsv(events)], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "sgc-choco-events.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-export function EventsTable({ events }: { events: StoredEvent[] }) {
-  const { t } = useI18n();
+export const EventsTable = memo(function EventsTable({ events }: { events: StoredEvent[] }) {
+  const { t, lang } = useI18n();
   const columns = useMemo(
     () => helper.columns([
       helper.accessor("time", {
         header: t.colTime,
         cell: (c) => (
-          <a className="underline underline-offset-4" href={sgcUrl(c.row.original.id)} target="_blank" rel="noreferrer">
-            {fmtDateTime(c.getValue())}
+          // The UTC form, as SGC and the CSV give it, stays one hover away for matching a row against them.
+          <a className="underline underline-offset-4" href={sgcUrl(c.row.original.id)} target="_blank" rel="noreferrer"
+            title={fmtUtc(c.getValue())}>
+            {fmtIsoDateTime(c.getValue())}
           </a>
         ),
       }),
@@ -87,7 +81,7 @@ export function EventsTable({ events }: { events: StoredEvent[] }) {
       <CardHeader>
         <CardTitle>{t.tableTitle}</CardTitle>
         <CardAction>
-          <Button variant="outline" size="sm" onClick={() => download(events)} disabled={events.length === 0}>
+          <Button variant="outline" size="sm" onClick={() => downloadCsv("sgc-choco-events.csv", toCsv(events, lang))} disabled={events.length === 0}>
             <DownloadIcon data-icon="inline-start" />
             {t.downloadCsv}
           </Button>
@@ -148,4 +142,4 @@ export function EventsTable({ events }: { events: StoredEvent[] }) {
       </CardFooter>
     </Card>
   );
-}
+});

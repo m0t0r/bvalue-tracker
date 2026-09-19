@@ -10,7 +10,9 @@ import "./index.css";
 initTheme();
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 60_000, refetchOnWindowFocus: false } },
+  // refetchOnWindowFocus is left at the library default (true): a stale query refetches when the tab
+  // becomes visible again. It was switched off here once, which left a background tab showing old data.
+  defaultOptions: { queries: { staleTime: 60_000 } },
 });
 
 createRoot(document.getElementById("root")!).render(

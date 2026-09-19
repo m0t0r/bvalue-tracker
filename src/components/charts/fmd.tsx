@@ -1,11 +1,11 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { CartesianGrid, ComposedChart, Line, ReferenceLine, Scatter, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/use-stats";
 
-export function FmdChart({ stats }: { stats: Stats }) {
+export const FmdChart = memo(function FmdChart({ stats }: { stats: Stats }) {
   const { t } = useI18n();
   const { bins, fit, mc } = stats;
 
@@ -18,19 +18,25 @@ export function FmdChart({ stats }: { stats: Stats }) {
   const data = useMemo(
     () => bins.map((b) => ({
       mag: b.mag,
-      cumulative: b.cumulative,
+      // Drawn only where an event exists. A dot at every step turns the lone mainshock into a
+      // long flat run at N = 1, which reads as data. The tooltip still reports every step.
+      cumulative: b.count > 0 ? b.cumulative : null,
+      cumulativeAll: b.cumulative,
       count: b.count > 0 ? b.count : null, // zero cannot be drawn on a log axis
       fit: fit && mc !== null && b.mag >= mc - 1e-9 && fit.a - fit.b * b.mag >= 0 ? 10 ** (fit.a - fit.b * b.mag) : null,
     })),
     [bins, fit, mc],
   );
+  // The largest event, when nothing lies within a magnitude unit below it: worth naming, or it looks like a stray point.
+  const filled = bins.filter((b) => b.count > 0);
+  const isolated = filled.length > 1 && filled.at(-1)!.mag - filled.at(-2)!.mag >= 1 ? filled.at(-1)!.mag : null;
   const top = Math.max(10, ...bins.map((b) => b.cumulative));
 
   return (
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.fmdTitle}</CardTitle>
-        <CardDescription>{t.fmdDesc}</CardDescription>
+        <CardDescription>{t.fmdDesc}{isolated !== null ? ` ${t.fmdIsolated(isolated.toFixed(1))}` : ""}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="aspect-auto h-80 w-full">
@@ -46,7 +52,7 @@ export function FmdChart({ stats }: { stats: Stats }) {
               return (
                 <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
                   <div className="font-medium">M{p.mag.toFixed(1)}</div>
-                  <div>{t.cumulative}: {p.cumulative}</div>
+                  <div>{t.cumulative}: {p.cumulativeAll}</div>
                   <div>{t.perBin}: {p.count ?? 0}</div>
                 </div>
               );
@@ -65,4 +71,4 @@ export function FmdChart({ stats }: { stats: Stats }) {
       </CardContent>
     </Card>
   );
-}
+});

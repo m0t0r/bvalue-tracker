@@ -1,14 +1,18 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis } from "recharts";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DownloadIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { downloadCsv } from "@/lib/download";
 import { fmtDateTime, fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { WINDOW_SIZE, type Stats } from "@/lib/use-stats";
+import { windowsToCsv } from "../../../core/csv";
 
-export function BOverTimeChart({ stats }: { stats: Stats }) {
-  const { t } = useI18n();
+export const BOverTimeChart = memo(function BOverTimeChart({ stats }: { stats: Stats }) {
+  const { t, lang } = useI18n();
   const config = {
     b: { label: t.bTitle, color: "var(--chart-1)" },
     band: { label: t.band, color: "var(--chart-1)" },
@@ -28,6 +32,13 @@ export function BOverTimeChart({ stats }: { stats: Stats }) {
       <CardHeader>
         <CardTitle>{t.bTimeTitle}</CardTitle>
         <CardDescription>{t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—")}</CardDescription>
+        <CardAction>
+          <Button variant="outline" size="sm" aria-label={t.downloadBCsv} disabled={stats.windows.length === 0}
+            onClick={() => downloadCsv("sgc-choco-b-windows.csv", windowsToCsv(stats.windows, lang))}>
+            <DownloadIcon data-icon="inline-start" />
+            {t.downloadCsv}
+          </Button>
+        </CardAction>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-center">
         {data.length < 2 ? (
@@ -37,7 +48,7 @@ export function BOverTimeChart({ stats }: { stats: Stats }) {
             <ComposedChart data={data} margin={{ left: 0, right: 12, top: 16 }} title={t.bTimeTitle}
               desc={t.bTimeAlt(data[0]!.b.toFixed(2), data[data.length - 1]!.b.toFixed(2))}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={fmtDay}
+              <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={(ms: number) => fmtDay(ms, lang)}
                 tickLine={false} axisLine={false} tickMargin={8} minTickGap={40} />
               <YAxis type="number" domain={[Math.floor(lo * 10) / 10, Math.ceil(hi * 10) / 10]}
                 tickFormatter={(v: number) => v.toFixed(1)} tickLine={false} axisLine={false} width={32} />
@@ -47,7 +58,7 @@ export function BOverTimeChart({ stats }: { stats: Stats }) {
                 return (
                   <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
                     <div className="font-medium">b = {p.b.toFixed(2)} ± {p.sigma.toFixed(2)}</div>
-                    <div className="text-muted-foreground">{fmtDateTime(p.from)} → {fmtDateTime(p.to)} UTC</div>
+                    <div className="text-muted-foreground">{fmtDateTime(p.from, lang)} → {fmtDateTime(p.to, lang)} ({t.tz})</div>
                   </div>
                 );
               }} />
@@ -61,4 +72,4 @@ export function BOverTimeChart({ stats }: { stats: Stats }) {
       </CardContent>
     </Card>
   );
-}
+});

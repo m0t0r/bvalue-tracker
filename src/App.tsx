@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, InfoIcon, MoonIcon, SunIcon } from "lucide-react";
-import { Suspense, lazy, useMemo, useState, type CSSProperties } from "react";
+import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
 import { BOverTimeChart } from "@/components/charts/b-over-time";
 import { FmdChart } from "@/components/charts/fmd";
@@ -28,11 +28,34 @@ export function App() {
   const dark = useIsDark();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   // The Worker's cron updates the database every 15 minutes; an open page picks that up by itself.
-  const events = useQuery({ queryKey: ["events"], queryFn: getEvents, refetchInterval: 300_000 });
-  const status = useQuery({ queryKey: ["status"], queryFn: getStatus, refetchInterval: 60_000 });
+  // Status is the cheap heartbeat: polled every minute, and again whenever the tab comes back to the
+  // front, because interval polling pauses while a tab is hidden. Events are refetched when status
+  // reports a newer ingest, so the figures never lag the "last update" shown above them, and when
+  // the reader returns after more than the one-minute stale time.
+  const qc = useQueryClient();
+  const events = useQuery({ queryKey: ["events"], queryFn: getEvents });
+  const status = useQuery({ queryKey: ["status"], queryFn: getStatus, refetchInterval: 60_000, refetchOnWindowFocus: "always" });
+  const lastIngest = status.data?.lastSuccessfulRun?.finishedAt ?? null;
+  const seenIngest = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastIngest === null) return;
+    if (seenIngest.current !== null && seenIngest.current !== lastIngest) void qc.invalidateQueries({ queryKey: ["events"] });
+    seenIngest.current = lastIngest;
+  }, [lastIngest, qc]);
 
-  const shown = useMemo(() => applyFilters(events.data ?? NO_EVENTS, filters), [events.data, filters]);
+  // Keyed on the fields that select events, not on `filters`: moving Mc must not hand the map,
+  // the table and the magnitude chart a new array to redraw.
+  const { from, to, minMag, manualOnly, excludeMainshock } = filters;
+  const shown = useMemo(
+    () => applyFilters(events.data ?? NO_EVENTS, { from, to, minMag, manualOnly, excludeMainshock, mc: null }),
+    [events.data, from, to, minMag, manualOnly, excludeMainshock],
+  );
   const stats = useStats(shown, filters.mc);
+  // The numbers update at once; the charts, map and table follow in an interruptible render. Drawn
+  // together they hold the main thread for ~300ms per slider step, which starves the rolling
+  // digits of frames so they appear to jump.
+  const heavyShown = useDeferredValue(shown);
+  const heavyStats = useDeferredValue(stats);
   const incomplete = !!status.data && status.data.backfill.done < status.data.backfill.total;
   const other = lang === "es" ? "en" : "es";
 
@@ -43,12 +66,15 @@ export function App() {
           <h1 className="text-3xl font-semibold tracking-tight text-balance">{t.title}</h1>
           <p className="text-muted-foreground text-pretty">{t.subtitle}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" lang={other} onClick={() => setLang(other)}>
+        <div className="ml-auto flex items-center gap-2">
+          {/* On touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
+          <Button variant="outline" size="sm" lang={other} onClick={() => setLang(other)}
+            className="pointer-coarse:h-10 pointer-coarse:px-4 pointer-coarse:text-sm pointer-coarse:after:-inset-x-0 pointer-coarse:after:-inset-y-0.5">
             {lang === "es" ? "English" : "Español"}
           </Button>
-          <Button variant="outline" size="icon-sm" aria-label={dark ? t.themeToLight : t.themeToDark} onClick={toggleTheme}>
-            {dark ? <SunIcon /> : <MoonIcon />}
+          <Button variant="outline" size="icon-sm" aria-label={dark ? t.themeToLight : t.themeToDark} onClick={toggleTheme}
+            className="pointer-coarse:size-10 pointer-coarse:after:-inset-0.5">
+            {dark ? <SunIcon className="size-4 pointer-coarse:size-5" /> : <MoonIcon className="size-4 pointer-coarse:size-5" />}
           </Button>
         </div>
       </header>
@@ -78,7 +104,7 @@ export function App() {
             {shown.length > 0 ? (
               <div className="enter grid gap-6 lg:grid-cols-3">
                 <BSummary stats={stats} incomplete={incomplete} />
-                <div className="lg:col-span-2"><BOverTimeChart stats={stats} /></div>
+                <div className="lg:col-span-2"><BOverTimeChart stats={heavyStats} /></div>
               </div>
             ) : null}
 
@@ -98,11 +124,11 @@ export function App() {
             ) : (
               <>
                 <div className="enter grid gap-6 lg:grid-cols-2" style={row(1)}>
-                  <FmdChart stats={stats} />
-                  <Suspense fallback={<Skeleton className="h-full min-h-[31rem] w-full" />}><EventMap events={shown} /></Suspense>
+                  <FmdChart stats={heavyStats} />
+                  <Suspense fallback={<Skeleton className="h-full min-h-[31rem] w-full" />}><EventMap events={heavyShown} /></Suspense>
                 </div>
-                <div className="enter" style={row(2)}><MagnitudeTimeChart events={shown} /></div>
-                <div className="enter" style={row(3)}><EventsTable events={shown} /></div>
+                <div className="enter" style={row(2)}><MagnitudeTimeChart events={heavyShown} /></div>
+                <div className="enter" style={row(3)}><EventsTable events={heavyShown} /></div>
               </>
             )}
           </>
@@ -128,6 +154,7 @@ export function App() {
           href="https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php">
           bdrsnc.sgc.gov.co
         </a>
+        <p className="mt-1 max-w-[75ch] text-pretty">{t.autoUpdateLong}</p>
       </footer>
     </div>
   );
