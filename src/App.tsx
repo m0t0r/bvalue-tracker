@@ -71,22 +71,23 @@ export function App() {
 
   return (
     <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex max-w-3xl flex-col gap-2">
+      <header className="flex flex-col gap-2">
+        {/* Title and controls share the top row; the subtitle runs the full width underneath. */}
+        <div className="flex items-start justify-between gap-4">
           <h1 className="text-3xl font-semibold tracking-tight text-balance">{t.title}</h1>
-          <p className="text-muted-foreground text-pretty">{t.subtitle}</p>
+          <div className="ml-auto flex items-center gap-2">
+            {/* On touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
+            <Button variant="outline" size="sm" lang={other} onClick={() => setLang(other)}
+              className="pointer-coarse:h-10 pointer-coarse:px-4 pointer-coarse:text-sm pointer-coarse:after:-inset-x-0 pointer-coarse:after:-inset-y-0.5">
+              {lang === "es" ? "English" : "Español"}
+            </Button>
+            <Button variant="outline" size="icon-sm" aria-label={dark ? t.themeToLight : t.themeToDark} onClick={toggleTheme}
+              className="pointer-coarse:size-10 pointer-coarse:after:-inset-0.5">
+              {dark ? <SunIcon className="size-4 pointer-coarse:size-5" /> : <MoonIcon className="size-4 pointer-coarse:size-5" />}
+            </Button>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          {/* On touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
-          <Button variant="outline" size="sm" lang={other} onClick={() => setLang(other)}
-            className="pointer-coarse:h-10 pointer-coarse:px-4 pointer-coarse:text-sm pointer-coarse:after:-inset-x-0 pointer-coarse:after:-inset-y-0.5">
-            {lang === "es" ? "English" : "Español"}
-          </Button>
-          <Button variant="outline" size="icon-sm" aria-label={dark ? t.themeToLight : t.themeToDark} onClick={toggleTheme}
-            className="pointer-coarse:size-10 pointer-coarse:after:-inset-0.5">
-            {dark ? <SunIcon className="size-4 pointer-coarse:size-5" /> : <MoonIcon className="size-4 pointer-coarse:size-5" />}
-          </Button>
-        </div>
+        <p className="text-muted-foreground text-pretty">{t.subtitle}</p>
       </header>
 
       <main className="contents">
