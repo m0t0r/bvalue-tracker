@@ -312,11 +312,22 @@ Each of these was a real bug in production or in review:
   step; the technical string goes in a collapsed `<details>`.
 
 The account is on the **Workers free plan**, whose ceilings are 100,000 requests/day,
-50 subrequests and 50 D1 queries per invocation, and **10 ms CPU per invocation** —
-wall time is not the limit, and runs finish in 1–13 s of it. 312 cron invocations a day
-and ~70k D1 rows read are nowhere near the daily allowances; 10 ms CPU is the one that
-could bite, and **polling more often does not change per-invocation CPU**, so the
-5-minute cadence neither helps nor hurts it.
+5,000,000 D1 rows read/day, 100,000 D1 rows written/day, 50 subrequests and 50 D1 queries
+per invocation, and **10 ms CPU per invocation** — wall time is not the limit, and runs
+finish in 1–13 s of it. 312 cron invocations a day and ~70k D1 rows read are nowhere near
+the daily allowances; 10 ms CPU is the one that could bite, and **polling more often does
+not change per-invocation CPU**, so the 5-minute cadence neither helps nor hurts it.
+
+That ~70k only holds because `ingest_runs` is indexed for it. **Do not add a hot query
+over `ingest_runs` without an index**: the table now grows ~312 rows/day, and the three
+queries that run on a tick — `fastLaneBlocked`'s rate-limit lookup (192/day),
+`backfillProgress` and `ingestSweep` — were full scans when the 5-minute cadence landed.
+Unindexed, that is ~5.4M rows/day at three months and ~21M at a year, i.e. through the
+free plan's 5M and climbing. `migrations/0003` fixes it: `ingest_runs_rate_limited` is a
+**partial** index holding only the runs SGC refused, so the ordinary case reads an empty
+index rather than every run ever recorded, and `ingest_runs_sweep`'s column order makes
+the other two covering searches over the sweep rows alone. Check `EXPLAIN QUERY PLAN`
+before adding a fourth.
 
 Still open: that 10 ms has **not been measured**. Read `cpuTime` off a scheduled event
 with `pnpm exec wrangler tail choco --format json` for each of the three lanes (narrow
