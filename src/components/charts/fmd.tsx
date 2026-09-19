@@ -40,8 +40,10 @@ export const FmdChart = memo(function FmdChart({ stats, magType, cluster }: { st
         <CardTitle>{t.fmdTitle}</CardTitle>
         <CardDescription>{cluster !== null ? `${t.clusterNote(t.clusterName[cluster])} ` : ""}{magType !== null ? `${t.bScopeNote(magType)} ` : ""}{t.fmdDesc}{isolated !== null ? ` ${t.fmdIsolated(isolated.toFixed(1))}` : ""}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-80 w-full">
+      {/* The card is stretched to the map beside it, so the chart takes the leftover height
+          rather than leaving it blank under the legend. */}
+      <CardContent className="flex flex-1 flex-col">
+        <ChartContainer config={config} className="aspect-auto min-h-80 w-full flex-1">
           <ComposedChart data={data} margin={{ left: 0, right: 12, top: 16 }} title={t.fmdTitle} desc={t.fmdDesc}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="mag" type="number" domain={["dataMin", "dataMax"]} tickCount={8}

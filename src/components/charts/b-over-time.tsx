@@ -42,6 +42,8 @@ export const BOverTimeChart = memo(function BOverTimeChart({ stats, magType, clu
           </Button>
         </CardAction>
       </CardHeader>
+      {/* Centred at a fixed height, not stretched to the b card beside it: the y axis is pinned to
+          0.4–1.2, so a taller plot would draw the same slide in b as a steeper fall. */}
       <CardContent className="flex flex-1 flex-col justify-center">
         {data.length < 2 ? (
           <Empty><EmptyHeader><EmptyDescription>

@@ -621,6 +621,12 @@ colour, motion). Keep to them:
   which is what makes hiding them here safe. The chart itself keeps its fixed `h-80` and stays
   centred in whatever height the row has; letting it grow to fill would steepen the slope of a
   b-value decline the page is careful not to oversell.
+- **A chart grows into the space beside it only where the extra height cannot mislead.**
+  Cards in a two-column row are stretched to the taller one, so a fixed-height chart leaves a
+  void under its legend. "Distribución frecuencia–magnitud" therefore fills its card (`flex-1`
+  with `min-h-80`) instead of sitting at `h-80` with ~90 px blank beneath it: both of its axes
+  are read off the data, so the room only spreads its points out. "Valor b en el tiempo" is the
+  counter-example directly above — with a pinned y axis, height is a claim about the slope.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
 - Charts and the map redraw on every filter change, so they do not animate. The
