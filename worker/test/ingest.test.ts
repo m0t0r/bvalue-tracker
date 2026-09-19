@@ -180,13 +180,22 @@ describe("sweep", () => {
 });
 
 describe("API", () => {
-  it("sends the security headers the static-asset layer cannot reach on /api/*", async () => {
-    // Refusals and 404s carry them too: the middleware wraps everything under /api/.
-    for (const res of [await call("/api/status"), await callRaw("/api/status"), await call("/api/nope")]) {
+  it("sends the security headers the static-asset layer cannot reach", async () => {
+    // Refusals, API 404s and the catch-all 404 carry them too: the middleware wraps everything.
+    for (const res of [await call("/api/status"), await callRaw("/api/status"), await call("/api/nope"), await callRaw("/nope")]) {
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
       expect(res.headers.get("referrer-policy")).toBe("no-referrer");
       expect(res.headers.get("strict-transport-security")).toBe("max-age=63072000; includeSubDomains; preload");
     }
+  });
+
+  it("answers a path that matches no asset with a 404, not with the page", async () => {
+    // The asset layer passes these through (not_found_handling: "none"). Answering them with
+    // index.html and a 200 instead told crawlers that every typo was a real page.
+    const res = await callRaw("/no-such-page");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toMatch(/text\/plain/);
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
   it("reports the reference statistics for the captured catalogue", async () => {
