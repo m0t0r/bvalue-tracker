@@ -22,6 +22,18 @@ const es = {
   backfillBody: "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
   backfillAction: "Cargar ahora",
   backfillShort: "Historial incompleto",
+  scopeTitle: (shown: string, total: string) => `Mostrando ${shown} de ${total} eventos`,
+  scopeShort: (shown: string, total: string) => `${shown} de ${total}`,
+  scopeAria: "Filtros activos",
+  scopeClear: "Quitar filtros",
+  chipAllDates: "Todas las fechas",
+  chipRange: (a: string, b: string) => `${a} – ${b}`,
+  chipFrom: (d: string) => `desde ${d}`,
+  chipTo: (d: string) => `hasta ${d}`,
+  chipMinMag: (m: string) => `M ≥ ${m}`,
+  chipManual: "Solo revisados",
+  chipNoMainshock: "Sin el sismo principal",
+  chipMc: (m: string) => `Mc = ${m}`,
   filters: "Filtros",
   from: "Desde",
   to: "Hasta",
@@ -75,7 +87,6 @@ const es = {
   clusterSame: "Los valores b de los dos grupos no se distinguen: su diferencia es menor que su incertidumbre.",
   clusterDiffer: "La diferencia entre los valores b de los dos grupos es mayor que lo esperable por azar.",
   clusterTest: (p: string) => `Prueba de Utsu (1992): p = ${p}. Los dos grupos usan la misma Mc, la de todo el catálogo.`,
-  clusterShowing: (name: string) => `Mostrando solo: ${name.toLowerCase()}`,
   clusterClear: "Ver todos",
   clusterNote: (name: string) => `${name}.`,
   bTimeEmptyCluster: (have: string, need: number) => `Este grupo tiene ${have} eventos ≥ Mc y cada ventana necesita ${need}, así que su valor b es una sola cifra, sin evolución en el tiempo.`,
@@ -143,7 +154,7 @@ const es = {
   timeNote: "Las fechas y horas son de Colombia (UTC−5). Los CSV descargados usan UTC.",
 };
 
-type Dict = typeof es;
+export type Dict = typeof es;
 
 const en: Dict = {
   docTitle: "Chocó earthquake sequence · b-value",
@@ -167,6 +178,18 @@ const en: Dict = {
   backfillBody: "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
   backfillAction: "Load now",
   backfillShort: "History incomplete",
+  scopeTitle: (shown, total) => `Showing ${shown} of ${total} events`,
+  scopeShort: (shown, total) => `${shown} of ${total}`,
+  scopeAria: "Active filters",
+  scopeClear: "Clear filters",
+  chipAllDates: "All dates",
+  chipRange: (a, b) => `${a} – ${b}`,
+  chipFrom: (d) => `from ${d}`,
+  chipTo: (d) => `to ${d}`,
+  chipMinMag: (m) => `M ≥ ${m}`,
+  chipManual: "Reviewed only",
+  chipNoMainshock: "Without the mainshock",
+  chipMc: (m) => `Mc = ${m}`,
   filters: "Filters",
   from: "From",
   to: "To",
@@ -220,7 +243,6 @@ const en: Dict = {
   clusterSame: "The two groups' b-values cannot be told apart: they differ by less than their uncertainty.",
   clusterDiffer: "The two groups' b-values differ by more than chance would explain.",
   clusterTest: (p) => `Utsu's test (1992): p = ${p}. Both groups use the same Mc, that of the whole catalogue.`,
-  clusterShowing: (name) => `Showing only: ${name.toLowerCase()}`,
   clusterClear: "Show all",
   clusterNote: (name) => `${name}.`,
   bTimeEmptyCluster: (have, need) => `This group has ${have} events ≥ Mc and each window needs ${need}, so its b-value is a single figure with no change over time.`,
@@ -289,7 +311,8 @@ const en: Dict = {
 };
 
 export type Lang = "es" | "en";
-const dicts: Record<Lang, Dict> = { es, en };
+/** Exported for the tests, which assert on strings without mounting the page. */
+export const dicts: Record<Lang, Dict> = { es, en };
 const STORAGE_KEY = "sgc-swarm:lang";
 
 const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({ lang: "es", t: es, setLang: () => {} });

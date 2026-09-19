@@ -126,6 +126,10 @@
     }
   html {
     @apply font-sans antialiased;
+    /* Room for the scope bar, which is fixed to the top of the window. Tabbing backwards scrolls
+       up, which is exactly what brings the bar in, so without this the browser can put the newly
+       focused control underneath it. */
+    scroll-padding-top: 4rem;
     }
 }
 :root {

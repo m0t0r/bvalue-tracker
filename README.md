@@ -28,6 +28,7 @@ changing anything. Most of it was found the hard way and is not visible in the c
 | `src/` | React page: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL. `lib/i18n.tsx` holds every user-facing string in `es` and `en`. |
 | `migrations/` | D1 schema. |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18. |
+| `src/**/*.test.ts` | The page's own pure logic, in a third vitest project (`page`). It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec. Its §3 lists every verified fact about the SGC endpoint. |
 
 ## Develop
@@ -41,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 133 tests, offline
+pnpm test                 # 138 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -567,14 +568,40 @@ colour, motion). Keep to them:
   reader has scrolled away from the right edge. Date ticks go from weekly to whatever
   fits in `TICK_GAP` while it scrolls. Above 768 px nothing changes.
 - **Choosing a cluster narrows the whole page**, like a filter: "Ver solo este grupo" in the
-  "Dos grupos de eventos" card. While it is on, a notice under the status bar names the group and
-  offers "Ver todos"; it sits outside the cards because a cluster can be emptied by the other
-  filters, and the control must not vanish with it. The comparison was tried inside the b card
+  "Dos grupos de eventos" card. It is one of the settings the scope notice below names, and it sits
+  outside the cards because a cluster can be emptied by the other filters, and the control must not
+  vanish with it. The comparison was tried inside the b card
   first (as rows on its b scale): the card grew to ~1,400 px, the groups landed far below the
   fold and the chart beside it was left mostly empty, so it has its own card. Shallow is the
   page's blue and deep the neutral grey (`--chart-1`, `--chart-3`) everywhere; orange stays the
   mainshock's. "Grupo", never "cúmulo" or "enjambre". The 7-day counts are counts: nothing in
   that card may read as a forecast.
+- **What the page is narrowed by is said once, in two places** (`src/components/filter-scope.tsx`).
+  `activeFilterChips` in `src/lib/filters.ts` is the single list: a setting earns a chip only where
+  it differs from `DEFAULT_FILTERS`, so an untouched page produces none and neither presentation
+  appears. Mc is in the list although it selects no events — it moves the b-value, and a Mc left on
+  by hand is what a reader forgets. "Quitar filtros" clears the cluster *and* the filters form,
+  which is why `FiltersCard` takes a `resetSignal`: the form owns its values, so the page can only
+  ask.
+  - The **notice** sits in the flow under the status bar. It is the accessible one and the only one
+    in the tab order, laid out as one row wherever there is room, so the bar reads as the same
+    object come back rather than a second thing.
+  - The **bar** is fixed to the top of the window and is **shy**: it stays away while the reader
+    moves down the page — they are following something they just set — and returns the moment they
+    scroll up, which is when someone is looking for where they are. It only ever appears once the
+    notice itself has scrolled out of view (an `IntersectionObserver` on the notice, not a pixel
+    threshold). A filter changing also brings it in wherever the reader is: that is the one moment
+    worth interrupting for. `STEP_PX` (8) is hysteresis — momentum, a trackpad's tail and scroll
+    anchoring all produce a few pixels the wrong way, and without it the bar flickers after every
+    flick. It is `aria-hidden` with its button out of the tab order, because it is a second view of
+    a notice a screen reader has already read out and can still reach.
+  - Its background is **opaque**, not a frosted pane: dense text and charts scroll under it, and a
+    sentence ghosting through the line that states the scope defeats the point. The shadow is what
+    separates it from the page and needs a solid surface; in dark mode the shadow does nothing and
+    `border-b` carries it. Enter is 220 ms and leave 150 ms on `--ease-out`, transform and opacity
+    only; `prefers-reduced-motion` drops the movement and keeps the fade.
+  - On a phone the bar shows the first chip and counts the rest (`+3`), and shortens the count to
+    "639 de 786". Both are pure CSS at the `sm` breakpoint, so its height never changes as it slides.
 - **The per-group daily strips in that card scroll sideways when narrow**, on the same idea as
   "Magnitud en el tiempo": below `MIN_BAR` (10 px) per day each day gets `PX_PER_DAY` (28 px), the
   strip starts at the newest day, each bar carries its count and every third day its date, and
