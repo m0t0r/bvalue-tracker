@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, InfoIcon, MoonIcon, SunIcon } from "lucide-react";
-import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { BSummary, type BScope } from "@/components/b-summary";
-import { ClusterNotice, ClustersCard, type ClusterChoice } from "@/components/clusters-card";
+import { ClustersCard } from "@/components/clusters-card";
 import { BOverTimeChart } from "@/components/charts/b-over-time";
 import { FmdChart } from "@/components/charts/fmd";
 import { MagnitudeTimeChart } from "@/components/charts/magnitude-time";
 import { EventsTable } from "@/components/events-table";
+import { FilterScope } from "@/components/filter-scope";
 import { FiltersCard } from "@/components/filters";
 import { StatusBar } from "@/components/status-bar";
 import { TechnicalDetail } from "@/components/technical-detail";
@@ -16,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getEvents, getStatus, type StoredEvent } from "@/lib/api";
-import { DEFAULT_FILTERS, applyFilters, type Filters } from "@/lib/filters";
+import { DEFAULT_FILTERS, activeFilterChips, applyFilters, type ClusterChoice, type Filters } from "@/lib/filters";
 import { useI18n } from "@/lib/i18n";
 import { toggleTheme, useIsDark } from "@/lib/theme";
 import { useNow } from "@/lib/use-now";
@@ -84,6 +85,12 @@ export function App() {
   const incomplete = !!status.data && status.data.backfill.done < status.data.backfill.total;
   const other = lang === "es" ? "en" : "es";
 
+  // Everything the page is narrowed by, in one place, so the scope bar can name it and clear it.
+  // The filters form keeps its own values, so clearing them is a request, not an assignment.
+  const [resetSignal, setResetSignal] = useState(0);
+  const chips = useMemo(() => activeFilterChips(filters, cluster, t, lang), [filters, cluster, t, lang]);
+  const clearScope = useCallback(() => { setCluster("all"); setResetSignal((n) => n + 1); }, []);
+
   return (
     <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
       <header className="flex flex-col gap-2">
@@ -107,7 +114,9 @@ export function App() {
 
       <main className="contents">
         <StatusBar status={status.data} shown={events.data ? shown.length : null} />
-        <ClusterNotice {...selection} />
+        {events.data ? (
+          <FilterScope chips={chips} cluster={cluster} shown={shown.length} total={events.data.length} onClear={clearScope} />
+        ) : null}
 
         {events.isError ? (
           <Alert variant="destructive">
@@ -135,7 +144,7 @@ export function App() {
             ) : null}
 
             {base.length > 0 ? <ClustersCard events={heavyBase} stats={clusterStats} selection={selection} /> : null}
-            <FiltersCard mcAuto={clusterStats.all.mcMaxc} onChange={setFilters} />
+            <FiltersCard mcAuto={clusterStats.all.mcMaxc} onChange={setFilters} resetSignal={resetSignal} />
 
             {shown.length === 0 ? (
               <Card>

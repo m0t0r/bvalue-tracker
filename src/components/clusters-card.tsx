@@ -1,13 +1,13 @@
-import { AlertTriangleIcon, FilterIcon } from "lucide-react";
+import { AlertTriangleIcon } from "lucide-react";
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlowNumber } from "@/components/flow-number";
 import { TechnicalDetail } from "@/components/technical-detail";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
+import type { ClusterChoice } from "@/lib/filters";
 import { dayStart, fmtDay, relativeTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { MIN_RELIABLE_N } from "@/lib/use-stats";
@@ -15,7 +15,6 @@ import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, clusterOf, type Cluster, type ClusterStats } from "../../core/clusters";
 
-export type ClusterChoice = "all" | Cluster;
 export interface ClusterSelection { cluster: ClusterChoice; onChange: (c: ClusterChoice) => void }
 
 const DAY = 86_400_000;
@@ -189,22 +188,5 @@ export function ClustersCard({ events, stats, selection }: { events: readonly St
         ) : null}
       </CardContent>
     </Card>
-  );
-}
-
-/** Shown whenever the page is narrowed to one cluster, outside any card that can disappear along with the events. */
-export function ClusterNotice({ cluster, onChange }: ClusterSelection) {
-  const { t } = useI18n();
-  if (cluster === "all") return null;
-  return (
-    // The action slot is sized for an icon button; "Ver todos" needs more room than its 4.5rem.
-    <Alert role="status" className="has-data-[slot=alert-action]:pr-28 pointer-coarse:has-data-[slot=alert-action]:pr-32">
-      <FilterIcon />
-      <AlertTitle>{t.clusterShowing(t.clusterName[cluster])}</AlertTitle>
-      <AlertDescription>{t.clusterWhere[cluster](CLUSTER_DEPTH_KM)}</AlertDescription>
-      <AlertAction className="top-1/2 -translate-y-1/2">
-        <Button variant="outline" size="sm" className="pointer-coarse:h-10 pointer-coarse:px-4" onClick={() => onChange("all")}>{t.clusterClear}</Button>
-      </AlertAction>
-    </Alert>
   );
 }

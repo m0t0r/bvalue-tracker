@@ -1,6 +1,6 @@
 import { useForm, useStore } from "@tanstack/react-form";
 import { RotateCcwIcon } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -13,9 +13,14 @@ import { useI18n } from "@/lib/i18n";
 interface Props {
   mcAuto: number | null;
   onChange: (f: Filters) => void;
+  /**
+   * Bumped by "Quitar filtros" on the scope bar, which clears the cluster and these together. The
+   * form owns its own values, so the page can only ask; it cannot set them.
+   */
+  resetSignal: number;
 }
 
-export function FiltersCard({ mcAuto, onChange }: Props) {
+export function FiltersCard({ mcAuto, onChange, resetSignal }: Props) {
   const { t } = useI18n();
   const form = useForm({
     defaultValues: DEFAULT_FILTERS,
@@ -29,6 +34,15 @@ export function FiltersCard({ mcAuto, onChange }: Props) {
   useEffect(() => {
     if (!formError) onChange(values);
   }, [values, formError, onChange]);
+
+  // Compared against the last value rather than run on every change of `form`, so that a form
+  // instance which is ever anything but stable cannot wipe what the reader is typing.
+  const lastReset = useRef(resetSignal);
+  useEffect(() => {
+    if (lastReset.current === resetSignal) return;
+    lastReset.current = resetSignal;
+    form.reset();
+  }, [resetSignal, form]);
 
   return (
     <Card>
