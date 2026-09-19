@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, XAxis, YAxis, ZAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import type { StoredEvent } from "@/lib/api";
 import { MAINSHOCK_ID } from "@/lib/filters";
-import { dayStart, fmtDateTime, fmtDay } from "@/lib/format";
+import { dayStart, fmtDate, fmtDateTime, fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 
 const config = { mag: { label: "M", color: "var(--chart-1)" }, main: { label: "M7.4", color: "var(--chart-2)" } } satisfies ChartConfig;
@@ -14,8 +14,8 @@ function domainOf(events: readonly StoredEvent[]): [number, number] {
   return [dayStart(events[0]!.time), dayStart(events[events.length - 1]!.time) + 86_400_000];
 }
 
-export function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] }) {
-  const { t } = useI18n();
+export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] }) {
+  const { t, lang } = useI18n();
   const { points, main, daily, domain, ticks } = useMemo(() => {
     const pts = events.map((e) => ({ t: Date.parse(e.time), mag: e.mag, time: e.time, region: e.region, id: e.id }));
     const counts = new Map<number, number>();
@@ -33,7 +33,7 @@ export function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] 
   }, [events]);
 
   const xAxis = (
-    <XAxis dataKey="t" type="number" scale="time" domain={domain} ticks={ticks} tickFormatter={fmtDay}
+    <XAxis dataKey="t" type="number" scale="time" domain={domain} ticks={ticks} tickFormatter={(ms: number) => fmtDay(ms, lang)}
       tickLine={false} axisLine={false} tickMargin={8} minTickGap={40} />
   );
 
@@ -55,7 +55,7 @@ export function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] 
               if (!active || !p) return null;
               return (
                 <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
-                  <div className="font-medium tabular-nums">M{p.mag.toFixed(1)} · {fmtDateTime(p.time)} UTC</div>
+                  <div className="font-medium tabular-nums">M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)} ({t.tz})</div>
                   <div className="text-muted-foreground">{p.region}</div>
                 </div>
               );
@@ -78,7 +78,7 @@ export function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] 
                 if (!active || !p) return null;
                 return (
                   <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
-                    <span className="font-medium">{p.count}</span> · {new Date(p.t).toISOString().slice(0, 10)}
+                    <span className="font-medium">{p.count}</span> · {fmtDate(p.t, lang)}
                   </div>
                 );
               }} />
@@ -89,4 +89,4 @@ export function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] 
       </CardContent>
     </Card>
   );
-}
+});

@@ -26,7 +26,7 @@ const toGeoJson = (events: readonly StoredEvent[]) => ({
 });
 
 export default function EventMap({ events }: { events: readonly StoredEvent[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const dark = useIsDark();
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
@@ -86,7 +86,7 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
         head.textContent = `M${Number(p.mag).toFixed(1)} · ${Number(p.depth).toFixed(0)} km`;
         const body = document.createElement("div");
         body.className = "text-muted-foreground";
-        body.textContent = `${fmtDateTime(p.time)} UTC · ${p.region}`;
+        body.textContent = `${fmtDateTime(p.time, lang)} (${t.tz}) · ${p.region}`;
         node.append(head, body);
         popup.setLngLat((f.geometry as unknown as { coordinates: [number, number] }).coordinates).setDOMContent(node).addTo(m);
       });
@@ -94,7 +94,7 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
     });
     map.current = m;
     return () => { m.remove(); map.current = null; };
-  }, [dark, t]);
+  }, [dark, t, lang]);
 
   useEffect(() => {
     const src = map.current?.getSource("events") as GeoJSONSource | undefined;

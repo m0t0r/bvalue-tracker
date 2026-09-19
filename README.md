@@ -39,7 +39,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # fill the local database: each call loads one missing week (6 calls on a fresh DB)
 curl -X POST http://localhost:5173/api/refresh
 
-pnpm test                 # 55 tests, offline
+pnpm test                 # 63 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -49,6 +49,7 @@ CLI:
 ```sh
 pnpm cli fetch --out data/events.csv
 pnpm cli bvalue --input data/events.csv --windows
+pnpm cli bvalue --input data/events.csv --windows-out data/b-windows.csv
 pnpm cli bvalue --input data/events.csv --mc 2.5 --manual-only --exclude-mainshock
 pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 ```
@@ -62,16 +63,23 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 | Cron `*/15 * * * *` | Re-reads the trailing 3 days. While history is incomplete it also loads one missing 7-day chunk per tick. |
 | Cron `5 * * * *` | Re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. |
 | `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight. |
-| The open page | Re-reads `/api/status` every minute and `/api/events` every 5 minutes. |
+| Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than 5 minutes. The Worker's own 5-minute limit is what protects SGC, whatever the number of visitors. |
+| The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
 
 Ingest upserts by event id, only touches rows whose data changed, marks events
 SGC stops returning as removed (never deletes), and changes nothing when the
 fetch or parse fails. A response that would retire more than 20% of a window's
 events is not trusted for removals.
 
-API: `GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/status`, `POST /api/refresh`.
+API: `GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/b-windows.csv` (b over
+time, one row per window), `/api/status`, `POST /api/refresh`.
 Filters: `from`, `to` (a bare date is inclusive of that day), `minMag`, `status`,
-`includeRemoved=1`, `excludeMainshock=1`, and `mc` on `/api/stats`.
+`includeRemoved=1`, `excludeMainshock=1`, and `mc` on `/api/stats` and `/api/b-windows.csv`.
+
+CSV headers are the stable machine names (`id,time,lat,…`) by default. `?lang=es` on
+either CSV endpoint, and the page's download buttons while the page is in Spanish,
+translate the header row only; values are identical. `fromCsv` (and so the CLI)
+reads both. Keep the default untranslated: scripts depend on it.
 
 ## Deploy
 
@@ -244,6 +252,8 @@ error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
   back to `#666` and fail contrast in dark mode. `ui/chart.tsx` also targets
   `.recharts-cartesian-axis-tick-value`. Re-check this after regenerating the component.
 - Recharts charts accept `title` and `desc`; we use them as the charts' text alternative.
+- The frequency–magnitude chart draws a cumulative dot only where an event exists.
+  A dot at every 0.1 step turned the lone M7.4 into 25 dots at N = 1, which read as data.
 - A `ScatterChart` with a time axis derives a single tick on its own. We pass
   explicit weekly `ticks`, shared with the bar chart below it.
 - pnpm 12 blocks dependency build scripts. `pnpm-workspace.yaml` allows `esbuild`,
@@ -251,6 +261,14 @@ error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
 - TypeScript is split into `tsconfig.app.json` (DOM), `tsconfig.worker.json`
   (Workers types) and `tsconfig.node.json`, because DOM and Workers globals conflict.
   Run `pnpm types` after changing `wrangler.jsonc`.
+- **Refetch on focus is TanStack Query's built-in `refetchOnWindowFocus`**, left at its
+  default. Do not add a custom `focusManager` listener. In v5 "focus" means the tab
+  becoming visible (`visibilitychange`); returning from another window or app while
+  the tab stayed visible refetches nothing, by the library's design. Identical
+  refetched data re-renders nothing (structural sharing), so relative times need
+  their own clock: `useNow`.
+- **Cron Triggers do not fire under `pnpm dev`.** Locally the data only changes when
+  the refresh button or `POST /api/refresh` is used.
 - Tailwind 4 already wraps `hover:` in `@media (hover: hover)`; do not add that guard.
 - `src/components/ui/*` is shadcn source that we **have modified** (focus rings,
   slider naming, `CardTitle` as `h2`, chart tick selector, legend wrapping, touch hit
@@ -268,6 +286,15 @@ colour, motion). Keep to them:
 - **Spanish is the default** regardless of browser language; the toggle's choice is
   remembered per device. Every new string goes into both `es` and `en` in
   `src/lib/i18n.tsx`, which TypeScript enforces.
+- **Every date and time on the page is Colombian time** (`America/Bogota`, UTC−5, no
+  daylight saving), whatever the reader's device says, labelled "hora de Colombia".
+  That covers the filter dates and the daily counts, which are Colombian calendar
+  days. The CSV, the API and its `from`/`to` filters stay in UTC; the table shows the
+  UTC form on hover. All of it goes through `src/lib/format.ts`; do not format a date
+  anywhere else.
+- **The page says that it updates itself** (under the refresh button, in the footer):
+  readers were reloading it. The "15 minutes" in the copy is the cron in
+  `wrangler.jsonc`; change them together.
 - **Decimal point everywhere** ("M7.4", "Mc = 2.0"), matching SGC, the CSV and every
   computed number. Never mix in decimal commas.
 - Terms: "sismo" only for the mainshock, "evento" for catalogue entries, "valor b",
@@ -280,7 +307,14 @@ colour, motion). Keep to them:
   must be within the first screen.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
-- Charts and the map redraw on every filter change, so they do not animate. Entry
+- Charts and the map redraw on every filter change, so they do not animate. The
+  headline numbers do (`FlowNumber`, wrapping `@number-flow/react`): digits roll to
+  the new value in 550 ms with `cubic-bezier(0.2, 0, 0, 1)` so the reader sees which
+  figures a filter moved. 300 ms with the page's front-loaded `--ease-out` read as a
+  jump; the library's 900 ms default lags behind a dragged slider. The roll
+  runs on the main thread, so the charts, map and table take `useDeferredValue`
+  copies of the data and are wrapped in `memo`: rendered in the same pass they
+  blocked for 300–400 ms per slider step and the digits simply jumped. Entry
   animation is limited to the once-per-load `.enter` rows and respects
   `prefers-reduced-motion`.
 - The theme follows the operating system unless overridden; choosing the theme the
