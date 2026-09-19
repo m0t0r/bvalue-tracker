@@ -27,7 +27,7 @@ export function App() {
   const { t, lang, setLang } = useI18n();
   const dark = useIsDark();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  // The Worker's cron updates the database every 15 minutes; an open page picks that up by itself.
+  // The Worker's cron updates the database every 5 minutes; an open page picks that up by itself.
   // Status is the cheap heartbeat: polled every minute, and again whenever the tab comes back to the
   // front, because interval polling pauses while a tab is hidden. Events are refetched when status
   // reports a newer ingest, so the figures never lag the "last update" shown above them, and when

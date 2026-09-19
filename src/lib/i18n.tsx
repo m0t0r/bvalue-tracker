@@ -10,12 +10,12 @@ const es = {
   lastUpdate: "Última consulta al SGC",
   never: "nunca",
   refresh: "Actualizar ahora",
-  autoUpdate: "Se actualiza sola cada 15 minutos",
+  autoUpdate: "Se actualiza sola cada 5 minutos",
   refreshing: "Consultando al SGC…",
-  refreshWait: (m: number) => `Consulta reciente al SGC. Podrás actualizar de nuevo en unos ${m} min.`,
+  refreshWait: "Ya tienes los datos más recientes: el SGC se consultó hace menos de 5 minutos.",
   refreshFailed: "No se pudo consultar al SGC. Inténtalo de nuevo en unos minutos.",
   ingestFailed: "La última consulta al SGC falló",
-  ingestFailedBody: "Se muestran los últimos datos guardados. La consulta se repite sola cada 15 minutos; no hace falta recargar.",
+  ingestFailedBody: "Se muestran los últimos datos guardados. La consulta se repite sola cada 5 minutos; no hace falta recargar.",
   technicalDetail: "Detalle técnico",
   loadFailed: "No se pudieron cargar los datos",
   loadFailedBody: "Revisa tu conexión y recarga la página.",
@@ -117,7 +117,7 @@ const es = {
     "Las secuencias de profundidad intermedia como esta suelen tener b bajo.",
   ],
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: "El catálogo se consulta al SGC cada 15 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
+  autoUpdateLong: "El catálogo se consulta al SGC cada 5 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
 };
 
 type Dict = typeof es;
@@ -132,12 +132,12 @@ const en: Dict = {
   lastUpdate: "Last SGC query",
   never: "never",
   refresh: "Refresh now",
-  autoUpdate: "Updates itself every 15 minutes",
+  autoUpdate: "Updates itself every 5 minutes",
   refreshing: "Querying SGC…",
-  refreshWait: (m) => `SGC was queried recently. You can refresh again in about ${m} min.`,
+  refreshWait: "You already have the latest data: SGC was queried less than 5 minutes ago.",
   refreshFailed: "Unable to query SGC. Try again in a few minutes.",
   ingestFailed: "The last SGC query failed",
-  ingestFailedBody: "Showing the most recent stored data. The query repeats by itself every 15 minutes; there is no need to reload.",
+  ingestFailedBody: "Showing the most recent stored data. The query repeats by itself every 5 minutes; there is no need to reload.",
   technicalDetail: "Technical detail",
   loadFailed: "Could not load data",
   loadFailedBody: "Check your connection and reload the page.",
@@ -239,7 +239,7 @@ const en: Dict = {
     "Intermediate-depth sequences like this one commonly have low b.",
   ],
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: "The catalogue is read from SGC every 15 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
+  autoUpdateLong: "The catalogue is read from SGC every 5 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
 };
 
 export type Lang = "es" | "en";

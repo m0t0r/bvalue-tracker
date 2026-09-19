@@ -2,7 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
 import worker from "../index.ts";
-import { ingest, ingestSweep, sweepChunks } from "../ingest.ts";
+import { fastLaneBlocked, ingest, ingestSweep, sweepChunks } from "../ingest.ts";
 
 // The fixture covers 2026-08-10 .. 2026-09-18 22:08 UTC.
 const FROM = new Date("2026-08-10T00:00:00Z");
@@ -364,5 +364,107 @@ describe("API", () => {
 
   it("returns JSON 404 for unknown API routes", async () => {
     expect((await call("/api/nope")).status).toBe(404);
+  });
+});
+
+/** Fires the scheduled handler as Cloudflare does, for one cron pattern at one minute. */
+async function tick(cron: string, minute: number) {
+  // scheduled() awaits its own work, so unlike the refresh route it needs no execution context.
+  const at = new Date(Date.UTC(2026, 8, 19, 12, minute));
+  await worker.scheduled!({ cron, scheduledTime: at.getTime(), noRetry() {} }, env);
+}
+
+const latestRun = async () =>
+  (await env.DB.prepare("SELECT * FROM ingest_runs ORDER BY id DESC LIMIT 1").first<Record<string, unknown>>())!;
+
+/** The window a trailing run of `days` opened, derived from when it actually started. */
+function expectedWindowStart(startedAt: string, days: number): string {
+  const d = new Date(startedAt);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - days * 86_400_000).toISOString();
+}
+
+/** Records a finished run, as the back-off reads them. */
+const recordRun = (ok: number, fields: { http_status?: number | null; retry_after_s?: number | null } = {}, finishedAt = NOW) =>
+  env.DB
+    .prepare(`INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, retry_after_s)
+              VALUES (?, ?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?, ?, ?)`)
+    .bind(finishedAt.toISOString(), finishedAt.toISOString(), ok, fields.http_status ?? null, fields.retry_after_s ?? null)
+    .run();
+
+describe("cron lanes", () => {
+  it("loads one trailing day on a five-minute tick and three on a fifteen-minute one", async () => {
+    // Otherwise the wide tick also pulls a history chunk, and that would be the latest run.
+    await completeBackfill();
+    vi.stubGlobal("fetch", async () => new Response(FULL));
+
+    await tick("*/5 * * * *", 5);
+    const fast = await latestRun();
+    expect(fast.window_start).toBe(expectedWindowStart(fast.started_at as string, 1));
+
+    await tick("*/5 * * * *", 15);
+    const wide = await latestRun();
+    expect(wide.window_start).toBe(expectedWindowStart(wide.started_at as string, 3));
+  });
+
+  it("sends the sweep cron to the sweep, on a minute the five-minute tick cannot share", async () => {
+    vi.stubGlobal("fetch", async () => new Response(FULL));
+    await tick("7 * * * *", 7);
+    expect((await latestRun()).trigger).toBe("sweep");
+    // A multiple of 5 here would collide with the tick above and lose the claim every hour.
+    expect(7 % 5).not.toBe(0);
+  });
+
+  // The fast lane's window holds a handful of events — too few for MAX_REMOVAL_SHARE to
+  // engage — so one short response could retire real ones. Only the wide lanes retire.
+  it("never retires an event on the fast lane, and still does on the wide one", async () => {
+    await ingest(deps(FULL), FROM, TO, "manual");
+
+    const fast = (await ingest(deps(dropRows(FULL, 1)), FROM, TO, "cron", { allowRemovals: false }))!;
+    expect(fast).toMatchObject({ ok: true, removed: 0 });
+    expect(await count("removed_at IS NOT NULL")).toBe(0);
+
+    const wide = (await ingest(deps(dropRows(FULL, 1)), FROM, TO, "cron"))!;
+    expect(wide).toMatchObject({ ok: true, removed: 1 });
+    expect(await count("removed_at IS NOT NULL")).toBe(1);
+  });
+});
+
+describe("fast lane back-off", () => {
+  it("runs while the last finished run succeeded", async () => {
+    expect(await fastLaneBlocked(env.DB, NOW)).toBe(false); // no runs yet
+    await recordRun(1);
+    expect(await fastLaneBlocked(env.DB, NOW)).toBe(false);
+  });
+
+  it("stands down until a success when a run failed for no HTTP reason", async () => {
+    await recordRun(0);
+    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 86_400_000))).toBe(true);
+    await recordRun(1, {}, new Date(NOW.getTime() + 60_000));
+    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 120_000))).toBe(false);
+  });
+
+  it("waits out Retry-After after a 429, then resumes by itself", async () => {
+    await recordRun(0, { http_status: 429, retry_after_s: 600 });
+    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 599_000))).toBe(true);
+    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 601_000))).toBe(false);
+  });
+
+  it("falls back to 30 minutes when the server named no cooldown", async () => {
+    await recordRun(0, { http_status: 503 });
+    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 1_799_000))).toBe(true);
+    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 1_801_000))).toBe(false);
+  });
+
+  it("keeps the wide tick running while the fast lane is standing down", async () => {
+    await completeBackfill();
+    await recordRun(0, { http_status: 429, retry_after_s: 86_400 });
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+
+    await tick("*/5 * * * *", 5);
+    expect(calls).toBe(0);
+
+    await tick("*/5 * * * *", 15);
+    expect(calls).toBe(1);
   });
 });

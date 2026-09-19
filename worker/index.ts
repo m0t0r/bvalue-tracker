@@ -4,10 +4,21 @@ import { computeStats } from "../core/gr.ts";
 import { MAINSHOCK_ID } from "../core/seiscomp.ts";
 import type { StatusResponse, StoredEvent } from "./api-types.ts";
 import { lastRun, runInFlight, toStored, type EventRow } from "./db.ts";
-import { backfillProgress, ingestSweep, ingestTrailing } from "./ingest.ts";
+import { backfillProgress, fastLaneBlocked, ingestSweep, ingestTrailing, TRAILING_FAST_DAYS } from "./ingest.ts";
 
+/**
+ * The visitor-facing throttle. It counts *any* run, cron included, so with a 5-minute
+ * cron a manual press almost always stands down — which is the point: this number, not
+ * the number of people with the page open, is what bounds our load on SGC.
+ */
 const REFRESH_MIN_INTERVAL_S = 300;
-const SWEEP_CRON = "5 * * * *";
+/**
+ * Not a multiple of 5: on a minute both crons share, the five-minute tick and the sweep
+ * would race and claimIngestRun would atomically drop one of them, once every hour.
+ */
+const SWEEP_CRON = "7 * * * *";
+/** Every fifteenth minute the five-minute tick loads the full trailing window instead. */
+const WIDE_TICK_EVERY_MIN = 15;
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -213,6 +224,17 @@ export default {
       await ingestSweep(deps);
       return;
     }
+
+    // One cron pattern, two lanes, chosen by the minute: two patterns would overlap and
+    // one of the two would lose the claim rather than run.
+    const tickAt = new Date(controller.scheduledTime);
+    if (tickAt.getUTCMinutes() % WIDE_TICK_EVERY_MIN !== 0) {
+      // The fast lane: a narrow window, no removals, and nothing at all while SGC is unwell.
+      if (await fastLaneBlocked(env.DB, tickAt)) return;
+      await ingestTrailing(deps, "cron", { days: TRAILING_FAST_DAYS, allowRemovals: false });
+      return;
+    }
+
     await ingestTrailing(deps, "cron");
     // Fresh database: fill history one chunk per tick instead of waiting for the hourly sweep.
     const progress = await backfillProgress(env.DB, new Date());

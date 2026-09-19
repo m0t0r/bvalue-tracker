@@ -1,9 +1,15 @@
-import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, type FetchOptions } from "../core/seiscomp.ts";
+import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions } from "../core/seiscomp.ts";
 import type { IngestRun } from "./api-types.ts";
-import { claimIngestRun, eventsBetween, existingIds, insertStmt, runBatched, sameData, toRun, updateStmt, type RunRow } from "./db.ts";
+import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastFinishedHealth, runBatched, sameData, toRun, updateStmt, type RunRow } from "./db.ts";
 
 const DAY_MS = 86_400_000;
 export const TRAILING_DAYS = 3;
+/**
+ * The fast lane's window. SGC publishes an event 2–5 minutes after it happens, so a
+ * single day is more than enough to catch everything new while keeping each of the
+ * extra requests small. Anything older is the wide tick's and the sweep's job.
+ */
+export const TRAILING_FAST_DAYS = 1;
 export const SWEEP_CHUNK_DAYS = 7;
 /** A successful response may not retire more than this share of a window's known events. */
 const MAX_REMOVAL_SHARE = 0.2;
@@ -14,6 +20,15 @@ export interface IngestDeps {
   fetchOptions?: FetchOptions;
   /** Guard widths for the atomic claim. A visitor's refresh also passes minIntervalS. */
   guard?: { inFlightMs?: number; minIntervalS?: number | null };
+}
+
+export interface IngestOptions {
+  /**
+   * Whether a response that lacks a known event may retire it. Off for the fast lane:
+   * its window holds only a handful of events, too few for MAX_REMOVAL_SHARE to engage,
+   * so one short response could retire real ones. The wide tick and the sweep still do it.
+   */
+  allowRemovals?: boolean;
 }
 
 /** How much of a window may be unparsable before the whole response is distrusted. */
@@ -37,7 +52,7 @@ const WORKER_FETCH: FetchOptions = { timeoutMs: 45_000, retries: 1 };
  * Returns null when another run already holds the claim, so nothing was attempted.
  */
 export async function ingest(
-  deps: IngestDeps, windowStart: Date, windowEnd: Date, trigger: IngestRun["trigger"],
+  deps: IngestDeps, windowStart: Date, windowEnd: Date, trigger: IngestRun["trigger"], opts: IngestOptions = {},
 ): Promise<IngestRun | null> {
   const { db, fetchOptions } = deps;
   const nowIso = (deps.now ?? new Date()).toISOString();
@@ -92,7 +107,9 @@ export async function ingest(
       else if (!prev || prev.removedAt !== null || !sameData(prev, e)) { stmts.push(updateStmt(db, e, nowIso)); updated++; }
     }
 
-    const inWindow = [...known.values()].filter((e) => e.time >= from && e.time < to && e.removedAt === null);
+    const inWindow = opts.allowRemovals === false
+      ? []
+      : [...known.values()].filter((e) => e.time >= from && e.time < to && e.removedAt === null);
     const gone = inWindow.filter((e) => !seen.has(e.id));
     let removed = 0;
     let note: string | null = null;
@@ -113,13 +130,44 @@ export async function ingest(
   } catch (err) {
     const e = err as Error;
     const cause = e.cause ? ` (${String(e.cause)})` : "";
-    return await finish({ ok: 0, error: `${e.message}${cause}`.slice(0, 500) });
+    const http = sgcHttpError(err);
+    return await finish({
+      ok: 0,
+      error: `${e.message}${cause}`.slice(0, 500),
+      http_status: http?.status ?? null,
+      retry_after_s: http?.retryAfterS ?? null,
+    });
   }
 }
 
-export function ingestTrailing(deps: IngestDeps, trigger: IngestRun["trigger"]): Promise<IngestRun | null> {
+export interface TrailingOptions extends IngestOptions {
+  /** How many days back from the start of today the window reaches. */
+  days?: number;
+}
+
+export function ingestTrailing(
+  deps: IngestDeps, trigger: IngestRun["trigger"], opts: TrailingOptions = {},
+): Promise<IngestRun | null> {
   const now = deps.now ?? new Date();
-  return ingest(deps, new Date(startOfUtcDay(now).getTime() - TRAILING_DAYS * DAY_MS), new Date(now.getTime() + DAY_MS), trigger);
+  const days = opts.days ?? TRAILING_DAYS;
+  return ingest(deps, new Date(startOfUtcDay(now).getTime() - days * DAY_MS), new Date(now.getTime() + DAY_MS), trigger, opts);
+}
+
+/** No cooldown was given, so sit out long enough that a limit we cannot see has reset. */
+export const RATE_LIMIT_COOLDOWN_S = 1800;
+
+/**
+ * Whether the fast lane should stand down. It runs only while SGC is answering: after any
+ * failed run it waits for the next wide tick, and after a 429 or 503 it waits out
+ * `Retry-After` (or 30 minutes). A rate limit we have never seen would therefore throttle
+ * us back to the old cadence or slower on its own, with nobody deploying a fix.
+ */
+export async function fastLaneBlocked(db: D1Database, now: Date): Promise<boolean> {
+  const health = await lastFinishedHealth(db, now);
+  if (health === null || health.ok) return false;
+  if (health.httpStatus === null) return true;
+  const cooldownS = health.retryAfterS ?? RATE_LIMIT_COOLDOWN_S;
+  return now.getTime() - Date.parse(health.finishedAt) < cooldownS * 1000;
 }
 
 /** 7-day windows covering mainshock day → now. */

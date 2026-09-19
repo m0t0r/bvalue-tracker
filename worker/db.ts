@@ -13,6 +13,15 @@ export interface RunRow {
   id: number; started_at: string; finished_at: string | null; trigger: string;
   window_start: string; window_end: string; ok: number;
   fetched: number | null; inserted: number | null; updated: number | null; removed: number | null; error: string | null;
+  http_status: number | null; retry_after_s: number | null;
+}
+
+/** What the last finished run says about SGC's health. Drives the fast lane's back-off. */
+export interface SgcHealth {
+  ok: boolean;
+  finishedAt: string;
+  httpStatus: number | null;
+  retryAfterS: number | null;
 }
 
 export function toStored(r: EventRow): StoredEvent {
@@ -143,6 +152,22 @@ export async function runInFlight(db: D1Database, now: Date, withinMs = 150_000)
     .bind(new Date(now.getTime() - withinMs).toISOString())
     .first();
   return row !== null;
+}
+
+/**
+ * The last finished run's health. Deliberately narrower than `lastRun`: the back-off
+ * needs the HTTP status, and the status API has no business carrying it.
+ */
+export async function lastFinishedHealth(db: D1Database, now: Date): Promise<SgcHealth | null> {
+  const row = await db
+    .prepare(
+      `SELECT ok, finished_at, http_status, retry_after_s FROM ingest_runs
+       WHERE finished_at IS NOT NULL AND finished_at <= ? ORDER BY id DESC LIMIT 1`,
+    )
+    .bind(now.toISOString())
+    .first<{ ok: number; finished_at: string; http_status: number | null; retry_after_s: number | null }>();
+  if (row === null) return null;
+  return { ok: row.ok === 1, finishedAt: row.finished_at, httpStatus: row.http_status, retryAfterS: row.retry_after_s };
 }
 
 export async function lastRun(db: D1Database, onlyOk: boolean): Promise<IngestRun | null> {

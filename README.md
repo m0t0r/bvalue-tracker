@@ -62,9 +62,10 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 
 | Trigger | What it does |
 |---|---|
-| Cron `*/15 * * * *` | Re-reads the trailing 3 days. While history is incomplete it also loads one missing 7-day chunk per tick. |
-| Cron `5 * * * *` | Re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. |
-| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. |
+| Cron `*/5 * * * *`, minute not divisible by 15 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](#sgc-rate-limits-and-the-request-budget). |
+| Cron `*/5 * * * *`, minute divisible by 15 | Re-reads the trailing 3 days, with removals. While history is incomplete it also loads one missing 7-day chunk per tick. |
+| Cron `7 * * * *` | Re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. The minute must not be a multiple of 5: on a shared minute both patterns fire, and `claimIngestRun` would atomically drop one of them every hour. |
+| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. Since the cron now runs on the same 5-minute period and the throttle counts *any* run, a press usually stands down; that is the intended outcome and `refreshWait` says the reader already has the newest data rather than counting down. |
 | Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than 5 minutes. The Worker's own 5-minute limit is what protects SGC, whatever the number of visitors. |
 | The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
 
@@ -169,6 +170,13 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
   Worker; no proxy or GitHub Actions fallback is needed.
 - The per-event page `https://www.sgc.gov.co/detallesismo/<id>/resumen` exists but
   returns 403 to `curl` without a browser user-agent.
+- **SGC publishes an event about 2–5 minutes after it happens** (measured 2026-09-19
+  against production: every `first_seen_at` landed on a cron boundary, and the smallest
+  origin-time-to-`first_seen_at` gap across the live-detected events was 5.0 min, with a
+  second at 6.8 min). Our own cron was the larger delay, which is why it is 5 minutes.
+  Polling faster than SGC publishes buys nothing, so do not go below 5.
+- Analyst-revised events can appear hours late — two events from 00:43 and 00:55 were
+  first seen at 05:45 and 06:15. No polling rate fixes that; it is what the sweep is for.
 
 Dead ends, do not retry:
 
@@ -181,6 +189,34 @@ Dead ends, do not retry:
   in streaming mode parses the same 0.8 MB in ~25 ms. Keep it.
 - There is no seismology, Gutenberg–Richter or usable QuakeML package on npm. The
   statistics in `core/gr.ts` are written and tested here.
+
+### SGC rate limits and the request budget
+
+No documented limit and none observed: `bdrsnc.sgc.gov.co/robots.txt` is a 404, so there
+is no stated crawl policy, and no run has ever seen a 429 or a 503 from the form. That is
+not a licence to hammer it — it means the Worker has to notice a limit if one ever appears.
+
+- We send an identifying `user-agent` (`sgc-swarm-research/0.1`) and query with the
+  bounding box and the narrowest window that answers the question.
+- The budget: **~312 SGC requests/day, ~29 MB/day**, against ~120/day and ~16 MB/day at
+  the 15-minute cadence. Requests tripled; bytes roughly doubled, because the fast lane
+  asks for less. Measured, not guessed: a response is 7.7 KB of page chrome plus
+  1.00 KB per row (the two fixtures), and at the September 2026 rate the fast lane's
+  span holds ~59 rows against the wide span's ~109 and a sweep chunk's ~173 — so ~67,
+  ~117 and ~182 KB per request, over 192 fast ticks, 96 wide ticks and 24 sweeps.
+  Re-derive these if the sequence's rate changes; they scale with events per day.
+- Visitors do not add to that. `REFRESH_MIN_INTERVAL_S` counts *any* run, cron included,
+  so with a 5-minute cron a manual refresh nearly always stands down. **That number, not
+  the number of people with the page open, is what bounds our load on SGC.**
+- **429 and 503 are never retried.** `fetchCatalog` throws `SgcHttpError` straight out of
+  the retry loop for those two — retrying is the one thing that makes being rate limited
+  worse — and honours `Retry-After` (seconds or HTTP date).
+- The status is stored on the run (`ingest_runs.http_status`, `retry_after_s`), not parsed
+  back out of `error`, so rewording a message cannot quietly disable the back-off.
+- `fastLaneBlocked` then stands the fast lane down: after **any** failed run until one
+  succeeds, and after a 429/503 for `Retry-After` or 30 minutes. The wide tick and the
+  sweep keep running. So an SGC rate limit we have never seen would throttle us back to
+  the old 15-minute cadence or slower by itself, with nobody deploying a fix.
 
 ### The science, and how not to mislead with it
 
@@ -238,6 +274,10 @@ Each of these was a real bug in production or in review:
   After a failed run everyone waits, so a broken SGC is never hammered.
 - The sweep orders chunks by last **attempt**, not last success. Otherwise one
   chunk that keeps failing is retried forever and starves the rest.
+- **Two cron patterns that share a minute silently lose a run.** The fast and wide lanes
+  are one `*/5` pattern dispatched on `scheduledTime`'s minute, not two patterns, because
+  `*/5` and `*/15` both fire at `:15` and the atomic claim would drop one. For the same
+  reason the sweep sits at `:07` — at `:05` it would collide once an hour.
 - **Never let an error response be cached.** A 500 once went out with
   `cache-control: max-age`, and browsers kept showing it after the API recovered.
   Errors are `no-store`; `/api/events` is `no-cache` because the page refetches it
@@ -253,8 +293,16 @@ Each of these was a real bug in production or in review:
 - Never show a raw database or fetch error to a visitor. Plain message plus next
   step; the technical string goes in a collapsed `<details>`.
 
-Still open: CPU time per invocation has **not been measured** on the Workers free
-plan. Runs finish in 1–13 s of wall time. If a run ever fails with a CPU-limit
+The account is on the **Workers free plan**, whose ceilings are 100,000 requests/day,
+50 subrequests and 50 D1 queries per invocation, and **10 ms CPU per invocation** —
+wall time is not the limit, and runs finish in 1–13 s of it. 312 cron invocations a day
+and ~70k D1 rows read are nowhere near the daily allowances; 10 ms CPU is the one that
+could bite, and **polling more often does not change per-invocation CPU**, so the
+5-minute cadence neither helps nor hurts it.
+
+Still open: that 10 ms has **not been measured**. Read `cpuTime` off a scheduled event
+with `pnpm exec wrangler tail choco --format json` for each of the three lanes (narrow
+tick, wide tick, sweep) and record the numbers here. If a run ever fails with a CPU-limit
 error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
 
 ### Security decisions (audit, 2026-09-19)
@@ -398,8 +446,11 @@ colour, motion). Keep to them:
   UTC form on hover. All of it goes through `src/lib/format.ts`; do not format a date
   anywhere else.
 - **The page says that it updates itself** (under the refresh button, in the footer):
-  readers were reloading it. The "15 minutes" in the copy is the cron in
+  readers were reloading it. The "5 minutes" in the copy is the cron in
   `wrangler.jsonc`; change them together.
+- **The refresh button standing down is good news, not a countdown.** With a 5-minute
+  cron the 5-minute throttle refuses most presses, so `refreshWait` says the reader
+  already has the newest data instead of asking them to wait N minutes.
 - **Decimal point everywhere** ("M7.4", "Mc = 2.0"), matching SGC, the CSV and every
   computed number. Never mix in decimal commas.
 - Terms: "sismo" only for the mainshock, "evento" for catalogue entries, "valor b",
