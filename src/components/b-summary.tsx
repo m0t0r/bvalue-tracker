@@ -13,6 +13,17 @@ import type { Cluster } from "../../core/clusters";
 
 interface Row { label: string; sub?: string; b: number; sigma: number; main: boolean }
 
+// A mark and the figure written beside it are one fact, so they move as one: `--ease-move` and
+// `--duration-move` are `FlowNumber`'s curve and duration. On the page's `--ease-out` the mark was
+// already parked while the digits were still rolling, and the two read as two separate events.
+// Each mark rides a full-width layer moved by a percentage of its own width, so its position is a
+// `transform` and the band a `clip-path`: nothing here triggers layout, and the marks keep gliding
+// on the compositor through the render pass a filter change spends on the main thread — the same
+// pass the digits already glide through. On `left`/`right` they froze there while the digits rolled.
+const MOVE = "duration-(--duration-move) ease-(--ease-move) motion-reduce:transition-none";
+const SLIDE = `transition-transform ${MOVE}`;
+const CLIP = `transition-[clip-path] ${MOVE}`;
+
 /**
  * The start, the whole and the end of the sequence on one b scale, so the drift is visible without
  * reading the chart beside it. The marks are decoration: every value is also written out as text.
@@ -22,7 +33,8 @@ function BScale({ rows }: { rows: Row[] }) {
   // Wide enough for b = 1 and for every error band, like the chart's axis.
   const lo = Math.min(0.4, ...rows.map((r) => Math.floor((r.b - r.sigma) * 10) / 10));
   const hi = Math.max(1.2, ...rows.map((r) => Math.ceil((r.b + r.sigma) * 10) / 10));
-  const x = (b: number) => `${((b - lo) / (hi - lo)) * 100}%`;
+  const pct = (b: number) => ((b - lo) / (hi - lo)) * 100;
+  const x = (b: number) => `${pct(b)}%`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,18 +46,33 @@ function BScale({ rows }: { rows: Row[] }) {
                 <span className={r.main ? "font-medium" : undefined}>{r.label}</span>
                 {r.sub ? <span className="text-xs text-muted-foreground"> {r.sub}</span> : null}
               </span>
-              <span className="font-medium whitespace-nowrap">{r.b.toFixed(2)} ± {r.sigma.toFixed(2)}</span>
+              {/* Rolled like the headline: a row's figure and its mark are the one fact, and a figure that
+                  snapped while its mark was still travelling read as the mark lagging behind. The scale's
+                  end labels below are left to change outright — they are the ruler, not a reading off it. */}
+              <span className="font-medium whitespace-nowrap">
+                <FlowNumber value={r.b} digits={2} />
+                <FlowNumber value={r.sigma} digits={2} prefix=" ± " />
+              </span>
             </div>
             <div aria-hidden className="relative h-2 rounded-full bg-muted">
-              <div className="absolute -inset-y-1 w-px bg-muted-foreground" style={{ left: x(1) }} />
-              <div className="absolute inset-y-0 rounded-full bg-(--chart-1)/35" style={{ left: x(r.b - r.sigma), right: `calc(100% - ${x(r.b + r.sigma)})` }} />
-              <div className={cn("absolute top-1/2 -translate-1/2 rounded-full bg-(--chart-1) ring-2 ring-card", r.main ? "size-3.5" : "size-3")} style={{ left: x(r.b) }} />
+              <div className={cn(SLIDE, "absolute inset-0")} style={{ transform: `translateX(${x(1)})` }}>
+                <div className="absolute -inset-y-1 left-0 w-px bg-muted-foreground" />
+              </div>
+              {/* Clipped rather than sized: `inset(… round)` keeps both ends a true half-circle at any
+                  width, where scaling one capsule would flatten them into ellipses. */}
+              <div className={cn(CLIP, "absolute inset-0 bg-(--chart-1)/35")}
+                style={{ clipPath: `inset(0 ${100 - pct(r.b + r.sigma)}% 0 ${pct(r.b - r.sigma)}% round 9999px)` }} />
+              <div className={cn(SLIDE, "absolute inset-0")} style={{ transform: `translateX(${x(r.b)})` }}>
+                <div className={cn("absolute top-1/2 left-0 -translate-1/2 rounded-full bg-(--chart-1) ring-2 ring-card", r.main ? "size-3.5" : "size-3")} />
+              </div>
             </div>
           </div>
         ))}
         <div aria-hidden className="relative h-4 text-xs text-muted-foreground">
           <span className="absolute left-0">{lo.toFixed(1)}</span>
-          <span className="absolute -translate-x-1/2" style={{ left: x(1) }}>b = 1</span>
+          <span className={cn(SLIDE, "absolute inset-x-0")} style={{ transform: `translateX(${x(1)})` }}>
+            <span className="absolute -translate-x-1/2">b = 1</span>
+          </span>
           <span className="absolute right-0">{hi.toFixed(1)}</span>
         </div>
       </div>

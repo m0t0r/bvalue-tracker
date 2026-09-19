@@ -5,6 +5,8 @@ import NumberFlow from "@number-flow/react";
 // jump however long the duration. This one leaves gently and lands softly. 550ms is well under the
 // library's 900ms default, which lags behind a dragged slider; while dragging, the digits retarget
 // mid-roll and keep turning rather than restarting.
+// Mirrored in CSS as `--ease-move` / `--duration-move` for marks that move with the digits, such as
+// the b scale's; the two must stay identical.
 const MOVE = { duration: 550, easing: "cubic-bezier(0.2, 0, 0, 1)" };
 // Digits that appear or leave (9 → 10, 1,000 → 999) fade faster than the roll, so none linger half-visible.
 const FADE = { duration: 300, easing: "ease-out" };
