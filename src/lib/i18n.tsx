@@ -4,7 +4,6 @@ const es = {
   docTitle: "Secuencia sísmica del Chocó · valor b",
   title: "Secuencia sísmica del Chocó",
   subtitle: "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del Servicio Geológico Colombiano.",
-  tz: "hora de Colombia",
   events: "Eventos",
   newestEvent: "Evento más reciente",
   lastUpdate: "Última consulta al SGC",
@@ -84,7 +83,7 @@ const es = {
   mapDesc: "Tamaño por magnitud, color por profundidad. El sismo principal va con anillo naranja.",
   depth: "Profundidad (km)",
   magTimeTitle: "Magnitud en el tiempo",
-  magTimeDesc: "Cada punto es un evento. Los días son días de Colombia.",
+  magTimeDesc: "Cada punto es un evento.",
   dailyTitle: "Eventos por día",
   magTimeRegion: "Magnitud en el tiempo y eventos por día; gráficos desplazables en horizontal",
   fmdTitle: "Distribución frecuencia–magnitud",
@@ -101,7 +100,7 @@ const es = {
   tableTitle: "Catálogo",
   downloadCsv: "Descargar CSV",
   downloadBCsv: "Descargar CSV del valor b en el tiempo",
-  colTime: "Fecha-hora (Colombia)",
+  colTime: "Fecha-hora",
   colMag: "Mag.",
   colType: "Tipo",
   colDepth: "Prof. (km)",
@@ -141,6 +140,7 @@ const es = {
   ],
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
   autoUpdateLong: "El catálogo se consulta al SGC cada 5 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
+  timeNote: "Las fechas y horas son de Colombia (UTC−5). Los CSV descargados usan UTC.",
 };
 
 type Dict = typeof es;
@@ -149,7 +149,6 @@ const en: Dict = {
   docTitle: "Chocó earthquake sequence · b-value",
   title: "Chocó earthquake sequence",
   subtitle: "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the Colombian Geological Survey (SGC).",
-  tz: "Colombia time",
   events: "Events",
   newestEvent: "Newest event",
   lastUpdate: "Last SGC query",
@@ -229,7 +228,7 @@ const en: Dict = {
   mapDesc: "Size by magnitude, colour by depth. The mainshock has an orange ring.",
   depth: "Depth (km)",
   magTimeTitle: "Magnitude over time",
-  magTimeDesc: "Each dot is one event. Days are Colombian days.",
+  magTimeDesc: "Each dot is one event.",
   dailyTitle: "Events per day",
   magTimeRegion: "Magnitude over time and events per day; horizontally scrollable charts",
   fmdTitle: "Frequency–magnitude distribution",
@@ -246,7 +245,7 @@ const en: Dict = {
   tableTitle: "Catalogue",
   downloadCsv: "Download CSV",
   downloadBCsv: "Download CSV of b-value over time",
-  colTime: "Date-time (Colombia)",
+  colTime: "Date-time",
   colMag: "Mag.",
   colType: "Type",
   colDepth: "Depth (km)",
@@ -286,6 +285,7 @@ const en: Dict = {
   ],
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
   autoUpdateLong: "The catalogue is read from SGC every 5 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
+  timeNote: "Dates and times are Colombia time (UTC−5). Downloaded CSVs use UTC.",
 };
 
 export type Lang = "es" | "en";

@@ -182,6 +182,7 @@ export function App() {
           bdrsnc.sgc.gov.co
         </a>
         <p className="mt-1 max-w-[75ch] text-pretty">{t.autoUpdateLong}</p>
+        <p className="mt-1 max-w-[75ch] text-pretty">{t.timeNote}</p>
       </footer>
     </div>
   );

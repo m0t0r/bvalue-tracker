@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayBounds, dayStart, fmtDateTime, fmtDay, fmtIsoDateTime, fmtUtc } from "../src/lib/format.ts";
+import { dayBounds, dayStart, fmtDateTime, fmtDay, fmtIsoDateTime, fmtRegion, fmtUtc } from "../src/lib/format.ts";
 
 // 03:10 UTC on 11 August is still 22:10 on 10 August in Colombia (UTC−5, no daylight saving).
 const LATE = "2026-08-11T03:10:00Z";
@@ -24,5 +24,13 @@ describe("Colombian time", () => {
     expect("2026-08-10T05:00:00Z" >= from && "2026-08-11T04:59:59Z" <= to).toBe(true);
     expect("2026-08-10T04:59:59Z" >= from).toBe(false);
     expect("2026-08-11T05:00:00Z" <= to).toBe(false);
+  });
+});
+
+describe("region names", () => {
+  it("drops the \", Colombia\" every SGC region ends with, and only at the end", () => {
+    expect(fmtRegion("Sipi - Choco, Colombia")).toBe("Sipi - Choco");
+    expect(fmtRegion("San Jose del Palmar - Choco,Colombia")).toBe("San Jose del Palmar - Choco");
+    expect(fmtRegion("Colombia, Pacific Ocean")).toBe("Colombia, Pacific Ocean");
   });
 });

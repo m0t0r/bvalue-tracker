@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import type { StoredEvent } from "@/lib/api";
 import { MAINSHOCK_ID } from "@/lib/filters";
-import { dayStart, fmtDate, fmtDateTime, fmtDay } from "@/lib/format";
+import { dayStart, fmtDate, fmtDateTime, fmtDay, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { CLUSTER_DEPTH_KM, clusterOf } from "../../../core/clusters";
@@ -174,8 +174,8 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                     if (!active || !p) return null;
                     return (
                       <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
-                        <div className="font-medium tabular-nums">M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)} ({t.tz})</div>
-                        <div className="text-muted-foreground">{t.clusterName[p.cluster]} · {p.depthKm.toFixed(0)} km · {p.region}</div>
+                        <div className="font-medium tabular-nums">M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)}</div>
+                        <div className="text-muted-foreground">{t.clusterName[p.cluster]} · {p.depthKm.toFixed(0)} km · {fmtRegion(p.region)}</div>
                       </div>
                     );
                   }} />

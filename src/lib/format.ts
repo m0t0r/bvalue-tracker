@@ -17,7 +17,10 @@ const DATE_TIME = formatters({ day: "numeric", month: "short", year: "numeric", 
 const DATE = formatters({ day: "numeric", month: "short", year: "numeric" });
 const DAY_MONTH = formatters({ day: "numeric", month: "short" });
 
-/** "18 sept 2026, 17:43", Colombian time. The caller adds the zone label (`t.tz`). */
+/** SGC ends every region with ", Colombia", which is a given on this page. */
+export const fmtRegion = (region: string) => region.replace(/,\s*Colombia$/, "");
+
+/** "18 sept 2026, 17:43", Colombian time. Unlabelled: the footer says so once for the whole page. */
 export const fmtDateTime = (iso: string, lang: Lang) => DATE_TIME[lang].format(new Date(iso));
 /** "18 sept 2026" */
 export const fmtDate = (ms: number, lang: Lang) => DATE[lang].format(ms);

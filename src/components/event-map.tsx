@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
 import { MAINSHOCK_ID } from "@/lib/filters";
-import { fmtDateTime } from "@/lib/format";
+import { fmtDateTime, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useIsDark } from "@/lib/theme";
 
@@ -86,7 +86,7 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
         head.textContent = `M${Number(p.mag).toFixed(1)} · ${Number(p.depth).toFixed(0)} km`;
         const body = document.createElement("div");
         body.className = "text-muted-foreground";
-        body.textContent = `${fmtDateTime(p.time, lang)} (${t.tz}) · ${p.region}`;
+        body.textContent = `${fmtDateTime(p.time, lang)} · ${fmtRegion(p.region)}`;
         node.append(head, body);
         popup.setLngLat((f.geometry as unknown as { coordinates: [number, number] }).coordinates).setDOMContent(node).addTo(m);
       });
