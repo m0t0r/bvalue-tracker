@@ -50,6 +50,12 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
         "CooperativeGesturesHandler.MobileHelpText": t.gestureMobile,
       },
     });
+    // OpenFreeMap's styles name sprite images their sprite sheet does not carry (circle-11),
+    // and MapLibre warns for each one, twice per load. Nothing of ours is missing, so hand it
+    // an empty pixel and keep the console readable for real errors.
+    m.on("styleimagemissing", (e) => {
+      if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+    });
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
     const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 10 });
     let shownId: string | null = null;
