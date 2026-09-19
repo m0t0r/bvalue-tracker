@@ -1,6 +1,7 @@
 # sgc-swarm
 
-**Live: https://choco.sgc-swarm.workers.dev** · raw data: [`/api/events.csv`](https://choco.sgc-swarm.workers.dev/api/events.csv)
+**Live: https://choco.sgc-swarm.workers.dev** · raw data: the **Descargar CSV** buttons on the page
+(`/api/*` is same-origin only; see [API](#api))
 
 Tracks the Chocó (Colombia) earthquake sequence that followed the M7.4 San José
 del Palmar earthquake of 2026-08-10 12:34:27 UTC, and its Gutenberg–Richter
@@ -36,10 +37,11 @@ pnpm install
 pnpm db:migrate:local     # once, and again whenever database_id in wrangler.jsonc changes (see gotchas)
 pnpm dev                  # page + Worker + local D1 on one port
 
-# fill the local database: each call loads one missing week (6 calls on a fresh DB)
-curl -X POST http://localhost:5173/api/refresh
+# fill the local database: each call loads one missing week (6 calls on a fresh DB).
+# The header is required: /api/* refuses a caller with no same-origin signal (see API).
+curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 63 tests, offline
+pnpm test                 # 87 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -62,7 +64,7 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 |---|---|
 | Cron `*/15 * * * *` | Re-reads the trailing 3 days. While history is incomplete it also loads one missing 7-day chunk per tick. |
 | Cron `5 * * * *` | Re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. |
-| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight. |
+| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. |
 | Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than 5 minutes. The Worker's own 5-minute limit is what protects SGC, whatever the number of visitors. |
 | The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
 
@@ -71,10 +73,28 @@ SGC stops returning as removed (never deletes), and changes nothing when the
 fetch or parse fails. A response that would retire more than 20% of a window's
 events is not trusted for removals.
 
-API: `GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/b-windows.csv` (b over
-time, one row per window), `/api/status`, `POST /api/refresh`.
+## API
+
+`GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/b-windows.csv` (b over time, one
+row per window), `/api/status`, `POST /api/refresh`.
 Filters: `from`, `to` (a bare date is inclusive of that day), `minMag`, `status`,
 `includeRemoved=1`, `excludeMainshock=1`, and `mc` on `/api/stats` and `/api/b-windows.csv`.
+
+**`/api/*` is same-origin only.** The Worker serves a request only when it carries
+`Sec-Fetch-Site: same-origin`, or an `Origin` equal to its own; anything else gets 403.
+A caller that sends neither header — `curl`, a script, a link in someone else's page —
+has no positive same-origin signal and is refused. That is deliberate: the data is public
+SGC data, but serving the whole catalogue to any direct caller is what we are avoiding.
+Headers are forgeable and this is **not** authentication; it keeps the raw feed out of
+casual reach. Use the page's download buttons, or `pnpm cli fetch`, which talks to SGC
+directly and is unaffected.
+
+Two exceptions:
+
+- `GET /api/health` is open to anyone: `{ ok, totalEvents }`, no catalogue data. It is
+  what the deploy smoke test and any uptime check should call.
+- `/api/*` is also rate limited per IP (120 requests/minute, `ratelimits` in
+  `wrangler.jsonc`), which applies before the origin check. Over the limit is 429.
 
 CSV headers are the stable machine names (`id,time,lat,…`) by default. `?lang=es` on
 either CSV endpoint, and the page's download buttons while the page is in Spanish,
@@ -231,6 +251,54 @@ Each of these was a real bug in production or in review:
 Still open: CPU time per invocation has **not been measured** on the Workers free
 plan. Runs finish in 1–13 s of wall time. If a run ever fails with a CPU-limit
 error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
+
+### Security decisions (audit, 2026-09-19)
+
+A full source audit lives outside the repo in `~/security-audit-skill/sgc-swarm/run-1/`
+(`REPORT.md`, `FINDINGS-DETAIL.md`, `NEEDS-VALIDATION.md`). What it changed here, and why:
+
+- **The refresh guard has to be atomic.** `runInFlight` plus the 300 s check were two
+  unlocked `SELECT`s, and the `ingest_runs` insert that would close the race happened
+  after them, so a burst of concurrent `POST /api/refresh` calls each passed both guards
+  and each queried SGC. `claimIngestRun` is now one `INSERT … WHERE NOT EXISTS`, which
+  SQLite evaluates atomically; the loser gets `null` and stands down. **`ingest()` therefore
+  returns `IngestRun | null`** — `null` means another run held the claim, not a failure.
+  The pre-checks in the route stay, only to give the page a useful `retryAfterS`.
+- **One bad row must not block the window.** `parseCatalogHtml` threw for the whole page on
+  any single malformed row. Because `ingestTrailing` recomputes the same 3-day window from
+  the clock every tick, one unparsable row froze every live figure for up to 3 days, 4 times
+  an hour. It now collects `skippedRows` and keeps the rest, and still throws when a
+  *majority* is unparsable — that means we are misreading the page, not that SGC had a typo.
+  A layout change, a missing table and a row-count mismatch are all still hard failures.
+- **Numeric fields are range-checked, not just `Number.isFinite`.** An absurd but finite
+  magnitude would be stored and then size `new Array(hi - lo + 1)` in `fmd`, throwing
+  `RangeError` on every `/api/stats` call and blanking the page. `requireRange` bounds
+  lat, lon, depth and mag at the parser, the last trusted point before storage.
+- **CSV cells must not start a formula.** `quote()` did RFC4180 escaping only, so an SGC
+  `region`/`magType`/`status` beginning `=`, `+`, `-`, `@`, tab or CR reached both the
+  server CSV and the page's download button intact. It is prefixed with `'` now — **except
+  when the value is a plain number**, or every negative depth error and b-value would
+  silently become text. Both CSV paths share `quote()`, so both are covered.
+- **`/api/*` is same-origin plus a per-IP rate limit.** See [API](#api) for the rule and
+  its two exceptions. `/api/health` exists *because* of this: the deploy smoke test used to
+  curl `/api/status`, which now 403s.
+- Static assets bypass the Worker (`run_worker_first: ["/api/*"]`), so page headers come
+  from `public/_headers`, not from Hono.
+  The CSP there is narrow and was checked against the running page: MapLibre needs
+  `blob:` for its worker, the shadcn chart needs `style-src 'unsafe-inline'`, and the
+  basemap needs `tiles.openfreemap.org`. Re-check the map and the chart axis labels if
+  you touch it.
+
+Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
+regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use
+`textContent` and the chart's `dangerouslySetInnerHTML` takes only source literals; `onError`
+leaks nothing; no secrets in source or history; CI cannot deploy from a pull request.
+
+Still open, with no confirmed exploit — detail in `NEEDS-VALIDATION.md`: the read routes have
+no `LIMIT` or range cap (the rate limit bounds volume, not a single query); the 150 s
+in-flight window has never been measured against a slow fetch plus a large sweep chunk; SGC
+responses are buffered with no byte cap; and the CI actions are pinned to `@v4` tags rather
+than commit SHAs.
 
 ### Tooling gotchas
 

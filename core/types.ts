@@ -48,5 +48,7 @@ export interface CatalogPage {
   reportedTotal: number;
   /** Rows the server repeated for an id already seen; removed from `events`. */
   duplicatesDropped: number;
+  /** Rows that could not be parsed and were skipped, rather than failing the whole page. */
+  skippedRows: { row: number; reason: string }[];
   events: SeismicEvent[];
 }

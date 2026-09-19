@@ -27,9 +27,17 @@ const NUMERIC = new Set<string>([
   "lat", "lon", "depthKm", "mag", "phases", "rmsS", "gapDeg", "errLatKm", "errLonKm", "errDepthKm",
 ]);
 
+// A cell starting with one of these is a formula to a spreadsheet, not text.
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+// ...unless it is simply a number: a negative magnitude or error must stay numeric.
+const PLAIN_NUMBER = /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+
 function quote(v: unknown): string {
   if (v === null || v === undefined) return "";
-  const s = String(v);
+  let s = String(v);
+  // Neutralise a leading formula character so no export can execute in Excel or Sheets.
+  // The upstream free-text fields (region, magType, status) carry no charset restriction.
+  if (FORMULA_LEAD.test(s) && !PLAIN_NUMBER.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

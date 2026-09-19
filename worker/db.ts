@@ -99,6 +99,43 @@ export async function runBatched(db: D1Database, stmts: D1PreparedStatement[], s
   for (let i = 0; i < stmts.length; i += size) await db.batch(stmts.slice(i, i + size));
 }
 
+export interface IngestClaim {
+  startedAt: string;
+  trigger: IngestRun["trigger"];
+  windowStart: string;
+  windowEnd: string;
+  /** Treat a run started after this instant, and not yet finished, as still in flight. */
+  inFlightSince: string;
+  /** If set, refuse when a run finished after this instant (the visitor-facing throttle). */
+  finishedSince: string | null;
+}
+
+/**
+ * Claim the right to talk to SGC and open the run row in ONE statement.
+ *
+ * The guards used to be separate SELECTs followed by an INSERT, so two requests whose
+ * reads landed before either insert both passed and both queried SGC. SQLite evaluates
+ * this insert-with-NOT-EXISTS atomically, so exactly one concurrent caller gets a row.
+ * Returns null when another run holds the claim: the caller must stand down, not proceed.
+ */
+export async function claimIngestRun(db: D1Database, c: IngestClaim): Promise<number | null> {
+  const row = await db
+    .prepare(
+      `INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
+       SELECT ?1, ?2, ?3, ?4
+       WHERE NOT EXISTS (
+               SELECT 1 FROM ingest_runs WHERE finished_at IS NULL AND started_at > ?5
+             )
+         AND (?6 IS NULL OR NOT EXISTS (
+               SELECT 1 FROM ingest_runs WHERE finished_at IS NOT NULL AND finished_at > ?6
+             ))
+       RETURNING id`,
+    )
+    .bind(c.startedAt, c.trigger, c.windowStart, c.windowEnd, c.inFlightSince, c.finishedSince)
+    .first<{ id: number }>();
+  return row?.id ?? null;
+}
+
 /** A run that started recently and has not finished: someone else is already talking to SGC. */
 export async function runInFlight(db: D1Database, now: Date, withinMs = 150_000): Promise<boolean> {
   const row = await db

@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { computeStats } from "../core/gr.ts";
 import { MAINSHOCK_ID } from "../core/seiscomp.ts";
@@ -10,6 +10,53 @@ const REFRESH_MIN_INTERVAL_S = 300;
 const SWEEP_CRON = "5 * * * *";
 
 const app = new Hono<{ Bindings: Env }>();
+
+/**
+ * The page's own fetches carry Sec-Fetch-Site: same-origin; a cross-site page's do not.
+ * A caller that sends neither Sec-Fetch-Site nor Origin (curl, a script) has no positive
+ * same-origin signal and is refused: that is the point, since the catalogue routes are
+ * what we are keeping off direct callers. Headers are forgeable and this is not an
+ * authentication boundary; it keeps the raw data out of casual reach, nothing more.
+ */
+function isSameOrigin(c: Context<{ Bindings: Env }>): boolean {
+  const site = c.req.header("sec-fetch-site");
+  if (site !== undefined) return site === "same-origin";
+  const origin = c.req.header("origin");
+  if (origin === undefined) return false;
+  try {
+    return new URL(origin).origin === new URL(c.req.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rate limit first, then the origin check: a caller that ignores both still cannot
+ * spend more than its share of D1 reads and Worker CPU. Every read route does a
+ * full-table scan and /api/stats recomputes the whole fit, so volume is the cost.
+ *
+ * /api/health stays open on purpose: it is the deploy smoke test's target and carries
+ * no catalogue data. Everything else under /api/ is for the page itself.
+ */
+app.use("/api/*", async (c, next) => {
+  const key = c.req.header("cf-connecting-ip") ?? "unknown";
+  const { success } = await c.env.API_RATE_LIMIT.limit({ key });
+  if (!success) {
+    c.header("cache-control", "no-store");
+    c.header("retry-after", "60");
+    return c.json({ error: "rate limited" }, 429);
+  }
+  if (c.req.path === "/api/health" || isSameOrigin(c)) return next();
+  c.header("cache-control", "no-store");
+  return c.json({ error: "forbidden" }, 403);
+});
+
+/** Liveness for CI and uptime checks: the Worker answered and D1 is readable. */
+app.get("/api/health", async (c) => {
+  const agg = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM events").first<{ n: number }>();
+  c.header("cache-control", "no-store");
+  return c.json({ ok: true, totalEvents: agg?.n ?? 0 });
+});
 
 interface EventFilter {
   from?: string;
@@ -65,7 +112,10 @@ async function status(db: D1Database): Promise<StatusResponse> {
   };
 }
 
-app.get("/api/status", async (c) => c.json(await status(c.env.DB)));
+app.get("/api/status", async (c) => {
+  c.header("cache-control", "no-cache");
+  return c.json(await status(c.env.DB));
+});
 
 app.get("/api/events", async (c) => {
   const events = await queryEvents(c.env.DB, parseFilter(c.req.query()));
@@ -83,6 +133,7 @@ app.get("/api/events.csv", async (c) => {
   return c.body(toCsv(events, csvLang(q)), 200, {
     "content-type": "text/csv; charset=utf-8",
     "content-disposition": 'attachment; filename="sgc-choco-events.csv"',
+    "cache-control": "no-cache",
   });
 });
 
@@ -102,6 +153,7 @@ app.get("/api/b-windows.csv", async (c) => {
   return c.body(windowsToCsv(computeStats(events, givenMc(q)).windows, csvLang(q)), 200, {
     "content-type": "text/csv; charset=utf-8",
     "content-disposition": 'attachment; filename="sgc-choco-b-windows.csv"',
+    "cache-control": "no-cache",
   });
 });
 
@@ -121,10 +173,14 @@ app.post("/api/refresh", async (c) => {
   const fastLane = progress.done < progress.total && (last === null || last.ok);
   if (!fastLane && sinceLastS < REFRESH_MIN_INTERVAL_S) return standDown(Math.ceil(REFRESH_MIN_INTERVAL_S - sinceLastS));
 
-  const work = progress.done < progress.total ? ingestSweep({ db }) : ingestTrailing({ db }, "manual");
+  // The checks above answer with a useful retryAfterS; this guard is the one that
+  // actually holds, because the claim inside ingest() is atomic.
+  const deps = { db, guard: { minIntervalS: fastLane ? null : REFRESH_MIN_INTERVAL_S } };
+  const work = progress.done < progress.total ? ingestSweep(deps) : ingestTrailing(deps, "manual");
   // Keep the ingest alive if the visitor closes the tab mid-request.
   c.executionCtx.waitUntil(work);
-  await work;
+  // null means a concurrent caller won the claim, so nothing was sent to SGC.
+  if ((await work) === null) return standDown(5);
   return c.json({ ...(await status(db)), refreshed: true } satisfies StatusResponse);
 });
 
