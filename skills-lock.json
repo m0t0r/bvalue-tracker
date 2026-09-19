@@ -1,6 +1,13 @@
 {
   "version": 1,
   "skills": {
+    "before-and-after": {
+      "source": "vercel-labs/before-and-after",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skill/SKILL.md",
+      "computedHash": "554384eec6d2b42fd51cfa200e61a1b9a5c3a164c5334682eb5a307af0e601ad"
+    },
     "better-accessibility": {
       "source": "jakubkrehel/skills",
       "sourceType": "github",
@@ -49,6 +56,12 @@
       "skillPath": "skills/break/SKILL.md",
       "computedHash": "528ebeb92997f30092b8c59a57944970febe4c84d3675d05e87432441c6f6832"
     },
+    "core-web-vitals": {
+      "source": "addyosmani/web-quality-skills",
+      "sourceType": "github",
+      "skillPath": "skills/core-web-vitals/SKILL.md",
+      "computedHash": "601b2cbb920fb0ea9814a3f11232d7883e1eb0923865218502ab1d73e9fc5172"
+    },
     "explain-interface": {
       "source": "jakubkrehel/skills",
       "sourceType": "github",
@@ -72,6 +85,12 @@
       "sourceType": "github",
       "skillPath": "skills/variant/SKILL.md",
       "computedHash": "d66d7c9a0b7c7ee12b7a7cacefebe4234a45284372b2fb6e7ddc1342ffca0f69"
+    },
+    "web-quality-audit": {
+      "source": "addyosmani/web-quality-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-quality-audit/SKILL.md",
+      "computedHash": "9be796fc70ff05cf9842327d234b019376dc1abad8d7e3c4e3ea2dab8d8d3deb"
     }
   }
 }
