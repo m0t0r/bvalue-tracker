@@ -41,7 +41,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 113 tests, offline
+pnpm test                 # 133 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -491,9 +491,19 @@ than commit SHAs.
   slider naming, `CardTitle` as `h2`, chart tick selector, legend wrapping, touch hit
   areas, press scale, no `transition-all`). Re-adding a component with the shadcn CLI
   would overwrite those; use `--diff` first.
-- Checking the page headlessly: full-page screenshots often miss the charts and the
-  map; scroll and take viewport screenshots instead. Do not click the refresh button
-  in a loop: it sends a real request to a government server.
+- **Checking the page headlessly**: `agent-browser` (CLI, on PATH) drives a real
+  browser against `pnpm dev`; `agent-browser skills get core` is its own guide. Full-page
+  screenshots often miss the charts and the map, so scroll and take viewport screenshots
+  instead. Recharts marks are real DOM nodes — a scatter dot is `path#<event id>`, so a
+  tooltip can be raised with `hover`. The map is a canvas: its popups cannot be reached
+  by selector.
+  **Give it data without touching SGC.** Copy a populated `.wrangler/` from another
+  checkout, then, in the copy only, set the newest successful `ingest_runs` row's
+  `finished_at` to now. That closes the Worker's five-minute guard, so neither the page's
+  focus refresh nor a click on the refresh button reaches the government server. An empty
+  database is the dangerous one: the page back-fills on load, in a loop, with no wait
+  between requests. Check `/api/status` and confirm `backfill.done == backfill.total`
+  before opening a browser on it. Do not click the refresh button in a loop.
 
 ### Interface conventions
 
@@ -504,11 +514,19 @@ colour, motion). Keep to them:
   remembered per device. Every new string goes into both `es` and `en` in
   `src/lib/i18n.tsx`, which TypeScript enforces.
 - **Every date and time on the page is Colombian time** (`America/Bogota`, UTC−5, no
-  daylight saving), whatever the reader's device says, labelled "hora de Colombia".
-  That covers the filter dates and the daily counts, which are Colombian calendar
-  days. The CSV, the API and its `from`/`to` filters stay in UTC; the table shows the
-  UTC form on hover. All of it goes through `src/lib/format.ts`; do not format a date
-  anywhere else.
+  daylight saving), whatever the reader's device says. That covers the filter dates and
+  the daily counts, which are Colombian calendar days. The CSV, the API and its
+  `from`/`to` filters stay in UTC; the table shows the UTC form on hover. All of it goes
+  through `src/lib/format.ts`; do not format a date anywhere else.
+- **SGC ends every region with ", Colombia"**, which says nothing on a page about one
+  Colombian sequence. `fmtRegion` in `src/lib/format.ts` strips it, and the table, the
+  magnitude-chart tooltip and the map popup all go through it. The CSV and the API keep
+  the region exactly as SGC gives it.
+- **The zone is stated once, in the footer** (`timeNote`), and never repeated on an
+  individual timestamp. It used to hang off every one of them — the two status-bar
+  hints, the map popup, the magnitude and b-over-time tooltips, the table's column
+  header, and "los días son días de Colombia" under the magnitude chart — which read as
+  a disclaimer being restated rather than a fact. A new timestamp gets no zone label.
 - **The page says that it updates itself** (under the refresh button, in the footer):
   readers were reloading it. The "5 minutes" in the copy is the cron in
   `wrangler.jsonc`; change them together.

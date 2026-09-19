@@ -63,7 +63,7 @@ export const BOverTimeChart = memo(function BOverTimeChart({ stats, magType, clu
                 return (
                   <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
                     <div className="font-medium">b = {p.b.toFixed(2)} ± {p.sigma.toFixed(2)}</div>
-                    <div className="text-muted-foreground">{fmtDateTime(p.from, lang)} → {fmtDateTime(p.to, lang)} ({t.tz})</div>
+                    <div className="text-muted-foreground">{fmtDateTime(p.from, lang)} → {fmtDateTime(p.to, lang)}</div>
                   </div>
                 );
               }} />

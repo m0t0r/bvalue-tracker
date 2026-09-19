@@ -104,10 +104,10 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
               hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined} />
             <Stat label={t.newestEvent}
               value={status ? (status.newestEventTime ? fmtDateTime(status.newestEventTime, lang) : "—") : null}
-              hint={status?.newestEventTime ? `${t.tz} · ${relativeTime(status.newestEventTime, lang, now)}` : undefined} />
+              hint={status?.newestEventTime ? relativeTime(status.newestEventTime, lang, now) : undefined} />
             <Stat label={t.lastUpdate}
               value={status ? (ok?.finishedAt ? relativeTime(ok.finishedAt, lang, now) : t.never) : null}
-              hint={ok?.finishedAt ? `${fmtDateTime(ok.finishedAt, lang)}, ${t.tz}` : undefined} />
+              hint={ok?.finishedAt ? fmtDateTime(ok.finishedAt, lang) : undefined} />
           </div>
           {/* Below lg this block wraps onto its own line at the start edge, so it reads from there; beside the stats it hugs the end edge. */}
           <div className="flex flex-col items-start gap-2 lg:items-end">

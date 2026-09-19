@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toCsv } from "../../core/csv";
 import type { StoredEvent } from "@/lib/api";
 import { downloadCsv } from "@/lib/download";
-import { fmtIsoDateTime, fmtNum, fmtUtc } from "@/lib/format";
+import { fmtIsoDateTime, fmtNum, fmtRegion, fmtUtc } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -54,7 +54,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
         id: "errH", header: t.colErrH, cell: (c) => num(c.getValue(), 1),
       }),
       helper.accessor("errDepthKm", { header: t.colErrZ, cell: (c) => num(c.getValue(), 1) }),
-      helper.accessor("region", { header: t.colRegion, cell: (c) => c.getValue().replace(", Colombia", "") }),
+      helper.accessor("region", { header: t.colRegion, cell: (c) => fmtRegion(c.getValue()) }),
       helper.accessor("status", {
         header: t.colStatus,
         cell: (c) => (
