@@ -100,13 +100,16 @@ export interface BWindow extends BValue {
   to: string;
 }
 
+export const WINDOW_SIZE = 150;
+export const WINDOW_STEP = 10;
+
 /**
  * b over time: sliding windows of `size` events at or above a FIXED mc, advancing
  * by `step`. A fixed Mc is deliberate; letting Mc float per window mostly
  * measures changes in network detection, not in the earthquakes.
  */
 export function bValueWindows(
-  events: readonly { time: string; mag: number }[], mc: number, size = 150, step = 25, dm = DEFAULT_DM,
+  events: readonly { time: string; mag: number }[], mc: number, size = WINDOW_SIZE, step = WINDOW_STEP, dm = DEFAULT_DM,
 ): BWindow[] {
   const kc = bin(mc, dm);
   const complete = events.filter((e) => bin(e.mag, dm) >= kc).sort((x, y) => x.time.localeCompare(y.time));
@@ -117,9 +120,6 @@ export function bValueWindows(
   }
   return out;
 }
-
-export const WINDOW_SIZE = 150;
-export const WINDOW_STEP = 10;
 
 export interface CatalogStats {
   count: number;

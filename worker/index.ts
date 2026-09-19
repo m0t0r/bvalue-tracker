@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { toCsv } from "../core/csv.ts";
+import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { computeStats } from "../core/gr.ts";
 import { MAINSHOCK_ID } from "../core/seiscomp.ts";
 import type { StatusResponse, StoredEvent } from "./api-types.ts";
@@ -74,20 +74,35 @@ app.get("/api/events", async (c) => {
   return c.json(events);
 });
 
+// CSV headers stay in the stable machine form unless a reader asks for Spanish with ?lang=es.
+const csvLang = (q: Record<string, string>): CsvLang => (q.lang === "es" ? "es" : "en");
+
 app.get("/api/events.csv", async (c) => {
-  const events = await queryEvents(c.env.DB, parseFilter(c.req.query()));
-  return c.body(toCsv(events), 200, {
+  const q = c.req.query();
+  const events = await queryEvents(c.env.DB, parseFilter(q));
+  return c.body(toCsv(events, csvLang(q)), 200, {
     "content-type": "text/csv; charset=utf-8",
     "content-disposition": 'attachment; filename="sgc-choco-events.csv"',
   });
 });
 
+const givenMc = (q: Record<string, string>): number | null =>
+  q.mc !== undefined && Number.isFinite(Number(q.mc)) ? Number(q.mc) : null;
+
 app.get("/api/stats", async (c) => {
   const q = c.req.query();
   const events = await queryEvents(c.env.DB, parseFilter(q));
-  const given = q.mc !== undefined && Number.isFinite(Number(q.mc)) ? Number(q.mc) : null;
   c.header("cache-control", "no-cache");
-  return c.json(computeStats(events, given));
+  return c.json(computeStats(events, givenMc(q)));
+});
+
+app.get("/api/b-windows.csv", async (c) => {
+  const q = c.req.query();
+  const events = await queryEvents(c.env.DB, parseFilter(q));
+  return c.body(windowsToCsv(computeStats(events, givenMc(q)).windows, csvLang(q)), 200, {
+    "content-type": "text/csv; charset=utf-8",
+    "content-disposition": 'attachment; filename="sgc-choco-b-windows.csv"',
+  });
 });
 
 app.post("/api/refresh", async (c) => {

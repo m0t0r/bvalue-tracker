@@ -1,13 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { fromCsv, toCsv } from "./csv.ts";
-import { bValue, bValueWindows, fmd, mcGoodnessOfFit, mcMaxCurvature } from "./gr.ts";
+import { fromCsv, toCsv, windowsToCsv } from "./csv.ts";
+import { bValue, computeStats, fmd, mcGoodnessOfFit, mcMaxCurvature, WINDOW_SIZE, WINDOW_STEP } from "./gr.ts";
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, MAINSHOCK_ID, fetchCatalog } from "./seiscomp.ts";
 import type { BBox, SeismicEvent } from "./types.ts";
 
 const USAGE = `usage:
   pnpm cli fetch  [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--bbox lonMin,latMin,lonMax,latMax] --out events.csv
-  pnpm cli bvalue --input events.csv [--mc 2.3] [--manual-only] [--exclude-mainshock] [--windows]`;
+  pnpm cli bvalue --input events.csv [--mc 2.3] [--manual-only] [--exclude-mainshock] [--windows] [--windows-out b-windows.csv]`;
 
 function parseDate(s: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error(`bad date ${s}, want YYYY-MM-DD`);
@@ -60,6 +60,7 @@ async function cmdBvalue(argv: string[]): Promise<void> {
     options: {
       input: { type: "string" }, mc: { type: "string" },
       "manual-only": { type: "boolean" }, "exclude-mainshock": { type: "boolean" }, windows: { type: "boolean" },
+      "windows-out": { type: "string" },
     },
   });
   if (!values.input) throw new Error("--input is required");
@@ -82,11 +83,17 @@ async function cmdBvalue(argv: string[]): Promise<void> {
     console.log(`    M${b.mag.toFixed(1)}  n=${String(b.count).padStart(4)}  N>=${b.cumulative}`);
   }
 
+  // Same pipeline as the page and the API, so the three cannot disagree.
+  const { windows } = computeStats(events, mcOverride ?? null);
   if (values.windows) {
-    console.log(`\n  b over time (150-event windows, step 25, fixed Mc=${mc.toFixed(1)}):`);
-    for (const w of bValueWindows(events, mc)) {
+    console.log(`\n  b over time (${WINDOW_SIZE}-event windows, step ${WINDOW_STEP}, fixed Mc=${mc.toFixed(1)}):`);
+    for (const w of windows) {
       console.log(`    ${w.from.slice(0, 16)} .. ${w.to.slice(0, 16)}  b=${w.b.toFixed(2)} ± ${w.sigmaB.toFixed(2)}`);
     }
+  }
+  if (values["windows-out"]) {
+    await writeFile(values["windows-out"], windowsToCsv(windows));
+    console.log(`\n  wrote ${windows.length} windows to ${values["windows-out"]}`);
   }
 }
 

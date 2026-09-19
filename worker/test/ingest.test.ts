@@ -169,6 +169,20 @@ describe("API", () => {
     expect(manual.fit.mc).toBe(2.5);
   });
 
+  it("serves b over time as CSV with the same windows as /api/stats", async () => {
+    await ingest(deps(FULL), FROM, TO, "manual");
+    const stats = (await (await call("/api/stats?mc=2.5")).json()) as any;
+    const res = await call("/api/b-windows.csv?mc=2.5");
+    expect(res.headers.get("content-type")).toContain("text/csv");
+    const lines = (await res.text()).trimEnd().split("\n");
+    expect(lines).toHaveLength(stats.windows.length + 1);
+    expect(lines[1]!.split(",").slice(0, 4)).toEqual([stats.windows[0].from, stats.windows[0].to, "150", "2.5"]);
+    expect(lines[0]).toBe("from,to,n,mc,b,sigmaB,a,meanMag");
+    const es = (await (await call("/api/b-windows.csv?mc=2.5&lang=es")).text()).trimEnd().split("\n");
+    expect(es[0]).toBe("desde,hasta,n,mc,b,sigma_b,a,magnitud_media");
+    expect(es.slice(1)).toEqual(lines.slice(1));
+  });
+
   it("filters events and hides removed ones by default", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     await ingest(deps(dropRows(FULL, 1)), FROM, TO, "manual");
@@ -180,6 +194,8 @@ describe("API", () => {
     expect(big.every((e) => e.mag >= 4)).toBe(true);
     const csv = await (await call("/api/events.csv?minMag=7")).text();
     expect(csv.split("\n")[1]).toContain("SGC2026pqqmro");
+    expect(csv.startsWith("id,time,")).toBe(true);
+    expect((await (await call("/api/events.csv?minMag=7&lang=es")).text()).startsWith("id,hora_utc,")).toBe(true);
   });
 
   it("excludes the mainshock by id, never the largest event of whatever range is asked for", async () => {
