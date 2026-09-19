@@ -97,11 +97,10 @@ pnpm deploy
 ```
 
 Pushes to `main` run `.github/workflows/ci.yml`: typecheck → tests → build, then on
-`main` D1 migrations → `wrangler deploy` → smoke test. **The deploy job fails until
-these repository settings exist** (as of 2026-09-18 they do not; deploys have been
-done from a laptop):
+`main` D1 migrations → `wrangler deploy` → smoke test. The deploy job needs these
+repository settings (set on 2026-09-18; earlier deploys were done from a laptop):
 
-- secret `CLOUDFLARE_API_TOKEN`: a token with *Workers Scripts: Edit* and *D1: Edit*
+- secret `CLOUDFLARE_API_TOKEN`: the "Edit Cloudflare Workers" template plus *Account · D1 · Edit*, limited to the AI-SDLC account
 - secret `CLOUDFLARE_ACCOUNT_ID`
 - variable `PRODUCTION_URL` = `https://choco.sgc-swarm.workers.dev` (optional; enables the smoke test)
 
