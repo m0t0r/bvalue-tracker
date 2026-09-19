@@ -4,17 +4,9 @@ import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.t
 import { computeStats, type CatalogStats } from "../core/gr.ts";
 import { MAINSHOCK_ID } from "../core/seiscomp.ts";
 import type { StatusResponse, StoredEvent } from "./api-types.ts";
-import { lastRun, runInFlight, toStored, type EventRow } from "./db.ts";
-import { backfillProgress, fastLaneBlocked, ingestSweep, ingestTrailing, TRAILING_FAST_DAYS } from "./ingest.ts";
-
-/**
- * The visitor-facing throttle. It counts *any* run, cron included, so with a 5-minute
- * cron a manual press almost always stands down — which is the point: this number, not
- * the number of people with the page open, is what bounds our load on SGC.
- */
-const REFRESH_MIN_INTERVAL_S = 300;
-/** Every fifteenth minute the five-minute tick loads the full trailing window instead. */
-const WIDE_TICK_EVERY_MIN = 15;
+import { lastRun, toStored, type EventRow } from "./db.ts";
+import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
+import { dueNow } from "./plan.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -210,20 +202,13 @@ app.post("/api/refresh", async (c) => {
   const standDown = async (retryAfterS: number) =>
     c.json({ ...(await status(db)), refreshed: false, retryAfterS } satisfies StatusResponse);
 
-  if (await runInFlight(db, now)) return standDown(5);
+  // One reading of the run history, one decision from it. The checks inside dueNow only
+  // answer with a useful retryAfterS; the guard that actually holds is the atomic claim,
+  // which the plan's minIntervalS carries into ingest().
+  const plan = dueNow({ kind: "manual" }, now, await readHistory(db, now));
+  if (plan.steps.length === 0) return standDown(plan.retryAfterS ?? 5);
 
-  const last = await lastRun(db, false);
-  const sinceLastS = last ? (now.getTime() - Date.parse(last.finishedAt ?? last.startedAt)) / 1000 : Infinity;
-  const progress = await backfillProgress(db, now);
-  // Missing history loads without the usual wait, but only while SGC is answering:
-  // after a failed run everyone waits, so a broken SGC is never hammered.
-  const fastLane = progress.done < progress.total && (last === null || last.ok);
-  if (!fastLane && sinceLastS < REFRESH_MIN_INTERVAL_S) return standDown(Math.ceil(REFRESH_MIN_INTERVAL_S - sinceLastS));
-
-  // The checks above answer with a useful retryAfterS; this guard is the one that
-  // actually holds, because the claim inside ingest() is atomic.
-  const deps = { db, guard: { minIntervalS: fastLane ? null : REFRESH_MIN_INTERVAL_S } };
-  const work = progress.done < progress.total ? ingestSweep(deps) : ingestTrailing(deps, "manual");
+  const work = runPlan({ db }, plan);
   // Keep the ingest alive if the visitor closes the tab mid-request.
   c.executionCtx.waitUntil(work);
   // null means a concurrent caller won the claim, so nothing was sent to SGC.
@@ -263,23 +248,10 @@ export default {
    * the other. Running the lanes in sequence in one invocation removes the race.
    */
   async scheduled(controller, env) {
-    const deps = { db: env.DB };
-    // scheduledTime is the cron's own minute; rounding keeps a boundary that lands at
-    // :14:59.9 from reading as minute 14 and quietly demoting the wide tick to a fast one.
-    const minute = Math.round(controller.scheduledTime / 60_000) % 60;
-
-    if (minute % WIDE_TICK_EVERY_MIN !== 0) {
-      // The fast lane: a narrow window, no removals, and nothing at all while SGC is unwell.
-      // The real clock, not the scheduled minute: a failure recorded seconds ago still counts.
-      if (await fastLaneBlocked(env.DB, new Date())) return;
-      await ingestTrailing(deps, "cron", { days: TRAILING_FAST_DAYS, allowRemovals: false });
-      return;
-    }
-
-    await ingestTrailing(deps, "cron");
-    const progress = await backfillProgress(env.DB, new Date());
-    // One older 7-day chunk on the hour, to catch late revisions — and on every wide tick
-    // while history is still incomplete, rather than waiting an hour per week of back-fill.
-    if (progress.done < progress.total || minute === 0) await ingestSweep(deps);
+    // The real clock, not the scheduled minute: a failure recorded seconds ago still counts
+    // against the fast lane, while which lane this tick *is* comes from scheduledTime.
+    const now = new Date();
+    const plan = dueNow({ kind: "cron", scheduledTime: controller.scheduledTime }, now, await readHistory(env.DB, now));
+    await runPlan({ db: env.DB }, plan);
   },
 } satisfies ExportedHandler<Env>;

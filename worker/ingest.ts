@@ -1,15 +1,9 @@
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions } from "../core/seiscomp.ts";
 import type { IngestRun } from "./api-types.ts";
-import { claimIngestRun, eventsBetween, existingIds, insertStmt, runBatched, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
+import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastRun, runBatched, runInFlight, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
+import { IN_FLIGHT_MS, TRAILING_DAYS, type IngestHistory, type IngestPlan } from "./plan.ts";
 
 const DAY_MS = 86_400_000;
-export const TRAILING_DAYS = 3;
-/**
- * The fast lane's window. SGC publishes an event 2–5 minutes after it happens, so a
- * single day is more than enough to catch everything new while keeping each of the
- * extra requests small. Anything older is the wide tick's and the sweep's job.
- */
-export const TRAILING_FAST_DAYS = 1;
 export const SWEEP_CHUNK_DAYS = 7;
 /** A successful response may not retire more than this share of a window's known events. */
 const MAX_REMOVAL_SHARE = 0.2;
@@ -33,7 +27,6 @@ export interface IngestOptions {
 
 /** How much of a window may be unparsable before the whole response is distrusted. */
 const MAX_SKIPPED_SHARE = 0.1;
-export const IN_FLIGHT_MS = 150_000;
 
 const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
@@ -153,38 +146,6 @@ export function ingestTrailing(
   return ingest(deps, new Date(startOfUtcDay(now).getTime() - days * DAY_MS), new Date(now.getTime() + DAY_MS), trigger, opts);
 }
 
-/** No cooldown was given, so sit out long enough that a limit we cannot see has reset. */
-export const RATE_LIMIT_COOLDOWN_S = 1800;
-/**
- * Bounds on a cooldown SGC asks for. Both ends are load-bearing: `Retry-After: 0` — which
- * an elapsed HTTP date parses to — would otherwise switch the back-off off in exactly the
- * case it exists for, and `Number()` reads "1e9", which would hold the lane down for
- * decades. One missed tick is the least we can usefully wait; six hours is the most.
- */
-export const RATE_LIMIT_MIN_COOLDOWN_S = 300;
-export const RATE_LIMIT_MAX_COOLDOWN_S = 21_600;
-
-/**
- * Whether the fast lane should stand down. It runs only while SGC is answering:
- *
- * - **any** failed run holds it down until one succeeds. The wide tick keeps probing every
- *   15 minutes, so that is what lets it back in — a run failing with an HTTP status is no
- *   weaker a signal than one that timed out.
- * - a 429 or 503 additionally holds it down for `Retry-After` (bounded) or 30 minutes,
- *   even once a later run has succeeded, because being answered is not being welcome.
- *
- * So a rate limit we have never seen would throttle us back to the old cadence or slower
- * on its own, with nobody deploying a fix.
- */
-export async function fastLaneBlocked(db: D1Database, now: Date): Promise<boolean> {
-  const health = await sgcHealth(db);
-  if (health.lastOk === false) return true;
-  if (health.rateLimit === null) return false;
-  const asked = health.rateLimit.retryAfterS ?? RATE_LIMIT_COOLDOWN_S;
-  const cooldownS = Math.min(Math.max(asked, RATE_LIMIT_MIN_COOLDOWN_S), RATE_LIMIT_MAX_COOLDOWN_S);
-  return now.getTime() - Date.parse(health.rateLimit.finishedAt) < cooldownS * 1000;
-}
-
 /** 7-day windows covering mainshock day → now. */
 export function sweepChunks(now: Date): { start: Date; end: Date }[] {
   const out: { start: Date; end: Date }[] = [];
@@ -219,4 +180,36 @@ export async function backfillProgress(db: D1Database, now: Date): Promise<{ don
     .all<{ s: string }>();
   const swept = new Set(results.map((r) => r.s));
   return { done: starts.filter((s) => swept.has(s)).length, total: starts.length };
+}
+
+/**
+ * Everything the recorded runs say, in one snapshot, so the plan is decided from one
+ * reading of the table rather than from four that can disagree mid-tick.
+ */
+export async function readHistory(db: D1Database, now: Date): Promise<IngestHistory> {
+  return {
+    health: await sgcHealth(db),
+    inFlight: await runInFlight(db, now),
+    lastRun: await lastRun(db, false),
+    backfill: await backfillProgress(db, now),
+  };
+}
+
+/**
+ * Carry out a plan, in order. Returns the first step's outcome — the one that decides
+ * whether SGC was reached at all — or null when another run held the claim, so nothing
+ * was sent. An empty plan is a stand-down and returns null without touching D1.
+ */
+export async function runPlan(deps: IngestDeps, plan: IngestPlan): Promise<IngestRun | null> {
+  let first: IngestRun | null = null;
+  for (const [i, step] of plan.steps.entries()) {
+    // The throttle guards the opening step only: a plan's own first run must not be what
+    // refuses its second (the wide tick's sweep).
+    const d: IngestDeps = { ...deps, guard: { ...deps.guard, minIntervalS: i === 0 ? plan.minIntervalS : null } };
+    const run = step.lane === "sweep"
+      ? await ingestSweep(d)
+      : await ingestTrailing(d, step.trigger, { days: step.days, allowRemovals: step.allowRemovals });
+    if (i === 0) first = run;
+  }
+  return first;
 }

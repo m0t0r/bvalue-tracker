@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
-  CHOCO_SWARM_BBOX, buildFormBody, fetchCatalog, formatFormDate, parseCatalogHtml, parseRetryAfter, sgcHttpError,
+  CHOCO_SWARM_BBOX, SEISCOMP_ENDPOINT, buildFormBody, fetchCatalog, formatFormDate, parseCatalogHtml,
+  parseRetryAfter, sgcHttpError,
 } from "../core/seiscomp.ts";
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -134,59 +137,65 @@ describe("parseCatalogHtml failure modes", () => {
 });
 
 describe("fetchCatalog", () => {
-  const ok = () => new Response(FULL, { status: 200 });
+  /**
+   * SGC itself, answered here. An unhandled request is an error rather than a passthrough,
+   * so no test in this file can reach bdrsnc.sgc.gov.co — that is test:live's job alone.
+   */
+  const server = setupServer();
+  beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
+
+  const ok = () => HttpResponse.html(FULL);
+
+  /** Answers the form with each response in turn, repeating the last; counts the requests. */
+  function serves(...responses: (() => Response)[]): () => number {
+    let n = 0;
+    server.use(http.post(SEISCOMP_ENDPOINT, () => responses[Math.min(n++, responses.length - 1)]!()));
+    return () => n;
+  }
 
   it("POSTs the form body and parses the response", async () => {
-    const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = (async (url: string, init: RequestInit) => { calls.push({ url, init }); return ok(); }) as typeof fetch;
-    const page = await fetchCatalog(query, { fetchImpl });
+    let seen: Request | undefined;
+    server.use(http.post(SEISCOMP_ENDPOINT, ({ request }) => { seen = request.clone(); return ok(); }));
+    const page = await fetchCatalog(query);
     expect(page.events).toHaveLength(786);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toContain("consulta_sismo.php");
-    expect(calls[0]!.init.method).toBe("POST");
-    expect(String(calls[0]!.init.body)).toContain("inicial=10%2F08%2F2026");
+    expect(seen!.url).toContain("consulta_sismo.php");
+    expect(seen!.method).toBe("POST");
+    expect(await seen!.text()).toContain("inicial=10%2F08%2F2026");
   });
 
   it("retries transport and HTTP failures", async () => {
-    let n = 0;
-    const fetchImpl = (async () => {
-      n++;
-      if (n === 1) throw new TypeError("fetch failed");
-      if (n === 2) return new Response("bad gateway", { status: 502 });
-      return ok();
-    }) as typeof fetch;
-    const page = await fetchCatalog(query, { fetchImpl, backoffMs: 1 });
-    expect(n).toBe(3);
+    const calls = serves(() => HttpResponse.error(), () => new Response("bad gateway", { status: 502 }), ok);
+    const page = await fetchCatalog(query, { backoffMs: 1 });
+    expect(calls()).toBe(3);
     expect(page.events).toHaveLength(786);
   });
 
   it("gives up after the retry budget and keeps the cause", async () => {
-    let n = 0;
-    const fetchImpl = (async () => { n++; return new Response("", { status: 500 }); }) as typeof fetch;
-    await expect(fetchCatalog(query, { fetchImpl, retries: 2, backoffMs: 1 })).rejects.toThrow(/failed after 3 attempts/);
-    expect(n).toBe(3);
+    const calls = serves(() => new Response("", { status: 500 }));
+    await expect(fetchCatalog(query, { retries: 2, backoffMs: 1 })).rejects.toThrow(/failed after 3 attempts/);
+    expect(calls()).toBe(3);
   });
 
   it("does not retry a deterministic parse failure", async () => {
-    let n = 0;
-    const fetchImpl = (async () => { n++; return new Response("<html>maintenance</html>", { status: 200 }); }) as typeof fetch;
-    await expect(fetchCatalog(query, { fetchImpl, backoffMs: 1 })).rejects.toThrow(/Total de registros/);
-    expect(n).toBe(1);
+    const calls = serves(() => HttpResponse.html("<html>maintenance</html>"));
+    await expect(fetchCatalog(query, { backoffMs: 1 })).rejects.toThrow(/Total de registros/);
+    expect(calls()).toBe(1);
   });
 
   // Retrying is the one thing that makes being rate limited worse, so 429 and 503 leave
   // the loop on the first response and carry the status out for the ingest back-off.
   it.each([429, 503])("stops at the first HTTP %i and reports its status", async (status) => {
-    let n = 0;
-    const fetchImpl = (async () => { n++; return new Response("", { status, headers: { "retry-after": "120" } }); }) as typeof fetch;
-    const err = await fetchCatalog(query, { fetchImpl, retries: 3, backoffMs: 1 }).catch((e: unknown) => e);
-    expect(n).toBe(1);
+    const calls = serves(() => new Response("", { status, headers: { "retry-after": "120" } }));
+    const err = await fetchCatalog(query, { retries: 3, backoffMs: 1 }).catch((e: unknown) => e);
+    expect(calls()).toBe(1);
     expect(sgcHttpError(err)).toMatchObject({ status, retryAfterS: 120 });
   });
 
   it("keeps the status of a retried failure as the cause", async () => {
-    const fetchImpl = (async () => new Response("", { status: 500 })) as typeof fetch;
-    const err = await fetchCatalog(query, { fetchImpl, retries: 1, backoffMs: 1 }).catch((e: unknown) => e);
+    serves(() => new Response("", { status: 500 }));
+    const err = await fetchCatalog(query, { retries: 1, backoffMs: 1 }).catch((e: unknown) => e);
     expect(sgcHttpError(err)).toMatchObject({ status: 500, retryAfterS: null });
   });
 });

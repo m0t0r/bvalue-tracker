@@ -1,5 +1,6 @@
 import type { SeismicEvent } from "../core/types.ts";
 import type { IngestRun, StoredEvent } from "./api-types.ts";
+import { IN_FLIGHT_MS, type SgcHealth } from "./plan.ts";
 
 export interface EventRow {
   id: string; time: string; lat: number; lon: number; depth_km: number; mag: number; mag_type: string;
@@ -14,14 +15,6 @@ export interface RunRow {
   window_start: string; window_end: string; ok: number;
   fetched: number | null; inserted: number | null; updated: number | null; removed: number | null; error: string | null;
   http_status: number | null; retry_after_s: number | null;
-}
-
-/** What the finished runs say about SGC's health. Drives the fast lane's back-off. */
-export interface SgcHealth {
-  /** Whether the most recent finished run succeeded; null when none has finished yet. */
-  lastOk: boolean | null;
-  /** The most recent run SGC rate limited, which holds the fast lane down on its own. */
-  rateLimit: { finishedAt: string; retryAfterS: number | null } | null;
 }
 
 export function toStored(r: EventRow): StoredEvent {
@@ -146,7 +139,7 @@ export async function claimIngestRun(db: D1Database, c: IngestClaim): Promise<nu
 }
 
 /** A run that started recently and has not finished: someone else is already talking to SGC. */
-export async function runInFlight(db: D1Database, now: Date, withinMs = 150_000): Promise<boolean> {
+export async function runInFlight(db: D1Database, now: Date, withinMs = IN_FLIGHT_MS): Promise<boolean> {
   const row = await db
     .prepare("SELECT 1 AS x FROM ingest_runs WHERE finished_at IS NULL AND started_at > ? LIMIT 1")
     .bind(new Date(now.getTime() - withinMs).toISOString())
