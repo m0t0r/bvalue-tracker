@@ -64,8 +64,8 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 | Trigger | What it does |
 |---|---|
 | Cron `*/5 * * * *`, minute not divisible by 15 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](#sgc-rate-limits-and-the-request-budget). |
-| Cron `*/5 * * * *`, minute divisible by 15 | Re-reads the trailing 3 days, with removals. While history is incomplete it also loads one missing 7-day chunk per tick. |
-| Cron `7 * * * *` | Re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. The minute must not be a multiple of 5: on a shared minute both patterns fire, and `claimIngestRun` would atomically drop one of them every hour. |
+| Cron `*/5 * * * *`, minute divisible by 15 | Re-reads the trailing 3 days, with removals. |
+| Cron `*/5 * * * *`, minute 0 | The above, then re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. While history is incomplete this sweep runs on **every** wide tick instead of hourly. |
 | `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. Since the cron now runs on the same 5-minute period and the throttle counts *any* run, a press usually stands down; that is the intended outcome and `refreshWait` says the reader already has the newest data rather than counting down. |
 | Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than 5 minutes. The Worker's own 5-minute limit is what protects SGC, whatever the number of visitors. |
 | The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
@@ -216,10 +216,19 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   worse — and honours `Retry-After` (seconds or HTTP date).
 - The status is stored on the run (`ingest_runs.http_status`, `retry_after_s`), not parsed
   back out of `error`, so rewording a message cannot quietly disable the back-off.
-- `fastLaneBlocked` then stands the fast lane down: after **any** failed run until one
-  succeeds, and after a 429/503 for `Retry-After` or 30 minutes. The wide tick and the
-  sweep keep running. So an SGC rate limit we have never seen would throttle us back to
-  the old 15-minute cadence or slower by itself, with nobody deploying a fix.
+- `fastLaneBlocked` then stands the fast lane down, on two independent rules. **Any** failed
+  run holds it down until one succeeds — an HTTP status is no weaker a signal than a
+  timeout, so 403 and 500 must not get a *bounded* wait where a timeout gets an open-ended
+  one. A 429 or 503 additionally holds it down for `Retry-After` or 30 minutes **even once
+  a later run has succeeded**, because being answered is not being welcome. The wide tick
+  and the sweep keep running throughout, and are what let the fast lane back in.
+- **The cooldown is clamped to 5 minutes … 6 hours.** Both ends are load-bearing.
+  `Retry-After: 0` — which an already-elapsed HTTP date parses to, and clock skew makes
+  reachable — would otherwise compute a zero-length cooldown and switch the back-off off in
+  precisely the case it exists for. At the other end `Number()` happily reads `"1e9"`, which
+  would hold the lane down for decades.
+- So an SGC rate limit we have never seen would throttle us back to the old 15-minute
+  cadence or slower by itself, with nobody deploying a fix.
 
 ### The science, and how not to mislead with it
 
@@ -309,10 +318,19 @@ Each of these was a real bug in production or in review:
   After a failed run everyone waits, so a broken SGC is never hammered.
 - The sweep orders chunks by last **attempt**, not last success. Otherwise one
   chunk that keeps failing is retried forever and starves the rest.
-- **Two cron patterns that share a minute silently lose a run.** The fast and wide lanes
-  are one `*/5` pattern dispatched on `scheduledTime`'s minute, not two patterns, because
-  `*/5` and `*/15` both fire at `:15` and the atomic claim would drop one. For the same
-  reason the sweep sits at `:07` — at `:05` it would collide once an hour.
+- **There is exactly one cron pattern, and a second one cannot be added safely.** Every
+  lane hangs off `*/5` and is chosen by `scheduledTime`'s minute. A second pattern lands at
+  best 120 s from this one — the furthest a non-multiple-of-5 minute can sit from a tick —
+  and that is *inside* `IN_FLIGHT_MS` (150 s), so the two keep landing in each other's claim
+  window: in one direction `claimIngestRun` drops a run silently, in the other the older run
+  has aged out of the window and both query SGC at once. This bit the first version of the
+  5-minute change, where the sweep sat on its own `7 * * * *`. The sweep now runs in the wide
+  tick's own invocation, in sequence, which is race-free by construction. Two ingests in one
+  invocation is already proven here: the back-fill path has always done it.
+- The lane is picked with `Math.round(scheduledTime / 60_000) % 60`, not `getUTCMinutes()`,
+  so a boundary landing at `:14:59.9` cannot read as minute 14 and quietly demote a wide
+  tick to a fast one — which would skip that tick's removals and its back-fill chunk with
+  nothing recorded to say so.
 - **Never let an error response be cached.** A 500 once went out with
   `cache-control: max-age`, and browsers kept showing it after the API recovered.
   Errors are `no-store`; `/api/events` is `no-cache` because the page refetches it
@@ -485,7 +503,10 @@ colour, motion). Keep to them:
   `wrangler.jsonc`; change them together.
 - **The refresh button standing down is good news, not a countdown.** With a 5-minute
   cron the 5-minute throttle refuses most presses, so `refreshWait` says the reader
-  already has the newest data instead of asking them to wait N minutes.
+  already has the newest data instead of asking them to wait N minutes. It is a timed
+  factual claim, so it is hidden as soon as a run fails — otherwise it would sit on
+  screen asserting a recent successful query right beside the "la última consulta falló"
+  alert, and it sticks until the next press.
 - **Decimal point everywhere** ("M7.4", "Mc = 2.0"), matching SGC, the CSV and every
   computed number. Never mix in decimal commas.
 - Terms: "sismo" only for the mainshock, "evento" for catalogue entries, "valor b",

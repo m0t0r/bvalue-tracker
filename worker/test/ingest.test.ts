@@ -383,11 +383,11 @@ describe("API", () => {
   });
 });
 
-/** Fires the scheduled handler as Cloudflare does, for one cron pattern at one minute. */
-async function tick(cron: string, minute: number) {
+/** Fires the scheduled handler as Cloudflare does, at one minute past the hour. */
+async function tick(minute: number, hour = 12) {
   // scheduled() awaits its own work, so unlike the refresh route it needs no execution context.
-  const at = new Date(Date.UTC(2026, 8, 19, 12, minute));
-  await worker.scheduled!({ cron, scheduledTime: at.getTime(), noRetry() {} }, env);
+  const at = new Date(Date.UTC(2026, 8, 19, hour, minute));
+  await worker.scheduled!({ cron: "*/5 * * * *", scheduledTime: at.getTime(), noRetry() {} }, env);
 }
 
 const latestRun = async () =>
@@ -413,21 +413,34 @@ describe("cron lanes", () => {
     await completeBackfill();
     vi.stubGlobal("fetch", async () => new Response(FULL));
 
-    await tick("*/5 * * * *", 5);
+    await tick(5);
     const fast = await latestRun();
     expect(fast.window_start).toBe(expectedWindowStart(fast.started_at as string, 1));
 
-    await tick("*/5 * * * *", 15);
+    await tick(15);
     const wide = await latestRun();
     expect(wide.window_start).toBe(expectedWindowStart(wide.started_at as string, 3));
   });
 
-  it("sends the sweep cron to the sweep, on a minute the five-minute tick cannot share", async () => {
+  // A second cron pattern would land within 120 s of this one, inside IN_FLIGHT_MS, and the
+  // two would steal each other's claim. The sweep runs in the wide tick's own invocation.
+  it("sweeps on the hour, in the same invocation as the wide tick, and not on other quarters", async () => {
+    await completeBackfill();
     vi.stubGlobal("fetch", async () => new Response(FULL));
-    await tick("7 * * * *", 7);
+
+    await tick(0);
+    const triggers = await env.DB.prepare("SELECT trigger FROM ingest_runs WHERE started_at > ? ORDER BY id")
+      .bind("2026-09-19T00:00:00.000Z").all<{ trigger: string }>();
+    expect(triggers.results.map((r) => r.trigger)).toEqual(["cron", "sweep"]);
+
+    await tick(30);
+    expect((await latestRun()).trigger).toBe("cron");
+  });
+
+  it("still sweeps on every wide tick while history is incomplete", async () => {
+    vi.stubGlobal("fetch", async () => new Response(FULL));
+    await tick(30);
     expect((await latestRun()).trigger).toBe("sweep");
-    // A multiple of 5 here would collide with the tick above and lose the claim every hour.
-    expect(7 % 5).not.toBe(0);
   });
 
   // The fast lane's window holds a handful of events — too few for MAX_REMOVAL_SHARE to
@@ -446,29 +459,58 @@ describe("cron lanes", () => {
 });
 
 describe("fast lane back-off", () => {
+  const at = (s: number) => new Date(NOW.getTime() + s * 1000);
+
   it("runs while the last finished run succeeded", async () => {
     expect(await fastLaneBlocked(env.DB, NOW)).toBe(false); // no runs yet
     await recordRun(1);
     expect(await fastLaneBlocked(env.DB, NOW)).toBe(false);
   });
 
-  it("stands down until a success when a run failed for no HTTP reason", async () => {
-    await recordRun(0);
-    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 86_400_000))).toBe(true);
-    await recordRun(1, {}, new Date(NOW.getTime() + 60_000));
-    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 120_000))).toBe(false);
+  // An HTTP status is no weaker a signal than a timeout, so both wait for a success.
+  it.each([
+    ["no HTTP reason", undefined],
+    ["a 403 that no cooldown covers", 403],
+    ["a 500", 500],
+  ])("stands down until a success after a failure with %s", async (_name, http_status) => {
+    await recordRun(0, { http_status });
+    expect(await fastLaneBlocked(env.DB, at(86_400))).toBe(true);
+    await recordRun(1, {}, at(60));
+    expect(await fastLaneBlocked(env.DB, at(120))).toBe(false);
   });
 
+  // Being answered again is not being welcome again: the cooldown outlives the recovery,
+  // which is also the only way to observe it — until a run succeeds, the rule above holds
+  // the lane down anyway. Each case records the rate limit, then a success a minute later.
+  const thenRecovered = async (fields: { http_status: number; retry_after_s?: number }) => {
+    await recordRun(0, fields);
+    await recordRun(1, {}, at(60));
+  };
+
   it("waits out Retry-After after a 429, then resumes by itself", async () => {
-    await recordRun(0, { http_status: 429, retry_after_s: 600 });
-    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 599_000))).toBe(true);
-    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 601_000))).toBe(false);
+    await thenRecovered({ http_status: 429, retry_after_s: 600 });
+    expect(await fastLaneBlocked(env.DB, at(599))).toBe(true);
+    expect(await fastLaneBlocked(env.DB, at(601))).toBe(false);
   });
 
   it("falls back to 30 minutes when the server named no cooldown", async () => {
-    await recordRun(0, { http_status: 503 });
-    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 1_799_000))).toBe(true);
-    expect(await fastLaneBlocked(env.DB, new Date(NOW.getTime() + 1_801_000))).toBe(false);
+    await thenRecovered({ http_status: 503 });
+    expect(await fastLaneBlocked(env.DB, at(1799))).toBe(true);
+    expect(await fastLaneBlocked(env.DB, at(1801))).toBe(false);
+  });
+
+  // Retry-After: 0, which an already-elapsed HTTP date also parses to, must not switch the
+  // back-off off in the one case it exists for.
+  it("holds the floor when the server asks for no wait at all", async () => {
+    await thenRecovered({ http_status: 429, retry_after_s: 0 });
+    expect(await fastLaneBlocked(env.DB, at(299))).toBe(true);
+    expect(await fastLaneBlocked(env.DB, at(301))).toBe(false);
+  });
+
+  it("caps an absurd Retry-After at six hours", async () => {
+    await thenRecovered({ http_status: 429, retry_after_s: 1e9 });
+    expect(await fastLaneBlocked(env.DB, at(21_599))).toBe(true);
+    expect(await fastLaneBlocked(env.DB, at(21_601))).toBe(false);
   });
 
   it("keeps the wide tick running while the fast lane is standing down", async () => {
@@ -477,10 +519,10 @@ describe("fast lane back-off", () => {
     let calls = 0;
     vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
 
-    await tick("*/5 * * * *", 5);
+    await tick(5);
     expect(calls).toBe(0);
 
-    await tick("*/5 * * * *", 15);
+    await tick(15);
     expect(calls).toBe(1);
   });
 });

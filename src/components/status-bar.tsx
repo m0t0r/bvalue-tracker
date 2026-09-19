@@ -84,7 +84,13 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   }), [busy, lastQueryMs, autoRefresh]);
 
   const failed = status?.lastRun && !status.lastRun.ok ? status.lastRun : null;
-  const message = refresh.isPending ? t.refreshing : refresh.isError ? t.refreshFailed : stoodDown ? t.refreshWait : "";
+  // `stoodDown` sticks until the next press, but the claim it makes — SGC was queried in
+  // the last five minutes — stops being true the moment a run fails. The alert below says
+  // so; this must not contradict it.
+  const message = refresh.isPending ? t.refreshing
+    : refresh.isError ? t.refreshFailed
+    : stoodDown && !failed ? t.refreshWait
+    : "";
 
   return (
     <div className="flex flex-col gap-4">

@@ -1,6 +1,6 @@
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions } from "../core/seiscomp.ts";
 import type { IngestRun } from "./api-types.ts";
-import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastFinishedHealth, runBatched, sameData, toRun, updateStmt, type RunRow } from "./db.ts";
+import { claimIngestRun, eventsBetween, existingIds, insertStmt, runBatched, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
 
 const DAY_MS = 86_400_000;
 export const TRAILING_DAYS = 3;
@@ -155,19 +155,34 @@ export function ingestTrailing(
 
 /** No cooldown was given, so sit out long enough that a limit we cannot see has reset. */
 export const RATE_LIMIT_COOLDOWN_S = 1800;
+/**
+ * Bounds on a cooldown SGC asks for. Both ends are load-bearing: `Retry-After: 0` — which
+ * an elapsed HTTP date parses to — would otherwise switch the back-off off in exactly the
+ * case it exists for, and `Number()` reads "1e9", which would hold the lane down for
+ * decades. One missed tick is the least we can usefully wait; six hours is the most.
+ */
+export const RATE_LIMIT_MIN_COOLDOWN_S = 300;
+export const RATE_LIMIT_MAX_COOLDOWN_S = 21_600;
 
 /**
- * Whether the fast lane should stand down. It runs only while SGC is answering: after any
- * failed run it waits for the next wide tick, and after a 429 or 503 it waits out
- * `Retry-After` (or 30 minutes). A rate limit we have never seen would therefore throttle
- * us back to the old cadence or slower on its own, with nobody deploying a fix.
+ * Whether the fast lane should stand down. It runs only while SGC is answering:
+ *
+ * - **any** failed run holds it down until one succeeds. The wide tick keeps probing every
+ *   15 minutes, so that is what lets it back in — a run failing with an HTTP status is no
+ *   weaker a signal than one that timed out.
+ * - a 429 or 503 additionally holds it down for `Retry-After` (bounded) or 30 minutes,
+ *   even once a later run has succeeded, because being answered is not being welcome.
+ *
+ * So a rate limit we have never seen would throttle us back to the old cadence or slower
+ * on its own, with nobody deploying a fix.
  */
 export async function fastLaneBlocked(db: D1Database, now: Date): Promise<boolean> {
-  const health = await lastFinishedHealth(db, now);
-  if (health === null || health.ok) return false;
-  if (health.httpStatus === null) return true;
-  const cooldownS = health.retryAfterS ?? RATE_LIMIT_COOLDOWN_S;
-  return now.getTime() - Date.parse(health.finishedAt) < cooldownS * 1000;
+  const health = await sgcHealth(db);
+  if (health.lastOk === false) return true;
+  if (health.rateLimit === null) return false;
+  const asked = health.rateLimit.retryAfterS ?? RATE_LIMIT_COOLDOWN_S;
+  const cooldownS = Math.min(Math.max(asked, RATE_LIMIT_MIN_COOLDOWN_S), RATE_LIMIT_MAX_COOLDOWN_S);
+  return now.getTime() - Date.parse(health.rateLimit.finishedAt) < cooldownS * 1000;
 }
 
 /** 7-day windows covering mainshock day → now. */

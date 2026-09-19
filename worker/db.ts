@@ -16,12 +16,12 @@ export interface RunRow {
   http_status: number | null; retry_after_s: number | null;
 }
 
-/** What the last finished run says about SGC's health. Drives the fast lane's back-off. */
+/** What the finished runs say about SGC's health. Drives the fast lane's back-off. */
 export interface SgcHealth {
-  ok: boolean;
-  finishedAt: string;
-  httpStatus: number | null;
-  retryAfterS: number | null;
+  /** Whether the most recent finished run succeeded; null when none has finished yet. */
+  lastOk: boolean | null;
+  /** The most recent run SGC rate limited, which holds the fast lane down on its own. */
+  rateLimit: { finishedAt: string; retryAfterS: number | null } | null;
 }
 
 export function toStored(r: EventRow): StoredEvent {
@@ -155,19 +155,21 @@ export async function runInFlight(db: D1Database, now: Date, withinMs = 150_000)
 }
 
 /**
- * The last finished run's health. Deliberately narrower than `lastRun`: the back-off
- * needs the HTTP status, and the status API has no business carrying it.
+ * Deliberately narrower than `lastRun`: the back-off needs the HTTP status, and the status
+ * API has no business carrying it. Both halves read the newest row by id and neither filters
+ * on a caller's clock — a run that finished a moment ago must not be invisible to the guard.
  */
-export async function lastFinishedHealth(db: D1Database, now: Date): Promise<SgcHealth | null> {
-  const row = await db
-    .prepare(
-      `SELECT ok, finished_at, http_status, retry_after_s FROM ingest_runs
-       WHERE finished_at IS NOT NULL AND finished_at <= ? ORDER BY id DESC LIMIT 1`,
-    )
-    .bind(now.toISOString())
-    .first<{ ok: number; finished_at: string; http_status: number | null; retry_after_s: number | null }>();
-  if (row === null) return null;
-  return { ok: row.ok === 1, finishedAt: row.finished_at, httpStatus: row.http_status, retryAfterS: row.retry_after_s };
+export async function sgcHealth(db: D1Database): Promise<SgcHealth> {
+  const last = await db
+    .prepare("SELECT ok FROM ingest_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1")
+    .first<{ ok: number }>();
+  const limited = await db
+    .prepare("SELECT finished_at, retry_after_s FROM ingest_runs WHERE http_status IN (429, 503) ORDER BY id DESC LIMIT 1")
+    .first<{ finished_at: string; retry_after_s: number | null }>();
+  return {
+    lastOk: last === null ? null : last.ok === 1,
+    rateLimit: limited === null ? null : { finishedAt: limited.finished_at, retryAfterS: limited.retry_after_s },
+  };
 }
 
 export async function lastRun(db: D1Database, onlyOk: boolean): Promise<IngestRun | null> {

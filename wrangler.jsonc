@@ -29,12 +29,12 @@
   ],
   "triggers": {
     // Every 5 min: the trailing 1 day, insert/update only. Every 15th of those minutes it
-    // widens to the trailing 3 days and does removals instead. Both lanes are one pattern
-    // on purpose — two would fire together and one would lose the claim.
-    // Hourly at :07: re-check one older 7-day chunk for revisions. The minute must not be
-    // a multiple of 5, or it would collide with the tick above. The page copy in
-    // src/lib/i18n.tsx says "5 minutos"; change them together.
-    "crons": ["*/5 * * * *", "7 * * * *"]
+    // widens to the trailing 3 days and does removals; on the hour it also re-checks one
+    // older 7-day chunk for revisions. Deliberately ONE pattern: any second pattern lands
+    // within 120 s of this one, inside the 150 s in-flight window, and the two would keep
+    // stealing each other's claim. See scheduled() in worker/index.ts.
+    // The page copy in src/lib/i18n.tsx says "5 minutos"; change them together.
+    "crons": ["*/5 * * * *"]
   },
   "observability": { "enabled": true }
 }
