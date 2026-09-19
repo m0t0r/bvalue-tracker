@@ -12,11 +12,6 @@ import { backfillProgress, fastLaneBlocked, ingestSweep, ingestTrailing, TRAILIN
  * the number of people with the page open, is what bounds our load on SGC.
  */
 const REFRESH_MIN_INTERVAL_S = 300;
-/**
- * Not a multiple of 5: on a minute both crons share, the five-minute tick and the sweep
- * would race and claimIngestRun would atomically drop one of them, once every hour.
- */
-const SWEEP_CRON = "7 * * * *";
 /** Every fifteenth minute the five-minute tick loads the full trailing window instead. */
 const WIDE_TICK_EVERY_MIN = 15;
 
@@ -218,26 +213,31 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
+  /**
+   * Every lane hangs off the one cron. A second pattern cannot be placed safely: the
+   * furthest a non-multiple-of-5 minute sits from a tick is 120 s, which is inside
+   * IN_FLIGHT_MS (150 s), so the two would keep landing in each other's claim window —
+   * dropping one of them silently in one direction, and querying SGC twice at once in
+   * the other. Running the lanes in sequence in one invocation removes the race.
+   */
   async scheduled(controller, env) {
     const deps = { db: env.DB };
-    if (controller.cron === SWEEP_CRON) {
-      await ingestSweep(deps);
-      return;
-    }
+    // scheduledTime is the cron's own minute; rounding keeps a boundary that lands at
+    // :14:59.9 from reading as minute 14 and quietly demoting the wide tick to a fast one.
+    const minute = Math.round(controller.scheduledTime / 60_000) % 60;
 
-    // One cron pattern, two lanes, chosen by the minute: two patterns would overlap and
-    // one of the two would lose the claim rather than run.
-    const tickAt = new Date(controller.scheduledTime);
-    if (tickAt.getUTCMinutes() % WIDE_TICK_EVERY_MIN !== 0) {
+    if (minute % WIDE_TICK_EVERY_MIN !== 0) {
       // The fast lane: a narrow window, no removals, and nothing at all while SGC is unwell.
-      if (await fastLaneBlocked(env.DB, tickAt)) return;
+      // The real clock, not the scheduled minute: a failure recorded seconds ago still counts.
+      if (await fastLaneBlocked(env.DB, new Date())) return;
       await ingestTrailing(deps, "cron", { days: TRAILING_FAST_DAYS, allowRemovals: false });
       return;
     }
 
     await ingestTrailing(deps, "cron");
-    // Fresh database: fill history one chunk per tick instead of waiting for the hourly sweep.
     const progress = await backfillProgress(env.DB, new Date());
-    if (progress.done < progress.total) await ingestSweep(deps);
+    // One older 7-day chunk on the hour, to catch late revisions — and on every wide tick
+    // while history is still incomplete, rather than waiting an hour per week of back-fill.
+    if (progress.done < progress.total || minute === 0) await ingestSweep(deps);
   },
 } satisfies ExportedHandler<Env>;
