@@ -379,6 +379,14 @@ describe("API", () => {
     expect(bad.status).toBe(403);
   });
 
+  it("names the newest event, and its id, so the page can link its time to SGC", async () => {
+    await ingest(deps(FULL), FROM, TO, "manual");
+    const status = (await (await call("/api/status")).json()) as any;
+    expect(status.newestEventTime).toBe("2026-09-18T22:08:54Z");
+    const row = await env.DB.prepare("SELECT id FROM events WHERE time = ?").bind(status.newestEventTime).first<{ id: string }>();
+    expect(status.newestEventId).toBe(row!.id);
+  });
+
   // The deploy smoke test and any uptime check call this one, so it must stay open.
   it("leaves /api/health reachable with no same-origin signal", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");

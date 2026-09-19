@@ -17,6 +17,9 @@ const DATE_TIME = formatters({ day: "numeric", month: "short", year: "numeric", 
 const DATE = formatters({ day: "numeric", month: "short", year: "numeric" });
 const DAY_MONTH = formatters({ day: "numeric", month: "short" });
 
+/** SGC's own page for one event. Event ids are regex-constrained at the parser, so this cannot become a scheme. */
+export const sgcEventUrl = (id: string) => `https://www.sgc.gov.co/detallesismo/${id}/resumen`;
+
 /** SGC ends every region with ", Colombia", which is a given on this page. */
 export const fmtRegion = (region: string) => region.replace(/,\s*Colombia$/, "");
 
@@ -42,12 +45,36 @@ export const dayBounds = (date: string): [string, string] => {
   return [iso(start), iso(start + DAY - 1000)];
 };
 
+/**
+ * The one user-facing string outside `i18n.tsx`. This module is runtime-neutral — the Node test
+ * project imports it, and it has neither the "@" alias nor JSX — so it cannot reach the dictionary.
+ * `Record<Lang, string>` keeps both languages required, which is what the rule is for.
+ */
+const UNDER_A_MINUTE: Record<Lang, string> = { es: "hace menos de un minuto", en: "less than a minute ago" };
+
+/**
+ * "hace 3 minutos": whole minutes, then whole hours, then whole days.
+ *
+ * Nothing here is ever shown in seconds, and no unit runs past the next one up. "hace 66 segundos"
+ * asks the reader to do arithmetic to learn it means about a minute, and `useNow` only ticks every
+ * 30 s, so the seconds were stale as often as not; "hace 86 minutos" was the same mistake an hour
+ * later. Inside a minute the page says so in words instead of naming a number it cannot stand
+ * behind — which also covers the small negative a device clock running fast produces, where the
+ * old ladder read "dentro de 5 segundos".
+ *
+ * Days are numeric ("hace 1 día", never "ayer"): elapsed hours do not say which calendar day an
+ * event fell on, and every one of these sits beside its exact date anyway.
+ */
 export function relativeTime(iso: string, lang: Lang, now = Date.now()): string {
-  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
-  const s = Math.round((Date.parse(iso) - now) / 1000);
-  if (Math.abs(s) < 90) return rtf.format(Math.round(s), "second");
-  if (Math.abs(s) < 5400) return rtf.format(Math.round(s / 60), "minute");
-  if (Math.abs(s) < 129_600) return rtf.format(Math.round(s / 3600), "hour");
+  const s = (Date.parse(iso) - now) / 1000;
+  if (Math.abs(s) < 60) return UNDER_A_MINUTE[lang];
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "always" });
+  // Each unit is re-derived from the seconds rather than carried over, so a value that rounds up
+  // into the next unit (59.7 minutes) is stated in that unit ("hace 1 hora"), never as its 60.
+  const minutes = Math.round(s / 60);
+  if (Math.abs(minutes) < 60) return rtf.format(minutes, "minute");
+  const hours = Math.round(s / 3600);
+  if (Math.abs(hours) < 24) return rtf.format(hours, "hour");
   return rtf.format(Math.round(s / 86_400), "day");
 }
 

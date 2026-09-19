@@ -24,6 +24,8 @@ export interface IngestRun {
 export interface StatusResponse {
   totalEvents: number;
   newestEventTime: string | null;
+  /** The same event's id, so the page can link its time to SGC's own page for it. */
+  newestEventId: string | null;
   lastRun: IngestRun | null;
   lastSuccessfulRun: IngestRun | null;
   /** 7-day history chunks loaded so far. Statistics are not representative until done === total. */

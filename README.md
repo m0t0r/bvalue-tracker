@@ -598,6 +598,20 @@ colour, motion). Keep to them:
   hints, the map popup, the magnitude and b-over-time tooltips, the table's column
   header, and "los días son días de Colombia" under the magnitude chart — which read as
   a disclaimer being restated rather than a fact. A new timestamp gets no zone label.
+- **No relative time is counted in seconds, and no unit runs past the next one up.**
+  `relativeTime` goes from "hace menos de un minuto" straight to whole minutes, to whole hours at
+  60 minutes, to whole days at 24 hours. "hace 66 segundos" and "hace 86 minutos" both left the
+  reader doing the arithmetic, and `useNow` ticks every 30 s, so a figure in seconds was stale as
+  often as it was right. Under a minute it says so in words, which also answers the small negative
+  a device clock running fast produces (it used to read "dentro de 5 segundos"). Days stay numeric
+  — "hace 1 día", never "ayer": elapsed hours do not say which calendar day an event fell on, and
+  the exact date is always beside it. Those two phrases are the **only** user-facing strings outside
+  `i18n.tsx`, because `src/lib/format.ts` is also imported by the Node test project, which has
+  neither the `@` alias nor JSX; `Record<Lang, string>` keeps both languages required there.
+- **A time that identifies one event is a link to SGC's own page for it** (`sgcEventUrl` in
+  `src/lib/format.ts`): the table's time column, and "Evento más reciente" in the status bar —
+  which is why `/api/status` carries `newestEventId` beside `newestEventTime`. Both keep the UTC
+  form on hover. A time that identifies no single event (the last SGC query) is not a link.
 - **The page says that it updates itself** (under the refresh button, in the footer):
   readers were reloading it. The "5 minutes" in the copy is the cron in
   `wrangler.jsonc`; change them together.
