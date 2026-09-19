@@ -127,7 +127,12 @@ repository settings (set on 2026-09-18; earlier deploys were done from a laptop)
 `sgc-canary.yml` runs the live SGC test daily so a change to their form is noticed.
 
 A brand-new `workers.dev` hostname takes about a minute to resolve; `curl` returns
-`000` until then. That is propagation, not a failed deploy.
+`000` until then. That is propagation, not a failed deploy. A *new version* of an
+existing Worker also takes a few seconds to reach every edge, so the smoke test can
+still hit the version being replaced — which 404s any route the deploy is adding.
+That is why its `curl` passes `--retry-all-errors`: plain `--retry` covers only
+connection errors and 5xx, and the deploy that introduced `/api/health` failed on
+its own first 404.
 
 ---
 
