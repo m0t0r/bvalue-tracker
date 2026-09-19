@@ -1,4 +1,5 @@
 import { Parser } from "htmlparser2";
+import { admitEvent } from "./admit.ts";
 import type { BBox, CatalogPage, CatalogQuery, SeismicEvent } from "./types.ts";
 
 export const SEISCOMP_ENDPOINT =
@@ -49,6 +50,7 @@ export function buildFormBody(q: CatalogQuery): URLSearchParams {
   });
 }
 
+/** A link's unrounded coordinate, or null when the href does not carry a readable one. */
 function num(s: string): number | null {
   const t = s.trim();
   if (t === "") return null;
@@ -56,26 +58,10 @@ function num(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function requireNum(s: string, field: string, row: number): number {
-  const n = num(s);
-  if (n === null) throw new Error(`row ${row}: ${field} is not numeric: ${JSON.stringify(s)}`);
-  return n;
-}
-
-/**
- * Finite is not enough. An absurd but numeric magnitude would be stored verbatim and then
- * size the bin array in computeStats, so bound every value SGC gives us to what the
- * quantity can physically be. Out of range means the row is wrong, not that the world is.
- */
-function requireRange(n: number, lo: number, hi: number, field: string, row: number): number {
-  if (n < lo || n > hi) throw new Error(`row ${row}: ${field} out of range [${lo}, ${hi}]: ${n}`);
-  return n;
-}
-
-/** "2026-08-10 12:34:27" or "2026-08-10_12:34:27" (UTC) → ISO 8601. */
-function toIso(s: string, row: number): string {
+/** "2026-08-10 12:34:27" or "2026-08-10_12:34:27" (UTC) → ISO 8601. SGC's wire form. */
+function toIso(s: string): string {
   const m = /^(\d{4}-\d{2}-\d{2})[ _](\d{2}:\d{2}:\d{2})$/.exec(s.trim());
-  if (!m) throw new Error(`row ${row}: unrecognised timestamp ${JSON.stringify(s)}`);
+  if (!m) throw new Error(`unrecognised timestamp ${JSON.stringify(s)}`);
   return `${m[1]}T${m[2]}Z`;
 }
 
@@ -167,41 +153,43 @@ export function parseCatalogHtml(html: string): CatalogPage {
   const skippedRows: { row: number; reason: string }[] = [];
   table.rows.forEach((cells, i) => {
     try {
-    if (cells.length !== EXPECTED_HEADERS.length) {
-      throw new Error(`row ${i}: expected ${EXPECTED_HEADERS.length} cells, got ${cells.length}`);
-    }
-    const text = cells.map((c) => c.text.replace(/\s+/g, " ").trim());
-    const links = [13, 14, 15].flatMap((k) => cells[k]!.hrefs).join(" ");
+      if (cells.length !== EXPECTED_HEADERS.length) {
+        throw new Error(`expected ${EXPECTED_HEADERS.length} cells, got ${cells.length}`);
+      }
+      const text = cells.map((c) => c.text.replace(/\s+/g, " ").trim());
+      const links = [13, 14, 15].flatMap((k) => cells[k]!.hrefs).join(" ");
 
-    const id = /id_sismo=([A-Za-z0-9_-]+)/.exec(links)?.[1] ?? /events\/([A-Za-z0-9_-]+)/.exec(links)?.[1];
-    if (!id) throw new Error(`row ${i}: no event id in links`);
+      const id = /id_sismo=([A-Za-z0-9_-]+)/.exec(links)?.[1] ?? /events\/([A-Za-z0-9_-]+)/.exec(links)?.[1];
+      if (!id) throw new Error("no event id in links");
 
-    // The map link carries unrounded coordinates; the table cells are rounded to 3/2 decimals.
-    const hiLat = num(/[?&]lat=(-?[\d.]+)/.exec(links)?.[1] ?? "");
-    const hiLon = num(/[?&]lon=(-?[\d.]+)/.exec(links)?.[1] ?? "");
-    const hiDepth = num(/[?&]pf=(-?[\d.]+)/.exec(links)?.[1] ?? "");
-    const stamp = /[?&]date=(\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2})/.exec(links)?.[1];
+      // The map link carries unrounded coordinates; the table cells are rounded to 3/2 decimals.
+      const hiLat = num(/[?&]lat=(-?[\d.]+)/.exec(links)?.[1] ?? "");
+      const hiLon = num(/[?&]lon=(-?[\d.]+)/.exec(links)?.[1] ?? "");
+      const hiDepth = num(/[?&]pf=(-?[\d.]+)/.exec(links)?.[1] ?? "");
+      const stamp = /[?&]date=(\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2})/.exec(links)?.[1];
 
-    events.push({
-      id,
-      time: toIso(text[0]!, i),
-      lat: requireRange(hiLat ?? requireNum(text[1]!, "lat", i), -90, 90, "lat", i),
-      lon: requireRange(hiLon ?? requireNum(text[2]!, "lon", i), -180, 180, "lon", i),
-      depthKm: requireRange(hiDepth ?? requireNum(text[3]!, "depth", i), -10, 1000, "depth", i),
-      mag: requireRange(requireNum(text[4]!, "mag", i), -2, 10, "mag", i),
-      magType: text[5]!,
-      phases: num(text[6]!),
-      rmsS: num(text[7]!),
-      gapDeg: num(text[8]!),
-      errLatKm: num(text[9]!),
-      errLonKm: num(text[10]!),
-      errDepthKm: num(text[11]!),
-      region: text[12]!,
-      status: text[16]!,
-      solutionStamp: stamp ? toIso(stamp, i) : null,
-    });
+      // Whether the values are plausible is not this module's question: admitEvent bounds
+      // them, for this door and the CSV one alike. Here we only read the page's shape.
+      events.push(admitEvent({
+        id,
+        time: toIso(text[0]!),
+        lat: hiLat ?? text[1],
+        lon: hiLon ?? text[2],
+        depthKm: hiDepth ?? text[3],
+        mag: text[4],
+        magType: text[5],
+        phases: text[6],
+        rmsS: text[7],
+        gapDeg: text[8],
+        errLatKm: text[9],
+        errLonKm: text[10],
+        errDepthKm: text[11],
+        region: text[12],
+        status: text[16],
+        solutionStamp: stamp ? toIso(stamp) : null,
+      }));
     } catch (err) {
-      skippedRows.push({ row: i, reason: (err as Error).message });
+      skippedRows.push({ row: i, reason: `row ${i}: ${(err as Error).message}` });
     }
   });
 
