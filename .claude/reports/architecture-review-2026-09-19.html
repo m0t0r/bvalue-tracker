@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review for sgc-swarm</title>
+    <!-- cdn.tailwindcss.com (the v3 Play CDN) no longer resolves; this is the v4 browser build. -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", flowchart: { curve: "basis" } });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 5 4; }
+      .deepbox { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .mermaid { display: flex; justify-content: center; }
+      .mermaid svg { max-width: 100%; height: auto; }
+      .lbl { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+      code { font-variant-ligatures: none; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans antialiased">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+      <!-- ─────────────────────────────── HEADER ─────────────────────────────── -->
+      <header class="space-y-5">
+        <div class="flex items-baseline justify-between gap-4 flex-wrap">
+          <h1 class="font-serif text-4xl tracking-tight">Architecture review — <span class="text-emerald-700">sgc-swarm</span></h1>
+          <p class="font-mono text-xs text-slate-500">2026-09-19 · branch <span class="text-slate-700">worktree-arch-review</span> · from <span class="text-slate-700">bba4e9a</span></p>
+        </div>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 border-y border-slate-200 py-3">
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 border border-slate-400 bg-white"></span> module</span>
+          <span class="flex items-center gap-2"><svg width="26" height="10"><line class="seam" x1="0" y1="5" x2="26" y2="5" stroke="#64748b" stroke-width="1.5"/></svg> seam</span>
+          <span class="flex items-center gap-2"><svg width="26" height="10"><line x1="0" y1="5" x2="20" y2="5" stroke="#dc2626" stroke-width="2"/><path d="M20 1 L26 5 L20 9Z" fill="#dc2626"/></svg> leakage</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 deepbox"></span> deep module</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 bg-amber-100 border border-amber-400"></span> unguarded / duplicated</span>
+        </div>
+        <p class="text-sm text-slate-600 max-w-3xl">Eight candidates. Two carry a failure reproduced in this worktree; those are marked <span class="font-semibold text-rose-700">verified</span>. Nothing here re-opens a decision README settles — the single cron pattern, the one <code>computeStats</code> pipeline, the atomic claim, the <code>ingest_runs</code> indexes, deferred loading, the shy scope bar, or <code>src/components/ui/*</code>.</p>
+      </header>
+
+      <!-- ─────────────────────────────── CANDIDATES ─────────────────────────────── -->
+      <section id="candidates" class="space-y-12">
+
+        <!-- ══════════════════ 1 ══════════════════ -->
+        <article id="c1" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-rose-100 text-rose-800 text-xs font-semibold px-3 py-1">verified failure</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">01 · core</span>
+            </div>
+            <h2 class="font-serif text-2xl">Admit events through one gate, not three</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">core/seiscomp.ts:59-73,188-191 · core/csv.ts:69-82 · worker/db.ts:27-35 · core/gr.ts:25 · core/cli.ts:68</p>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <!-- BEFORE -->
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">Before — three doors, one guard</p>
+              <div class="space-y-3">
+                <div class="flex items-stretch gap-3">
+                  <div class="w-32 shrink-0 border border-slate-300 bg-white px-2 py-3 text-center flex items-center justify-center"><span class="lbl text-slate-500 leading-tight">parse<wbr>CatalogHtml</span></div>
+                  <div class="flex-1 border border-emerald-400 bg-emerald-50 px-2 py-3 text-center"><span class="lbl text-emerald-700">requireRange ✓</span></div>
+                </div>
+                <div class="flex items-stretch gap-3">
+                  <div class="w-32 shrink-0 border border-slate-300 bg-white px-2 py-3 text-center flex items-center justify-center"><span class="lbl text-slate-500">fromCsv</span></div>
+                  <div class="flex-1 border border-amber-400 bg-amber-100 px-2 py-3 text-center"><span class="lbl text-amber-800">cast, no check</span></div>
+                </div>
+                <div class="flex items-stretch gap-3">
+                  <div class="w-32 shrink-0 border border-slate-300 bg-white px-2 py-3 text-center flex items-center justify-center"><span class="lbl text-slate-500">toStored</span></div>
+                  <div class="flex-1 border border-amber-400 bg-amber-100 px-2 py-3 text-center"><span class="lbl text-amber-800">cast, no check</span></div>
+                </div>
+                <svg viewBox="0 0 300 40" class="w-full"><path d="M55 0 L150 28" stroke="#94a3b8" stroke-width="1.5" fill="none"/><path d="M150 14 L150 28" stroke="#dc2626" stroke-width="2" fill="none"/><path d="M245 0 L150 28" stroke="#dc2626" stroke-width="2" fill="none"/><path d="M146 22 L150 34 L154 22Z" fill="#dc2626"/></svg>
+                <div class="border-2 border-slate-800 bg-slate-800 text-white px-3 py-4 text-center"><span class="lbl">computeStats · fmd</span></div>
+                <p class="text-xs text-rose-700 font-mono leading-relaxed pt-1">mag "abc" → NaN → count=2, b=undefined<br>mag "1e7" → RangeError: Invalid array length</p>
+              </div>
+            </div>
+            <!-- AFTER -->
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">After — one gate</p>
+              <div class="space-y-3">
+                <div class="grid grid-cols-3 gap-2">
+                  <div class="border border-slate-300 bg-white px-1 py-3 text-center"><span class="lbl text-slate-500">html</span></div>
+                  <div class="border border-slate-300 bg-white px-1 py-3 text-center"><span class="lbl text-slate-500">csv</span></div>
+                  <div class="border border-slate-300 bg-white px-1 py-3 text-center"><span class="lbl text-slate-500">d1 row</span></div>
+                </div>
+                <svg viewBox="0 0 300 34" class="w-full"><path d="M50 0 L150 22 M150 0 L150 22 M250 0 L150 22" stroke="#94a3b8" stroke-width="1.5" fill="none"/><path d="M146 16 L150 28 L154 16Z" fill="#475569"/></svg>
+                <div class="border-2 border-emerald-500 bg-emerald-50 px-3 py-5 text-center">
+                  <span class="lbl text-emerald-800">admit()</span>
+                  <p class="text-[11px] text-emerald-700 mt-1 normal-case tracking-normal">bounds · skip &amp; report</p>
+                </div>
+                <svg viewBox="0 0 300 26" class="w-full"><path d="M150 0 L150 16" stroke="#475569" stroke-width="1.5"/><path d="M146 10 L150 22 L154 10Z" fill="#475569"/></svg>
+                <div class="deepbox border-2 border-slate-900 text-white px-3 py-4 text-center"><span class="lbl">computeStats · fmd</span></div>
+                <p class="text-xs text-emerald-700 font-mono leading-relaxed pt-1">every door bounded<br>skippedRows reported on all three</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed">"An event is physically plausible" is implemented inside the HTML parser's implementation, not at the seam where events enter <code>core</code>. Two of the three doors are unguarded.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One module judges admission. Producers keep their own job — reading HTML shape, splitting CSV lines, renaming SQL columns — and hand rows to it.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>locality: one "plausible event" rule</li>
+                <li>every door bounded, not one</li>
+                <li>CLI stops computing on NaN</li>
+                <li><code>seiscomp.ts</code> shrinks to HTML shape</li>
+                <li>testable without the 0.8 MB fixture</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mx-7 mb-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            <span class="font-semibold">Reproduced in this worktree.</span> <code>fromCsv</code> + <code>computeStats</code> on a hand-edited catalogue: a non-numeric magnitude is counted but silently dropped from the distribution; <code>1e7</code> throws <code>RangeError</code>. README records <code>requireRange</code> as the fix for exactly this — it just never reached the CSV door.
+          </div>
+        </article>
+
+        <!-- ══════════════════ 2 ══════════════════ -->
+        <article id="c2" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-rose-100 text-rose-800 text-xs font-semibold px-3 py-1">verified divergence</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">local-substitutable</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">02 · worker</span>
+            </div>
+            <h2 class="font-serif text-2xl">Make one module decide what ingest is due now</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">worker/index.ts:200-225,258-277 · worker/ingest.ts:148-186,215-222 · worker/db.ts:149</p>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="lbl text-slate-400 mb-3">Before — the rule stated twice</p>
+              <pre class="mermaid">
+flowchart TD
+  S["scheduled()"] --> A["fastLaneBlocked()<br/>health + Retry-After"]
+  R["POST /api/refresh"] --> B["last === null<br/>|| last.ok"]
+  B -. "ignores<br/>Retry-After" .-> A
+  A --> I["ingest()"]
+  B --> I
+  I --> C["claimIngestRun"]
+  M["IN_FLIGHT_MS<br/>150_000"] -. "copied" .-> N["runInFlight<br/>withinMs = 150_000"]
+  classDef bad stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  classDef dup stroke:#f59e0b,stroke-width:2px,fill:#fffbeb;
+  class A,B bad
+  class M,N dup
+</pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="lbl text-slate-400 mb-3">After — one plan, two executors</p>
+              <pre class="mermaid">
+flowchart TD
+  S["scheduled()"] --> D["dueNow(clock, history)"]
+  R["POST /api/refresh"] --> D
+  D --> H["run history<br/>health · lastRun · backfill"]
+  D --> P{"plan"}
+  P -->|stand down| X["retryAfterS"]
+  P -->|window + removals| ING["ingest()"]
+  ING --> C["claimIngestRun"]
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#fff,stroke-width:2px;
+  classDef good stroke:#10b981,stroke-width:2px,fill:#ecfdf5;
+  class D deep
+  class P good
+              </pre>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed">"Which window is due, may removals happen, may we talk to SGC at all" is one concept with no module — inline in two callers, split across three helpers. The two callers state the availability rule <em>differently</em>.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One module takes the clock and the recorded run history and returns the plan. <code>scheduled</code> and <code>/api/refresh</code> each call it once, then execute.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>lane policy verified without D1</li>
+                <li>one availability rule, not two</li>
+                <li>both callers shrink to execute-a-plan</li>
+                <li><code>retryAfterS</code> derived where decided</li>
+                <li>in-flight width stops having two copies</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mx-7 mb-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            <span class="font-semibold">Confirmed by reading both sites.</span> <code>worker/index.ts:213</code> gates the back-fill fast lane on <code>last === null || last.ok</code>; <code>fastLaneBlocked</code> (<code>worker/ingest.ts:179-186</code>) <em>also</em> honours a 429/503 cooldown. So after SGC rate-limits and a later run succeeds, the cron fast lane stands down while the refresh button still reaches SGC. Narrow — it needs history incomplete — but it is the one rule README says must hold. No test covers the combination. <code>runInFlight</code>'s <code>withinMs = 150_000</code> (<code>worker/db.ts:149</code>) is a second copy of <code>IN_FLIGHT_MS</code>.
+          </div>
+        </article>
+
+        <!-- ══════════════════ 3 ══════════════════ -->
+        <article id="c3" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">03 · src</span>
+            </div>
+            <h2 class="font-serif text-2xl">Give the page one module for what it is scoped to</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">src/App.tsx:38-96 · src/lib/filters.ts · src/lib/use-stats.ts · src/components/filters.tsx:13-45</p>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">Before — derivation as component body</p>
+              <div class="font-mono text-[11px] leading-snug space-y-1">
+                <div class="border border-slate-300 bg-white px-2 py-1.5">App.tsx <span class="text-slate-400">(component)</span></div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">filters ← useState(DEFAULT_FILTERS)</div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">base ← applyFilters(…, mc: null)</div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">clusterStats ← computeClusterStats(base, mc, hour)</div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">shown ← base.filter(clusterOf)</div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">magType ← dominantMagType(shown)</div>
+                <div class="ms-3 border-s-2 border-rose-500 bg-rose-50 ps-2 py-1 text-rose-800">typeStats ← useStats(ofType, <b>clusterStats.all.mc</b>)</div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">stats ← oneType ? typeStats : allStats</div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">×4 useDeferredValue</div>
+                <div class="ms-3 border-s-2 border-amber-400 bg-amber-50 ps-2 py-1">resetSignal ← useState(0)</div>
+              </div>
+              <svg viewBox="0 0 300 30" class="w-full mt-2"><path d="M150 2 L150 16" stroke="#94a3b8" stroke-width="1.5"/><path d="M146 10 L150 22 L154 10Z" fill="#94a3b8"/></svg>
+              <div class="border border-slate-300 bg-white px-2 py-2 text-center"><span class="lbl text-slate-500">tested surface: activeFilterChips only</span></div>
+              <p class="text-xs text-rose-700 mt-3 leading-relaxed">Depth inverted: the tested module is nearly all interface; the line where a scientific invariant breaks has no seam.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">After — collapsed behind one interface</p>
+              <div class="font-mono text-[11px] leading-snug space-y-1">
+                <div class="border border-slate-300 bg-white px-2 py-1.5">App.tsx <span class="text-slate-400">(layout)</span></div>
+                <div class="ms-3 border-s-2 border-emerald-500 bg-emerald-50 ps-2 py-1">view ← useScope()</div>
+              </div>
+              <svg viewBox="0 0 300 30" class="w-full mt-2"><path d="M150 2 L150 16" stroke="#475569" stroke-width="1.5"/><path d="M146 10 L150 22 L154 10Z" fill="#475569"/></svg>
+              <div class="deepbox border-2 border-slate-900 rounded px-4 py-4 text-white">
+                <p class="lbl mb-2">pageView(events, scope, now)</p>
+                <div class="font-mono text-[10px] leading-snug space-y-0.5 text-slate-400">
+                  <div>applyFilters</div><div>computeClusterStats</div><div>dominantMagType</div><div>computeStats &nbsp;<span class="text-emerald-400">← shared Mc, one place</span></div><div>activeFilterChips</div>
+                </div>
+              </div>
+              <svg viewBox="0 0 300 30" class="w-full mt-2"><path d="M150 2 L150 16" stroke="#475569" stroke-width="1.5"/><path d="M146 10 L150 22 L154 10Z" fill="#475569"/></svg>
+              <div class="border-2 border-emerald-500 bg-emerald-50 px-2 py-2 text-center"><span class="lbl text-emerald-800">page test: pageView(fixture, scope)</span></div>
+              <p class="text-xs text-emerald-700 mt-3 leading-relaxed">Pure function over <code>(events, scope, now)</code>, testable in the existing <code>page</code> vitest project — no DOM.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed">The rule README calls the whole point of <code>computeClusterStats</code> — every scope shares the all-types Mc — is enforced for the magnitude-type tab by one <em>argument</em> at <code>App.tsx:78</code>. Swap <code>clusterStats.all.mc</code> for <code>filters.mc</code> and one tab silently gets its own Mc and a wrong b-value. Nothing catches that.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One module owns scope and everything derived from it, as a plain function plus a thin hook for the memoised and deferred copies. <code>FiltersCard</code> becomes controlled, so <code>resetSignal</code> stops being a protocol.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>Mc-sharing rule verified in one test</li>
+                <li>interface shrinks: scope in, view out</li>
+                <li><code>resetSignal</code> deleted, not documented</li>
+                <li><code>DEFAULT_FILTERS</code> stops spanning three files</li>
+                <li>locality: <code>App.tsx</code> becomes layout</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ══════════════════ 4 ══════════════════ -->
+        <article id="c4" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">ports &amp; adapters</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">04 · src</span>
+            </div>
+            <h2 class="font-serif text-2xl">Give the page one module for when it asks the server</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">src/App.tsx:44-53 · src/components/status-bar.tsx:17,41-84 · src/lib/api.ts · src/main.tsx:12-16</p>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="lbl text-slate-400 mb-3">Before — coupled through string literals</p>
+              <pre class="mermaid">
+flowchart TD
+  APP["App.tsx"] --> QE["#quot;events#quot; + #quot;status#quot;<br/>poll · invalidate"]
+  SB["StatusBar<br/><i>a card</i>"] --> LOOP["backfill loop ×40<br/>sleep · give-up"]
+  SB --> FOC["focusManager<br/>AUTO_REFRESH_AFTER_MS"]
+  LOOP -. "setQueryData<br/>by string literal" .-> QE
+  FOC -.-> LOOP
+  LOOP ==> SGC[("SGC")]
+  classDef bad stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  class LOOP,SGC bad
+</pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="lbl text-slate-400 mb-3">After — one seam for freshness</p>
+              <pre class="mermaid">
+flowchart TD
+  APP["App.tsx"] --> UC["useCatalogue()"]
+  APP --> SB["StatusBar<br/><i>props only</i>"]
+  UC --> KEYS["owns both keys<br/>poll · focus · invalidate"]
+  UC --> STEP["backfillStep(status)<br/><i>pure</i>"]
+  TEST["page test"] --> STEP
+  KEYS --> API["api.*"]
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#fff,stroke-width:2px;
+  classDef good stroke:#10b981,stroke-width:2px,fill:#ecfdf5;
+  class UC deep
+  class STEP good
+</pre>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed">The rules for reaching the government server are split between the page shell and a card named "status bar", coupled only by two bare query-key literals and a comment in each file pointing at the other. The loop that posts repeatedly — the exact hazard README warns about — is an anonymous <code>mutationFn</code> inside a card, reachable by no test and no caller but its own effect.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One module owns the catalogue's freshness: both query keys, the poll, the focus rule and its threshold, the invalidate-on-newer-ingest rule, and the back-fill policy as a pure step function it drives.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>locality: every SGC-facing rule at one seam</li>
+                <li>back-fill policy testable without a DOM</li>
+                <li>query keys stop being a cross-file interface</li>
+                <li><code>StatusBar</code> renders; it no longer polls</li>
+                <li>throttle constant paired with the Worker's</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mx-7 mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <span class="font-semibold">Keep as-is behaviour.</span> <code>AUTO_REFRESH_AFTER_MS = 300_000</code> must stay equal to the Worker's <code>REFRESH_MIN_INTERVAL_S</code>, the cron in <code>wrangler.jsonc</code> and the "5 minutes" in <code>lib/i18n.tsx</code>. README ties all four together; the deepening should make that one constant with one comment, not four.
+          </div>
+        </article>
+
+        <!-- ══════════════════ 5 ══════════════════ -->
+        <article id="c5" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">local-substitutable</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">05 · worker</span>
+            </div>
+            <h2 class="font-serif text-2xl">Give the ingest run record one module</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">worker/db.ts:12-17,37-43,111-185 · worker/ingest.ts:76-84,206,218 · worker/test/ingest.test.ts:59-64,412-417</p>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <!-- cross-section -->
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">Before — the schema known in four places</p>
+              <div class="space-y-2">
+                <div class="h-12 flex items-center border-s-4 border-amber-500 bg-amber-50 px-3"><span class="lbl text-amber-900">db.ts — RunRow · toRow · 10 exports</span></div>
+                <div class="h-12 flex items-center border-s-4 border-rose-500 bg-rose-50 px-3"><span class="lbl text-rose-900">ingest.ts finish() — column names as object keys</span></div>
+                <div class="h-12 flex items-center border-s-4 border-amber-500 bg-amber-50 px-3"><span class="lbl text-amber-900">ingest.ts — 2 raw SELECTs over ingest_runs</span></div>
+                <div class="h-12 flex items-center border-s-4 border-amber-500 bg-amber-50 px-3"><span class="lbl text-amber-900">test — hand-written INSERT INTO ingest_runs</span></div>
+                <div class="h-12 flex items-center border-s-4 border-slate-400 bg-slate-100 px-3"><span class="lbl text-slate-700">migrations/0001 + 0002</span></div>
+              </div>
+              <p class="text-xs text-rose-700 mt-4 leading-relaxed">No single file answers "what does a run row look like". <code>toRun</code> omits the two columns 0002 added, so <code>sgcHealth</code> re-queries them.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">After — one band</p>
+              <div class="space-y-2">
+                <div class="h-12 flex items-center justify-between border border-slate-300 bg-white px-3"><span class="lbl text-slate-500">ingest.ts</span><span class="lbl text-slate-400">open · succeed · fail</span></div>
+                <div class="h-12 flex items-center justify-between border border-slate-300 bg-white px-3"><span class="lbl text-slate-500">index.ts</span><span class="lbl text-slate-400">last · lastOk</span></div>
+                <div class="h-12 flex items-center justify-between border border-slate-300 bg-white px-3"><span class="lbl text-slate-500">test</span><span class="lbl text-slate-400">record</span></div>
+                <svg viewBox="0 0 300 26" class="w-full"><path d="M60 0 L150 14 M150 0 L150 14 M240 0 L150 14" stroke="#94a3b8" stroke-width="1.5" fill="none"/><path d="M146 8 L150 20 L154 8Z" fill="#475569"/></svg>
+                <div class="deepbox h-28 flex flex-col items-center justify-center border-2 border-slate-900 text-white px-3 text-center">
+                  <span class="lbl">runs — the only file naming a column</span>
+                  <span class="text-[10px] text-slate-400 mt-1">claim · finish · health · sweep · backfill</span>
+                </div>
+              </div>
+              <p class="text-xs text-emerald-700 mt-4 leading-relaxed">Ten one-caller exports become one interface. Identifier interpolation into SQL disappears.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed"><code>db.ts</code> is organised by technology, not by concept. Every one of its ten ingest-side exports has exactly one caller — <code>ingest()</code> — an interface nearly as large as the implementation it hides.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One module owns the run record: open it (the atomic claim), close it, and answer the questions callers ask. <code>ingest.ts</code> stops naming columns and stops building SQL; tests seed history through the same interface.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>locality: schema knowledge in one file</li>
+                <li>no dynamic-column SQL inside ingest</li>
+                <li>tests seed runs through one interface</li>
+                <li>migration-0002-style columns change once</li>
+                <li><code>ingest.ts</code> drops six one-caller imports</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mx-7 mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <span class="font-semibold">Do not disturb.</span> <code>claimIngestRun</code>'s single <code>INSERT … WHERE NOT EXISTS</code> is the atomicity README's audit added. It moves into the module unchanged, and <code>ingest()</code> keeps returning <code>null</code> for "another run held the claim".
+          </div>
+        </article>
+
+        <!-- ══════════════════ 6 ══════════════════ -->
+        <article id="c6" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-sky-100 text-sky-800 text-xs font-semibold px-3 py-1">cheapest</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">06 · src</span>
+            </div>
+            <h2 class="font-serif text-2xl">Make "events per Colombian day, by cluster" one module</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">src/components/charts/magnitude-time.tsx:40-80 · src/components/clusters-card.tsx:98-106 · src/lib/format.ts:34</p>
+          </div>
+
+          <!-- mass diagram -->
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">Before — two implementations, two preconditions</p>
+              <div class="grid grid-cols-2 gap-4 items-end" style="height:230px">
+                <div class="flex flex-col justify-end h-full">
+                  <div class="border border-amber-400 bg-amber-100 flex items-center justify-center text-center px-1" style="height:120px"><span class="lbl text-amber-900">magnitude-time<br>domainOf + Map</span></div>
+                  <p class="text-[10px] font-mono text-rose-700 mt-2 leading-tight">events[0] / events[last]<br><b>assumes time-sorted</b><br>max = per-day total</p>
+                </div>
+                <div class="flex flex-col justify-end h-full">
+                  <div class="border border-amber-400 bg-amber-100 flex items-center justify-center text-center px-1" style="height:110px"><span class="lbl text-amber-900">clusters-card<br>min/max scan</span></div>
+                  <p class="text-[10px] font-mono text-rose-700 mt-2 leading-tight">scans for lo/hi<br><b>no ordering assumption</b><br>max = per-cluster max</p>
+                </div>
+              </div>
+              <p class="text-xs text-rose-700 mt-3 leading-relaxed">Same concept, disagreeing about their own preconditions. Both are <code>useMemo</code> bodies, so the day arithmetic is only reachable by rendering Recharts.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">After — one implementation, short interface</p>
+              <div class="flex flex-col justify-end" style="height:230px">
+                <div class="border-2 border-emerald-500 bg-emerald-50 flex items-center justify-center mb-1" style="height:34px"><span class="lbl text-emerald-800">dailyCounts(events)</span></div>
+                <div class="deepbox border-2 border-slate-900 flex flex-col items-center justify-center text-white text-center px-2" style="height:150px">
+                  <span class="lbl">implementation</span>
+                  <span class="text-[10px] text-slate-400 mt-1 leading-snug">dayStart bucketing · clusterOf split<br>range scan · shared max</span>
+                </div>
+              </div>
+              <p class="text-xs text-emerald-700 mt-3 leading-relaxed">Returns <code>{ from, to, days, perDay{shallow, deep, total}, max }</code>. Ordering precondition stated in the interface, or removed by scanning. <code>countAxis</code> stays with the chart that needs a Recharts domain.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed">One concept — the Colombian calendar-day histogram, split by cluster — has two implementations. One silently requires time-sorted input (true today only because <code>worker/index.ts:117</code> says <code>ORDER BY time</code>, which <code>src/lib/api.ts</code> promises nothing about), the other does not. Their <code>max</code> means different things.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One module takes the filtered events and returns the day range, the per-day counts split by cluster, and the shared maximum. Both charts read it. Day <em>formatting</em> keeps going through <code>format.ts</code>, unchanged.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>day bucketing verified once, on the fixture</li>
+                <li>ordering precondition stated, not assumed</li>
+                <li>two charts cannot disagree on days</li>
+                <li>testable without Recharts</li>
+                <li><code>dayStart</code> callers drop from four to one</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ══════════════════ 7 ══════════════════ -->
+        <article id="c7" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1">Worth exploring</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">07 · core</span>
+            </div>
+            <h2 class="font-serif text-2xl">Give the statistics one selection interface</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">core/gr.ts:105,144,166 · core/clusters.ts:16,43 · core/cli.ts:43-56,83-106 · worker/index.ts:172-183 · src/lib/use-stats.ts:6</p>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="lbl text-slate-400 mb-4">Before — three consumers, three sequences</p>
+              <div class="space-y-2.5 text-[10px] font-mono">
+                <div class="flex items-center gap-1.5">
+                  <span class="w-12 shrink-0 lbl text-slate-400">page</span>
+                  <span class="flex-1 border border-slate-300 bg-white px-1 py-1.5 text-center">clusterStats</span><span class="text-slate-400">›</span>
+                  <span class="flex-1 border border-slate-300 bg-white px-1 py-1.5 text-center">magType</span><span class="text-slate-400">›</span>
+                  <span class="flex-1 border border-slate-300 bg-white px-1 py-1.5 text-center">useStats</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-12 shrink-0 lbl text-slate-400">worker</span>
+                  <span class="flex-1 border border-slate-300 bg-white px-1 py-1.5 text-center">parseFilter</span><span class="text-slate-400">›</span>
+                  <span class="flex-1 border border-slate-300 bg-white px-1 py-1.5 text-center">parseCluster</span><span class="text-slate-400">›</span>
+                  <span class="flex-1 border border-slate-300 bg-white px-1 py-1.5 text-center">statsFor</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-12 shrink-0 lbl text-slate-400">cli</span>
+                  <span class="flex-1 border border-rose-400 bg-rose-50 px-1 py-1.5 text-center text-rose-800">report() — re-derives Mc, prints no caution</span>
+                </div>
+              </div>
+              <svg viewBox="0 0 300 30" class="w-full my-1"><path d="M60 0 L150 18 M150 0 L150 18 M240 0 L150 18" stroke="#94a3b8" stroke-width="1.5" fill="none"/><path d="M146 12 L150 24 L154 12Z" fill="#475569"/></svg>
+              <div class="border border-slate-300 bg-slate-100 px-2 py-2.5 text-center"><span class="lbl text-slate-600">core/gr.ts</span></div>
+              <div class="mt-4 border border-rose-400 bg-rose-50 px-2 py-2 text-center">
+                <span class="lbl text-rose-800">MIN_RELIABLE_N = 50</span>
+                <p class="text-[10px] text-rose-700 normal-case tracking-normal mt-0.5">lives in <code>src/</code>; its sibling <code>ownMcHigher</code> lives in core</p>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="lbl text-slate-400 mb-3">After — one seam, three adapters</p>
+              <pre class="mermaid">
+flowchart TD
+  P["page"] --> SEL["statsFor(selection)"]
+  W["worker"] --> SEL
+  C["cli"] --> SEL
+  T["test/"] --> SEL
+  SEL --> OUT["fit + cautions<br/>few events · ownMcHigher"]
+  OUT --> CL["clusters.ts"] --> GR["gr.ts"]
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#fff,stroke-width:2px;
+  class SEL deep
+</pre>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed">The n&nbsp;&lt;&nbsp;50 caution lives in the page while its sibling <code>ownMcHigher</code> lives in core; the CLI's <code>report()</code> re-derives Mc independently of <code>computeStats</code> and prints no caution at all. Three consumers re-sequence four core functions three ways, and the one under test is the one nobody runs.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One core entry point takes a selection — events, optional Mc, cluster, magnitude type — and returns the fit <em>plus the cautions that belong to it</em>. Split <code>core/cli.ts</code> so its commands are importable and its sequence can be tested at all.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>cautions travel with the fit</li>
+                <li>three consumers stop re-sequencing</li>
+                <li>CLI becomes testable and consistent</li>
+                <li>tests exercise callers, not re-derivations</li>
+                <li><code>/api/stats</code> gains the magnitude-type axis</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mx-7 mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <span class="font-semibold">Overlaps candidate 03.</span> The page-side half of the shared-Mc rule is the same line (<code>App.tsx:78</code>). Do 03 first; this one then extends the same seam to the Worker and the CLI. <code>src/lib/use-stats.ts</code> — 11 lines, interface as large as its implementation — is absorbed by whichever lands first.
+          </div>
+        </article>
+
+        <!-- ══════════════════ 8 ══════════════════ -->
+        <article id="c8" class="scroll-mt-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-100 px-7 py-5 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1">Worth exploring</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="ml-auto font-mono text-xs text-slate-400">08 · core</span>
+            </div>
+            <h2 class="font-serif text-2xl">Describe the event record once</h2>
+            <p class="font-mono text-sm text-slate-500 leading-relaxed">core/types.ts:18-44 · core/csv.ts:4-28 · worker/db.ts:4-90 · core/seiscomp.ts:185-202 · migrations/0001_init.sql</p>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-6 bg-stone-50/60">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">Before — one fact, ten lists</p>
+              <div class="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                <div class="border border-slate-300 bg-white px-2 py-2">types.ts <span class="text-slate-400">SeismicEvent</span></div>
+                <div class="border border-amber-400 bg-amber-100 px-2 py-2">csv.ts <span class="text-amber-800">COLUMNS</span></div>
+                <div class="border border-amber-400 bg-amber-100 px-2 py-2">csv.ts <span class="text-amber-800">COLUMNS_ES</span></div>
+                <div class="border border-rose-400 bg-rose-100 px-2 py-2">csv.ts <span class="text-rose-800">NUMERIC — untyped</span></div>
+                <div class="border border-amber-400 bg-amber-100 px-2 py-2">db.ts <span class="text-amber-800">EventRow</span></div>
+                <div class="border border-amber-400 bg-amber-100 px-2 py-2">db.ts <span class="text-amber-800">toStored</span></div>
+                <div class="border border-amber-400 bg-amber-100 px-2 py-2">db.ts <span class="text-amber-800">DATA_FIELDS</span></div>
+                <div class="border border-rose-400 bg-rose-100 px-2 py-2">db.ts <span class="text-rose-800">insertStmt — positional</span></div>
+                <div class="border border-rose-400 bg-rose-100 px-2 py-2">db.ts <span class="text-rose-800">updateStmt — positional</span></div>
+                <div class="border border-amber-400 bg-amber-100 px-2 py-2">seiscomp.ts <span class="text-amber-800">cell indices</span></div>
+                <div class="border border-slate-300 bg-slate-100 px-2 py-2 col-span-2">migrations/0001_init.sql</div>
+              </div>
+              <p class="text-xs text-rose-700 mt-4 leading-relaxed">Adding one SGC field means editing ten sites across three modules. Three of the lists are positional or string-keyed, so a mistake is caught only by the CSV round-trip test, if at all.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="lbl text-slate-400 mb-4">After — one table, derived views</p>
+              <div class="deepbox border-2 border-slate-900 px-4 py-5 text-white text-center">
+                <span class="lbl">core — field table</span>
+                <p class="text-[10px] text-slate-400 mt-1 normal-case tracking-normal">code name · sql name · spanish header · numeric?</p>
+              </div>
+              <svg viewBox="0 0 300 34" class="w-full my-1"><path d="M150 0 L60 22 M150 0 L150 22 M150 0 L240 22" stroke="#475569" stroke-width="1.5" fill="none"/><path d="M56 16 L60 28 L64 16Z M146 16 L150 28 L154 16Z M236 16 L240 28 L244 16Z" fill="#475569"/></svg>
+              <div class="grid grid-cols-3 gap-2 text-[10px] font-mono">
+                <div class="border border-emerald-400 bg-emerald-50 px-1 py-3 text-center">csv.ts</div>
+                <div class="border border-emerald-400 bg-emerald-50 px-1 py-3 text-center">db.ts</div>
+                <div class="border border-emerald-400 bg-emerald-50 px-1 py-3 text-center">admit()</div>
+              </div>
+              <p class="text-xs text-emerald-700 mt-4 leading-relaxed">Migration stays hand-written, checked against the table by a test. Bind order stops being positional.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-x-10 gap-y-5">
+            <div class="space-y-4">
+              <div><p class="lbl text-slate-400 mb-1">Problem</p><p class="text-sm leading-relaxed">Each list is shallow on its own; together they are a single fact with no home.</p></div>
+              <div><p class="lbl text-slate-400 mb-1">Solution</p><p class="text-sm leading-relaxed">One table describing each field once, from which the CSV columns, the row mapper, the change comparison and the SQL statements are derived.</p></div>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm space-y-1.5 list-disc ps-5 text-slate-700">
+                <li>locality: one edit per new field</li>
+                <li>bind order stops being positional</li>
+                <li><code>NUMERIC</code> typed against the record</li>
+                <li><code>db.ts</code> shrinks to query shapes</li>
+                <li>pairs naturally with candidate 01</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mx-7 mb-6 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <span class="font-semibold">Buys locality, not leverage.</span> No caller's interface shrinks. Generated SQL must stay readable enough that the <code>ON CONFLICT</code> comment at <code>worker/db.ts:68</code> survives. Do it after 01, with which it shares a module.
+          </div>
+        </article>
+      </section>
+
+      <!-- ─────────────────────────────── TOP RECOMMENDATION ─────────────────────────────── -->
+      <section id="top-recommendation">
+        <div class="rounded-xl deepbox text-white px-8 py-8 shadow-lg space-y-4">
+          <p class="lbl text-emerald-400">Top recommendation</p>
+          <h2 class="font-serif text-3xl"><a href="#c1" class="underline decoration-emerald-500 decoration-2 underline-offset-4">01 — Admit events through one gate</a></h2>
+          <p class="text-slate-300 leading-relaxed max-w-3xl">It is the only candidate whose failure I reproduced rather than inferred, the smallest in blast radius, and the one that makes the others cheaper: once events have one admission gate, candidate 08 has somewhere to put the field table and candidate 07 can assume its input is plausible. It also <em>deletes</em> interface — two private helpers leave <code>seiscomp.ts</code>, which shrinks to reading HTML shape.</p>
+          <div class="grid sm:grid-cols-3 gap-3 pt-2">
+            <div class="rounded-lg bg-white/5 border border-white/10 px-4 py-3">
+              <p class="lbl text-slate-400 mb-1">then</p>
+              <p class="text-sm"><a href="#c2" class="underline decoration-slate-600 underline-offset-2">02 — what ingest is due</a><br><span class="text-slate-400 text-xs">closes the one live rule divergence</span></p>
+            </div>
+            <div class="rounded-lg bg-white/5 border border-white/10 px-4 py-3">
+              <p class="lbl text-slate-400 mb-1">then</p>
+              <p class="text-sm"><a href="#c3" class="underline decoration-slate-600 underline-offset-2">03 — the page's scope</a><br><span class="text-slate-400 text-xs">puts the shared-Mc rule under test</span></p>
+            </div>
+            <div class="rounded-lg bg-white/5 border border-white/10 px-4 py-3">
+              <p class="lbl text-slate-400 mb-1">cheapest win</p>
+              <p class="text-sm"><a href="#c6" class="underline decoration-slate-600 underline-offset-2">06 — the day histogram</a><br><span class="text-slate-400 text-xs">one afternoon, fixture-testable</span></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="text-xs text-slate-400 font-mono pt-4 border-t border-slate-200">
+        Read-only review. No files changed. Worktree <span class="text-slate-600">.claude/worktrees/arch-review</span>.
+      </footer>
+    </main>
+  </body>
+</html>
