@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, computeClusterStats } from "./clusters.ts";
 import { fromCsv, toCsv, windowsToCsv } from "./csv.ts";
 import { bValue, computeStats, fmd, mcGoodnessOfFit, mcMaxCurvature, WINDOW_SIZE, WINDOW_STEP } from "./gr.ts";
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, MAINSHOCK_ID, fetchCatalog } from "./seiscomp.ts";
@@ -7,7 +8,7 @@ import type { BBox, SeismicEvent } from "./types.ts";
 
 const USAGE = `usage:
   pnpm cli fetch  [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--bbox lonMin,latMin,lonMax,latMax] --out events.csv
-  pnpm cli bvalue --input events.csv [--mc 2.3] [--manual-only] [--exclude-mainshock] [--windows] [--windows-out b-windows.csv]`;
+  pnpm cli bvalue --input events.csv [--mc 2.3] [--manual-only] [--exclude-mainshock] [--windows] [--windows-out b-windows.csv] [--cluster shallow|deep]`;
 
 function parseDate(s: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error(`bad date ${s}, want YYYY-MM-DD`);
@@ -60,7 +61,7 @@ async function cmdBvalue(argv: string[]): Promise<void> {
     options: {
       input: { type: "string" }, mc: { type: "string" },
       "manual-only": { type: "boolean" }, "exclude-mainshock": { type: "boolean" }, windows: { type: "boolean" },
-      "windows-out": { type: "string" },
+      "windows-out": { type: "string" }, cluster: { type: "string" },
     },
   });
   if (!values.input) throw new Error("--input is required");
@@ -76,7 +77,23 @@ async function cmdBvalue(argv: string[]): Promise<void> {
   for (const e of events) byType.set(e.magType, (byType.get(e.magType) ?? 0) + 1);
   console.log("magnitude types:", [...byType].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}=${n}`).join(" "));
 
+  const cluster = values.cluster;
+  if (cluster !== undefined && cluster !== "shallow" && cluster !== "deep") throw new Error("--cluster must be shallow or deep");
+
   const mc = report("all events", events, mcOverride);
+
+  // Both clusters are fitted above the Mc of the whole catalogue, exactly as the page does.
+  const clusters = computeClusterStats(events, mcOverride ?? null);
+  console.log(`\n== depth clusters, cut at ${CLUSTER_DEPTH_KM} km, shared Mc=${mc.toFixed(1)}`);
+  for (const c of CLUSTERS) {
+    const { stats, recent, ownMcHigher } = clusters[c];
+    const fit = stats.fit ? `b=${stats.fit.b.toFixed(3)} ± ${stats.fit.sigmaB.toFixed(3)}  n=${stats.fit.n}` : "too few events at or above Mc";
+    console.log(`  ${c.padEnd(8)} ${String(stats.count).padStart(4)} events  ${fit}  last ${RECENT_DAYS} days: ${recent}${ownMcHigher ? `  (own Mc ${stats.mcMaxc} is higher: b may be biased low)` : ""}`);
+  }
+  if (clusters.difference) {
+    const { p } = clusters.difference;
+    console.log(`  Utsu test: p=${p.toFixed(3)} -> ${p < 0.05 ? "the b-values differ" : "the b-values cannot be told apart"}`);
+  }
 
   console.log("\n  FMD (lowest bins):");
   for (const b of fmd(events.map((e) => e.mag)).slice(0, 12)) {
@@ -84,9 +101,9 @@ async function cmdBvalue(argv: string[]): Promise<void> {
   }
 
   // Same pipeline as the page and the API, so the three cannot disagree.
-  const { windows } = computeStats(events, mcOverride ?? null);
+  const { windows } = cluster ? clusters[cluster].stats : computeStats(events, mcOverride ?? null);
   if (values.windows) {
-    console.log(`\n  b over time (${WINDOW_SIZE}-event windows, step ${WINDOW_STEP}, fixed Mc=${mc.toFixed(1)}):`);
+    console.log(`\n  b over time${cluster ? `, ${cluster} cluster` : ""} (${WINDOW_SIZE}-event windows, step ${WINDOW_STEP}, fixed Mc=${mc.toFixed(1)}):`);
     for (const w of windows) {
       console.log(`    ${w.from.slice(0, 16)} .. ${w.to.slice(0, 16)}  b=${w.b.toFixed(2)} ± ${w.sigmaB.toFixed(2)}`);
     }

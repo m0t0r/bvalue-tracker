@@ -7,8 +7,14 @@ import { MAINSHOCK_ID } from "@/lib/filters";
 import { dayStart, fmtDate, fmtDateTime, fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { CLUSTER_DEPTH_KM, clusterOf } from "../../../core/clusters";
 
-const config = { mag: { label: "M", color: "var(--chart-1)" }, main: { label: "M7.4", color: "var(--chart-2)" } } satisfies ChartConfig;
+// The shallow cluster keeps the page's blue; the deep one, which went quiet after the first week, is
+// the neutral grey. Orange stays the mainshock's alone.
+const config = {
+  mag: { label: "M", color: "var(--chart-1)" }, deep: { label: "M", color: "var(--chart-3)" },
+  main: { label: "M7.4", color: "var(--chart-2)" },
+} satisfies ChartConfig;
 
 const DAY = 86_400_000;
 // The whole sequence squeezed into a phone's ~300px is one solid band, so below DENSE_BELOW every
@@ -44,20 +50,27 @@ function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
 
 export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] }) {
   const { t, lang } = useI18n();
-  const { points, main, daily, domain, days, count } = useMemo(() => {
-    const pts = events.map((e) => ({ t: Date.parse(e.time), mag: e.mag, time: e.time, region: e.region, id: e.id }));
-    const counts = new Map<number, number>();
-    for (const e of events) counts.set(dayStart(e.time), (counts.get(dayStart(e.time)) ?? 0) + 1);
+  const { points, deepPoints, main, daily, domain, days, count } = useMemo(() => {
+    const pts = events.map((e) => ({ t: Date.parse(e.time), mag: e.mag, time: e.time, region: e.region, id: e.id, depthKm: e.depthKm, cluster: clusterOf(e) }));
+    const counts = new Map<number, number>(), deepCounts = new Map<number, number>();
+    for (const e of events) {
+      const d = dayStart(e.time);
+      counts.set(d, (counts.get(d) ?? 0) + 1);
+      if (clusterOf(e) === "deep") deepCounts.set(d, (deepCounts.get(d) ?? 0) + 1);
+    }
     const [lo, hi] = domainOf(events);
     const bars = [];
     let max = 0;
     for (let d = lo; d < hi; d += DAY) {
       const c = counts.get(d) ?? 0;
       if (c > max) max = c;
-      bars.push({ t: d + DAY / 2, count: c });
+      const deep = deepCounts.get(d) ?? 0;
+      bars.push({ t: d + DAY / 2, count: c, shallow: c - deep, deep });
     }
     return {
-      points: pts.filter((p) => p.id !== MAINSHOCK_ID), main: pts.filter((p) => p.id === MAINSHOCK_ID),
+      points: pts.filter((p) => p.id !== MAINSHOCK_ID && p.cluster === "shallow"),
+      deepPoints: pts.filter((p) => p.id !== MAINSHOCK_ID && p.cluster === "deep"),
+      main: pts.filter((p) => p.id === MAINSHOCK_ID),
       daily: bars, domain: [lo, hi] as [number, number], days: Math.max(1, bars.length), count: countAxis(max),
     };
   }, [events]);
@@ -129,7 +142,15 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
         <CardTitle>{t.magTimeTitle}</CardTitle>
         <CardDescription>{t.magTimeDesc}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-3">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {(["shallow", "deep"] as const).map((c) => (
+            <li key={c} className="flex items-center gap-1.5">
+              <span className={cn("size-2.5 rounded-full", c === "shallow" ? "bg-(--chart-1)" : "bg-(--chart-3)")} />
+              {t.clusterName[c]} <span>({t.clusterWhere[c](CLUSTER_DEPTH_KM)})</span>
+            </li>
+          ))}
+        </ul>
         <div ref={scroller} onScroll={onScroll} role="group" aria-label={t.magTimeRegion} tabIndex={0}
           className="overflow-x-auto overscroll-x-contain rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring">
           <div className="flex flex-col gap-6" style={{ width: AXIS_COL + plotW }}>
@@ -154,11 +175,12 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                     return (
                       <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
                         <div className="font-medium tabular-nums">M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)} ({t.tz})</div>
-                        <div className="text-muted-foreground">{p.region}</div>
+                        <div className="text-muted-foreground">{t.clusterName[p.cluster]} · {p.depthKm.toFixed(0)} km · {p.region}</div>
                       </div>
                     );
                   }} />
                   <Scatter data={points} fill="var(--color-mag)" fillOpacity={0.55} stroke="var(--color-mag)" isAnimationActive={false} />
+                  <Scatter data={deepPoints} fill="var(--color-deep)" fillOpacity={0.55} stroke="var(--color-deep)" isAnimationActive={false} />
                   <Scatter data={main} fill="var(--color-main)" shape="star" isAnimationActive={false}>
                     <ZAxis range={[160, 160]} />
                   </Scatter>
@@ -183,15 +205,19 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                     {xAxis(true)}
                     {yCount(false)}
                     <ChartTooltip cursor={{ fillOpacity: 0.08 }} content={({ active, payload }) => {
-                      const p = payload?.[0]?.payload as { t: number; count: number } | undefined;
+                      const p = payload?.[0]?.payload as (typeof daily)[number] | undefined;
                       if (!active || !p) return null;
                       return (
                         <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
-                          <span className="font-medium">{p.count}</span> · {fmtDate(p.t, lang)}
+                          <div><span className="font-medium">{p.count}</span> · {fmtDate(p.t, lang)}</div>
+                          {p.deep > 0 && p.shallow > 0 ? (
+                            <div className="text-muted-foreground">{t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}</div>
+                          ) : null}
                         </div>
                       );
                     }} />
-                    <Bar dataKey="count" fill="var(--color-count)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                    <Bar dataKey="shallow" stackId="day" fill="var(--chart-1)" isAnimationActive={false} />
+                    <Bar dataKey="deep" stackId="day" fill="var(--chart-3)" isAnimationActive={false} />
                   </BarChart>
                 </ChartContainer>
               </div>

@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/use-stats";
+import type { Cluster } from "../../../core/clusters";
 
-/** `magType` is set while the b card limits the statistics to one magnitude type. */
-export const FmdChart = memo(function FmdChart({ stats, magType }: { stats: Stats; magType: string | null }) {
+/** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
+export const FmdChart = memo(function FmdChart({ stats, magType, cluster }: { stats: Stats; magType: string | null; cluster: Cluster | null }) {
   const { t } = useI18n();
   const { bins, fit, mc } = stats;
 
@@ -37,7 +38,7 @@ export const FmdChart = memo(function FmdChart({ stats, magType }: { stats: Stat
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.fmdTitle}</CardTitle>
-        <CardDescription>{magType !== null ? `${t.bScopeNote(magType)} ` : ""}{t.fmdDesc}{isolated !== null ? ` ${t.fmdIsolated(isolated.toFixed(1))}` : ""}</CardDescription>
+        <CardDescription>{cluster !== null ? `${t.clusterNote(t.clusterName[cluster])} ` : ""}{magType !== null ? `${t.bScopeNote(magType)} ` : ""}{t.fmdDesc}{isolated !== null ? ` ${t.fmdIsolated(isolated.toFixed(1))}` : ""}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="aspect-auto h-80 w-full">

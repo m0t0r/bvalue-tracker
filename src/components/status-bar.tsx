@@ -2,6 +2,7 @@ import { focusManager, useMutation, useQueryClient } from "@tanstack/react-query
 import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FlowNumber } from "@/components/flow-number";
+import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -131,10 +132,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
           <AlertTitle>{t.ingestFailed}</AlertTitle>
           <AlertDescription>
             {t.ingestFailedBody}
-            <details className="text-xs">
-              <summary className="cursor-pointer">{t.technicalDetail}</summary>
-              {failed.error}
-            </details>
+            <TechnicalDetail>{failed.error}</TechnicalDetail>
           </AlertDescription>
         </Alert>
       ) : null}
