@@ -32,6 +32,15 @@ describe("public/_headers", () => {
     expect(hsts).toContain("includeSubDomains");
   });
 
+  it("lets the content-hashed assets be cached for good", () => {
+    // A changed file gets a new name, so revalidating them on every visit buys nothing.
+    // index.html is the one file that must not be pinned this way.
+    const rule = HEADERS.slice(HEADERS.indexOf("/assets/*"));
+    expect(rule, "no /assets/* rule in public/_headers").toContain("/assets/*");
+    expect(rule).toMatch(/Cache-Control:\s*public, max-age=31536000, immutable/i);
+    expect(HEADERS.slice(0, HEADERS.indexOf("/assets/*"))).not.toMatch(/^\s*Cache-Control:/im);
+  });
+
   it("denies the device permissions the page never asks for", () => {
     const policy = value("Permissions-Policy");
     for (const feature of ["camera", "microphone", "geolocation", "payment", "usb"]) {
