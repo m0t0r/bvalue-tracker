@@ -1,11 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, InfoIcon, MoonIcon, SunIcon } from "lucide-react";
-import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { BSummary, type BScope } from "@/components/b-summary";
 import { ClustersCard } from "@/components/clusters-card";
-import { BOverTimeChart } from "@/components/charts/b-over-time";
-import { FmdChart } from "@/components/charts/fmd";
-import { MagnitudeTimeChart } from "@/components/charts/magnitude-time";
+import { Deferred } from "@/components/deferred";
 import { EventsTable } from "@/components/events-table";
 import { FilterScope } from "@/components/filter-scope";
 import { FiltersCard } from "@/components/filters";
@@ -24,6 +22,12 @@ import { useNow } from "@/lib/use-now";
 import { dominantMagType, useStats } from "@/lib/use-stats";
 import { clusterOf, computeClusterStats } from "../core/clusters";
 
+// The three Recharts cards and the map are the page's heavy chunks; `Deferred` says why they
+// are only fetched once the reader is near them. Everything above the b-value — the number
+// itself, the status bar, the groups card and the filters — stays in the first chunk.
+const BOverTimeChart = lazy(() => import("@/components/charts/b-over-time").then((m) => ({ default: m.BOverTimeChart })));
+const FmdChart = lazy(() => import("@/components/charts/fmd").then((m) => ({ default: m.FmdChart })));
+const MagnitudeTimeChart = lazy(() => import("@/components/charts/magnitude-time").then((m) => ({ default: m.MagnitudeTimeChart })));
 const EventMap = lazy(() => import("@/components/event-map"));
 const NO_EVENTS: StoredEvent[] = [];
 const row = (i: number) => ({ "--i": i }) as CSSProperties;
@@ -139,7 +143,11 @@ export function App() {
                 <BSummary stats={stats} incomplete={incomplete}
                   cluster={cluster === "all" ? null : cluster}
                   scope={{ value: bScope, onChange: setBScope, magType, typeCount: ofType.length, total: shown.length }} />
-                <div className="lg:col-span-2"><BOverTimeChart stats={heavyStats} magType={heavyMagType} cluster={heavyCluster} /></div>
+                <div className="lg:col-span-2">
+                  <Deferred title={t.bTimeTitle}>
+                    <BOverTimeChart stats={heavyStats} magType={heavyMagType} cluster={heavyCluster} />
+                  </Deferred>
+                </div>
               </div>
             ) : null}
 
@@ -160,10 +168,19 @@ export function App() {
             ) : (
               <>
                 <div className="enter grid gap-6 lg:grid-cols-2" style={row(1)}>
-                  <FmdChart stats={heavyStats} magType={heavyMagType} cluster={heavyCluster} />
-                  <Suspense fallback={<Skeleton className="h-full min-h-[31rem] w-full" />}><EventMap events={heavyShown} /></Suspense>
+                  <Deferred title={t.fmdTitle}>
+                    <FmdChart stats={heavyStats} magType={heavyMagType} cluster={heavyCluster} />
+                  </Deferred>
+                  {/* h-96 canvas plus the depth/magnitude legend under it. */}
+                  <Deferred title={t.mapTitle} height="h-[26rem]">
+                    <EventMap events={heavyShown} />
+                  </Deferred>
                 </div>
-                <div className="enter" style={row(2)}><MagnitudeTimeChart events={heavyShown} /></div>
+                <div className="enter" style={row(2)}>
+                  <Deferred title={t.magTimeTitle}>
+                    <MagnitudeTimeChart events={heavyShown} />
+                  </Deferred>
+                </div>
                 <div className="enter" style={row(3)}><EventsTable events={heavyShown} /></div>
               </>
             )}
