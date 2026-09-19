@@ -1,0 +1,21 @@
+name: SGC canary
+
+# Hits the real SGC server once a day so a change to their form or table
+# layout is noticed from CI, not only from a failing cron in production.
+on:
+  schedule:
+    - cron: "23 11 * * *"
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:live

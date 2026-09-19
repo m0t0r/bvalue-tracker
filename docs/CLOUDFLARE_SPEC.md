@@ -1,5 +1,13 @@
 # Spec: Chocó swarm monitor on Cloudflare
 
+> **Status (2026-09-18): implemented.** The Worker, D1 schema, cron ingest, API,
+> React page, tests and CI/CD described here exist in this repo. Differences from
+> this spec as built: core logic lives in `core/` (not `src/`, which holds the
+> React app); the daily full re-read became an hourly rotating 7-day "sweep" so
+> every invocation stays small; statistics are computed in the browser from
+> `/api/events`, with `/api/stats` kept for checks. Still open: §4.1, confirming
+> from a deployed Worker that SGC accepts Cloudflare egress, and measuring CPU time.
+
 You are building the hosted part of this project end to end. A working, tested
 proof of concept already exists in this repo. Read this whole file, then
 `README.md`, then the code in `src/` before writing anything.
