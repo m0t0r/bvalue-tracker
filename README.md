@@ -42,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 138 tests, offline
+pnpm test                 # 140 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -409,10 +409,13 @@ A full source audit lives outside the repo in `~/security-audit-skill/sgc-swarm/
 - **The response headers are the two files below, and nothing else sets them**
   (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
 
-  | | `public/_headers` (the page) | `worker/index.ts` middleware (`/api/*`) |
+  | | `public/_headers` (the page) | `worker/index.ts` middleware (every Worker route) |
   |---|---|---|
   | CSP, X-Frame-Options, Permissions-Policy, COOP, CORP | yes | no — a JSON body renders nothing |
   | HSTS, X-Content-Type-Options, Referrer-Policy | yes | yes, including on 403/429/404/500 |
+
+  The middleware is `app.use("*")`, not `/api/*`, because the Worker also answers the 404
+  for any path that matches no asset (see `not_found_handling` below).
 
   `Permissions-Policy` denies every feature: the page asks for no geolocation, camera,
   microphone or clipboard, and the map has no locate control, so an allow-list anywhere
@@ -426,8 +429,13 @@ A full source audit lives outside the repo in `~/security-audit-skill/sgc-swarm/
   `Permissions-Policy` were missing (2026-09-19).
   `_headers` does **not** apply under `pnpm dev` — Vite serves the assets itself there,
   and it drops the Worker's own headers too. Check headers against `pnpm preview`, which
-  runs the built Worker in workerd and prints `Parsed 1 valid header rule` if the file
-  is well formed.
+  runs the built Worker in workerd and prints `Parsed 2 valid header rules` if the file
+  is well formed (the second rule is the asset cache policy under [Performance](#performance)).
+- **`not_found_handling` is `none`, not `single-page-application`.** There is one page and
+  no client-side router, so the SPA fallback only meant that `/robots.txt`, `/favicon.ico`,
+  `/llms.txt` and every crawler's guess answered **200 with the whole app** — a soft 404 that
+  also made Lighthouse call robots.txt invalid. An asset miss now falls through to the Worker,
+  whose catch-all answers `404 not found` as `text/plain`, with the three headers above.
 
 Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
 regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use
@@ -439,6 +447,59 @@ no `LIMIT` or range cap (the rate limit bounds volume, not a single query); the 
 in-flight window has never been measured against a slow fetch plus a large sweep chunk; SGC
 responses are buffered with no byte cap; and the CI actions are pinned to `@v4` tags rather
 than commit SHAs.
+
+### Performance
+
+Measured 2026-09-19 (Lighthouse 13, emulated mobile: slow 4G, 4× CPU). Production scored
+**44** — FCP 3.7 s, LCP 5.2 s, TBT 2.1 s, TTI 7.5 s — while desktop scored 96. The whole
+difference was JavaScript: one 917 kB chunk plus MapLibre, all of it executed before anything
+could be drawn. The rules below are what fixed it; median of 3 runs against `pnpm preview`,
+same machine, same data: **46 → 75**, FCP 6.2 → 4.1 s, LCP 6.2 → 4.4 s, TBT 676 → 46 ms,
+TTI 14.5 → 8.5 s, CLS unchanged at 0.007. SEO went 91 → 100, accessibility and best
+practices stayed at 100.
+
+- **The heavy cards are fetched when the reader nears them, not at load**
+  (`src/components/deferred.tsx`). Recharts (~1.3 MB of sources, with its own redux/immer/d3
+  stack) and MapLibre (~1.0 MB) are most of what this page ships, and every card that needs
+  them sits below the b-value: on a phone the map's top edge is ~4,200 px down. `Deferred`
+  mounts its child once an `IntersectionObserver` says it is within 600 px, so the shell and
+  the b-value paint first. Deferring the map alone halved TTI; moving the three charts out as
+  well took the main chunk from 922 kB to 472 kB (276 → 142 kB gzipped) and did the rest of
+  the blocking time.
+  - The placeholder is **the same card with the same title** and a skeleton the height of the
+    chart it becomes (`height`, defaulting to `h-80`; the map passes `h-[26rem]` for its canvas
+    plus legend). A plain box of the wrong height would trade the blocking time for layout
+    shift, which is the thing CLS counts.
+  - A card that is already on screen (the b-over-time chart on a desktop) still loads
+    immediately — one frame after the shell, instead of holding it up.
+  - Anything above the b-value stays in the first chunk: the status bar, the groups card and
+    the filters. So does the events table, whose placeholder cannot be given the right height
+    cheaply (25 rows, and they wrap differently on a phone).
+- **The latin font subset is preloaded** by a small plugin in `vite.config.ts` that reads the
+  hashed file name out of the bundle. Everything on this page is text, so the largest paint
+  waits for that file; once the shell painted earlier than the font arrived, the swap from the
+  fallback face became the page's whole layout shift — it roughly tripled CLS in the run that
+  first showed it. Preloading it put CLS back where it was. Latin only — the other subsets are
+  for text this page never renders.
+- **`/assets/*` is cached for a year, `immutable`** (`public/_headers`). Vite puts a content
+  hash in every name there, so a changed file is a new URL. Without the rule the asset layer
+  answers `max-age=0, must-revalidate` and every repeat visit revalidates the bundle, the
+  stylesheet and the font. `index.html` must stay on the revalidating default: it is the file
+  that points at the hashed ones.
+- **The LCP element is the header subtitle**, and it is drawn by React, so LCP can never beat
+  "bundle downloaded and executed" (~1.0 s even unthrottled). Putting a static header in
+  `index.html` would fix that, and was left undone on purpose: the CSP has no `'unsafe-inline'`
+  for scripts, so the shell could not read the remembered language, and an English reader would
+  see the Spanish header until React mounted.
+- **Measuring.** `pnpm build && pnpm preview`, then
+  `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
+  three times, median. Give the local database data and close the refresh guard first, as under
+  [Tooling gotchas](#tooling-gotchas), or the page queries SGC. `preview` serves assets
+  **uncompressed**, so its absolute numbers are pessimistic against production — compare runs
+  with each other, not with a production score.
+- The console must stay empty. The basemap style names sprite images OpenFreeMap does not
+  ship (`circle-11`), which MapLibre warns about twice per load, so `event-map.tsx` answers
+  `styleimagemissing` with an empty pixel. Real map errors still reach `console.error`.
 
 ### Tooling gotchas
 
@@ -629,6 +690,10 @@ colour, motion). Keep to them:
   counter-example directly above — with a pinned y axis, height is a claim about the slope.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
+- **A chart or the map arrives in its own card, already titled.** They are loaded on approach
+  (`Deferred`, see [Performance](#performance)), so on a slow connection the reader first sees
+  the card with its heading and a skeleton the size of the drawing. Never a bare grey box, and
+  never a card that changes height when the drawing lands.
 - Charts and the map redraw on every filter change, so they do not animate. The
   headline numbers do (`FlowNumber`, wrapping `@number-flow/react`): digits roll to
   the new value in 550 ms with `cubic-bezier(0.2, 0, 0, 1)` so the reader sees which
