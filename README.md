@@ -661,20 +661,38 @@ colour, motion). Keep to them:
   - The **notice** sits in the flow under the status bar. It is the accessible one and the only one
     in the tab order, laid out as one row wherever there is room, so the bar reads as the same
     object come back rather than a second thing.
-  - The **bar** is fixed to the top of the window and is **shy**: it stays away while the reader
-    moves down the page — they are following something they just set — and returns the moment they
-    scroll up, which is when someone is looking for where they are. It only ever appears once the
-    notice itself has scrolled out of view (an `IntersectionObserver` on the notice, not a pixel
-    threshold). A filter changing also brings it in wherever the reader is: that is the one moment
-    worth interrupting for. `STEP_PX` (8) is hysteresis — momentum, a trackpad's tail and scroll
-    anchoring all produce a few pixels the wrong way, and without it the bar flickers after every
-    flick. It is `aria-hidden` with its button out of the tab order, because it is a second view of
-    a notice a screen reader has already read out and can still reach.
+  - The **bar** is fixed to the top of the window and **hands over from the notice**: it slides in
+    once the notice has left the top of the window, and slides away when the reader comes back up
+    to it. So exactly one of the two states the scope at any time, and the reader is never without
+    it — which is the whole reason the bar exists, since everything below the fold is a chart drawn
+    from a filtered catalogue. One `IntersectionObserver` on the notice decides it: no scroll
+    handler, no pixel threshold, nothing running on a scroll frame. It watches `entry`, not
+    `isIntersecting` alone, and requires `boundingClientRect.bottom <= 0` — a notice out of view
+    *below* the fold, which is where a short screen starts, is not one the bar may stand in for.
+    It is `aria-hidden` with its button out of the tab order, because it is a second view of a
+    notice a screen reader has already read out and can still reach. The hand-over is the same
+    pixel in both directions (checked in the browser, 2 px either side of it), so a reader parked
+    exactly on that edge can wobble the bar in and out; a CSS transition retargets from wherever it
+    is, so that reads as wavering rather than flashing, and it is not worth a scroll listener.
+    - It was **shy** first — away on the way down, back on the way up, on a scroll-direction
+      listener with 8 px of hysteresis. Two things were wrong with it: the reader lost the scope
+      exactly while moving through the charts it applies to, and a 45 px move under a fade reads
+      as the bar blinking rather than arriving. Do not reinstate the direction rule without the
+      first problem's answer.
   - Its background is **opaque**, not a frosted pane: dense text and charts scroll under it, and a
     sentence ghosting through the line that states the scope defeats the point. The shadow is what
     separates it from the page and needs a solid surface; in dark mode the shadow does nothing and
-    `border-b` carries it. Enter is 220 ms and leave 150 ms on `--ease-out`, transform and opacity
-    only; `prefers-reduced-motion` drops the movement and keeps the fade.
+    `border-b` carries it. Enter is 260 ms and leave 180 ms, **transform only** — a fade over the
+    same time reads as an appearance, and it is the edge travelling that says the bar came from the
+    top of the window. The hidden position is `calc(-100% - 1.5rem)`: `-100%` alone parks the bar
+    off-screen but leaves `shadow-lg` hanging into the page as a grey band, and the 1.5rem clears
+    it. Write the `calc` as `calc(-100%_-_1.5rem)` — CSS needs the spaces around the minus, and
+    without them the utility is silently dropped and the bar never hides at all.
+    `prefers-reduced-motion` drops the movement and fades instead. The curve is `--ease-slide`
+    (`cubic-bezier(0.32, 0.72, 0, 1)`), not the page's `--ease-out`: `--ease-out` is tuned for a
+    control answering a click and puts 90% of the travel in its first 95 ms, which over this
+    distance is a pop. Measured in the browser, the bar now leaves the top edge at ~60 ms and
+    lands at ~230 ms.
   - On a phone the bar shows the first chip and counts the rest (`+3`), and shortens the count to
     "639 de 786". Both are pure CSS at the `sm` breakpoint, so its height never changes as it slides.
 - **The per-group daily strips in that card scroll sideways when narrow**, on the same idea as

@@ -1,5 +1,5 @@
 import { FilterIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useIntersectionObserver } from "usehooks-ts";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,6 @@ import { CLUSTER_DEPTH_KM, type Cluster } from "../../core/clusters";
 
 /** The clusters' own colours, as everywhere else on the page. */
 const DOT: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-3)" };
-
-/**
- * How far the page has to move before a scroll counts as a change of direction. Momentum, a
- * trackpad's tail and the browser's own scroll anchoring all produce a few pixels in the wrong
- * direction; without this the bar flickers at the end of every flick.
- */
-const STEP_PX = 8;
 
 function Chip({ chip, className }: { chip: FilterChip; className?: string }) {
   return (
@@ -41,60 +34,27 @@ interface Props {
  *
  * Two presentations of the same thing. The notice sits in the flow under the status bar, where the
  * reader can meet it on the way down; it is the accessible one, and the only one in the tab order.
- * The bar is fixed to the top of the window for everything below the fold, because both the groups
- * card and the filters card scroll out of sight long before the map and the table do, and a reader
- * looking at a chart has no way of telling that it is drawn from a quarter of the catalogue.
+ * The bar is fixed to the top of the window and takes over the moment the notice has scrolled off
+ * the top, because both the groups card and the filters card leave the screen long before the map
+ * and the table do, and a reader looking at a chart has no way of telling that it is drawn from a
+ * quarter of the catalogue.
  *
- * The bar is **shy**: it stays away while the reader is moving down the page — they are following
- * something they just set — and comes back the moment they scroll up, which is when someone is
- * looking for where they are. That keeps a permanent strip off a phone's screen. Turning a filter
- * on or off also brings it in wherever the reader is, since that is the one moment the answer is
- * worth interrupting for.
+ * So the two never both state the scope, and the reader is never without it: the bar is out of the
+ * way at the top of the page, where the notice itself answers the question, and present for the
+ * whole way down, where nothing else does. One `IntersectionObserver` on the notice decides it —
+ * no scroll handler, no pixel threshold, and nothing that runs on a scroll frame.
  */
 export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
   const { t, lang } = useI18n();
-  const notice = useRef<HTMLDivElement>(null);
-  const [past, setPast] = useState(false);
-  const [up, setUp] = useState(true);
-  const active = chips.length > 0;
-  // The chips' own text: it changes on exactly the changes the reader should be told about.
-  const signature = chips.map((c) => c.label).join("|");
+  // `entry`, not `isIntersecting`: the notice being out of view is not enough. On a short screen it
+  // starts out of view *below* the fold, and the bar must not pre-empt a notice the reader has yet
+  // to reach. Only a notice that has gone off the **top** is one the bar stands in for. Before the
+  // first callback there is no entry, and the bar stays away, so a load never starts with it on.
+  const { ref: notice, entry } = useIntersectionObserver({ threshold: 0 });
+  const past = entry ? !entry.isIntersecting && entry.boundingClientRect.bottom <= 0 : false;
 
-  // The bar stands in for the notice, so it may only appear once the notice itself has gone.
-  useEffect(() => {
-    const el = notice.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => setPast(!e!.isIntersecting));
-    io.observe(el);
-    return () => io.disconnect();
-  }, [active]);
+  if (chips.length === 0) return null;
 
-  useEffect(() => {
-    if (!active) return;
-    let last = window.scrollY;
-    let frame = 0;
-    const read = () => {
-      frame = 0;
-      // iOS rubber-banding reports positions above the top of the document; a bounce must not read
-      // as the reader turning round.
-      const y = Math.max(0, window.scrollY);
-      const d = y - last;
-      if (Math.abs(d) < STEP_PX) return;
-      last = y;
-      setUp(d < 0);
-    };
-    const onScroll = () => { frame ||= requestAnimationFrame(read); };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(frame); };
-  }, [active]);
-
-  // A filter that has just changed is what the reader is waiting to see confirmed, wherever on the
-  // page the control was.
-  useEffect(() => { setUp(true); }, [signature]);
-
-  if (!active) return null;
-
-  const visible = past && up;
   const where = cluster === "all" ? null : t.clusterWhere[cluster](CLUSTER_DEPTH_KM);
   const counts = [shown.toLocaleString(lang), total.toLocaleString(lang)] as const;
 
@@ -128,11 +88,17 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
           // ghosting through the line that says what the page is scoped to defeats the point of it.
           // The shadow is what separates the bar from the page, and it needs a solid surface to sit on.
           "fixed inset-x-0 top-0 z-50 border-b bg-background shadow-lg",
-          "transition-[transform,opacity] ease-(--ease-out) motion-reduce:transition-opacity",
-          visible
-            ? "translate-y-0 opacity-100 duration-[220ms]"
+          // Transform alone, so the bar travels rather than materialises: a fade over the same
+          // 260 ms reads as an appearance, and it is the edge moving that says "this came from the
+          // top of the window and is still there". Reduced motion gets that fade instead, which is
+          // the one case where not moving is the point.
+          "transition-transform ease-(--ease-slide) motion-reduce:transition-opacity",
+          past
+            ? "translate-y-0 duration-[260ms] motion-reduce:opacity-100"
+            // The extra 1.5rem clears `shadow-lg`, which would otherwise hang into the top of the
+            // page as a grey band while the bar itself is out of sight.
             // Leaving is quicker than arriving: the reader has already moved on.
-            : "pointer-events-none -translate-y-full opacity-0 duration-150 motion-reduce:translate-y-0",
+            : "pointer-events-none translate-y-[calc(-100%_-_1.5rem)] duration-[180ms] motion-reduce:translate-y-0 motion-reduce:opacity-0",
         )}
       >
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 sm:gap-3 sm:px-6">
