@@ -5,8 +5,11 @@
 > this spec as built: core logic lives in `core/` (not `src/`, which holds the
 > React app); the daily full re-read became an hourly rotating 7-day "sweep" so
 > every invocation stays small; statistics are computed in the browser from
-> `/api/events`, with `/api/stats` kept for checks. Still open: §4.1, confirming
-> from a deployed Worker that SGC accepts Cloudflare egress, and measuring CPU time.
+> `/api/events`, with `/api/stats` kept for checks. §5's "every 15 minutes" became
+> every 5, once SGC's own publication lag was measured at 2–5 minutes — as one cron
+> alternating a narrow 1-day window with the full trailing 3 days. See the README's
+> "How it stays current" and "SGC rate limits and the request budget". Still open:
+> §4.1, and measuring CPU time.
 
 You are building the hosted part of this project end to end. A working, tested
 proof of concept already exists in this repo. Read this whole file, then

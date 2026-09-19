@@ -235,6 +235,39 @@ export interface FetchOptions {
   backoffMs?: number;
 }
 
+/** A non-OK HTTP response from SGC. `status` is what the ingest back-off reads. */
+export class SgcHttpError extends Error {
+  constructor(readonly status: number, readonly retryAfterS: number | null) {
+    super(`SGC responded HTTP ${status}`);
+    this.name = "SgcHttpError";
+  }
+}
+
+/**
+ * 429 and 503 are SGC asking us to stop. They are the one case where the retry loop
+ * makes things worse, so they are thrown straight out and left for the caller to sit out.
+ */
+const NO_RETRY_STATUS = new Set([429, 503]);
+
+/** `Retry-After` is either a seconds count or an HTTP date. Returns seconds, or null. */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | null {
+  if (value === undefined || value === null || value.trim() === "") return null;
+  const secs = Number(value.trim());
+  if (Number.isFinite(secs)) return Math.max(0, Math.round(secs));
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : Math.max(0, Math.round((at - now) / 1000));
+}
+
+/**
+ * The HTTP error behind a failed fetch, whether it was thrown directly (no-retry) or
+ * wrapped as the `cause` of the "failed after N attempts" error.
+ */
+export function sgcHttpError(err: unknown): SgcHttpError | null {
+  if (err instanceof SgcHttpError) return err;
+  const cause = (err as { cause?: unknown } | null | undefined)?.cause;
+  return cause instanceof SgcHttpError ? cause : null;
+}
+
 export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Promise<CatalogPage> {
   const { fetchImpl = fetch, timeoutMs = 120_000, retries = 3, backoffMs = 1000 } = opts;
   // Only transport/HTTP failures are retried; a parse failure is deterministic.
@@ -252,9 +285,11 @@ export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Pr
         body: buildFormBody(q).toString(),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (!res.ok) throw new Error(`SGC responded HTTP ${res.status}`);
+      if (!res.ok) throw new SgcHttpError(res.status, parseRetryAfter(res.headers.get("retry-after")));
       html = await res.text();
     } catch (err) {
+      // Being rate limited is a deterministic answer, not a flaky connection: stop here.
+      if (err instanceof SgcHttpError && NO_RETRY_STATUS.has(err.status)) throw err;
       lastErr = err;
     }
   }

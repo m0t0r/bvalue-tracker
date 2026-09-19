@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  CHOCO_SWARM_BBOX, buildFormBody, fetchCatalog, formatFormDate, parseCatalogHtml,
+  CHOCO_SWARM_BBOX, buildFormBody, fetchCatalog, formatFormDate, parseCatalogHtml, parseRetryAfter, sgcHttpError,
 } from "../core/seiscomp.ts";
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -172,5 +172,41 @@ describe("fetchCatalog", () => {
     const fetchImpl = (async () => { n++; return new Response("<html>maintenance</html>", { status: 200 }); }) as typeof fetch;
     await expect(fetchCatalog(query, { fetchImpl, backoffMs: 1 })).rejects.toThrow(/Total de registros/);
     expect(n).toBe(1);
+  });
+
+  // Retrying is the one thing that makes being rate limited worse, so 429 and 503 leave
+  // the loop on the first response and carry the status out for the ingest back-off.
+  it.each([429, 503])("stops at the first HTTP %i and reports its status", async (status) => {
+    let n = 0;
+    const fetchImpl = (async () => { n++; return new Response("", { status, headers: { "retry-after": "120" } }); }) as typeof fetch;
+    const err = await fetchCatalog(query, { fetchImpl, retries: 3, backoffMs: 1 }).catch((e: unknown) => e);
+    expect(n).toBe(1);
+    expect(sgcHttpError(err)).toMatchObject({ status, retryAfterS: 120 });
+  });
+
+  it("keeps the status of a retried failure as the cause", async () => {
+    const fetchImpl = (async () => new Response("", { status: 500 })) as typeof fetch;
+    const err = await fetchCatalog(query, { fetchImpl, retries: 1, backoffMs: 1 }).catch((e: unknown) => e);
+    expect(sgcHttpError(err)).toMatchObject({ status: 500, retryAfterS: null });
+  });
+});
+
+describe("parseRetryAfter", () => {
+  const now = Date.parse("2026-09-19T12:00:00Z");
+
+  it("reads a seconds count", () => {
+    expect(parseRetryAfter("120", now)).toBe(120);
+    expect(parseRetryAfter(" 30 ", now)).toBe(30);
+  });
+
+  it("reads an HTTP date as seconds from now, never negative", () => {
+    expect(parseRetryAfter("Sat, 19 Sep 2026 12:05:00 GMT", now)).toBe(300);
+    expect(parseRetryAfter("Sat, 19 Sep 2026 11:00:00 GMT", now)).toBe(0);
+  });
+
+  it("returns null for a missing or unreadable value", () => {
+    expect(parseRetryAfter(null, now)).toBeNull();
+    expect(parseRetryAfter("", now)).toBeNull();
+    expect(parseRetryAfter("soon", now)).toBeNull();
   });
 });

@@ -31,14 +31,17 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   const { t, lang } = useI18n();
   const qc = useQueryClient();
   const now = useNow();
-  const [waitMin, setWaitMin] = useState<number | null>(null);
+  // The server stands down whenever SGC was queried in the last five minutes, which with a
+  // five-minute cron is most of the time. That is good news, not a countdown, so the message
+  // says the reader already has the newest data rather than asking them to wait.
+  const [stoodDown, setStoodDown] = useState(false);
 
   // `auto` is a refresh the page started by itself on return to the tab. If the server stands down
   // because SGC was queried recently, that is the expected outcome and is not reported to the reader.
   const refresh = useMutation({
     mutationFn: (_: { auto: boolean }) => postRefresh(),
     onSuccess: (res, { auto }) => {
-      setWaitMin(res.refreshed || auto ? null : Math.max(1, Math.ceil((res.retryAfterS ?? 60) / 60)));
+      setStoodDown(!res.refreshed && !auto);
       // Events follow by themselves: App refetches them when status reports a newer successful ingest.
       qc.setQueryData(["status"], res);
     },
@@ -81,7 +84,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   }), [busy, lastQueryMs, autoRefresh]);
 
   const failed = status?.lastRun && !status.lastRun.ok ? status.lastRun : null;
-  const message = refresh.isPending ? t.refreshing : refresh.isError ? t.refreshFailed : waitMin !== null ? t.refreshWait(waitMin) : "";
+  const message = refresh.isPending ? t.refreshing : refresh.isError ? t.refreshFailed : stoodDown ? t.refreshWait : "";
 
   return (
     <div className="flex flex-col gap-4">
