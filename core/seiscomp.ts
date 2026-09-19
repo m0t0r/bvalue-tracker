@@ -216,7 +216,6 @@ export function parseCatalogHtml(html: string): CatalogPage {
 }
 
 export interface FetchOptions {
-  fetchImpl?: typeof fetch;
   timeoutMs?: number;
   retries?: number;
   /** Base delay for exponential backoff between retries. */
@@ -257,14 +256,14 @@ export function sgcHttpError(err: unknown): SgcHttpError | null {
 }
 
 export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Promise<CatalogPage> {
-  const { fetchImpl = fetch, timeoutMs = 120_000, retries = 3, backoffMs = 1000 } = opts;
+  const { timeoutMs = 120_000, retries = 3, backoffMs = 1000 } = opts;
   // Only transport/HTTP failures are retried; a parse failure is deterministic.
   let lastErr: unknown;
   let html: string | undefined;
   for (let attempt = 0; attempt <= retries && html === undefined; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, backoffMs * 2 ** (attempt - 1)));
     try {
-      const res = await fetchImpl(SEISCOMP_ENDPOINT, {
+      const res = await fetch(SEISCOMP_ENDPOINT, {
         method: "POST",
         headers: {
           "content-type": "application/x-www-form-urlencoded",

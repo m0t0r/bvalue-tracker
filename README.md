@@ -24,7 +24,7 @@ changing anything. Most of it was found the hard way and is not visible in the c
 | Path | What |
 |---|---|
 | `core/` | Shared, runtime-neutral logic: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), statistics (`gr.ts`, including the one `computeStats` pipeline), CSV, CLI. Used by the Worker, the browser and Node. |
-| `worker/` | Hono API (`index.ts`), ingest rules (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`). |
+| `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`). |
 | `src/` | React page: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL. `lib/i18n.tsx` holds every user-facing string in `es` and `en`. |
 | `migrations/` | D1 schema. |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18. |
@@ -42,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 188 tests, offline
+pnpm test                 # 199 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -217,7 +217,7 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   worse — and honours `Retry-After` (seconds or HTTP date).
 - The status is stored on the run (`ingest_runs.http_status`, `retry_after_s`), not parsed
   back out of `error`, so rewording a message cannot quietly disable the back-off.
-- `fastLaneBlocked` then stands the fast lane down, on two independent rules. **Any** failed
+- `sgcUnwell` (`worker/plan.ts`) then stands the fast lanes down, on two independent rules. **Any** failed
   run holds it down until one succeeds — an HTTP status is no weaker a signal than a
   timeout, so 403 and 500 must not get a *bounded* wait where a timeout gets an open-ended
   one. A 429 or 503 additionally holds it down for `Retry-After` or 30 minutes **even once
@@ -317,6 +317,20 @@ Each of these was a real bug in production or in review:
   `finished_at`, or the page flashes "la última consulta falló" during every ingest.
 - The back-fill fast lane (no 5-minute wait) is only open while SGC is answering.
   After a failed run everyone waits, so a broken SGC is never hammered.
+- **One module decides what ingest is due, and both callers ask it** (architecture review
+  candidate 02, 2026-09-19). `dueNow` in `worker/plan.ts` takes the clock and one reading of
+  the run history and returns a plan — the steps to run, the claim's `minIntervalS`, and the
+  `retryAfterS` to answer with. `scheduled()` and `POST /api/refresh` each call it once and
+  then `runPlan`. It is pure, so every lane rule is tested in `worker/test/plan.test.ts`
+  without a database. The rule that forced it: the route used to open its back-fill fast lane
+  on `last === null || last.ok`, which ignores the cooldown a 429 or 503 asked for, so after a
+  rate limit and a later success the button reached SGC with no wait while the cron's own fast
+  lane was standing down. Both now read `sgcUnwell`. A closed lane costs the wait, not the
+  chunk — the sweep still runs, and is what lets the lane open again. **Do not re-state an
+  availability rule at a caller**; it belongs in `plan.ts`.
+- `IN_FLIGHT_MS` (150 s) is defined once, in `plan.ts`. `runInFlight`'s default used to be a
+  second literal `150_000`, so the pre-check the page is answered from could disagree with the
+  atomic claim that actually holds.
 - The sweep orders chunks by last **attempt**, not last success. Otherwise one
   chunk that keeps failing is retried forever and starves the rest.
 - **There is exactly one cron pattern, and a second one cannot be added safely.** Every
@@ -356,7 +370,7 @@ not change per-invocation CPU**, so the 5-minute cadence neither helps nor hurts
 
 That ~70k only holds because `ingest_runs` is indexed for it. **Do not add a hot query
 over `ingest_runs` without an index**: the table now grows ~312 rows/day, and the three
-queries that run on a tick — `fastLaneBlocked`'s rate-limit lookup (192/day),
+queries that run on a tick — `readHistory`'s rate-limit lookup (192/day),
 `backfillProgress` and `ingestSweep` — were full scans when the 5-minute cadence landed.
 Unindexed, that is ~5.4M rows/day at three months and ~21M at a year, i.e. through the
 free plan's 5M and climbing. `migrations/0003` fixes it: `ingest_runs_rate_limited` is a
@@ -534,6 +548,17 @@ practices stayed at 100.
 - D1 is **not reset between tests** in this pool version; `worker/test` clears the
   tables in `beforeEach`. Tests call the Worker with `createExecutionContext()`
   because the refresh route uses `waitUntil`.
+- **SGC is stubbed with MSW, in both test projects** — `msw/node`'s `setupServer` works
+  inside the Workers pool as well as under Node (`nodejs_compat` is on). Handlers are
+  registered for `SEISCOMP_ENDPOINT` and the server listens with
+  `onUnhandledRequest: "error"`, so a test cannot reach `bdrsnc.sgc.gov.co` by accident.
+  It replaced `vi.stubGlobal("fetch", …)` and a `fetchImpl` option on `FetchOptions` that
+  existed only for tests; `fetchCatalog` now calls `fetch` directly. `msw` is `false` in
+  `pnpm-workspace.yaml`'s `allowBuilds`: its build script only copies the browser service
+  worker, which nothing here uses. `worker.fetch(...)` in `worker/test` is not a network
+  call — it invokes the Worker's own handler, which is the system under test.
+- **`test/live.test.ts` must stay unmocked.** It is the daily canary against the real SGC
+  form. `pnpm test:live` runs that file alone, so no MSW server is ever loaded in it.
 - `wrangler.test.jsonc` exists because the real config has `assets` without a
   directory (the Vite plugin supplies it), which the test pool rejects.
 - **MapLibre GL 6 ships its worker as a separate module** that imports a shared

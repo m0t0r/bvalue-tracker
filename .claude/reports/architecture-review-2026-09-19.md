@@ -15,7 +15,7 @@ interface, implementation, depth, seam, adapter, leverage, locality**.
 | # | Area | Strength | Deepening |
 |---|---|---|---|
 | 01 | `core` | **Done — 2026-09-19** | ~~Admit events through one gate, not three~~ |
-| 02 | `worker` | **Strong — verified** | Make one module decide what ingest is due now |
+| 02 | `worker` | **Done — 2026-09-19** | ~~Make one module decide what ingest is due now~~ |
 | 03 | `src` | Strong | Give the page one module for what it is scoped to |
 | 04 | `src` | Strong | Give the page one module for when it asks the server |
 | 05 | `worker` | Strong | Give the ingest run record one module |
@@ -23,9 +23,29 @@ interface, implementation, depth, seam, adapter, leverage, locality**.
 | 07 | `core` | Worth exploring | Give the statistics one selection interface |
 | 08 | `core` | Worth exploring | Describe the event record once |
 
-**01 is done** (branch `worktree-arch-01-event-gate`, 2026-09-19). **Next recommendation: 02**,
-the other verified candidate. 08 now has somewhere to put the field table, and 07 can assume
-its input is plausible.
+**01 and 02 are done** (branches `worktree-arch-01-event-gate` and
+`worktree-arch-02-ingest-plan`, both 2026-09-19). **Next recommendation: 03**, which puts the
+page's shared-Mc rule under test; 06 is the cheapest win. 08 now has somewhere to put the
+field table, and 07 can assume its input is plausible.
+
+## What 02 changed
+
+`worker/plan.ts` is the module: `dueNow(caller, now, history) → IngestPlan`, pure, plus
+`sgcUnwell` — the one availability rule — and every policy constant that used to be spread
+across `index.ts` and `ingest.ts`. `readHistory` and `runPlan` (in `ingest.ts`) are the
+adapter and the executor; `scheduled()` and `POST /api/refresh` each read once, plan once and
+run the plan. `scheduled` went from 18 lines of lane arithmetic to 3.
+
+- **The divergence is closed and covered twice.** `worker/test/plan.test.ts` pins it at the
+  seam with no database; one case in `worker/test/ingest.test.ts` pins it at the route. Both
+  fail against the old `last === null || last.ok`, which was checked by reinstating it.
+- **`IN_FLIGHT_MS` has one definition.** `runInFlight`'s `withinMs = 150_000` now reads it.
+- **Lane policy is verified without D1**: 17 of the 199 tests are pure, and `fastLaneBlocked`'s
+  D1-backed cooldown cases became `sgcUnwell` cases. What is left in `ingest.test.ts` is the
+  wiring — that the rows `readHistory` reads really do drive the lanes.
+- Out of the report's scope, asked for during the work: SGC is now stubbed with **MSW** in both
+  test projects, replacing `vi.stubGlobal("fetch", …)` and the `fetchImpl` option on
+  `FetchOptions`, which existed only for tests and is deleted.
 
 ## What 01 changed
 

@@ -1,16 +1,39 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
 import worker from "../index.ts";
-import { fastLaneBlocked, ingest, ingestSweep, sweepChunks } from "../ingest.ts";
+import { ingest, ingestSweep, sweepChunks } from "../ingest.ts";
 
 // The fixture covers 2026-08-10 .. 2026-09-18 22:08 UTC.
 const FROM = new Date("2026-08-10T00:00:00Z");
 const TO = new Date("2026-09-19T00:00:00Z");
 const NOW = new Date("2026-09-18T23:00:00Z");
 
-const serve = (html: string) => (async () => new Response(html, { status: 200 })) as unknown as typeof fetch;
-const deps = (html: string, now = NOW) => ({ db: env.DB, now, fetchOptions: { fetchImpl: serve(html), backoffMs: 1, retries: 1 } });
+/**
+ * SGC itself, answered from the captured fixture. An unhandled request is an error rather
+ * than a passthrough, so a test can never reach bdrsnc.sgc.gov.co by accident.
+ */
+const server = setupServer();
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterAll(() => server.close());
+
+/** Makes SGC answer this way, and hands back how many requests it has taken so far. */
+function serves(respond: () => Response): () => number {
+  let calls = 0;
+  server.use(http.post(SEISCOMP_ENDPOINT, () => { calls++; return respond(); }));
+  return () => calls;
+}
+const serving = (html: string) => serves(() => HttpResponse.html(html));
+
+const FETCH_FAST = { backoffMs: 1, retries: 1 };
+/** Deps for a direct ingest() call, with SGC serving this page. */
+const deps = (html: string, now = NOW) => {
+  serving(html);
+  return { db: env.DB, now, fetchOptions: FETCH_FAST };
+};
 
 const count = async (where = "1=1") =>
   (await env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE ${where}`).first<{ n: number }>())!.n;
@@ -53,7 +76,7 @@ async function callRaw(path: string, init: RequestInit = {}) {
 beforeEach(async () => {
   await env.DB.batch([env.DB.prepare("DELETE FROM events"), env.DB.prepare("DELETE FROM ingest_runs")]);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => server.resetHandlers());
 
 /** Marks every history chunk as swept, as a finished back-fill would. */
 async function completeBackfill() {
@@ -113,12 +136,11 @@ describe("ingest", () => {
 
   it("keeps a burst of concurrent refreshes down to a single SGC request", async () => {
     await completeBackfill();
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+    const calls = serving(FULL);
     const burst = await Promise.all(Array.from({ length: 8 }, () => call("/api/refresh", { method: "POST" })));
     const bodies = (await Promise.all(burst.map((r) => r.json()))) as any[];
     expect(bodies.filter((b) => b.refreshed)).toHaveLength(1);
-    expect(calls).toBe(1);
+    expect(calls()).toBe(1);
   });
 
   it("does not remove events outside the requested window", async () => {
@@ -138,14 +160,14 @@ describe("ingest", () => {
   });
 
   it.each([
-    ["an unparseable page", async () => new Response("<html>mantenimiento</html>")],
-    ["a truncated page", async () => new Response(FULL.slice(0, 400_000))],
-    ["an HTTP error", async () => new Response("", { status: 503 })],
-    ["a network failure", async () => { throw new TypeError("fetch failed"); }],
-  ])("leaves events untouched and records the error on %s", async (_name, impl) => {
+    ["an unparseable page", () => HttpResponse.html("<html>mantenimiento</html>")],
+    ["a truncated page", () => HttpResponse.html(FULL.slice(0, 400_000))],
+    ["an HTTP error", () => new Response("", { status: 503 })],
+    ["a network failure", () => HttpResponse.error()],
+  ])("leaves events untouched and records the error on %s", async (_name, respond) => {
     await ingest(deps(FULL), FROM, TO, "manual");
-    const bad = { db: env.DB, now: NOW, fetchOptions: { fetchImpl: impl as unknown as typeof fetch, backoffMs: 1, retries: 1 } };
-    const run = (await ingest(bad, FROM, TO, "cron"))!;
+    serves(respond);
+    const run = (await ingest({ db: env.DB, now: NOW, fetchOptions: FETCH_FAST }, FROM, TO, "cron"))!;
     expect(run.ok).toBe(false);
     expect(run.error).toBeTruthy();
     expect(await count("removed_at IS NULL")).toBe(786);
@@ -161,8 +183,8 @@ describe("sweep", () => {
   });
 
   it("sends a chunk that keeps failing to the back of the queue", async () => {
-    const failing = { db: env.DB, now: NOW, fetchOptions: { fetchImpl: (async () => new Response("", { status: 503 })) as unknown as typeof fetch, backoffMs: 1, retries: 0 } };
-    const bad = (await ingestSweep(failing))!;
+    serves(() => new Response("", { status: 503 }));
+    const bad = (await ingestSweep({ db: env.DB, now: NOW, fetchOptions: { backoffMs: 1, retries: 0 } }))!;
     expect(bad.ok).toBe(false);
     const next = (await ingestSweep(deps(FULL, new Date(NOW.getTime() + 60_000))))!;
     expect(next.windowStart).not.toBe(bad.windowStart);
@@ -278,22 +300,37 @@ describe("API", () => {
   });
 
   it("stops fast-laning the back-fill once SGC starts failing", async () => {
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => { calls++; return new Response("", { status: 503 }); });
+    const calls = serves(() => new Response("", { status: 503 }));
     const first = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(first.refreshed).toBe(true);
     expect(first.lastRun.ok).toBe(false);
-    const attempts = calls;
+    const attempts = calls();
 
     const second = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(second.refreshed).toBe(false);
     expect(second.retryAfterS).toBeGreaterThan(200);
-    expect(calls).toBe(attempts);
+    expect(calls()).toBe(attempts);
+  });
+
+  // One availability rule for both fast lanes. The button used to open its no-wait back-fill
+  // lane on "the last run succeeded" alone, which ignores a cooldown SGC asked for, so after
+  // a 429 and a later success it reached SGC while the cron's own fast lane was standing down.
+  it("makes the refresh button wait out a 429's cooldown even after SGC answers again", async () => {
+    const now = Date.now();
+    await recordRun(0, { http_status: 429, retry_after_s: 3600 }, new Date(now - 60_000));
+    await recordRun(1, {}, new Date(now - 30_000));
+    const calls = serving(FULL);
+
+    const res = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
+    expect(res.backfill.done).toBe(0); // history incomplete: the fast lane is what would have run
+    expect(res.lastRun.ok).toBe(true); // and SGC is answering again, so only the cooldown holds
+    expect(res.refreshed).toBe(false);
+    expect(res.retryAfterS).toBeGreaterThan(0);
+    expect(calls()).toBe(0);
   });
 
   it("refresh loads missing history first, one chunk per call, and reports progress", async () => {
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+    const calls = serving(FULL);
     const before = (await (await call("/api/status")).json()) as any;
     expect(before.backfill.done).toBe(0);
     const total = before.backfill.total as number;
@@ -304,33 +341,30 @@ describe("API", () => {
       expect(res.backfill).toEqual({ done: i, total });
       expect(res.lastRun.trigger).toBe("sweep");
     }
-    expect(calls).toBe(total);
+    expect(calls()).toBe(total);
   });
 
   it("refresh queries SGC once, then is rate limited", async () => {
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
     await completeBackfill();
-    calls = 0;
+    const calls = serving(FULL);
     const first = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(first.refreshed).toBe(true);
     expect(first.lastSuccessfulRun.trigger).toBe("manual");
-    expect(calls).toBe(1);
+    expect(calls()).toBe(1);
 
     const second = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(second.refreshed).toBe(false);
     expect(second.retryAfterS).toBeGreaterThan(0);
-    expect(calls).toBe(1);
+    expect(calls()).toBe(1);
   });
 
   it("refresh stands down while another run is in flight", async () => {
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+    const calls = serving(FULL);
     await env.DB.prepare("INSERT INTO ingest_runs (started_at, trigger, window_start, window_end) VALUES (?, 'cron', ?, ?)")
       .bind(new Date().toISOString(), FROM.toISOString(), TO.toISOString()).run();
     const res = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(res.refreshed).toBe(false);
-    expect(calls).toBe(0);
+    expect(calls()).toBe(0);
     expect(res.lastRun).toBeNull(); // an unfinished run is not reported as a failed one
   });
 
@@ -363,11 +397,10 @@ describe("API", () => {
   );
 
   it("refuses a cross-site POST /api/refresh without touching SGC", async () => {
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+    const calls = serving(FULL);
     const res = await callRaw("/api/refresh", { method: "POST", headers: { "sec-fetch-site": "cross-site" } });
     expect(res.status).toBe(403);
-    expect(calls).toBe(0);
+    expect(calls()).toBe(0);
     expect(await runCount()).toBe(0);
   });
 
@@ -428,7 +461,7 @@ describe("cron lanes", () => {
   it("loads one trailing day on a five-minute tick and three on a fifteen-minute one", async () => {
     // Otherwise the wide tick also pulls a history chunk, and that would be the latest run.
     await completeBackfill();
-    vi.stubGlobal("fetch", async () => new Response(FULL));
+    serving(FULL);
 
     await tick(5);
     const fast = await latestRun();
@@ -443,7 +476,7 @@ describe("cron lanes", () => {
   // two would steal each other's claim. The sweep runs in the wide tick's own invocation.
   it("sweeps on the hour, in the same invocation as the wide tick, and not on other quarters", async () => {
     await completeBackfill();
-    vi.stubGlobal("fetch", async () => new Response(FULL));
+    serving(FULL);
 
     await tick(0);
     const triggers = await env.DB.prepare("SELECT trigger FROM ingest_runs WHERE started_at > ? ORDER BY id")
@@ -455,7 +488,7 @@ describe("cron lanes", () => {
   });
 
   it("still sweeps on every wide tick while history is incomplete", async () => {
-    vi.stubGlobal("fetch", async () => new Response(FULL));
+    serving(FULL);
     await tick(30);
     expect((await latestRun()).trigger).toBe("sweep");
   });
@@ -475,71 +508,35 @@ describe("cron lanes", () => {
   });
 });
 
-describe("fast lane back-off", () => {
-  const at = (s: number) => new Date(NOW.getTime() + s * 1000);
-
-  it("runs while the last finished run succeeded", async () => {
-    expect(await fastLaneBlocked(env.DB, NOW)).toBe(false); // no runs yet
-    await recordRun(1);
-    expect(await fastLaneBlocked(env.DB, NOW)).toBe(false);
-  });
-
-  // An HTTP status is no weaker a signal than a timeout, so both wait for a success.
-  it.each([
-    ["no HTTP reason", undefined],
-    ["a 403 that no cooldown covers", 403],
-    ["a 500", 500],
-  ])("stands down until a success after a failure with %s", async (_name, http_status) => {
-    await recordRun(0, { http_status });
-    expect(await fastLaneBlocked(env.DB, at(86_400))).toBe(true);
-    await recordRun(1, {}, at(60));
-    expect(await fastLaneBlocked(env.DB, at(120))).toBe(false);
-  });
-
-  // Being answered again is not being welcome again: the cooldown outlives the recovery,
-  // which is also the only way to observe it — until a run succeeds, the rule above holds
-  // the lane down anyway. Each case records the rate limit, then a success a minute later.
-  const thenRecovered = async (fields: { http_status: number; retry_after_s?: number }) => {
-    await recordRun(0, fields);
-    await recordRun(1, {}, at(60));
-  };
-
-  it("waits out Retry-After after a 429, then resumes by itself", async () => {
-    await thenRecovered({ http_status: 429, retry_after_s: 600 });
-    expect(await fastLaneBlocked(env.DB, at(599))).toBe(true);
-    expect(await fastLaneBlocked(env.DB, at(601))).toBe(false);
-  });
-
-  it("falls back to 30 minutes when the server named no cooldown", async () => {
-    await thenRecovered({ http_status: 503 });
-    expect(await fastLaneBlocked(env.DB, at(1799))).toBe(true);
-    expect(await fastLaneBlocked(env.DB, at(1801))).toBe(false);
-  });
-
-  // Retry-After: 0, which an already-elapsed HTTP date also parses to, must not switch the
-  // back-off off in the one case it exists for.
-  it("holds the floor when the server asks for no wait at all", async () => {
-    await thenRecovered({ http_status: 429, retry_after_s: 0 });
-    expect(await fastLaneBlocked(env.DB, at(299))).toBe(true);
-    expect(await fastLaneBlocked(env.DB, at(301))).toBe(false);
-  });
-
-  it("caps an absurd Retry-After at six hours", async () => {
-    await thenRecovered({ http_status: 429, retry_after_s: 1e9 });
-    expect(await fastLaneBlocked(env.DB, at(21_599))).toBe(true);
-    expect(await fastLaneBlocked(env.DB, at(21_601))).toBe(false);
-  });
-
-  it("keeps the wide tick running while the fast lane is standing down", async () => {
+// The rule itself lives in worker/plan.ts and is tested there, without a database. What is
+// left here is the wiring: that the rows readHistory reads really do drive the lanes.
+describe("fast lane back-off, through the cron", () => {
+  it("stands the fast lane down after a failure, and the wide tick's success lets it back in", async () => {
     await completeBackfill();
-    await recordRun(0, { http_status: 429, retry_after_s: 86_400 });
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+    const calls = serving(FULL);
 
     await tick(5);
-    expect(calls).toBe(0);
+    expect(calls()).toBe(1);
+
+    await recordRun(0, { http_status: 500 });
+    await tick(10);
+    expect(calls()).toBe(1);
+
+    await tick(15); // the wide tick keeps probing, whatever SGC has been doing
+    expect(calls()).toBe(2);
+    await tick(20);
+    expect(calls()).toBe(3);
+  });
+
+  it("keeps the wide tick running while a Retry-After holds the fast lane down", async () => {
+    await completeBackfill();
+    await recordRun(0, { http_status: 429, retry_after_s: 86_400 });
+    const calls = serving(FULL);
+
+    await tick(5);
+    expect(calls()).toBe(0);
 
     await tick(15);
-    expect(calls).toBe(1);
+    expect(calls()).toBe(1);
   });
 });
