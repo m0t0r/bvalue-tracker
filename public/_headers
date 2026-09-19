@@ -27,3 +27,11 @@
   #   'unsafe-inline'  the shadcn chart injects a <style> element per chart
   #   tiles.openfreemap.org  basemap style, sprites, glyphs and vector tiles
   Content-Security-Policy: default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+
+# Everything Vite emits under /assets/ has a content hash in its name, so a changed file is a
+# new URL and this can be cached for good. Without a rule the asset layer answers
+# `max-age=0, must-revalidate`, which makes every repeat visit revalidate the bundle, the
+# stylesheet and the font. index.html is deliberately left on the default: it is the file that
+# points at the hashed ones.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
