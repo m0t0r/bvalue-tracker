@@ -60,5 +60,13 @@ jobs:
         env:
           PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
         run: |
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 "$PRODUCTION_URL/api/health" | tee health.json
+          # pipefail: without it the pipeline's status is tee's, so a failed curl fell
+          # through to node, which then died on an empty health.json and hid the cause.
+          set -o pipefail
+          # --retry-all-errors because a just-deployed version takes a few seconds to
+          # reach every edge, and the version still being served 404s a route that this
+          # deploy adds. Plain --retry only covers connection errors and 5xx, so the
+          # first 404 ended the step (this is how /api/health failed on its own deploy).
+          curl --fail --silent --show-error --retry 10 --retry-delay 5 --retry-all-errors \
+            "$PRODUCTION_URL/api/health" | tee health.json
           node -e 'const s=require("./health.json"); if (s.ok !== true || typeof s.totalEvents !== "number") process.exit(1)'
