@@ -3,8 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Both themes are real here (the page follows the system unless overridden), so the browser
+         is told before any CSS loads, and the address bar is given each theme's own background. -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <title>Secuencia sísmica del Chocó · valor b</title>
     <meta name="description" content="Catálogo del SGC y valor b de Gutenberg–Richter para la secuencia del Chocó tras el sismo M7.4 del 10 de agosto de 2026." />
+    <!-- The page is shared as a link, person to person. Spanish, like the page's default; the
+         copy is deliberately the same as <title> and the description above. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Secuencia sísmica del Chocó" />
+    <meta property="og:title" content="Secuencia sísmica del Chocó · valor b" />
+    <meta property="og:description" content="Catálogo del SGC y valor b de Gutenberg–Richter para la secuencia del Chocó tras el sismo M7.4 del 10 de agosto de 2026." />
+    <meta property="og:url" content="https://choco.sgc-swarm.workers.dev/" />
+    <meta property="og:locale" content="es_CO" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
     <div id="root"></div>
