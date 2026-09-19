@@ -709,7 +709,7 @@ colour, motion). Keep to them:
 - **The b card's fine print is collapsed** — the magnitude-scale caveat and the goodness-of-fit
   Mc. Open, it made the card half again as tall as "Valor b en el tiempo" beside it, and because
   the two share a grid row the chart was stretched to match: 189 px of its card was empty. Folded,
-  the row is 593 px instead of 779 px. Fold nothing whose only other home is that card: the
+  the row is 569 px instead of 779 px. Fold nothing whose only other home is that card: the
   mixed magnitude types and "no es un pronóstico" stay in the open under "Cómo leer estas cifras",
   which is what makes hiding them here safe. The chart itself keeps its fixed `h-80` and stays
   centred in whatever height the row has; letting it grow to fill would steepen the slope of a
@@ -736,6 +736,16 @@ colour, motion). Keep to them:
   blocked for 300–400 ms per slider step and the digits simply jumped. Entry
   animation is limited to the once-per-load `.enter` rows and respects
   `prefers-reduced-motion`.
+- **A `FlowNumber` has to measure like the text it replaces.** The library pads its box above and
+  below by `round(nearest, var(--number-flow-mask-height, 0.25em) / 2, 1px) * 2` — room for the
+  mask that fades a rolling digit out as it leaves the top or the bottom — and that padding is in
+  the box, so the element stood taller than the plain text beside it: 32 px against 28 px at
+  `text-xl`, 72 px against 48 px at `text-5xl`. In the status bar that dropped the "Eventos" hint
+  4 px below the two hints next to it and put the count 2 px off their baseline, and it is where
+  the b card's extra 24 px came from. `flow-number.tsx` takes the same amount back as a negative
+  `margin-block`. The mask is drawn, not typeset, and nothing clips it, so it stays exactly where
+  it was and only the measurement changes. Keep the expression in step with the library's, and
+  do not reach for `--number-flow-mask-height: 0` instead: that deletes the fade.
 - The theme follows the operating system unless overridden; choosing the theme the
   system already uses clears the override (`src/lib/theme.ts`). The map rebuilds on
   theme and language change.
