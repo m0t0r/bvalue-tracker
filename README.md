@@ -768,6 +768,19 @@ colour, motion). Keep to them:
   `margin-block`. The mask is drawn, not typeset, and nothing clips it, so it stays exactly where
   it was and only the measurement changes. Keep the expression in step with the library's, and
   do not reach for `--number-flow-mask-height: 0` instead: that deletes the fade.
+- **The b card's marks travel on that same roll**, because a mark and the figure
+  written beside it are one fact and a mark that jumped while the digits were still
+  turning read as two events. `--ease-move` and `--duration-move` in `index.css` are
+  `FlowNumber`'s `MOVE` written in CSS; change one and change the other. Every row
+  figure on the scale is a `FlowNumber` too — the scale's end labels are not, since
+  they are the ruler rather than a reading off it. Each mark rides a full-width layer
+  moved by a percentage of its own width, so its position is a `transform`, and the
+  error band is a full-width capsule cut by `clip-path: inset(… round 9999px)` —
+  which keeps both ends a true half-circle at any width, where scaling one capsule
+  flattens them into ellipses. Nothing there touches layout, so the marks keep
+  gliding on the compositor through the render pass a filter change spends on the
+  main thread, the same pass the digits already glide through; on `left`/`right`
+  they froze in it while the digits rolled on.
 - The theme follows the operating system unless overridden; choosing the theme the
   system already uses clears the override (`src/lib/theme.ts`). The map rebuilds on
   theme and language change.

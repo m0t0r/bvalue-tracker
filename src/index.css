@@ -116,6 +116,12 @@
      edge across; `--ease-out` puts 90% of the travel in its first 95 ms, which a panel reads as a
      pop rather than a slide. */
   --ease-slide: cubic-bezier(0.32, 0.72, 0, 1);
+  /* For a value moving to a new value, where start and end are both on screen and both matter. It
+     leaves gently and lands softly, so nothing reads as a jump. Kept in step with `FlowNumber`'s
+     `MOVE` (`src/components/flow-number.tsx`), which is the same curve in JavaScript: a mark and
+     the digits beside it are the same fact, so they must travel together. Change one, change both. */
+  --ease-move: cubic-bezier(0.2, 0, 0, 1);
+  --duration-move: 550ms;
 }
 
 /* Content that replaces a skeleton eases in instead of popping. Seen once per load, so it may animate. */
