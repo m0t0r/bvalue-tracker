@@ -1,6 +1,6 @@
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, type FetchOptions } from "../core/seiscomp.ts";
 import type { IngestRun } from "./api-types.ts";
-import { eventsBetween, existingIds, insertStmt, runBatched, sameData, toRun, updateStmt, type RunRow } from "./db.ts";
+import { claimIngestRun, eventsBetween, existingIds, insertStmt, runBatched, sameData, toRun, updateStmt, type RunRow } from "./db.ts";
 
 const DAY_MS = 86_400_000;
 export const TRAILING_DAYS = 3;
@@ -12,7 +12,13 @@ export interface IngestDeps {
   db: D1Database;
   now?: Date;
   fetchOptions?: FetchOptions;
+  /** Guard widths for the atomic claim. A visitor's refresh also passes minIntervalS. */
+  guard?: { inFlightMs?: number; minIntervalS?: number | null };
 }
+
+/** How much of a window may be unparsable before the whole response is distrusted. */
+const MAX_SKIPPED_SHARE = 0.1;
+export const IN_FLIGHT_MS = 150_000;
 
 const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
@@ -27,20 +33,30 @@ const WORKER_FETCH: FetchOptions = { timeoutMs: 45_000, retries: 1 };
  * A fetch or parse failure is recorded and leaves `events` untouched. If D1 itself
  * fails part-way, some upserts may already be applied; that is safe, because they
  * are idempotent and correct, removals are written last, and the next run finishes the job.
+ *
+ * Returns null when another run already holds the claim, so nothing was attempted.
  */
 export async function ingest(
   deps: IngestDeps, windowStart: Date, windowEnd: Date, trigger: IngestRun["trigger"],
-): Promise<IngestRun> {
+): Promise<IngestRun | null> {
   const { db, fetchOptions } = deps;
   const nowIso = (deps.now ?? new Date()).toISOString();
   const from = windowStart.toISOString();
   const to = windowEnd.toISOString();
 
-  const run = await db
-    .prepare("INSERT INTO ingest_runs (started_at, trigger, window_start, window_end) VALUES (?, ?, ?, ?) RETURNING id")
-    .bind(nowIso, trigger, from, to)
-    .first<{ id: number }>();
-  const runId = run!.id;
+  // Claiming and opening the run is one atomic statement: two callers racing here
+  // must not both end up talking to SGC.
+  const nowMs = Date.parse(nowIso);
+  const minIntervalS = deps.guard?.minIntervalS ?? null;
+  const runId = await claimIngestRun(db, {
+    startedAt: nowIso,
+    trigger,
+    windowStart: from,
+    windowEnd: to,
+    inFlightSince: new Date(nowMs - (deps.guard?.inFlightMs ?? IN_FLIGHT_MS)).toISOString(),
+    finishedSince: minIntervalS === null ? null : new Date(nowMs - minIntervalS * 1000).toISOString(),
+  });
+  if (runId === null) return null;
 
   const finish = async (fields: Record<string, number | string | null>) => {
     const cols = Object.keys(fields);
@@ -87,6 +103,11 @@ export async function ingest(
       removed = gone.length;
     }
 
+    if (page.skippedRows.length > 0) {
+      const skipNote = `skipped ${page.skippedRows.length} unparsable row(s): ${page.skippedRows[0]!.reason}`;
+      note = note ? `${note}; ${skipNote}` : skipNote;
+    }
+
     await runBatched(db, stmts);
     return await finish({ ok: 1, fetched: page.events.length, inserted, updated, removed, error: note });
   } catch (err) {
@@ -96,7 +117,7 @@ export async function ingest(
   }
 }
 
-export function ingestTrailing(deps: IngestDeps, trigger: IngestRun["trigger"]): Promise<IngestRun> {
+export function ingestTrailing(deps: IngestDeps, trigger: IngestRun["trigger"]): Promise<IngestRun | null> {
   const now = deps.now ?? new Date();
   return ingest(deps, new Date(startOfUtcDay(now).getTime() - TRAILING_DAYS * DAY_MS), new Date(now.getTime() + DAY_MS), trigger);
 }
@@ -114,7 +135,7 @@ export function sweepChunks(now: Date): { start: Date; end: Date }[] {
  * Re-check one older chunk per call, least recently attempted first, so late
  * revisions are picked up while every invocation stays small.
  */
-export async function ingestSweep(deps: IngestDeps): Promise<IngestRun> {
+export async function ingestSweep(deps: IngestDeps): Promise<IngestRun | null> {
   const now = deps.now ?? new Date();
   const { results } = await deps.db
     // Ordered by last ATTEMPT, not last success: a chunk that keeps failing goes to the back

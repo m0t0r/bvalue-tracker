@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Neither job calls the GitHub API; say so rather than inheriting the default scope.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -50,6 +54,11 @@ jobs:
       - run: pnpm exec wrangler deploy
       - name: Smoke test
         if: vars.PRODUCTION_URL != ''
+        # Through env, not interpolated into the script: a repository variable should not
+        # be able to become shell. /api/health is the one route open to a non-browser
+        # caller; every other /api/ route now requires a same-origin signal.
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
         run: |
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 "${{ vars.PRODUCTION_URL }}/api/status" | tee status.json
-          node -e 'const s=require("./status.json"); if (typeof s.totalEvents !== "number") process.exit(1)'
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 "$PRODUCTION_URL/api/health" | tee health.json
+          node -e 'const s=require("./health.json"); if (s.ok !== true || typeof s.totalEvents !== "number") process.exit(1)'

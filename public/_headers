@@ -1,0 +1,13 @@
+# Served by Cloudflare's static-asset layer, which handles everything except /api/*
+# (run_worker_first). The API sets its own cache-control per route.
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  # Verified against the running page on 2026-09-19: basemap tiles, sprites, glyphs, the
+  # event dots and the chart axis labels all render with this policy on. It is narrow,
+  # so re-check the map and charts if any of these change:
+  #   blob:            MapLibre GL 6 runs its worker from a blob URL
+  #   'unsafe-inline'  the shadcn chart injects a <style> element per chart
+  #   tiles.openfreemap.org  basemap style, sprites, glyphs and vector tiles
+  Content-Security-Policy: default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'

@@ -62,6 +62,16 @@ function requireNum(s: string, field: string, row: number): number {
   return n;
 }
 
+/**
+ * Finite is not enough. An absurd but numeric magnitude would be stored verbatim and then
+ * size the bin array in computeStats, so bound every value SGC gives us to what the
+ * quantity can physically be. Out of range means the row is wrong, not that the world is.
+ */
+function requireRange(n: number, lo: number, hi: number, field: string, row: number): number {
+  if (n < lo || n > hi) throw new Error(`row ${row}: ${field} out of range [${lo}, ${hi}]: ${n}`);
+  return n;
+}
+
 /** "2026-08-10 12:34:27" or "2026-08-10_12:34:27" (UTC) → ISO 8601. */
 function toIso(s: string, row: number): string {
   const m = /^(\d{4}-\d{2}-\d{2})[ _](\d{2}:\d{2}:\d{2})$/.exec(s.trim());
@@ -131,10 +141,18 @@ function checkHeaders(got: string[]): void {
   if (!ok) throw new Error(`result table layout changed; headers are now: ${JSON.stringify(got)}`);
 }
 
+/** How many of a page's rows may be unparsable before the whole response is distrusted. */
+const MAX_SKIPPED_SHARE = 0.1;
+
 /**
  * Parse the HTML returned by consulta_sismo.php.
- * Throws rather than returning partial data: a layout change, a malformed row,
- * or a row count that disagrees with "Total de registros" are all errors.
+ * Throws on anything structural: a missing marker, a missing table, a changed header
+ * layout, a row count that disagrees with "Total de registros", or so many unparsable
+ * rows that the response cannot be trusted at all.
+ *
+ * One bad row is NOT structural. It is skipped and reported in `skippedRows`, because
+ * throwing for the whole page let a single malformed event block every valid event in
+ * the trailing window, on every cron tick, until its date rolled out of that window.
  */
 export function parseCatalogHtml(html: string): CatalogPage {
   const totalMatch = /Total de registros:(?:\s|<[^>]+>)*(\d+)/i.exec(html);
@@ -146,7 +164,9 @@ export function parseCatalogHtml(html: string): CatalogPage {
   checkHeaders(table.headers);
 
   const events: SeismicEvent[] = [];
+  const skippedRows: { row: number; reason: string }[] = [];
   table.rows.forEach((cells, i) => {
+    try {
     if (cells.length !== EXPECTED_HEADERS.length) {
       throw new Error(`row ${i}: expected ${EXPECTED_HEADERS.length} cells, got ${cells.length}`);
     }
@@ -165,10 +185,10 @@ export function parseCatalogHtml(html: string): CatalogPage {
     events.push({
       id,
       time: toIso(text[0]!, i),
-      lat: hiLat ?? requireNum(text[1]!, "lat", i),
-      lon: hiLon ?? requireNum(text[2]!, "lon", i),
-      depthKm: hiDepth ?? requireNum(text[3]!, "depth", i),
-      mag: requireNum(text[4]!, "mag", i),
+      lat: requireRange(hiLat ?? requireNum(text[1]!, "lat", i), -90, 90, "lat", i),
+      lon: requireRange(hiLon ?? requireNum(text[2]!, "lon", i), -180, 180, "lon", i),
+      depthKm: requireRange(hiDepth ?? requireNum(text[3]!, "depth", i), -10, 1000, "depth", i),
+      mag: requireRange(requireNum(text[4]!, "mag", i), -2, 10, "mag", i),
       magType: text[5]!,
       phases: num(text[6]!),
       rmsS: num(text[7]!),
@@ -180,10 +200,20 @@ export function parseCatalogHtml(html: string): CatalogPage {
       status: text[16]!,
       solutionStamp: stamp ? toIso(stamp, i) : null,
     });
+    } catch (err) {
+      skippedRows.push({ row: i, reason: (err as Error).message });
+    }
   });
 
-  if (events.length !== reportedTotal) {
-    throw new Error(`parsed ${events.length} rows but server reported ${reportedTotal}`);
+  // A handful of bad rows is upstream messiness; a majority means we are misreading the page.
+  if (skippedRows.length > Math.max(3, table.rows.length * MAX_SKIPPED_SHARE)) {
+    throw new Error(
+      `${skippedRows.length} of ${table.rows.length} rows unparsable; refusing partial data: ${skippedRows[0]!.reason}`,
+    );
+  }
+
+  if (events.length + skippedRows.length !== reportedTotal) {
+    throw new Error(`parsed ${events.length} rows (+${skippedRows.length} skipped) but server reported ${reportedTotal}`);
   }
 
   // SGC occasionally emits one event twice (seen on large queries). Keep one row
@@ -194,7 +224,7 @@ export function parseCatalogHtml(html: string): CatalogPage {
     if (!prev || (e.solutionStamp ?? "") > (prev.solutionStamp ?? "")) byId.set(e.id, e);
   }
 
-  return { reportedTotal, duplicatesDropped: events.length - byId.size, events: [...byId.values()] };
+  return { reportedTotal, duplicatesDropped: events.length - byId.size, skippedRows, events: [...byId.values()] };
 }
 
 export interface FetchOptions {

@@ -15,6 +15,9 @@ const deps = (html: string, now = NOW) => ({ db: env.DB, now, fetchOptions: { fe
 const count = async (where = "1=1") =>
   (await env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE ${where}`).first<{ n: number }>())!.n;
 
+const runCount = async () =>
+  (await env.DB.prepare("SELECT COUNT(*) AS n FROM ingest_runs").first<{ n: number }>())!.n;
+
 /** Rewrites one table cell of the row belonging to `id`. */
 function editRow(html: string, id: string, edit: (row: string) => string): string {
   const at = html.indexOf(`id_sismo=${id}&`);
@@ -29,7 +32,18 @@ function dropRows(html: string, n: number): string {
   return out.replace(/(colspan=2>)786</, `$1${786 - n}<`);
 }
 
-async function call(path: string, init?: RequestInit) {
+/** Calls the Worker as the page does: same-origin, which /api/* now requires. */
+async function call(path: string, init: RequestInit = {}) {
+  const ctx = createExecutionContext();
+  const headers = new Headers(init.headers);
+  if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin");
+  const res = await worker.fetch(new Request(`https://x.test${path}`, { ...init, headers }), env, ctx);
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
+/** Calls the Worker as an outsider does: no same-origin signal at all. */
+async function callRaw(path: string, init: RequestInit = {}) {
   const ctx = createExecutionContext();
   const res = await worker.fetch(new Request(`https://x.test${path}`, init), env, ctx);
   await waitOnExecutionContext(ctx);
@@ -86,23 +100,37 @@ describe("ingest", () => {
     expect(await count("removed_at IS NOT NULL")).toBe(0);
   });
 
-  it("survives two overlapping runs of the same window", async () => {
+  it("lets only one of two overlapping runs claim the window", async () => {
+    // The guard used to be a read followed by an insert, so both callers passed it and
+    // both queried SGC. The claim is one atomic statement now: the loser gets null.
     const runs = await Promise.all([ingest(deps(FULL), FROM, TO, "cron"), ingest(deps(FULL), FROM, TO, "manual")]);
-    expect(runs.map((r) => r.ok)).toEqual([true, true]);
-    expect(runs.map((r) => r.error)).toEqual([null, null]);
+    const won = runs.filter((r) => r !== null);
+    expect(won).toHaveLength(1);
+    expect(won[0]).toMatchObject({ ok: true, error: null });
     expect(await count()).toBe(786);
+    expect(await runCount()).toBe(1);
+  });
+
+  it("keeps a burst of concurrent refreshes down to a single SGC request", async () => {
+    await completeBackfill();
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+    const burst = await Promise.all(Array.from({ length: 8 }, () => call("/api/refresh", { method: "POST" })));
+    const bodies = (await Promise.all(burst.map((r) => r.json()))) as any[];
+    expect(bodies.filter((b) => b.refreshed)).toHaveLength(1);
+    expect(calls).toBe(1);
   });
 
   it("does not remove events outside the requested window", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     // A response for a late window legitimately lacks the early events.
-    const run = await ingest(deps(dropRows(FULL, 0)), new Date("2026-09-15T00:00:00Z"), TO, "manual");
+    const run = (await ingest(deps(dropRows(FULL, 0)), new Date("2026-09-15T00:00:00Z"), TO, "manual"))!;
     expect(run.removed).toBe(0);
   });
 
   it("refuses a response that would retire more than 20% of a window", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
-    const run = await ingest(deps(dropRows(FULL, 300)), FROM, TO, "manual");
+    const run = (await ingest(deps(dropRows(FULL, 300)), FROM, TO, "manual"))!;
     expect(run.ok).toBe(true);
     expect(run.removed).toBe(0);
     expect(run.error).toMatch(/removal skipped: response lacks 300 of 786/);
@@ -117,7 +145,7 @@ describe("ingest", () => {
   ])("leaves events untouched and records the error on %s", async (_name, impl) => {
     await ingest(deps(FULL), FROM, TO, "manual");
     const bad = { db: env.DB, now: NOW, fetchOptions: { fetchImpl: impl as unknown as typeof fetch, backoffMs: 1, retries: 1 } };
-    const run = await ingest(bad, FROM, TO, "cron");
+    const run = (await ingest(bad, FROM, TO, "cron"))!;
     expect(run.ok).toBe(false);
     expect(run.error).toBeTruthy();
     expect(await count("removed_at IS NULL")).toBe(786);
@@ -134,16 +162,16 @@ describe("sweep", () => {
 
   it("sends a chunk that keeps failing to the back of the queue", async () => {
     const failing = { db: env.DB, now: NOW, fetchOptions: { fetchImpl: (async () => new Response("", { status: 503 })) as unknown as typeof fetch, backoffMs: 1, retries: 0 } };
-    const bad = await ingestSweep(failing);
+    const bad = (await ingestSweep(failing))!;
     expect(bad.ok).toBe(false);
-    const next = await ingestSweep(deps(FULL, new Date(NOW.getTime() + 60_000)));
+    const next = (await ingestSweep(deps(FULL, new Date(NOW.getTime() + 60_000))))!;
     expect(next.windowStart).not.toBe(bad.windowStart);
   });
 
   it("visits never-swept chunks first, then the least recently swept", async () => {
     const seen: string[] = [];
     for (let i = 0; i < 7; i++) {
-      const run = await ingestSweep(deps(FULL, new Date(NOW.getTime() + i * 60_000)));
+      const run = (await ingestSweep(deps(FULL, new Date(NOW.getTime() + i * 60_000))))!;
       seen.push(run.windowStart);
     }
     expect(new Set(seen.slice(0, 6)).size).toBe(6);
@@ -274,10 +302,55 @@ describe("API", () => {
 
   it("never lets an error response be cached", async () => {
     const broken = { ...env, DB: { prepare: () => { throw new Error("D1 down"); } } as unknown as D1Database };
-    const res = await worker.fetch(new Request("https://x.test/api/events"), broken, {} as ExecutionContext);
+    const req = new Request("https://x.test/api/events", { headers: { "sec-fetch-site": "same-origin" } });
+    const res = await worker.fetch(req, broken, {} as ExecutionContext);
     expect(res.status).toBe(500);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await res.json()).toEqual({ error: "internal error" });
+  });
+
+  it.each(["/api/events", "/api/events.csv", "/api/stats", "/api/b-windows.csv", "/api/status"])(
+    "refuses %s without a same-origin signal",
+    async (path) => {
+      await ingest(deps(FULL), FROM, TO, "manual");
+      const res = await callRaw(path);
+      expect(res.status).toBe(403);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(await res.json()).toEqual({ error: "forbidden" });
+    },
+  );
+
+  it.each(["cross-site", "same-site", "none"])(
+    "refuses /api/events when Sec-Fetch-Site is %s",
+    async (site) => {
+      const res = await callRaw("/api/events", { headers: { "sec-fetch-site": site } });
+      expect(res.status).toBe(403);
+    },
+  );
+
+  it("refuses a cross-site POST /api/refresh without touching SGC", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => { calls++; return new Response(FULL); });
+    const res = await callRaw("/api/refresh", { method: "POST", headers: { "sec-fetch-site": "cross-site" } });
+    expect(res.status).toBe(403);
+    expect(calls).toBe(0);
+    expect(await runCount()).toBe(0);
+  });
+
+  it("accepts a request whose Origin matches, for clients that send no Sec-Fetch-Site", async () => {
+    await ingest(deps(FULL), FROM, TO, "manual");
+    const ok = await callRaw("/api/events", { headers: { origin: "https://x.test" } });
+    expect(ok.status).toBe(200);
+    const bad = await callRaw("/api/events", { headers: { origin: "https://evil.test" } });
+    expect(bad.status).toBe(403);
+  });
+
+  // The deploy smoke test and any uptime check call this one, so it must stay open.
+  it("leaves /api/health reachable with no same-origin signal", async () => {
+    await ingest(deps(FULL), FROM, TO, "manual");
+    const res = await callRaw("/api/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, totalEvents: 786 });
   });
 
   it("returns JSON 404 for unknown API routes", async () => {

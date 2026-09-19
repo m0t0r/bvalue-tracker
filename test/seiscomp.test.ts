@@ -82,7 +82,7 @@ describe("parseCatalogHtml on the captured response", () => {
 
 describe("parseCatalogHtml failure modes", () => {
   it("returns an empty page for a genuine zero-result response", () => {
-    expect(parseCatalogHtml(EMPTY)).toEqual({ reportedTotal: 0, duplicatesDropped: 0, events: [] });
+    expect(parseCatalogHtml(EMPTY)).toEqual({ reportedTotal: 0, duplicatesDropped: 0, skippedRows: [], events: [] });
   });
 
   it("collapses a row the server repeats, as SGC does on large queries", () => {
@@ -100,7 +100,32 @@ describe("parseCatalogHtml failure modes", () => {
 
   it("rejects a truncated response instead of returning partial data", () => {
     const cut = FULL.slice(0, FULL.lastIndexOf("<tr>")) + "</tbody></table></body></html>";
-    expect(() => parseCatalogHtml(cut)).toThrow(/parsed 785 rows but server reported 786/);
+    expect(() => parseCatalogHtml(cut)).toThrow(/parsed 785 rows \(\+0 skipped\) but server reported 786/);
+  });
+
+  // One bad row used to throw for the whole page, which stopped every valid event in
+  // the trailing window from being ingested on every cron tick until its date rolled out.
+  it("skips a single unparsable row and keeps the rest of the page", () => {
+    // Make exactly one row's origin time unparsable; every other row stays valid.
+    const page = parseCatalogHtml(FULL.replace("<center>2026-08-10 12:34:27</center>", "<center>n/d</center>"));
+    expect(page.skippedRows).toHaveLength(1);
+    expect(page.skippedRows[0]!.reason).toMatch(/not numeric|unrecognised timestamp/);
+    expect(page.events).toHaveLength(785);
+    expect(page.reportedTotal).toBe(786);
+  });
+
+  // An absurd but finite magnitude would otherwise be stored and then size the bin
+  // array in computeStats, throwing RangeError on every /api/stats call.
+  it("skips a row whose magnitude is numeric but physically impossible", () => {
+    const page = parseCatalogHtml(FULL.replace("<center>7.4</center>", "<center>4.3e8</center>"));
+    expect(page.skippedRows).toHaveLength(1);
+    expect(page.skippedRows[0]!.reason).toMatch(/mag out of range/);
+    expect(page.events).toHaveLength(785);
+  });
+
+  it("still refuses a page where most rows are unparsable", () => {
+    const wrecked = FULL.replaceAll("<center>2026-", "<center>n/d 2026-");
+    expect(() => parseCatalogHtml(wrecked)).toThrow(/rows unparsable; refusing partial data/);
   });
 
   it("rejects a changed column layout", () => {
