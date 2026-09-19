@@ -18,7 +18,7 @@ import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, clusterOf, type Cluster, type 
 export interface ClusterSelection { cluster: ClusterChoice; onChange: (c: ClusterChoice) => void }
 
 const DAY = 86_400_000;
-const FILL: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-3)" };
+const FILL: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-4)" };
 
 // Same idea as "Magnitud en el tiempo": squeezed into a phone's width forty days are slivers with no
 // values, so below MIN_BAR of room per day every day gets PX_PER_DAY instead and the strip scrolls

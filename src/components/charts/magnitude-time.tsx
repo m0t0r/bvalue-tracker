@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
 import { CLUSTER_DEPTH_KM, clusterOf } from "../../../core/clusters";
 
 // The shallow cluster keeps the page's blue; the deep one, which went quiet after the first week, is
-// the neutral grey. Orange stays the mainshock's alone.
+// a teal set well away from the blue in lightness as well as hue. Orange stays the mainshock's alone.
 const config = {
-  mag: { label: "M", color: "var(--chart-1)" }, deep: { label: "M", color: "var(--chart-3)" },
+  mag: { label: "M", color: "var(--chart-1)" }, deep: { label: "M", color: "var(--chart-4)" },
   main: { label: "M7.4", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
@@ -150,7 +150,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {(["shallow", "deep"] as const).map((c) => (
             <li key={c} className="flex items-center gap-1.5">
-              <span className={cn("size-2.5 rounded-full", c === "shallow" ? "bg-(--chart-1)" : "bg-(--chart-3)")} />
+              <span className={cn("size-2.5 rounded-full", c === "shallow" ? "bg-(--chart-1)" : "bg-(--chart-4)")} />
               {t.clusterName[c]} <span>({t.clusterWhere[c](CLUSTER_DEPTH_KM)})</span>
             </li>
           ))}
@@ -221,7 +221,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                       );
                     }} />
                     <Bar dataKey="shallow" stackId="day" fill="var(--chart-1)" isAnimationActive={false} />
-                    <Bar dataKey="deep" stackId="day" fill="var(--chart-3)" isAnimationActive={false} />
+                    <Bar dataKey="deep" stackId="day" fill="var(--chart-4)" isAnimationActive={false} />
                   </BarChart>
                 </ChartContainer>
               </div>
