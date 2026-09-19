@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHOCO_SWARM_BBOX, fetchCatalog } from "../src/seiscomp.ts";
+import { CHOCO_SWARM_BBOX, fetchCatalog } from "../core/seiscomp.ts";
 
 // Hits the real SGC server. Run with `pnpm test:live`.
 describe.skipIf(!process.env.LIVE)("live SGC", () => {

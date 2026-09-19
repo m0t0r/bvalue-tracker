@@ -8,6 +8,7 @@ export const SEISCOMP_ENDPOINT =
 export const CHOCO_SWARM_BBOX: BBox = { lonMin: -77.4, lonMax: -76.1, latMin: 4.1, latMax: 5.6 };
 
 export const MAINSHOCK_DATE = new Date(Date.UTC(2026, 7, 10));
+export const MAINSHOCK_ID = "SGC2026pqqmro";
 
 const EXPECTED_HEADERS = [
   "fecha-hora", "lat", "long", "prof", "mag", "tipo", "fases", "rms", "gap",

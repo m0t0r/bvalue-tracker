@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   CHOCO_SWARM_BBOX, buildFormBody, fetchCatalog, formatFormDate, parseCatalogHtml,
-} from "../src/seiscomp.ts";
+} from "../core/seiscomp.ts";
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 // Real response captured 2026-09-18 for the Chocó bbox, 10/08/2026 .. 18/09/2026.

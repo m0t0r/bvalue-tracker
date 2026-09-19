@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { fromCsv, toCsv } from "./csv.ts";
 import { bValue, bValueWindows, fmd, mcGoodnessOfFit, mcMaxCurvature } from "./gr.ts";
-import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog } from "./seiscomp.ts";
+import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, MAINSHOCK_ID, fetchCatalog } from "./seiscomp.ts";
 import type { BBox, SeismicEvent } from "./types.ts";
 
 const USAGE = `usage:
@@ -66,8 +66,7 @@ async function cmdBvalue(argv: string[]): Promise<void> {
   let events = fromCsv(await readFile(values.input, "utf8"));
   if (values["manual-only"]) events = events.filter((e) => e.status === "manual");
   if (values["exclude-mainshock"]) {
-    const top = Math.max(...events.map((e) => e.mag));
-    events = events.filter((e) => e.mag < top);
+    events = events.filter((e) => e.id !== MAINSHOCK_ID);
   }
   if (events.length === 0) throw new Error("no events after filtering");
   const mcOverride = values.mc !== undefined ? Number(values.mc) : undefined;

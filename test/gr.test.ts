@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bValue, bValueWindows, fmd, mcGoodnessOfFit, mcMaxCurvature } from "../src/gr.ts";
+import { bValue, bValueWindows, fmd, mcGoodnessOfFit, mcMaxCurvature } from "../core/gr.ts";
 
 function mulberry32(seed: number): () => number {
   let a = seed;

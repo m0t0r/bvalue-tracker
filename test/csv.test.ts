@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { fromCsv, toCsv } from "../src/csv.ts";
-import { parseCatalogHtml } from "../src/seiscomp.ts";
+import { fromCsv, toCsv } from "../core/csv.ts";
+import { parseCatalogHtml } from "../core/seiscomp.ts";
 
 describe("csv", () => {
   it("round-trips the whole captured catalogue losslessly", () => {

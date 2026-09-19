@@ -1,0 +1,8 @@
+{
+  // Test-only config: same Worker and D1 binding, without static assets or cron.
+  "name": "sgc-swarm-test",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{ "binding": "DB", "database_name": "sgc-swarm", "database_id": "test", "migrations_dir": "migrations" }]
+}

@@ -117,3 +117,38 @@ export function bValueWindows(
   }
   return out;
 }
+
+export const WINDOW_SIZE = 150;
+export const WINDOW_STEP = 10;
+
+export interface CatalogStats {
+  count: number;
+  bins: FmdBin[];
+  mcMaxc: number | null;
+  mcGft: number | null;
+  /** Mc actually used: the override if given, else maximum curvature. */
+  mc: number | null;
+  fit: BValue | null;
+  fitGft: BValue | null;
+  windows: BWindow[];
+}
+
+/** The one statistics pipeline, shared by the page, the API and the CLI so they cannot disagree. */
+export function computeStats(events: readonly { time: string; mag: number }[], mcOverride: number | null = null): CatalogStats {
+  const mags = events.map((e) => e.mag);
+  if (mags.length < 2) {
+    return { count: mags.length, bins: [], mcMaxc: null, mcGft: null, mc: null, fit: null, fitGft: null, windows: [] };
+  }
+  const tryFit = (mc: number | null): BValue | null => {
+    if (mc === null) return null;
+    try { return bValue(mags, mc); } catch { return null; }
+  };
+  const mcMaxc = mcMaxCurvature(mags);
+  const mcGft = mcGoodnessOfFit(mags);
+  const mc = mcOverride ?? mcMaxc;
+  return {
+    count: mags.length, bins: fmd(mags), mcMaxc, mcGft, mc,
+    fit: tryFit(mc), fitGft: tryFit(mcGft),
+    windows: bValueWindows(events, mc, WINDOW_SIZE, WINDOW_STEP),
+  };
+}
