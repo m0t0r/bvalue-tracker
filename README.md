@@ -678,6 +678,15 @@ colour, motion). Keep to them:
   stay readable exactly when it is least reliable.
 - Order by importance: the b-value leads the page, above the filters. On a phone it
   must be within the first screen.
+- **The status bar's stats are one wrapping row at every width**, never a two-column grid
+  on a phone. The stats are not the same size — "Eventos" is three digits, "Evento más
+  reciente" is "18 sept 2026, 17:08" — so equal halves broke the date across two lines
+  below 480 px, which is every phone, leaving it two lines tall beside a number one line
+  tall. Each stat is now as wide as its own longest line, and one that no longer fits
+  beside its neighbour takes the next line whole: the date stays on one line down to
+  320 px, and which stats share a line follows from the text rather than from a
+  breakpoint. Nothing here needs revisiting when a stat is added, a figure grows a digit
+  or a translation gets longer.
 - **"Magnitud en el tiempo" scrolls sideways when it is too narrow to read.** Below
   768 px of plot width every Colombian day gets `PX_PER_DAY` (28 px) instead of the
   whole range being squeezed in, which on a phone drew one solid band. The scatter and

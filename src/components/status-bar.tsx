@@ -106,10 +106,11 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
     <div className="flex flex-col gap-4">
       <Card>
         <CardContent className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          {/* Two columns on a phone. An odd stat left over on the last row spans both, so its date
-              hint is not broken across lines beside an empty half. Written as a rule about the
-              trailing child, not about the third stat, so adding or removing one keeps it true. */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4 [&>*:nth-child(odd):last-child]:col-span-2 sm:flex sm:flex-wrap sm:gap-x-10">
+          {/* One wrapping row at every width, rather than two columns on a phone: a stat is as wide
+              as its own longest line, and one that no longer fits beside its neighbour takes the next
+              line whole instead of folding "18 sept 2026, 17:08" in half. Which stats share a line is
+              then a consequence of the text, so a longer date or a narrower phone needs nothing here. */}
+          <div className="flex flex-wrap gap-x-6 gap-y-4 sm:gap-x-10">
             <Stat label={t.events} value={shown === null ? null : <FlowNumber value={shown} lang={lang} />}
               hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined} />
             <Stat label={t.newestEvent} value={status ? (newestEvent ?? "—") : null}
