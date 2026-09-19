@@ -254,7 +254,9 @@ error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
 - The frequency–magnitude chart draws a cumulative dot only where an event exists.
   A dot at every 0.1 step turned the lone M7.4 into 25 dots at N = 1, which read as data.
 - A `ScatterChart` with a time axis derives a single tick on its own. We pass
-  explicit weekly `ticks`, shared with the bar chart below it.
+  explicit weekly `ticks`, shared with the bar chart below it — see the scrolling
+  mobile chart under [Interface conventions](#interface-conventions) for how the tick
+  spacing and the pinned y axes work.
 - pnpm 12 blocks dependency build scripts. `pnpm-workspace.yaml` allows `esbuild`,
   `workerd` and `sharp`; without that, installs fail with `ERR_PNPM_IGNORED_BUILDS`.
 - TypeScript is split into `tsconfig.app.json` (DOM), `tsconfig.worker.json`
@@ -304,6 +306,17 @@ colour, motion). Keep to them:
   stay readable exactly when it is least reliable.
 - Order by importance: the b-value leads the page, above the filters. On a phone it
   must be within the first screen.
+- **"Magnitud en el tiempo" scrolls sideways when it is too narrow to read.** Below
+  768 px of plot width every Colombian day gets `PX_PER_DAY` (28 px) instead of the
+  whole range being squeezed in, which on a phone drew one solid band. The scatter and
+  the "eventos por día" bars sit in **one** scroll container so a single gesture moves
+  both, and both y axes are pinned: each is a second, data-less chart in a `sticky`
+  column, which only lines up because the pinned and scrolling charts are given the
+  same margins, the same `X_AXIS_H` and — for the counts — the same explicit domain and
+  `ticks` (`countAxis`). `interval={0}`, or Recharts quietly drops one of them.
+  The view starts at the newest events and stays there through a refresh unless the
+  reader has scrolled away from the right edge. Date ticks go from weekly to whatever
+  fits in `TICK_GAP` while it scrolls. Above 768 px nothing changes.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
 - Charts and the map redraw on every filter change, so they do not animate. The
