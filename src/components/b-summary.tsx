@@ -2,6 +2,7 @@ import { AlertTriangleIcon } from "lucide-react";
 import { FlowNumber } from "@/components/flow-number";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { MIN_RELIABLE_N, WINDOW_SIZE, type Stats } from "@/lib/use-stats";
@@ -55,13 +56,72 @@ function BScale({ rows }: { rows: Row[] }) {
   );
 }
 
-export function BSummary({ stats, incomplete }: { stats: Stats; incomplete: boolean }) {
+export type BScope = "all" | "type";
+
+/** Which magnitudes feed b. `magType` is null when the events shown share one type, and then there is nothing to choose. */
+export interface BScopeChoice {
+  value: BScope;
+  onChange: (v: BScope) => void;
+  magType: string | null;
+  /** Events of `magType`, and all events, among those shown. */
+  typeCount: number;
+  total: number;
+}
+
+export function BSummary({ stats, incomplete, scope }: { stats: Stats; incomplete: boolean; scope: BScopeChoice }) {
   const { t, lang } = useI18n();
   const { fit, fitGft, mc, mcGft, windows } = stats;
+  const { magType } = scope;
   const few = fit !== null && fit.n < MIN_RELIABLE_N;
   const dim = few || incomplete;
   const first = windows[0], last = windows.at(-1);
   const span = (w: { from: string; to: string }) => `${fmtDay(Date.parse(w.from), lang)} – ${fmtDay(Date.parse(w.to), lang)}`;
+  const scopeHelp = magType === null ? null : (
+    <div className="flex flex-col gap-2 text-pretty text-muted-foreground">
+      <p>{scope.value === "all" ? t.bScopeAllHelp(magType) : t.bScopeOneHelp(magType, scope.typeCount.toLocaleString(lang), scope.total.toLocaleString(lang))}</p>
+      <p>{t.bScopeBoth}</p>
+    </div>
+  );
+  const body = fit === null || mc === null ? (
+    <p className="text-sm text-pretty text-muted-foreground">{t.bNone}</p>
+  ) : (
+    <>
+      <div className="flex flex-col gap-4">
+        {/* Demoted with the secondary-text token, not opacity: it must stay readable exactly when it is least reliable. */}
+        <div className={cn("flex items-baseline gap-2 transition-colors duration-200 ease-out", dim && "text-muted-foreground")}>
+          <FlowNumber value={fit.b} digits={2} className="text-5xl font-semibold tracking-tight" />
+          <FlowNumber value={fit.sigmaB} digits={2} prefix="± " className="text-xl text-muted-foreground" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary"><FlowNumber value={mc} digits={1} prefix="Mc = " /></Badge>
+          <Badge variant="secondary"><FlowNumber value={fit.n} lang={lang} prefix="n = " suffix={` ${t.eventsAboveMc}`} /></Badge>
+          {/* Cautions, not failures: red stays reserved for things that actually broke. */}
+          {few ? <Badge variant="outline"><AlertTriangleIcon data-icon="inline-start" />{t.bFew}</Badge> : null}
+          {incomplete ? <Badge variant="outline"><AlertTriangleIcon data-icon="inline-start" />{t.backfillShort}</Badge> : null}
+        </div>
+        {scopeHelp}
+        {fitGft && mcGft !== null ? (
+          <p className="text-sm text-pretty text-muted-foreground">
+            {t.bGft} ({mcGft.toFixed(1)}):{" "}
+            <span className="whitespace-nowrap">b = {fitGft.b.toFixed(2)} ± {fitGft.sigmaB.toFixed(2)}</span>,{" "}
+            <span className="whitespace-nowrap">n = {fitGft.n.toLocaleString(lang)}</span>
+          </p>
+        ) : null}
+      </div>
+      {/* Needs two separate windows to say anything about change; with fewer, the headline stands alone. */}
+      {first && last && first !== last ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-pretty text-muted-foreground">{t.bDrift(first.b.toFixed(2), last.b.toFixed(2))}</p>
+          <BScale rows={[
+            { label: t.bRowStart, sub: t.bRowFirst(WINDOW_SIZE, span(first)), b: first.b, sigma: first.sigmaB, main: false },
+            { label: t.bRowAll, b: fit.b, sigma: fit.sigmaB, main: true },
+            { label: t.bRowEnd, sub: t.bRowLast(WINDOW_SIZE, span(last)), b: last.b, sigma: last.sigmaB, main: false },
+          ]} />
+        </div>
+      ) : null}
+    </>
+  );
+  const BODY = "flex flex-1 flex-col justify-between gap-6";
 
   return (
     <Card className="h-full">
@@ -69,46 +129,18 @@ export function BSummary({ stats, incomplete }: { stats: Stats; incomplete: bool
         <CardTitle>{t.bTitle}</CardTitle>
         <CardDescription>Gutenberg–Richter · Aki–Utsu</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-between gap-6">
-        {fit === null || mc === null ? (
-          <p className="text-sm text-pretty text-muted-foreground">{t.bNone}</p>
-        ) : (
-          <>
-            <div className="flex flex-col gap-4">
-              {/* Demoted with the secondary-text token, not opacity: it must stay readable exactly when it is least reliable. */}
-              <div className={cn("flex items-baseline gap-2 transition-colors duration-200 ease-out", dim && "text-muted-foreground")}>
-                <FlowNumber value={fit.b} digits={2} className="text-5xl font-semibold tracking-tight" />
-                <FlowNumber value={fit.sigmaB} digits={2} prefix="± " className="text-xl text-muted-foreground" />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary"><FlowNumber value={mc} digits={1} prefix="Mc = " /></Badge>
-                <Badge variant="secondary"><FlowNumber value={fit.n} lang={lang} prefix="n = " suffix={` ${t.eventsAboveMc}`} /></Badge>
-                {/* Cautions, not failures: red stays reserved for things that actually broke. */}
-                {few ? <Badge variant="outline"><AlertTriangleIcon data-icon="inline-start" />{t.bFew}</Badge> : null}
-                {incomplete ? <Badge variant="outline"><AlertTriangleIcon data-icon="inline-start" />{t.backfillShort}</Badge> : null}
-              </div>
-              {fitGft && mcGft !== null ? (
-                <p className="text-sm text-pretty text-muted-foreground">
-                  {t.bGft} ({mcGft.toFixed(1)}):{" "}
-                  <span className="whitespace-nowrap">b = {fitGft.b.toFixed(2)} ± {fitGft.sigmaB.toFixed(2)}</span>,{" "}
-                  <span className="whitespace-nowrap">n = {fitGft.n.toLocaleString(lang)}</span>
-                </p>
-              ) : null}
-            </div>
-            {/* Needs two separate windows to say anything about change; with fewer, the headline stands alone. */}
-            {first && last && first !== last ? (
-              <div className="flex flex-col gap-4">
-                <p className="text-pretty text-muted-foreground">{t.bDrift(first.b.toFixed(2), last.b.toFixed(2))}</p>
-                <BScale rows={[
-                  { label: t.bRowStart, sub: t.bRowFirst(WINDOW_SIZE, span(first)), b: first.b, sigma: first.sigmaB, main: false },
-                  { label: t.bRowAll, b: fit.b, sigma: fit.sigmaB, main: true },
-                  { label: t.bRowEnd, sub: t.bRowLast(WINDOW_SIZE, span(last)), b: last.b, sigma: last.sigmaB, main: false },
-                ]} />
-              </div>
-            ) : null}
-          </>
-        )}
-      </CardContent>
+      {magType === null ? <CardContent className={BODY}>{body}</CardContent> : (
+        <CardContent className="flex flex-1 flex-col">
+          <Tabs value={scope.value} onValueChange={(v) => scope.onChange(v as BScope)} className="flex-1 gap-4">
+            <TabsList aria-label={t.bScopeLabel} className="w-full">
+              <TabsTrigger value="all">{t.bScopeAll}</TabsTrigger>
+              <TabsTrigger value="type">{t.bScopeOne(magType)}</TabsTrigger>
+            </TabsList>
+            {/* One panel for both tabs: only the numbers differ, so they roll to the new value instead of remounting. */}
+            <TabsContent value={scope.value} className={BODY}>{body}</TabsContent>
+          </Tabs>
+        </CardContent>
+      )}
     </Card>
   );
 }

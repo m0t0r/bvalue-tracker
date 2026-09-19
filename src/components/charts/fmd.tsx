@@ -5,7 +5,8 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, type Cha
 import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/use-stats";
 
-export const FmdChart = memo(function FmdChart({ stats }: { stats: Stats }) {
+/** `magType` is set while the b card limits the statistics to one magnitude type. */
+export const FmdChart = memo(function FmdChart({ stats, magType }: { stats: Stats; magType: string | null }) {
   const { t } = useI18n();
   const { bins, fit, mc } = stats;
 
@@ -36,7 +37,7 @@ export const FmdChart = memo(function FmdChart({ stats }: { stats: Stats }) {
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.fmdTitle}</CardTitle>
-        <CardDescription>{t.fmdDesc}{isolated !== null ? ` ${t.fmdIsolated(isolated.toFixed(1))}` : ""}</CardDescription>
+        <CardDescription>{magType !== null ? `${t.bScopeNote(magType)} ` : ""}{t.fmdDesc}{isolated !== null ? ` ${t.fmdIsolated(isolated.toFixed(1))}` : ""}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="aspect-auto h-80 w-full">

@@ -4,8 +4,8 @@
 
 Tracks the Chocó (Colombia) earthquake sequence that followed the M7.4 San José
 del Palmar earthquake of 2026-08-10 12:34:27 UTC, and its Gutenberg–Richter
-b-value. Built for a Spanish-speaking seismologist, so the page is Spanish first
-with an English toggle.
+b-value. Built for a Spanish-speaking enthusiast, not a trained seismologist, so
+the page is Spanish first with an English toggle and explains its terms in plain words.
 
 - **Source**: the Servicio Geológico Colombiano (SGC) "Consulta Experta SeisComP"
   form. One POST returns every event in a date range and bounding box with id,
@@ -176,6 +176,15 @@ Dead ends, do not retry:
   reliable), magnitudes mix types (MLr_1 dominates; also MLv, Mw, M), and low b is
   common for intermediate-depth sequences. **A b-value below 1 describes the
   sequence. It is not a forecast, and the page must keep saying so.**
+- **Mixed magnitude types move b by more than its error bar.** SGC gives small events
+  MLr_1 and most events above M4 another type (MLv, Mw). On 2026-09-19, at Mc = 2.3:
+  all types b = 0.75 ± 0.03, MLr_1 only b = 0.87 ± 0.04. Neither is right: an offset
+  between the scales pulls the first down, and dropping the large events pushes the
+  second up. With MLr_1 only, the September slide to ~0.58 mostly disappears (it ends
+  near 0.8), so that slide leans on the larger MLv events. The b card has a tab for
+  each (`dominantMagType` in `core/gr.ts`); both use the all-types Mc so that only the
+  magnitudes differ, and the b charts follow the tab. A proper fix is converting to
+  one scale, which needs published SGC conversion relations: do not invent them.
 - **There are two clusters**, visible on the map: a shallower one (~40 km) under
   Istmina/Sipí that was still producing M4.6–4.9 events in mid-September, and the
   deep one (~100 km) around the mainshock. They probably deserve separate b-values;

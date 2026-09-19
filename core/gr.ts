@@ -121,6 +121,21 @@ export function bValueWindows(
   return out;
 }
 
+/**
+ * The magnitude type most events carry, or null when every event already shares one type.
+ * SGC gives most large events a different type (MLv, Mw) from the small ones (MLr_1), so b from
+ * all types and b from this one type bracket the truth: the first is pulled down by any offset
+ * between the scales, the second pushed up by losing the top of the distribution.
+ */
+export function dominantMagType(events: readonly { magType: string }[]): string | null {
+  const counts = new Map<string, number>();
+  for (const e of events) counts.set(e.magType, (counts.get(e.magType) ?? 0) + 1);
+  if (counts.size < 2) return null;
+  let best: string | null = null, n = 0;
+  for (const [type, c] of counts) if (c > n) { best = type; n = c; }
+  return best;
+}
+
 export interface CatalogStats {
   count: number;
   bins: FmdBin[];

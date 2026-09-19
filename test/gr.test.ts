@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bValue, bValueWindows, fmd, mcGoodnessOfFit, mcMaxCurvature } from "../core/gr.ts";
+import { bValue, bValueWindows, dominantMagType, fmd, mcGoodnessOfFit, mcMaxCurvature } from "../core/gr.ts";
 
 function mulberry32(seed: number): () => number {
   let a = seed;
@@ -112,5 +112,17 @@ describe("bValueWindows", () => {
     expect(w[0]!.from).toBe(events[0]!.time);
     expect(w[1]!.from).toBe(events[50]!.time);
     expect(w[0]!.from < w[0]!.to).toBe(true);
+  });
+});
+
+describe("dominantMagType", () => {
+  it("names the most common type", () => {
+    const t = (magType: string) => ({ magType });
+    expect(dominantMagType([t("MLr_1"), t("MLv"), t("MLr_1"), t("Mw")])).toBe("MLr_1");
+  });
+
+  it("is null when there is nothing to separate", () => {
+    expect(dominantMagType([])).toBeNull();
+    expect(dominantMagType([{ magType: "MLr_1" }, { magType: "MLr_1" }])).toBeNull();
   });
 });

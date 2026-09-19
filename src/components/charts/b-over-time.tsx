@@ -11,7 +11,8 @@ import { useI18n } from "@/lib/i18n";
 import { WINDOW_SIZE, type Stats } from "@/lib/use-stats";
 import { windowsToCsv } from "../../../core/csv";
 
-export const BOverTimeChart = memo(function BOverTimeChart({ stats }: { stats: Stats }) {
+/** `magType` is set while the b card limits the statistics to one magnitude type. */
+export const BOverTimeChart = memo(function BOverTimeChart({ stats, magType }: { stats: Stats; magType: string | null }) {
   const { t, lang } = useI18n();
   const config = {
     b: { label: t.bTitle, color: "var(--chart-1)" },
@@ -31,10 +32,10 @@ export const BOverTimeChart = memo(function BOverTimeChart({ stats }: { stats: S
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.bTimeTitle}</CardTitle>
-        <CardDescription>{t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—")}</CardDescription>
+        <CardDescription>{magType !== null ? `${t.bScopeNote(magType)} ` : ""}{t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—")}</CardDescription>
         <CardAction>
           <Button variant="outline" size="sm" aria-label={t.downloadBCsv} disabled={stats.windows.length === 0}
-            onClick={() => downloadCsv("sgc-choco-b-windows.csv", windowsToCsv(stats.windows, lang))}>
+            onClick={() => downloadCsv(magType !== null ? `sgc-choco-b-windows-${magType}.csv` : "sgc-choco-b-windows.csv", windowsToCsv(stats.windows, lang))}>
             <DownloadIcon data-icon="inline-start" />
             {t.downloadCsv}
           </Button>

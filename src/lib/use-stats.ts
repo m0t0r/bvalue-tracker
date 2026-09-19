@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { computeStats, type CatalogStats } from "../../core/gr";
 import type { StoredEvent } from "@/lib/api";
 
-export { WINDOW_SIZE } from "../../core/gr";
+export { WINDOW_SIZE, dominantMagType } from "../../core/gr";
 export const MIN_RELIABLE_N = 50;
 export type Stats = CatalogStats;
 
