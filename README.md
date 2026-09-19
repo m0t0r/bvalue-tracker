@@ -28,7 +28,7 @@ changing anything. Most of it was found the hard way and is not visible in the c
 | `src/` | React page: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL. `lib/i18n.tsx` holds every user-facing string in `es` and `en`. |
 | `migrations/` | D1 schema. |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18. |
-| `src/**/*.test.ts` | The page's own pure logic, in a third vitest project (`page`). It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
+| `src/**/*.test.ts` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec. Its §3 lists every verified fact about the SGC endpoint. |
 
 ## Develop
@@ -287,7 +287,8 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   - **Both clusters use the Mc of the whole filtered catalogue**, like the magnitude-type tabs,
     so only the population differs. `computeClusterStats` is the one place that rule lives; the
     page, `/api/stats?cluster=` and the CLI all go through it. Never call `computeStats` on a
-    cluster's own events, which would give it its own Mc. A cluster whose own maximum-curvature
+    cluster's own events, which would give it its own Mc. The magnitude-type tab is the same rule
+    and lives in `measure` in `src/lib/scope.ts` — see [the page's scope](#the-pages-scope). A cluster whose own maximum-curvature
     Mc is higher than the shared one gets a caution badge (b would be biased low); today both
     are 2.3.
   - The deep cluster has too few events for 150-event windows, and smaller windows (±0.11–0.16)
@@ -623,6 +624,35 @@ practices stayed at 100.
   between requests. Check `/api/status` and confirm `backfill.done == backfill.total`
   before opening a browser on it. Do not click the refresh button in a loop.
 
+### The page's scope
+
+**One module owns what the page is narrowed to, and everything read off it**
+(`src/lib/scope.ts`, architecture review candidate 03, 2026-09-19). A `Scope` is the filters form,
+the depth group and the b card's magnitude tab; `pageView(events, scope, now)` derives the whole
+page from it and is a plain function, so a test runs exactly what the page runs. `useScope` adds
+only React — the state, three memo layers, the deferred copies and the two control objects the
+groups card and the b card take. `App.tsx` is layout.
+
+- **The rule it exists for: every fit the page shows is above the Mc of the whole filtered
+  catalogue.** Narrowing to a depth group or to one magnitude type changes which events are counted
+  and nothing else. `computeClusterStats` keeps the group half; `measure` keeps the magnitude half,
+  which before this lived as one argument inside a component body — swap `clusters.all.mc` there for
+  the reader's own `filters.mc` and one tab silently fits its own distribution. `pageView` is where
+  that is now tested, across every group × tab combination.
+  - The fixture in `src/lib/scope.test.ts` is **synthetic on purpose**. On the real catalogue every
+    Mc estimate lands on 2.3, so the mistake passes unnoticed; that catalogue peaks at M2.4 while
+    the commonest magnitude type and the deep group each peak at M2.0, and the swap reads as a
+    different number. Reinstating the swap was checked to fail it.
+- **Mc moves the figures and never the selection**, so the derivation is layered and each layer is
+  given exactly the part of the scope it may read. `applyFilters` takes `EventFilters`, which has no
+  `mc` field at all — the guard is in the type, not in a `mc: null` argument at the call site as it
+  used to be. `selectBase` is keyed on the filters, `selectShown` on the group, `measure` on the
+  rest. So dragging the Mc slider rebuilds no array, and choosing a group leaves `base` — the two
+  daily strips in the groups card — untouched. Checked in a browser: after four steps of the Mc
+  slider the MapLibre canvas and the table's first row are the same DOM nodes.
+- The `page` vitest project runs on `happy-dom` with `@testing-library/react`, for that one seam.
+  Everything else it holds is a pure function; do not reach for a renderer where `pageView` will do.
+
 ### Interface conventions
 
 Settled in a six-domain interface review (accessibility, layout, copy, typography,
@@ -712,8 +742,11 @@ colour, motion). Keep to them:
   it differs from `DEFAULT_FILTERS`, so an untouched page produces none and neither presentation
   appears. Mc is in the list although it selects no events — it moves the b-value, and a Mc left on
   by hand is what a reader forgets. "Quitar filtros" clears the cluster *and* the filters form,
-  which is why `FiltersCard` takes a `resetSignal`: the form owns its values, so the page can only
-  ask.
+  which both go through `useScope`'s `clear`: `FiltersCard` is controlled, so the page owns the
+  values and the form renders them. It used to be given a `resetSignal` to bump instead, and the
+  reason that protocol existed is still a rule — **a reader's half-typed `from > to` must survive**.
+  The form remembers the last object it handed up and compares by identity, so while it is invalid
+  it emits nothing, `value` stays the last good object, and nothing resets underneath them.
   - The **notice** sits in the flow under the status bar. It is the accessible one and the only one
     in the tab order, laid out as one row wherever there is room, so the bar reads as the same
     object come back rather than a second thing.

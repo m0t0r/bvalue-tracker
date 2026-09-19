@@ -7,15 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
-import type { ClusterChoice } from "@/lib/filters";
 import { dayStart, fmtDay, relativeTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { MIN_RELIABLE_N } from "@/lib/use-stats";
+import type { ClusterSelection } from "@/lib/scope";
+import { MIN_RELIABLE_N } from "@/lib/stats";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, clusterOf, type Cluster, type ClusterStats } from "../../core/clusters";
-
-export interface ClusterSelection { cluster: ClusterChoice; onChange: (c: ClusterChoice) => void }
 
 const DAY = 86_400_000;
 const FILL: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-4)" };

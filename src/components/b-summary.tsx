@@ -7,7 +7,8 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { MIN_RELIABLE_N, WINDOW_SIZE, type Stats } from "@/lib/use-stats";
+import type { MagTabs } from "@/lib/scope";
+import { MIN_RELIABLE_N, WINDOW_SIZE, type Stats } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "../../core/clusters";
 
@@ -87,23 +88,11 @@ function BScale({ rows }: { rows: Row[] }) {
   );
 }
 
-export type BScope = "all" | "type";
-
-/** Which magnitudes feed b. `magType` is null when the events shown share one type, and then there is nothing to choose. */
-export interface BScopeChoice {
-  value: BScope;
-  onChange: (v: BScope) => void;
-  magType: string | null;
-  /** Events of `magType`, and all events, among those shown. */
-  typeCount: number;
-  total: number;
-}
-
 /** `cluster` is set while the page is narrowed to one depth cluster; the card then says whose b it is showing. */
-export function BSummary({ stats, incomplete, scope, cluster }: { stats: Stats; incomplete: boolean; scope: BScopeChoice; cluster: Cluster | null }) {
+export function BSummary({ stats, incomplete, tabs, cluster }: { stats: Stats; incomplete: boolean; tabs: MagTabs; cluster: Cluster | null }) {
   const { t, lang } = useI18n();
   const { fit, fitGft, mc, mcGft, windows } = stats;
-  const { magType } = scope;
+  const { magType } = tabs;
   const few = fit !== null && fit.n < MIN_RELIABLE_N;
   const dim = few || incomplete;
   const first = windows[0], last = windows.at(-1);
@@ -124,7 +113,7 @@ export function BSummary({ stats, incomplete, scope, cluster }: { stats: Stats; 
       <div className="flex flex-col gap-2 text-pretty text-muted-foreground">
         {magType === null ? null : (
           <>
-            <p>{scope.value === "all" ? t.bScopeAllHelp(magType) : t.bScopeOneHelp(magType, scope.typeCount.toLocaleString(lang), scope.total.toLocaleString(lang))}</p>
+            <p>{tabs.value === "all" ? t.bScopeAllHelp(magType) : t.bScopeOneHelp(magType, tabs.typeCount.toLocaleString(lang), tabs.total.toLocaleString(lang))}</p>
             <p>{t.bScopeBoth}</p>
           </>
         )}
@@ -174,13 +163,13 @@ export function BSummary({ stats, incomplete, scope, cluster }: { stats: Stats; 
       </CardHeader>
       {magType === null ? <CardContent className={BODY}>{body}</CardContent> : (
         <CardContent className="flex flex-1 flex-col">
-          <Tabs value={scope.value} onValueChange={(v) => scope.onChange(v as BScope)} className="flex-1 gap-4">
+          <Tabs value={tabs.value} onValueChange={(v) => tabs.onChange(v as MagTabs["value"])} className="flex-1 gap-4">
             <TabsList aria-label={t.bScopeLabel} className="w-full">
               <TabsTrigger value="all">{t.bScopeAll}</TabsTrigger>
               <TabsTrigger value="type">{t.bScopeOne(magType)}</TabsTrigger>
             </TabsList>
             {/* One panel for both tabs: only the numbers differ, so they roll to the new value instead of remounting. */}
-            <TabsContent value={scope.value} className={BODY}>{body}</TabsContent>
+            <TabsContent value={tabs.value} className={BODY}>{body}</TabsContent>
           </Tabs>
         </CardContent>
       )}

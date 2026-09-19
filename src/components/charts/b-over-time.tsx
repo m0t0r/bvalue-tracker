@@ -8,7 +8,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { downloadCsv } from "@/lib/download";
 import { fmtDateTime, fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { WINDOW_SIZE, type Stats } from "@/lib/use-stats";
+import { WINDOW_SIZE, type Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
 import { windowsToCsv } from "../../../core/csv";
 

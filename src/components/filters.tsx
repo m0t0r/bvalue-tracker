@@ -12,18 +12,15 @@ import { useI18n } from "@/lib/i18n";
 
 interface Props {
   mcAuto: number | null;
+  /** The page's filters. The form renders these; it does not own them. */
+  value: Filters;
   onChange: (f: Filters) => void;
-  /**
-   * Bumped by "Quitar filtros" on the scope bar, which clears the cluster and these together. The
-   * form owns its own values, so the page can only ask; it cannot set them.
-   */
-  resetSignal: number;
 }
 
-export function FiltersCard({ mcAuto, onChange, resetSignal }: Props) {
+export function FiltersCard({ mcAuto, value, onChange }: Props) {
   const { t } = useI18n();
   const form = useForm({
-    defaultValues: DEFAULT_FILTERS,
+    defaultValues: value,
     validators: {
       onChange: ({ value }) => (value.from && value.to && value.from > value.to ? t.dateOrder : undefined),
     },
@@ -31,25 +28,38 @@ export function FiltersCard({ mcAuto, onChange, resetSignal }: Props) {
 
   const values = useStore(form.store, (s) => s.values);
   const formError = useStore(form.store, (s) => s.errors[0]);
-  useEffect(() => {
-    if (!formError) onChange(values);
-  }, [values, formError, onChange]);
 
-  // Compared against the last value rather than run on every change of `form`, so that a form
-  // instance which is ever anything but stable cannot wipe what the reader is typing.
-  const lastReset = useRef(resetSignal);
+  /**
+   * The page is the owner: "Quitar filtros" on the scope bar sets `value`, and the form takes it.
+   *
+   * The two effects are a loop unless the form can tell the page's own echo from a real change, so
+   * it remembers the last object it handed up and compares by identity. That is exact, and it is
+   * also what keeps a half-typed date safe: while the form is invalid nothing is emitted, `value`
+   * stays the last good object, and the reader's `from > to` is not reset out from under them.
+   *
+   * Order matters. This effect is declared first so that in the commit where the reader changed a
+   * field it still sees the value it emitted last, and does not reset the form to it.
+   */
+  const emitted = useRef(value);
   useEffect(() => {
-    if (lastReset.current === resetSignal) return;
-    lastReset.current = resetSignal;
-    form.reset();
-  }, [resetSignal, form]);
+    if (value === emitted.current) return;
+    emitted.current = value;
+    form.reset(value);
+  }, [value, form]);
+  useEffect(() => {
+    if (formError) return;
+    emitted.current = values;
+    onChange(values);
+  }, [values, formError, onChange]);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t.filters}</CardTitle>
         <CardAction>
-          <Button variant="ghost" size="sm" onClick={() => form.reset()}>
+          {/* Asked of the page, like every other change here, so that clearing from the card and
+              clearing from the scope bar are the same event and cannot drift apart. */}
+          <Button variant="ghost" size="sm" onClick={() => onChange(DEFAULT_FILTERS)}>
             <RotateCcwIcon data-icon="inline-start" />
             {t.reset}
           </Button>
