@@ -219,7 +219,7 @@ export function parseCatalogHtml(html: string): CatalogPage {
     events: [...byId.values()],
     // Only what this function can honestly know: it was handed a string, so there was no
     // network. fetchCatalog fills the other two in.
-    cost: { bytes: html.length, fetchMs: null, attempts: null },
+    cost: { chars: html.length, fetchMs: null, attempts: null },
   };
 }
 

@@ -94,7 +94,7 @@ export async function ingest(
    */
   const finish = async (
     fields: Record<string, number | string | null>,
-    sgc: { ms: number | null; bytes: number | null } = { ms: null, bytes: null },
+    sgc: { ms: number | null; chars: number | null } = { ms: null, chars: null },
   ) => {
     const cols = Object.keys(fields);
     await db
@@ -117,7 +117,7 @@ export async function ingest(
       removed: run.removed,
       durationMs,
       sgcMs: sgc.ms,
-      sgcBytes: sgc.bytes,
+      sgcChars: sgc.chars,
       httpStatus,
       retryAfterS,
       ...(run.error === null ? {} : { error: run.error }),
@@ -178,7 +178,7 @@ export async function ingest(
     await runBatched(db, stmts);
     return await finish(
       { ok: 1, fetched: page.events.length, inserted, updated, removed, error: note },
-      { ms: page.cost.fetchMs, bytes: page.cost.bytes },
+      { ms: page.cost.fetchMs, chars: page.cost.chars },
     );
   } catch (err) {
     const e = err as Error;

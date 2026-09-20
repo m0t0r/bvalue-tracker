@@ -91,7 +91,7 @@ describe("parseCatalogHtml failure modes", () => {
       skippedRows: [],
       events: [],
       // Parsed from a string, so there was no network to describe.
-      cost: { bytes: EMPTY.length, fetchMs: null, attempts: null },
+      cost: { chars: EMPTY.length, fetchMs: null, attempts: null },
     });
   });
 
@@ -186,7 +186,7 @@ describe("fetchCatalog", () => {
   it("reports what the response cost: its size and how many requests it took", async () => {
     serves(() => HttpResponse.error(), ok);
     const page = await fetchCatalog(query, { backoffMs: 1 });
-    expect(page.cost.bytes).toBe(FULL.length);
+    expect(page.cost.chars).toBe(FULL.length);
     expect(page.cost.attempts).toBe(2);
     expect(page.cost.fetchMs).toBeGreaterThanOrEqual(0);
   });

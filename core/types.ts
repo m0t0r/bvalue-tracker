@@ -55,8 +55,15 @@ export interface SeismicEvent {
  * `$workers.cpuTimeMs` in Workers Logs instead; see `pnpm logs cpu`.
  */
 export interface CatalogCost {
-  /** Bytes of HTML the response held. */
-  bytes: number;
+  /**
+   * Length of the HTML, in UTF-16 code units — **characters, not bytes on the wire.**
+   * SGC's pages are Spanish, so accented characters make the encoded response larger than
+   * this number, and a byte cap sized from it would sit below the real payload and start
+   * refusing good responses. It is nonetheless the figure that matters for the memory
+   * question behind that cap, because it is what the isolate is holding. Counting true
+   * bytes would mean encoding the whole 0.8 MB string again, on a 10 ms CPU budget.
+   */
+  chars: number;
   /** Time on the network, ms. null when a page was parsed from a string we already had. */
   fetchMs: number | null;
   /** How many requests it took, including the retry. null when nothing was fetched. */

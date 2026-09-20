@@ -44,6 +44,13 @@ export default defineConfig({
      * published beside the page, add megabytes to the deploy, and hand the whole source to
      * anyone who asks. Cloudflare fetches the Worker's map itself, out of band, after the
      * invocation has finished; it is never served to a visitor.
+     *
+     * **The key is the Worker's `name` in wrangler.jsonc, and nothing checks that they
+     * agree.** Rename the Worker and this key matches no environment: no map is emitted,
+     * `upload_source_maps` has nothing to upload, and the build says nothing about it —
+     * the only symptom is a minified stack trace in Workers Logs, weeks later. Change the
+     * two together, and let `pnpm build` confirm it: `dist/<name>/index.js.map` must exist
+     * and `dist/client` must contain no map at all.
      */
     choco: { build: { sourcemap: true } },
   },
