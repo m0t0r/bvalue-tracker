@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IngestRun } from "../api-types.ts";
-import { dueNow, REFRESH_MIN_INTERVAL_S, type IngestHistory } from "../plan.ts";
+import { dueNow, REFRESH_MIN_INTERVAL_S, TRAILING_DAYS, type IngestHistory, type IngestPlan } from "../plan.ts";
 
 /** A healthy, idle history with the back-fill finished: the ordinary case. */
 const history = (over: Partial<IngestHistory> = {}): IngestHistory => ({
@@ -94,6 +94,36 @@ describe("cron lanes", () => {
     expect(dueNow(early, NOW, history()).steps).toEqual([
       { lane: "trailing", trigger: "cron", days: 3, allowRemovals: true },
     ]);
+  });
+
+  /**
+   * The lane is snapped to the nearest *tick*, not the nearest minute, and this is why.
+   * Production dispatches this cron at :45 past, which rounded to the nearest minute reads
+   * as the minute after — and for a five-minute cron the minute after is never a multiple
+   * of 15. Every tick of 2026-09-19..20 therefore took the fast lane: no removals, no
+   * sweep, and no lane left that ignores SGC's health, so one 410 stopped the Worker
+   * talking to SGC at all. Each offset below is a dispatch time, in seconds from the tick.
+   */
+  describe.each([0, 45, 149, -149])("dispatched %i s from the tick", (offsetS) => {
+    const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+    const plansFor = (h: IngestHistory) =>
+      MINUTES.map((m) => dueNow({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, h));
+    const isWide = (p: IngestPlan) => p.steps.some((s) => s.lane === "trailing" && s.days === TRAILING_DAYS);
+    const hasSweep = (p: IngestPlan) => p.steps.some((s) => s.lane === "sweep");
+
+    it("puts four wide ticks on the quarters and one sweep on the hour", () => {
+      const hour = plansFor(history());
+      expect(hour.map(isWide)).toEqual([true, false, false, true, false, false, true, false, false, true, false, false]);
+      expect(hour.filter(hasSweep)).toHaveLength(1);
+      expect(hasSweep(hour[0]!)).toBe(true);
+    });
+
+    // The one that turned a 410 from a blip into an outage with no way out: with every tick
+    // on the fast lane, the first failure stood down the only lane there was.
+    it("leaves four lanes an hour that probe SGC while the fast lane is standing down", () => {
+      const ill = plansFor(history({ health: { lastOk: false, rateLimit: null } }));
+      expect(ill.filter((p) => p.steps.length > 0)).toHaveLength(4);
+    });
   });
 });
 

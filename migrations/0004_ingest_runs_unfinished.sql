@@ -1,0 +1,12 @@
+-- A run with no finished_at is one of two things, and the difference matters: it is either
+-- still talking to SGC, or the Worker was killed before it could record a result. Nothing
+-- told the two apart, so 112 consecutive killed runs on 2026-09-20 left the newest *finished*
+-- row a success, the fast lane open, and the page showing no error for nine hours.
+-- reapAbandonedRuns closes the books on the second kind, and this index is what lets it —
+-- and runInFlight, and claimIngestRun's own NOT EXISTS — ask the question cheaply.
+--
+-- Partial, like ingest_runs_rate_limited, and for the same reason: it holds only the runs
+-- with no result yet, normally one or none. The unindexed form read every run ever recorded
+-- on every tick and every POST /api/refresh (measured: 357 of 357 rows), which is the fourth
+-- hot query over this table and the one 0003 missed.
+CREATE INDEX ingest_runs_unfinished ON ingest_runs(started_at) WHERE finished_at IS NULL;

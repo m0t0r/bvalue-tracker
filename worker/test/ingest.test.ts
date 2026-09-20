@@ -4,8 +4,10 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
+import { ABANDONED_ERROR } from "../db.ts";
 import worker from "../index.ts";
 import { ingest, ingestSweep, sweepChunks } from "../ingest.ts";
+import { IN_FLIGHT_MS } from "../plan.ts";
 
 // The fixture covers 2026-08-10 .. 2026-09-18 22:08 UTC.
 const FROM = new Date("2026-08-10T00:00:00Z");
@@ -433,10 +435,16 @@ describe("API", () => {
   });
 });
 
-/** Fires the scheduled handler as Cloudflare does, at one minute past the hour. */
-async function tick(minute: number, hour = 12) {
+/**
+ * Fires the scheduled handler as Cloudflare really does. `scheduledTime` is **not** the round
+ * minute in production: this Worker's ticks are dispatched at :45 past, and reading the lane
+ * off the nearest *minute* turned every one of them into the minute after — never a multiple
+ * of 15, so for a day neither the wide tick nor the sweep ran at all. The offset is the
+ * default here so that every lane test below runs against the shape production sends.
+ */
+async function tick(minute: number, { hour = 12, offsetS = 45 } = {}) {
   // scheduled() awaits its own work, so unlike the refresh route it needs no execution context.
-  const at = new Date(Date.UTC(2026, 8, 19, hour, minute));
+  const at = new Date(Date.UTC(2026, 8, 19, hour, minute) + offsetS * 1000);
   await worker.scheduled!({ cron: "*/5 * * * *", scheduledTime: at.getTime(), noRetry() {} }, env);
 }
 
@@ -538,5 +546,87 @@ describe("fast lane back-off, through the cron", () => {
 
     await tick(15);
     expect(calls()).toBe(1);
+  });
+});
+
+/**
+ * The failure nothing could see. On 2026-09-20 the Worker was killed mid-ingest on 112
+ * consecutive ticks: each had claimed its row and none ever wrote a result. Every reader of
+ * the history asks about *finished* runs, so the newest finished row stayed a success for
+ * nine hours — the fast lane kept its cadence, the page showed no error, and the catalogue
+ * quietly stopped moving. A run past the in-flight window with no result is not in progress.
+ */
+describe("a run the Worker was killed in the middle of", () => {
+  /** A claimed run that never came back, started `agoMs` ago on the real clock. */
+  const openRun = (agoMs: number) =>
+    env.DB
+      .prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
+                VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
+      .bind(new Date(Date.now() - agoMs).toISOString())
+      .run();
+
+  it("is closed as failed once it is past the in-flight window, and says so", async () => {
+    await completeBackfill();
+    await openRun(10 * 60_000);
+    serving(FULL);
+
+    await tick(15); // any tick: readHistory reaps before it reads
+    const reaped = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1")
+      .first<Record<string, unknown>>())!;
+    expect(reaped.ok).toBe(0);
+    expect(reaped.error).toBe(ABANDONED_ERROR);
+    // Dated when it stopped counting as in flight, never later: a row that sat there for
+    // hours must not push the visitor's five-minute throttle out by hours with it.
+    const finished = Date.parse(reaped.finished_at as string);
+    expect(finished).toBeLessThanOrEqual(Date.now() - IN_FLIGHT_MS);
+    expect(finished).toBeGreaterThanOrEqual(Date.parse(reaped.started_at as string));
+  });
+
+  it("is left alone while it could still be talking to SGC", async () => {
+    await completeBackfill();
+    await openRun(30_000);
+    const calls = serving(FULL);
+
+    await tick(5);
+    const row = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1")
+      .first<Record<string, unknown>>())!;
+    expect(row.finished_at).toBeNull();
+    // And it still holds the claim, so this tick did not reach SGC either.
+    expect(calls()).toBe(0);
+  });
+
+  // The whole point of recording it: an invocation that died is a failed query, and the
+  // rules that read failures — the fast lane's back-off and the page's alert — must see it.
+  it("stands the fast lane down, and the wide tick still lets it back in", async () => {
+    await completeBackfill();
+    await openRun(10 * 60_000);
+    const calls = serving(FULL);
+
+    await tick(5);
+    expect(calls()).toBe(0);
+
+    await tick(15);
+    expect(calls()).toBe(1);
+  });
+
+  it("is what /api/status reports as the last run, with the reason in the technical detail", async () => {
+    await completeBackfill();
+    await openRun(10 * 60_000);
+    serving(FULL);
+    await tick(5); // stands down, but still reaps
+
+    const body = (await (await call("/api/status")).json()) as any;
+    expect(body.lastRun).toMatchObject({ ok: false, error: ABANDONED_ERROR });
+  });
+
+  // ingest_runs grows ~312 rows a day and this question is asked on every tick and every
+  // refresh. Unindexed it read the whole table — the fourth hot query over it, and the one
+  // 0003 missed. Partial, so the ordinary case reads a near-empty index.
+  it("is looked up through the partial index, not a scan of every run ever recorded", async () => {
+    const { results } = await env.DB
+      .prepare("EXPLAIN QUERY PLAN SELECT 1 AS x FROM ingest_runs WHERE finished_at IS NULL AND started_at > ? LIMIT 1")
+      .bind(NOW.toISOString())
+      .all<{ detail: string }>();
+    expect(results.map((r) => r.detail).join("\n")).toContain("ingest_runs_unfinished");
   });
 });

@@ -7,8 +7,34 @@ import type { IngestRun } from "./api-types.ts";
  */
 export const IN_FLIGHT_MS = 150_000;
 
-/** Every fifteenth minute the five-minute tick loads the full trailing window instead. */
-const WIDE_TICK_EVERY_MIN = 15;
+/** The one cron pattern, in milliseconds. See `triggers` in wrangler.jsonc. */
+const TICK_MS = 300_000;
+
+/**
+ * Which tick this is, as a minute of the hour — snapped to the nearest scheduled tick,
+ * never to the nearest minute.
+ *
+ * `scheduledTime` is not the round minute. Production dispatches this Worker's five-minute
+ * cron at **:45 past**, and rounding that to the nearest minute reads it as the minute after —
+ * which for a five-minute cron is never a multiple of 15. So from the moment the
+ * five-minute cadence was deployed (2026-09-19) until this was found (2026-09-20), every
+ * single tick took the fast lane: no removals were ever applied, no sweep ever ran, and —
+ * worst of it — nothing was left that ignores SGC's health, so the first failed run stood
+ * the only remaining lane down and the Worker stopped talking to SGC altogether. A 410 from
+ * SGC froze the page until a visitor pressed the button.
+ *
+ * Snapping to the tick gives 2.5 minutes of slack either side of the dispatch time instead
+ * of 30 seconds, so the lane a tick belongs to no longer depends on how punctual the
+ * dispatch was.
+ */
+export const tickMinute = (scheduledTime: number) => ((Math.round(scheduledTime / TICK_MS) * TICK_MS) / 60_000) % 60;
+
+/**
+ * Every fifteenth minute the five-minute tick loads the full trailing window instead.
+ * Exported because it is also the number the page's failed-ingest alert quotes: once a run
+ * has failed the fast lane stands down, so the wide tick is the only lane still asking SGC.
+ */
+export const WIDE_TICK_EVERY_MIN = 15;
 export const TRAILING_DAYS = 3;
 /**
  * The fast lane's window. SGC publishes an event 2–5 minutes after it happens, so a
@@ -103,8 +129,7 @@ export function sgcUnwell(health: SgcHealth, now: Date): boolean {
 export function dueNow(caller: Caller, now: Date, history: IngestHistory): IngestPlan {
   if (caller.kind === "manual") return refreshPlan(now, history);
 
-  // The cron's own minute, rounded: a tick that lands at :14:59.9 is minute 15, not 14.
-  const minute = Math.round(caller.scheduledTime / 60_000) % 60;
+  const minute = tickMinute(caller.scheduledTime);
 
   if (minute % WIDE_TICK_EVERY_MIN !== 0) {
     // The fast lane: a narrow window, no removals, and nothing at all while SGC is unwell.

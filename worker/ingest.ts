@@ -1,6 +1,6 @@
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions } from "../core/seiscomp.ts";
 import type { IngestRun } from "./api-types.ts";
-import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastRun, runBatched, runInFlight, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
+import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastRun, reapAbandonedRuns, runBatched, runInFlight, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
 import { IN_FLIGHT_MS, TRAILING_DAYS, type IngestHistory, type IngestPlan } from "./plan.ts";
 
 const DAY_MS = 86_400_000;
@@ -187,6 +187,10 @@ export async function backfillProgress(db: D1Database, now: Date): Promise<{ don
  * reading of the table rather than from four that can disagree mid-tick.
  */
 export async function readHistory(db: D1Database, now: Date): Promise<IngestHistory> {
+  // First close the books on any run the Worker was killed in the middle of. Everything
+  // below reads finished runs, so until this happens a killed run is invisible: it is
+  // neither the last run nor a failure, and the fast lane goes on as if SGC were fine.
+  await reapAbandonedRuns(db, now);
   return {
     health: await sgcHealth(db),
     inFlight: await runInFlight(db, now),

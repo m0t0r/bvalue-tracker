@@ -147,6 +147,34 @@ export async function runInFlight(db: D1Database, now: Date, withinMs = IN_FLIGH
   return row !== null;
 }
 
+/** What a run says when the Worker never got to write its own result. */
+export const ABANDONED_ERROR = "run abandoned: the Worker recorded no result";
+
+/**
+ * Close the books on runs that started, stopped counting as in flight, and never wrote a
+ * result. `ingest()` records its own failures, so a row left open is not a failure it saw:
+ * the invocation itself was killed — out of memory, out of CPU, or evicted mid-fetch.
+ *
+ * Every reader of the history asks about *finished* runs, which is right, so nothing saw
+ * those runs at all: the newest finished row stayed the last success, `sgcUnwell` stayed
+ * false, the fast lane kept its 5-minute cadence, and the page showed no error while the
+ * catalogue went nine hours stale (2026-09-20, 112 runs). Marking them failed here, once,
+ * is what lets the health rule, the page's alert and the sweep's ordering see them without
+ * any of the three learning a second rule.
+ *
+ * `finished_at` is the instant the run stopped counting as in flight, not now: it is the
+ * last moment anything could still have been true of it, and dating it later would push the
+ * visitor's throttle out by however long the row sat there.
+ */
+export async function reapAbandonedRuns(db: D1Database, now: Date, withinMs = IN_FLIGHT_MS): Promise<number> {
+  const cutoff = new Date(now.getTime() - withinMs).toISOString();
+  const { meta } = await db
+    .prepare("UPDATE ingest_runs SET finished_at = ?1, ok = 0, error = ?2 WHERE finished_at IS NULL AND started_at <= ?1")
+    .bind(cutoff, ABANDONED_ERROR)
+    .run();
+  return meta.changes ?? 0;
+}
+
 /**
  * Deliberately narrower than `lastRun`: the back-off needs the HTTP status, and the status
  * API has no business carrying it. Both halves read the newest row by id and neither filters

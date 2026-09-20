@@ -42,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 199 tests, offline
+pnpm test                 # 234 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -64,12 +64,16 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 
 | Trigger | What it does |
 |---|---|
-| Cron `*/5 * * * *`, minute not divisible by 15 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](#sgc-rate-limits-and-the-request-budget). |
-| Cron `*/5 * * * *`, minute divisible by 15 | Re-reads the trailing 3 days, with removals. |
-| Cron `*/5 * * * *`, minute 0 | The above, then re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. While history is incomplete this sweep runs on **every** wide tick instead of hourly. |
+| Cron `*/5 * * * *`, tick minute not divisible by 15 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](#sgc-rate-limits-and-the-request-budget). |
+| Cron `*/5 * * * *`, tick minute divisible by 15 | Re-reads the trailing 3 days, with removals. |
+| Cron `*/5 * * * *`, tick minute 0 | The above, then re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. While history is incomplete this sweep runs on **every** wide tick instead of hourly. |
 | `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. Since the cron now runs on the same 5-minute period and the throttle counts *any* run, a press usually stands down; that is the intended outcome and `refreshWait` says the reader already has the newest data rather than counting down. |
 | Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than 5 minutes. The Worker's own 5-minute limit is what protects SGC, whatever the number of visitors. |
 | The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
+
+The tick's own minute is `tickMinute(scheduledTime)`, which snaps to the nearest
+five-minute tick — never to the nearest minute, because the dispatch is not punctual and
+that mistake cost a day of wide ticks. See [the lane note](#concurrency-and-failure-lessons).
 
 Ingest upserts by event id, only touches rows whose data changed, marks events
 SGC stops returning as removed (never deletes), and changes nothing when the
@@ -212,9 +216,14 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
 - Visitors do not add to that. `REFRESH_MIN_INTERVAL_S` counts *any* run, cron included,
   so with a 5-minute cron a manual refresh nearly always stands down. **That number, not
   the number of people with the page open, is what bounds our load on SGC.**
-- **429 and 503 are never retried.** `fetchCatalog` throws `SgcHttpError` straight out of
-  the retry loop for those two — retrying is the one thing that makes being rate limited
-  worse — and honours `Retry-After` (seconds or HTTP date).
+- **Only a 5xx other than 503 is ever retried** (`retryableStatus` in `core/seiscomp.ts`).
+  The retry loop exists for a flaky connection, and a status line is not one: SGC answered.
+  429 and 503 are SGC asking us to stop, and retrying is the one thing that makes being rate
+  limited worse; every other 4xx is a deterministic answer about the request itself, so a
+  second identical request can only get the same answer and cost the server another one.
+  `Retry-After` (seconds or HTTP date) is honoured. **SGC answered 410 Gone** from 12:40 UTC
+  on 2026-09-20, for hours, on requests that had succeeded minutes earlier — whatever the
+  cause, treat "SGC has withdrawn the endpoint" as something that happens.
 - The status is stored on the run (`ingest_runs.http_status`, `retry_after_s`), not parsed
   back out of `error`, so rewording a message cannot quietly disable the back-off.
 - `sgcUnwell` (`worker/plan.ts`) then stands the fast lanes down, on two independent rules. **Any** failed
@@ -316,6 +325,19 @@ Each of these was a real bug in production or in review:
   Worker caps its fetch at 45 s with one retry for that reason.
 - An unfinished run is *in progress*, not *failed*. `lastRun` ignores rows without
   `finished_at`, or the page flashes "la última consulta falló" during every ingest.
+- **…but a run past the in-flight window with no result is neither**, and until
+  `reapAbandonedRuns` (`worker/db.ts`) nothing said so. `ingest()` records its own failures,
+  so a row left open means the invocation itself was killed — out of memory, out of CPU, or
+  evicted mid-fetch. Production did exactly that on **112 consecutive ticks, 02:50–12:05 UTC
+  on 2026-09-20**: every reader asks about *finished* runs, so the newest one stayed a
+  success from before the trouble, `sgcUnwell` stayed false, the fast lane kept its cadence
+  into whatever was killing it, and the page showed no error at all while the catalogue went
+  nine hours stale. `readHistory` now closes those books first — one `UPDATE`, dated the
+  instant the run stopped counting as in flight, never later, so a row that sat open for
+  hours does not push the visitor's throttle out by hours. Everything downstream then sees
+  an ordinary failed run, and none of it needed a second rule. **The cause of the kills is
+  still unknown** — Workers Logs are the only place that would say, and they keep three
+  days. `ok = 0` with no `error` was the one state the schema allowed and nothing wrote.
 - The back-fill fast lane (no 5-minute wait) is only open while SGC is answering.
   After a failed run everyone waits, so a broken SGC is never hammered.
 - **One module decides what ingest is due, and both callers ask it** (architecture review
@@ -343,10 +365,21 @@ Each of these was a real bug in production or in review:
   5-minute change, where the sweep sat on its own `7 * * * *`. The sweep now runs in the wide
   tick's own invocation, in sequence, which is race-free by construction. Two ingests in one
   invocation is already proven here: the back-fill path has always done it.
-- The lane is picked with `Math.round(scheduledTime / 60_000) % 60`, not `getUTCMinutes()`,
-  so a boundary landing at `:14:59.9` cannot read as minute 14 and quietly demote a wide
-  tick to a fast one — which would skip that tick's removals and its back-fill chunk with
-  nothing recorded to say so.
+- **The lane is snapped to the nearest tick, not the nearest minute** (`tickMinute` in
+  `worker/plan.ts`). `controller.scheduledTime` is **not** the round minute: production
+  dispatches this Worker's five-minute cron at **:45 past**, verified in `wrangler tail`
+  (`scheduledTime` 12:55:45.000Z, 13:00:45.000Z). Rounding that to the nearest *minute* read
+  every tick as the minute after — and for a five-minute cron the minute after is never a
+  multiple of 15. So from the deploy of the 5-minute cadence (2026-09-19 20:27 UTC) until
+  this was found the next day, **every single tick took the fast lane**: 195 cron runs, all
+  with a 1-day window, no removals ever applied and not one sweep — the newest `trigger =
+  'sweep'` row was from before the deploy. Worse, the fast lane is the one lane that stands
+  down when SGC is unwell, so there was nothing left to probe SGC and let it back in: the
+  410 above stopped the Worker talking to SGC at all, and the only thing still reaching it
+  was a reader pressing the button. `Math.round(t / 300_000) * 5 % 60` leaves 2.5 minutes of
+  slack either side of the dispatch instead of 30 seconds. `tick()` in
+  `worker/test/ingest.test.ts` dispatches at :45 by default so every lane test runs against
+  the shape production sends; `plan.test.ts` walks a whole hour at four different offsets.
 - **Never let an error response be cached.** A 500 once went out with
   `cache-control: max-age`, and browsers kept showing it after the API recovered.
   Errors are `no-store`; `/api/events` is `no-cache` because the page refetches it
@@ -370,15 +403,19 @@ the daily allowances; 10 ms CPU is the one that could bite, and **polling more o
 not change per-invocation CPU**, so the 5-minute cadence neither helps nor hurts it.
 
 That ~70k only holds because `ingest_runs` is indexed for it. **Do not add a hot query
-over `ingest_runs` without an index**: the table now grows ~312 rows/day, and the three
-queries that run on a tick — `readHistory`'s rate-limit lookup (192/day),
+over `ingest_runs` without an index**: the table now grows ~312 rows/day, and the four
+queries that run on a tick — `readHistory`'s rate-limit lookup (192/day), `runInFlight`,
 `backfillProgress` and `ingestSweep` — were full scans when the 5-minute cadence landed.
 Unindexed, that is ~5.4M rows/day at three months and ~21M at a year, i.e. through the
 free plan's 5M and climbing. `migrations/0003` fixes it: `ingest_runs_rate_limited` is a
 **partial** index holding only the runs SGC refused, so the ordinary case reads an empty
 index rather than every run ever recorded, and `ingest_runs_sweep`'s column order makes
-the other two covering searches over the sweep rows alone. Check `EXPLAIN QUERY PLAN`
-before adding a fourth.
+two more covering searches over the sweep rows alone. `runInFlight` was the one 0003 missed
+— measured on production at 357 of 357 rows per call, on every tick *and* every
+`POST /api/refresh` — and `migrations/0004` gives it, `claimIngestRun`'s own `NOT EXISTS`
+and `reapAbandonedRuns` the same treatment: `ingest_runs_unfinished` is partial over
+`finished_at IS NULL`, which normally holds one row or none. Check `EXPLAIN QUERY PLAN`
+before adding a fifth; `worker/test/ingest.test.ts` asserts this one.
 
 Still open: that 10 ms has **not been measured**. Read `cpuTime` off a scheduled event
 with `pnpm exec wrangler tail choco --format json` for each of the three lanes (narrow
@@ -692,6 +729,11 @@ colour, motion). Keep to them:
 - **The page says that it updates itself** (under the refresh button, in the footer):
   readers were reloading it. The "5 minutes" in the copy is the cron in
   `wrangler.jsonc`; change them together.
+- **The failed-ingest alert says 15 minutes, not 5**, and the difference is the whole point
+  of the alert: a failed run stands the fast lane down, so from that moment the only lane
+  still asking SGC is the wide tick. `ingestFailedBody` used to promise the reader a retry
+  "cada 5 minutos" in precisely the state where that had stopped being true. The number is
+  `WIDE_TICK_EVERY_MIN` in `worker/plan.ts`; change them together.
 - **The refresh button standing down is good news, not a countdown.** With a 5-minute
   cron the 5-minute throttle refuses most presses, so `refreshWait` says the reader
   already has the newest data instead of asking them to wait N minutes. It is a timed
