@@ -198,7 +198,7 @@ describe("while SGC is refusing us", () => {
 
   it("never stops probing: the hour's tick still goes", () => {
     const plan = dueNow(cron(30), NOW, refused(7200, 3601));
-    expect(plan.steps).toEqual([{ lane: "trailing", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }]);
+    expect(plan.steps).toEqual([{ lane: "wide", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }]);
   });
 
   // A 5xx is their bad day, not a door: the probe is what recovers from it, at full rate.
@@ -227,7 +227,7 @@ describe("while SGC is refusing us", () => {
 
   it("lets the button through once that hour has passed, and holds the claim to it", () => {
     const plan = dueNow(MANUAL, NOW, refused(7200, 3601));
-    expect(plan.steps).toEqual([{ lane: "trailing", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true }]);
+    expect(plan.steps).toEqual([{ lane: "wide", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true }]);
     expect(plan.minIntervalS).toBe(3600);
   });
 
