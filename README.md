@@ -43,7 +43,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 279 tests, offline
+pnpm test                 # 302 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 pnpm logs                 # production's own logs, from here (see Debugging production)
