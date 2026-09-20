@@ -166,6 +166,31 @@ describe("while SGC is refusing us", () => {
     expect(dueNow(cron(30), NOW, refused(600, 300)).steps).toHaveLength(1);
   });
 
+  /**
+   * The grace period read as a timeline, because reading it as a number hid a 90-minute
+   * freeze. One 410 lands on a wide tick and nothing runs after it, so `failing.since` and
+   * `lastRun` both stay at that instant while the ticks go by. What must not happen is what
+   * happened with `REFUSAL_GRACE_S` written as a literal 1800 against 30-minute ticks: the
+   * next wide tick landed exactly *on* the boundary, `sgcRefusing` was already true, the
+   * hourly wait started immediately, and a run duration pushed the probe past the following
+   * tick as well — first contact at +90, from a single transient answer.
+   */
+  it("lets the next wide tick through after a single 410, and probes hourly after that", () => {
+    const T = Date.UTC(2026, 8, 19, 12, 0);
+    const oneFailure = history({
+      health: failingSince(new Date(T), 410),
+      lastRun: { ...finishedAt(new Date(T)), ok: false },
+    });
+    const at = (min: number) =>
+      dueNow({ kind: "cron", scheduledTime: T + min * 60_000 }, new Date(T + min * 60_000), oneFailure)
+        .steps.length > 0;
+
+    expect(at(15)).toBe(false); // narrow lane: down on the failure alone, as it always was
+    expect(at(30)).toBe(true); // the wide tick still goes — this is the grace
+    expect(at(45)).toBe(false);
+    expect(at(60)).toBe(true); // refusal believed from +60; the hourly probe lands on its tick
+  });
+
   it("drops the wide tick to hourly once the refusal has persisted", () => {
     expect(dueNow(cron(30), NOW, refused(3600, 300)).steps).toEqual([]);
     expect(dueNow(cron(30), NOW, refused(3600, 900)).steps).toEqual([]);

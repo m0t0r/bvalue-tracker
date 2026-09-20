@@ -9,12 +9,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse } from "@/lib/api";
+import { REFRESH_MIN_INTERVAL_S } from "../../worker/plan.ts";
 import { fmtDateTime, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
 
-/** The Worker refuses a refresh sooner than this after the last SGC query (REFRESH_MIN_INTERVAL_S). */
-const AUTO_REFRESH_AFTER_MS = 300_000;
+/**
+ * The Worker refuses a refresh sooner than this after the last SGC query, so asking earlier
+ * is a request that can only be turned away. Read from the Worker's own constant rather than
+ * copied: as a copy it was left at five minutes when the throttle moved to fifteen, which
+ * made two thirds of every cron period a refresh the page sent and the Worker refused.
+ */
+const AUTO_REFRESH_AFTER_MS = REFRESH_MIN_INTERVAL_S * 1000;
+
+/** A wait the reader should not sit through: the cron will do the work instead. */
+const LONG_WAIT_S = 60;
 
 function Stat({ label, value, hint }: { label: string; value: ReactNode | null; hint?: string }) {
   return (
@@ -54,6 +63,10 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
       qc.setQueryData(["status"], res);
       for (let i = 0; i < 40 && res.backfill.done < res.backfill.total; i++) {
         // Another run is in flight (cron, or someone else's page): wait for it rather than race it.
+        // A wait longer than a tick is not a wait, it is a stand-down: the cron carries the
+        // back-fill on from here. Sleeping through it would hold this mutation — and with it
+        // `busy`, which disables the focus refresh — for hours.
+        if ((res.retryAfterS ?? 0) > LONG_WAIT_S) break;
         if (!res.refreshed) await new Promise((r) => setTimeout(r, (res.retryAfterS ?? 5) * 1000));
         res = await postRefresh();
         qc.setQueryData(["status"], res);

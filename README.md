@@ -42,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 274 tests, offline
+pnpm test                 # 275 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -218,17 +218,21 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
 
 - We send an identifying `user-agent` (`sgc-swarm-research/0.1`) and query with the
   bounding box and the narrowest window that answers the question.
-- The budget: **~120 SGC requests/day, ~16 MB/day** — 48 narrow ticks, 48 wide ticks and
+- The budget: **~120 SGC requests/day, ~13 MB/day** — 48 narrow ticks, 48 wide ticks and
   24 sweeps. Measured, not guessed: a response is 7.7 KB of page chrome plus 1.00 KB per row
   (the two fixtures), and at the September 2026 rate the narrow span holds ~59 rows against
-  the wide span's ~109 and a sweep chunk's ~173 — so ~67, ~117 and ~182 KB per request.
+  the wide span's ~109 and a sweep chunk's ~173 — so ~67, ~117 and ~182 KB per request, and
+  48·67 + 48·117 + 24·182 ≈ 13.2 MB. It is **not** the 16 MB/day of the original 15-minute
+  config: that one had no narrow lane, so all 96 ticks pulled the wide span. Same request
+  count, fewer bytes.
   Re-derive these if the sequence's rate changes; they scale with events per day.
   **Three constants decide this number and they have to agree**: the cron in
   `wrangler.jsonc`, `TICK_MS` and `WIDE_TICK_EVERY_MIN` in `worker/plan.ts`. When they did
   not, an hour silently became twelve requests with no removals and no sweep at all, for a
   day. The budget is a test now, not a paragraph: `plan.test.ts` walks a real hour of ticks
   at four dispatch offsets and counts what it sends.
-  For reference, the 5-minute cadence we ran for one day was **~312/day, ~29 MB/day**.
+  For reference, the 5-minute cadence we ran for one day was **~312/day, ~29 MB/day**, and
+  the original 15-minute one **~120/day, ~16 MB/day**.
 - Visitors do not add to that. `REFRESH_MIN_INTERVAL_S` counts *any* run, cron included,
   and **it is set to the cron's own period** so a press nearly always coincides with a tick
   that was going to happen anyway. That is what makes this bullet true rather than hopeful:
@@ -254,10 +258,17 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   down — so when SGC began answering **410 Gone** to the Worker on 2026-09-20 there was
   nothing in the back-off that covered it, and the probe would have knocked on a closed door
   **96 times a day, indefinitely**. 401, 403, 410 and 451 are a door held shut rather than a
-  bad day: once one of them has persisted for `REFUSAL_GRACE_S` (30 minutes, two wide ticks,
-  so a single 410 from a proxy having a moment costs nothing), the wide tick drops to one
-  probe an hour, and so does the refresh button — a press is the same request from the same
-  address, and the rule lives in `plan.ts` once rather than being restated at a caller. It
+  bad day: once one of them has persisted for `REFUSAL_GRACE_S` — **two wide ticks, derived
+  from `WIDE_TICK_EVERY_MIN` and never written down** — the wide tick drops to one probe an
+  hour, and so does the refresh button, since a press is the same request from the same
+  address and the rule lives in `plan.ts` once rather than being restated at a caller.
+  Writing that number down is how it broke: left at a literal 1800 s when the wide tick went
+  to 30 minutes, the first tick after a failure landed exactly *on* the boundary, so the
+  grace was unreachable and one transient 410 bought 90 minutes of silence — the freeze the
+  rule exists to prevent. The other half of that was `sinceLastRunS` measuring from
+  `finished_at`, so a run's own 1–13 s pushed the hourly probe past its tick as well.
+  **These intervals are measured from when a run started**, because what they ration is
+  requests leaving. `plan.test.ts` walks the single-410 timeline tick by tick. It
   is deliberately *not* a stand-down: a probe that stopped could never see SGC come back.
   429 and 503 stay out of that list; they have their own cooldown, which SGC itself names.
   A 5xx is their bad day and keeps the full rate, because the probe is what recovers from it.
@@ -431,15 +442,17 @@ Each of these was a real bug in production or in review:
 The account is on the **Workers free plan**, whose ceilings are 100,000 requests/day,
 5,000,000 D1 rows read/day, 100,000 D1 rows written/day, 50 subrequests and 50 D1 queries
 per invocation, and **10 ms CPU per invocation** — wall time is not the limit, and runs
-finish in 1–13 s of it. 96 cron invocations a day and ~70k D1 rows read are nowhere near
-the daily allowances; 10 ms CPU is the one that could bite, and **polling more often does
+finish in 1–13 s of it. 96 cron invocations a day, and the ~70k D1 rows read measured at
+312, are nowhere near the daily allowances; 10 ms CPU is the one that could bite, and **polling more often does
 not change per-invocation CPU**, so the cadence neither helps nor hurts it.
 
 That ~70k only holds because `ingest_runs` is indexed for it. **Do not add a hot query
-over `ingest_runs` without an index**: the table grows ~120 rows/day (~312 at the
-5-minute cadence, which is what the figures below were measured at), and the four
-queries that run on a tick — `readHistory`'s rate-limit lookup (192/day), `runInFlight`,
-`backfillProgress` and `ingestSweep` — were full scans when the 5-minute cadence landed.
+over `ingest_runs` without an index**: the table grows ~120 rows/day, and the four queries
+that run on a tick — `readHistory`'s rate-limit lookup, `runInFlight`, `backfillProgress`
+and `ingestSweep` — were full scans when the 5-minute cadence landed. **Every figure in this
+paragraph was measured at that cadence** (312 invocations/day, 192 fast ticks, ~70k rows
+read); at 96 invocations/day they are all roughly a third lower, and none of them was
+re-measured, so treat them as the ceiling they were derived as.
 Unindexed, that is ~5.4M rows/day at three months and ~21M at a year, i.e. through the
 free plan's 5M and climbing. `migrations/0003` fixes it: `ingest_runs_rate_limited` is a
 **partial** index holding only the runs SGC refused, so the ordinary case reads an empty
@@ -810,10 +823,9 @@ colour, motion). Keep to them:
   same number for the reason given under the budget. `src/lib/i18n.test.ts` holds all three
   to it; change them together.
 - **The failed-ingest alert names no interval at all, and that is the settled answer.** It
-  said the cron's own rate — in the one state where the fast lane has stood
-  down and five minutes is wrong. That was changed to fifteen, the wide tick's rate, and
-  within the hour SGC began refusing us and the probe dropped to hourly, so fifteen was wrong
-  too. Three lane rules decide that number and the reader can act on none of them, so
+  named the cron's own rate, in the one state where the fast lane has stood down and the
+  cron's rate is wrong. It was changed to the wide tick's rate instead, and within the hour
+  SGC began refusing us and the probe dropped to hourly, so that was wrong too. Three lane rules decide that number and the reader can act on none of them, so
   `ingestFailedBody` promises a retry and stops there. What it must keep saying is "no hace
   falta recargar"; `src/lib/i18n.test.ts` holds both halves. Do not put a number back.
 - **Three stand-down messages, three different truths.** `refreshWait` claims SGC answered

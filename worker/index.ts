@@ -241,11 +241,14 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   /**
-   * Every lane hangs off the one cron. A second pattern cannot be placed safely: the
-   * furthest a non-multiple-of-5 minute sits from a tick is 120 s, which is inside
-   * IN_FLIGHT_MS (150 s), so the two would keep landing in each other's claim window —
-   * dropping one of them silently in one direction, and querying SGC twice at once in
-   * the other. Running the lanes in sequence in one invocation removes the race.
+   * Every lane hangs off the one cron, and is chosen from the tick rather than from a
+   * pattern of its own. At the five-minute cadence a second pattern was provably unsafe —
+   * the furthest a non-multiple-of-5 minute can sit from a tick is 120 s, inside
+   * IN_FLIGHT_MS (150 s), so the two kept landing in each other's claim window, dropping a
+   * run silently in one direction and querying SGC twice at once in the other. At fifteen
+   * minutes that particular arithmetic no longer bites, but the rule stays: one pattern has
+   * no spacing to get wrong, and the cadence is a constant that moves. Running the lanes in
+   * sequence in one invocation is race-free by construction.
    */
   async scheduled(controller, env) {
     // The real clock, not the scheduled minute: a failure recorded seconds ago still counts
