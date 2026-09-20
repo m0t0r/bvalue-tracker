@@ -701,6 +701,39 @@ groups card and the b card take. `App.tsx` is layout.
 - The `page` vitest project runs on `happy-dom` with `@testing-library/react`, for that one seam.
   Everything else it holds is a pure function; do not reach for a renderer where `pageView` will do.
 
+### Events per day
+
+**One module counts events per Colombian day, and both charts that draw them ask it**
+(`src/lib/daily-counts.ts`, architecture review candidate 06, 2026-09-19). `dailyCounts(events)`
+returns one record per day — `start`, `shallow`, `deep`, `total` — plus two maxima. The stacked
+"eventos por día" bars under "Magnitud en el tiempo" and the two per-group strips in the groups
+card had each written their own version, and they disagreed. Do not add a third: `grep dayStart`
+should only ever reach `format.ts` and this module.
+
+- **It returns a flat array of days, not `from`/`to`/a day count.** Each day carries its own
+  `start`, so the range is read off the array. An empty catalogue therefore has no range to
+  misreport — the groups card's end labels used to compute theirs from a `from` of 0 and render
+  "1 ene 1970". That path is dead today (`App.tsx` renders the card only when `base` is non-empty),
+  and the guard in `DailyStrip` is what keeps it dead.
+- **There are two named maxima, and which one a chart uses is a claim about its scale.**
+  `maxTotal` is the busiest day's total and is the stacked bars' y axis; `maxCluster` is the most
+  any one cluster had on a day and is the scale the two strips **share**, which is the whole point
+  of the strips — one group going quiet while the other carries on has to be visible without
+  reading a number. The review's finding was that the two implementations disagreed about what a
+  single `max` meant. Do not collapse them back into one.
+- **It assumes nothing about the order events arrive in.** It scans for its range rather than
+  reading `events[0]` and `events[last]`, which is what `magnitude-time` used to do. One extra pass
+  over ~800 events, and nothing breaks quietly if `/api/events` ever loses its `ORDER BY time`.
+- **An event whose `time` cannot be parsed is left out, not thrown on.** It runs inside a render,
+  there is no error boundary in `src/`, and the D1 read path is deliberately outside the admission
+  gate (see [Security decisions](#security-decisions-audit-2026-09-19)), so one bad row must cost
+  that event and not the dashboard. Both implementations it replaced dropped such an event
+  silently; a bare `days[i]!` would have turned that into a white screen. Tests pin it.
+- It takes a structural type rather than `StoredEvent`, and imports nothing with JSX or the `@`
+  alias, so `test/` (the Node project) can hand it parsed fixture events — the same shape, and for
+  the same reason, as `src/lib/format.ts`. Its tests are mutation-checked; the figures in them were
+  counted independently in Python from the same 786 events.
+
 ### Interface conventions
 
 Settled in a six-domain interface review (accessibility, layout, copy, typography,
@@ -800,7 +833,8 @@ colour, motion). Keep to them:
   or a translation gets longer.
 - **"Magnitud en el tiempo" scrolls sideways when it is too narrow to read.** Below
   768 px of plot width every Colombian day gets `PX_PER_DAY` (28 px) instead of the
-  whole range being squeezed in, which on a phone drew one solid band. The scatter and
+  whole range being squeezed in, which on a phone drew one solid band. The bars themselves
+  come from `dailyCounts` (see [Events per day](#events-per-day)). The scatter and
   the "eventos por día" bars sit in **one** scroll container so a single gesture moves
   both, and both y axes are pinned: each is a second, data-less chart in a `sticky`
   column, which only lines up because the pinned and scrolling charts are given the
@@ -866,7 +900,8 @@ colour, motion). Keep to them:
   - On a phone the bar shows the first chip and counts the rest (`+3`), and shortens the count to
     "639 de 786". Both are pure CSS at the `sm` breakpoint, so its height never changes as it slides.
 - **The per-group daily strips in that card scroll sideways when narrow**, on the same idea as
-  "Magnitud en el tiempo": below `MIN_BAR` (10 px) per day each day gets `PX_PER_DAY` (28 px), the
+  "Magnitud en el tiempo", and off the same `dailyCounts` (see [Events per day](#events-per-day)):
+  below `MIN_BAR` (10 px) per day each day gets `PX_PER_DAY` (28 px), the
   strip starts at the newest day, each bar carries its count and every third day its date, and
   one gesture moves both strips. Every ancestor up to the tile needs `min-w-0`; without it the
   strip widens its tile instead of scrolling, the width it measures grows, and it flips back out

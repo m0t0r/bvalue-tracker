@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import type { StoredEvent } from "@/lib/api";
 import { MAINSHOCK_ID } from "@/lib/filters";
-import { dayStart, fmtDate, fmtDateTime, fmtDay, fmtRegion } from "@/lib/format";
+import { dailyCounts } from "@/lib/daily-counts";
+import { fmtDate, fmtDateTime, fmtDay, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { CLUSTER_DEPTH_KM, clusterOf } from "../../../core/clusters";
@@ -37,11 +38,6 @@ const BAR_MARGIN = { left: 10, right: 12, top: 8 };
 const PINNED_SCATTER_MARGIN = { left: 0, right: 0, top: 8 };
 const PINNED_BAR_MARGIN = { left: 0, right: 0, top: 8 };
 
-function domainOf(events: readonly StoredEvent[]): [number, number] {
-  if (events.length === 0) return [0, 1];
-  return [dayStart(events[0]!.time), dayStart(events[events.length - 1]!.time) + DAY];
-}
-
 // The daily counts need one explicit scale, because the pinned axis is drawn by a second chart that
 // holds no data: left to infer a domain the two would disagree.
 function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
@@ -56,26 +52,17 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
   const { t, lang } = useI18n();
   const { points, deepPoints, main, daily, domain, days, count } = useMemo(() => {
     const pts = events.map((e) => ({ t: Date.parse(e.time), mag: e.mag, time: e.time, region: e.region, id: e.id, depthKm: e.depthKm, cluster: clusterOf(e) }));
-    const counts = new Map<number, number>(), deepCounts = new Map<number, number>();
-    for (const e of events) {
-      const d = dayStart(e.time);
-      counts.set(d, (counts.get(d) ?? 0) + 1);
-      if (clusterOf(e) === "deep") deepCounts.set(d, (deepCounts.get(d) ?? 0) + 1);
-    }
-    const [lo, hi] = domainOf(events);
-    const bars = [];
-    let max = 0;
-    for (let d = lo; d < hi; d += DAY) {
-      const c = counts.get(d) ?? 0;
-      if (c > max) max = c;
-      const deep = deepCounts.get(d) ?? 0;
-      bars.push({ t: d + DAY / 2, count: c, shallow: c - deep, deep });
-    }
+    // The day histogram is `dailyCounts`, shared with the groups card: a bar sits at the middle of
+    // its own day, and the time axis spans the whole of the first day to the whole of the last.
+    const byDay = dailyCounts(events);
+    const lo = byDay.days[0]?.start ?? 0;
+    const hi = byDay.days.length > 0 ? byDay.days.at(-1)!.start + DAY : 1;
     return {
       points: pts.filter((p) => p.id !== MAINSHOCK_ID && p.cluster === "shallow"),
       deepPoints: pts.filter((p) => p.id !== MAINSHOCK_ID && p.cluster === "deep"),
       main: pts.filter((p) => p.id === MAINSHOCK_ID),
-      daily: bars, domain: [lo, hi] as [number, number], days: Math.max(1, bars.length), count: countAxis(max),
+      daily: byDay.days.map((d) => ({ t: d.start + DAY / 2, total: d.total, shallow: d.shallow, deep: d.deep })),
+      domain: [lo, hi] as [number, number], days: Math.max(1, byDay.days.length), count: countAxis(byDay.maxTotal),
     };
   }, [events]);
 
@@ -138,7 +125,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
     scrolled && "shadow-[6px_0_8px_-7px_rgb(0_0_0/0.35)] dark:shadow-[6px_0_8px_-7px_rgb(255_255_255/0.22)]");
   // Recharts lays out nothing for a chart with no data, so the pinned charts carry one invisible
   // point. Both scales are given explicitly above, so it cannot move a tick.
-  const seed = useMemo(() => [{ t: domain[0], mag: 2, count: 0 }], [domain]);
+  const seed = useMemo(() => [{ t: domain[0], mag: 2, total: 0 }], [domain]);
 
   return (
     <Card>
@@ -198,11 +185,11 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                   <ChartContainer config={config} className="aspect-auto h-36 w-full">
                     <BarChart margin={PINNED_BAR_MARGIN} data={seed}>
                       {xAxis(false)}{yCount(true)}
-                      <Bar dataKey="count" fill="none" isAnimationActive={false} />
+                      <Bar dataKey="total" fill="none" isAnimationActive={false} />
                     </BarChart>
                   </ChartContainer>
                 </div>
-                <ChartContainer config={{ count: { label: t.dailyTitle, color: "var(--chart-1)" } }}
+                <ChartContainer config={{ total: { label: t.dailyTitle, color: "var(--chart-1)" } }}
                   className="aspect-auto h-36 shrink-0" style={{ width: plotW }}>
                   <BarChart data={daily} margin={BAR_MARGIN} barCategoryGap={2} title={t.dailyTitle}>
                     <CartesianGrid vertical={false} />
@@ -213,7 +200,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                       if (!active || !p) return null;
                       return (
                         <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
-                          <div><span className="font-medium">{p.count}</span> · {fmtDate(p.t, lang)}</div>
+                          <div><span className="font-medium">{p.total}</span> · {fmtDate(p.t, lang)}</div>
                           {p.deep > 0 && p.shallow > 0 ? (
                             <div className="text-muted-foreground">{t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}</div>
                           ) : null}
