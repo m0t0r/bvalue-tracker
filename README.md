@@ -220,7 +220,7 @@ also carries `lane` and `trigger`.
 | `tick planned` / `tick stood down` | info | every cron tick | `tickMinute`, `lanes`, `sgcUnwell`, `backfill`, `inFlight` |
 | `ingest ok` | info | a run finished cleanly | `runId`, `fetched`, `inserted`, `updated`, `removed`, `durationMs`, `sgcMs`, `sgcChars` |
 | `ingest ok with a note` | warn | it worked, but skipped a removal or a bad row | `error` carries the note |
-| `ingest failed` | error | SGC or D1 refused | `httpStatus`, `retryAfterS`, `error` |
+| `ingest failed` | error | SGC or D1 refused | `httpStatus`, `retryAfterS`, `error`, and on an HTTP refusal `sgcHeaders`, `sgcBody` |
 | `reaped abandoned runs: an invocation was killed` | **warn** | a claimed run never wrote a result | `reaped` |
 | `refresh stood down` | info | the button did nothing | `why`: `throttled`, `in flight`, `claim held` |
 | `unhandled error` | error | a route threw | `err.stack`, `method`, `path` |
@@ -312,6 +312,13 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
   the caller. Treat "our network can be refused" as a live possibility, and **the canary is
   the instrument that tells the two apart** — it reaches SGC from somewhere else. If a
   fallback is ever needed this is the shape of it; nothing is built yet.
+  - The host is SGC's own (`190.121.155.237`, in a /26 LACNIC registers to SGC), with no CDN
+    in front, so the 410 is written by something SGC runs. **Which thing is in the log**: an
+    `ingest failed` line carries `sgcHeaders` and `sgcBody`, the refusal's own headers and
+    first 600 characters. Read those before theorising — a stock Apache "Gone" page means a
+    hand-written rule, a vendor block page names the appliance.
+  - Every outbound Worker request carries a `CF-Worker: sgc-swarm.workers.dev` header that
+    we cannot remove, so a block need not be by address at all.
 - The per-event page `https://www.sgc.gov.co/detallesismo/<id>/resumen` exists but
   returns 403 to `curl` without a browser user-agent.
 - **SGC publishes an event about 2–5 minutes after it happens** (measured 2026-09-19
@@ -321,8 +328,13 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
   Polling faster than SGC publishes buys nothing, so **never go below 5**. We ran at 5 for
   one day (2026-09-19 → 20) and then went back to **15 deliberately** — not because 5 was
   too fast for SGC in any measured sense, but because SGC began refusing this Worker's
-  address the next afternoon and ~120 requests/day is the load that had run for weeks
-  without incident. The cost is median detection going from ~5 min back to ~10. Revisit it
+  address the next afternoon and ~120 requests/day is the lower of the only two loads we
+  have ever run. **It had not "run for weeks"**, as this paragraph once said: `ingest_runs`
+  begins 2026-09-18 18:00 UTC, so the Worker's whole history with SGC before the refusal is
+  42 hours — ~5 requests/hour for the first 26, then 12/hour round the clock for 16, and the
+  410 arrived at the end of those 16. That is a correlation on a sample of one, not a
+  measured limit, but no claim here that a cadence is "known safe" has evidence behind it.
+  The cost is median detection going from ~5 min back to ~10. Revisit it
   only once SGC has been answering us steadily again, and change the three constants
   together (see the budget below).
 - Analyst-revised events can appear hours late — two events from 00:43 and 00:55 were

@@ -1,4 +1,4 @@
-import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions } from "../core/seiscomp.ts";
+import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions, type RefusalEvidence } from "../core/seiscomp.ts";
 import { recordRun } from "./analytics.ts";
 import type { IngestRun } from "./api-types.ts";
 import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastRun, reapAbandonedRuns, runBatched, runInFlight, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
@@ -94,7 +94,7 @@ export async function ingest(
    */
   const finish = async (
     fields: Record<string, number | string | null>,
-    sgc: { ms: number | null; chars: number | null } = { ms: null, chars: null },
+    sgc: { ms: number | null; chars: number | null; refusal?: RefusalEvidence | null } = { ms: null, chars: null },
   ) => {
     const cols = Object.keys(fields);
     await db
@@ -121,6 +121,8 @@ export async function ingest(
       httpStatus,
       retryAfterS,
       ...(run.error === null ? {} : { error: run.error }),
+      // Who wrote the refusal: the log's alone, like the stack. Never the D1 row the page reads.
+      ...(sgc.refusal ? { sgcHeaders: sgc.refusal.headers, sgcBody: sgc.refusal.body } : {}),
     };
     // A note on a successful run (a skipped removal, an unparsable row) is not an error but
     // must not read as an ordinary success either: it is the shape the 2026-09-19 "one bad
@@ -193,7 +195,7 @@ export async function ingest(
       error: `${e.message}${cause}`.slice(0, 500),
       http_status: http?.status ?? null,
       retry_after_s: http?.retryAfterS ?? null,
-    });
+    }, { ms: null, chars: null, refusal: http?.evidence ?? null });
   }
 }
 

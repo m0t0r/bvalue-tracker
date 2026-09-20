@@ -230,9 +230,41 @@ export interface FetchOptions {
   backoffMs?: number;
 }
 
+/**
+ * Who wrote a refusal. A status alone cannot say: from 2026-09-20 the Worker got 410 Gone
+ * while the same request from GitHub's runners got 200, and for hours nobody could tell a
+ * web-server rule from a firewall appliance from a block page, because the response was
+ * thrown away. `server`, `via` and the first lines of the body are what tell them apart.
+ */
+export interface RefusalEvidence {
+  headers: Record<string, string>;
+  body: string;
+}
+
+const EVIDENCE_HEADERS = 24;
+const EVIDENCE_HEADER_CHARS = 200;
+const EVIDENCE_BODY_CHARS = 600;
+
+/** Bounded here, not by the logger: its cut is one level deep and this is a nested object. */
+async function refusalEvidence(res: Response): Promise<RefusalEvidence> {
+  const headers: Record<string, string> = {};
+  for (const [k, v] of res.headers) {
+    if (Object.keys(headers).length >= EVIDENCE_HEADERS) break;
+    // A cookie is theirs to give to a browser, not ours to keep in a log.
+    if (k !== "set-cookie") headers[k] = v.slice(0, EVIDENCE_HEADER_CHARS);
+  }
+  // The body is a courtesy: a refusal whose body cannot be read is still a refusal.
+  const body = await res.text().then((t) => t.replace(/\s+/g, " ").trim().slice(0, EVIDENCE_BODY_CHARS), () => "");
+  return { headers, body };
+}
+
 /** A non-OK HTTP response from SGC. `status` is what the ingest back-off reads. */
 export class SgcHttpError extends Error {
-  constructor(readonly status: number, readonly retryAfterS: number | null) {
+  constructor(
+    readonly status: number,
+    readonly retryAfterS: number | null,
+    readonly evidence: RefusalEvidence | null = null,
+  ) {
     super(`SGC responded HTTP ${status}`);
     this.name = "SgcHttpError";
   }
@@ -294,7 +326,9 @@ export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Pr
         body: buildFormBody(q).toString(),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (!res.ok) throw new SgcHttpError(res.status, parseRetryAfter(res.headers.get("retry-after")));
+      if (!res.ok) {
+        throw new SgcHttpError(res.status, parseRetryAfter(res.headers.get("retry-after")), await refusalEvidence(res));
+      }
       html = await res.text();
     } catch (err) {
       // An answer we would only get again is not worth a second request: stop here.

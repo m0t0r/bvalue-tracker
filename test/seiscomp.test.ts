@@ -213,6 +213,21 @@ describe("fetchCatalog", () => {
     expect(sgcHttpError(err)).toMatchObject({ status, retryAfterS: 120 });
   });
 
+  // The 2026-09-20 410 reached the Worker and not GitHub's runners, and the status could not
+  // say whether a web-server rule, a firewall or a block page had written it.
+  it("keeps who wrote a refusal: its headers and the start of its body, both bounded", async () => {
+    serves(() => new Response(`<h1>Gone</h1>\n\n  ${"x".repeat(5000)}`, {
+      status: 410,
+      headers: { server: "Apache", "set-cookie": "sid=1", "x-long": "y".repeat(1000) },
+    }));
+    const { evidence } = sgcHttpError(await fetchCatalog(query).catch((e: unknown) => e))!;
+    expect(evidence!.headers.server).toBe("Apache");
+    expect(evidence!.headers["set-cookie"]).toBeUndefined();
+    expect(evidence!.headers["x-long"]).toHaveLength(200);
+    expect(evidence!.body).toMatch(/^<h1>Gone<\/h1> x+$/);
+    expect(evidence!.body).toHaveLength(600);
+  });
+
   it("keeps the status of a retried failure as the cause", async () => {
     serves(() => new Response("", { status: 500 }));
     const err = await fetchCatalog(query, { retries: 1, backoffMs: 1 }).catch((e: unknown) => e);
