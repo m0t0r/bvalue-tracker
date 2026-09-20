@@ -56,6 +56,11 @@ const IN_FLIGHT_RETRY_S = 5;
 export interface SgcHealth {
   /** Whether the most recent finished run succeeded; null when none has finished yet. */
   lastOk: boolean | null;
+  /**
+   * The unbroken run of failures at the end of the history, if the newest finished run
+   * failed: `since` is when the oldest of them started, `status` what SGC last answered.
+   */
+  failing: { since: string; status: number | null } | null;
   /** The most recent run SGC rate limited, which holds the fast lane down on its own. */
   rateLimit: { finishedAt: string; retryAfterS: number | null } | null;
 }
@@ -122,6 +127,46 @@ export function sgcUnwell(health: SgcHealth, now: Date): boolean {
 }
 
 /**
+ * Statuses that mean SGC is refusing *us*, rather than failing. A 5xx is their bad day and
+ * a 404 could be one wrong URL, but these are a door held shut: the same request will be
+ * refused again, and asking four times an hour for a week is both pointless and the sort of
+ * thing that gets a door held shut in the first place. 429 and 503 are not here — they have
+ * their own cooldown above, and SGC names its own wait for them.
+ */
+const REFUSAL_STATUSES = new Set([401, 403, 410, 451]);
+/**
+ * How long a refusal has to persist before we believe it. Two wide ticks: a single 410 can
+ * be a proxy having a moment, and dropping to an hourly probe on one answer would make
+ * every blip cost an hour of staleness.
+ */
+const REFUSAL_GRACE_S = 1800;
+/** What the probe drops to once we believe it: one an hour instead of four. */
+const REFUSED_PROBE_INTERVAL_S = 3600;
+
+/**
+ * Whether SGC has been refusing us long enough that we should stop asking at full rate.
+ *
+ * This is the one rule that slows the **wide** tick, which otherwise never stands down
+ * because it is what probes SGC while the fast lane waits. That is still true — the probe
+ * does not stop, it thins out. Production met this on 2026-09-20: SGC answered 410 Gone to
+ * the Worker while answering the same request normally from another network, and nothing in
+ * the back-off covered a 4xx, so the wide tick would have knocked on a closed door 96 times
+ * a day indefinitely.
+ */
+export function sgcRefusing(health: SgcHealth, now: Date): boolean {
+  if (health.failing === null || health.failing.status === null) return false;
+  if (!REFUSAL_STATUSES.has(health.failing.status)) return false;
+  return now.getTime() - Date.parse(health.failing.since) >= REFUSAL_GRACE_S * 1000;
+}
+
+/** Seconds since anything last asked SGC, from the newest finished run. Infinity if none. */
+function sinceLastRunS(history: IngestHistory, now: Date): number {
+  const last = history.lastRun;
+  if (last === null) return Infinity;
+  return (now.getTime() - Date.parse(last.finishedAt ?? last.startedAt)) / 1000;
+}
+
+/**
  * What ingest is due, for whoever is asking, given one reading of the run history. Pure, so
  * every lane rule can be checked without a database. Both callers ask once and then execute
  * the plan with `runPlan`; neither restates a rule that lives here.
@@ -142,8 +187,13 @@ export function dueNow(caller: Caller, now: Date, history: IngestHistory): Inges
     };
   }
 
-  // The wide tick never stands down for SGC's health: it is what probes SGC while the fast
-  // lane waits, and so what lets the fast lane back in.
+  // The wide tick never stands down for a failure: it is what probes SGC while the fast lane
+  // waits, and so what lets the fast lane back in. A refusal is the one thing that slows it,
+  // and even then only to hourly — a probe that stopped could never see SGC come back.
+  if (sgcRefusing(history.health, now) && sinceLastRunS(history, now) < REFUSED_PROBE_INTERVAL_S) {
+    return { steps: [], retryAfterS: null, minIntervalS: null };
+  }
+
   const steps: IngestStep[] = [{ lane: "trailing", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }];
   // One older 7-day chunk on the hour, to catch late revisions — and on every wide tick
   // while history is still incomplete, rather than waiting an hour per week of back-fill.
@@ -159,10 +209,13 @@ function refreshPlan(now: Date, history: IngestHistory): IngestPlan {
   // rule the cron's fast lane reads, so a cooldown cannot hold one lane down and not the other.
   const fastLane = incomplete && !sgcUnwell(history.health, now);
 
-  const last = history.lastRun;
-  const sinceLastS = last === null ? Infinity : (now.getTime() - Date.parse(last.finishedAt ?? last.startedAt)) / 1000;
-  if (!fastLane && sinceLastS < REFRESH_MIN_INTERVAL_S) {
-    return { steps: [], retryAfterS: Math.ceil(REFRESH_MIN_INTERVAL_S - sinceLastS), minIntervalS: null };
+  const sinceLastS = sinceLastRunS(history, now);
+  // While SGC is refusing us the button waits as long as the cron does. A press is the same
+  // request from the same address, so letting it through twelve times an hour would undo the
+  // back-off above — and this rule belongs here, once, not restated at a caller.
+  const waitS = sgcRefusing(history.health, now) ? REFUSED_PROBE_INTERVAL_S : REFRESH_MIN_INTERVAL_S;
+  if (!fastLane && sinceLastS < waitS) {
+    return { steps: [], retryAfterS: Math.ceil(waitS - sinceLastS), minIntervalS: null };
   }
 
   // A closed fast lane costs the wait, not the chunk: the sweep is what probes SGC while
@@ -170,5 +223,5 @@ function refreshPlan(now: Date, history: IngestHistory): IngestPlan {
   const step: IngestStep = incomplete
     ? { lane: "sweep" }
     : { lane: "trailing", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true };
-  return { steps: [step], retryAfterS: null, minIntervalS: fastLane ? null : REFRESH_MIN_INTERVAL_S };
+  return { steps: [step], retryAfterS: null, minIntervalS: fastLane ? null : waitS };
 }

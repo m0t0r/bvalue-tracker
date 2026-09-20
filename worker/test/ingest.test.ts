@@ -4,7 +4,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
-import { ABANDONED_ERROR } from "../db.ts";
+import { ABANDONED_ERROR, sgcHealth } from "../db.ts";
 import worker from "../index.ts";
 import { ingest, ingestSweep, sweepChunks } from "../ingest.ts";
 import { IN_FLIGHT_MS } from "../plan.ts";
@@ -628,5 +628,57 @@ describe("a run the Worker was killed in the middle of", () => {
       .bind(NOW.toISOString())
       .all<{ detail: string }>();
     expect(results.map((r) => r.detail).join("\n")).toContain("ingest_runs_unfinished");
+  });
+});
+
+/**
+ * The wiring for the refusal back-off. The rule itself lives in worker/plan.ts and is tested
+ * there without a database; what is left here is that the rows `sgcHealth` reads really do
+ * describe the streak, and that the streak really does slow the probe.
+ */
+describe("the refusal back-off, through the cron", () => {
+  const ago = (min: number) => new Date(Date.now() - min * 60_000);
+
+  it("reads the unbroken run of failures off the finished runs, and forgets it on a success", async () => {
+    await recordRun(1, {}, ago(50));
+    await recordRun(0, { http_status: 410 }, ago(45));
+    await recordRun(0, { http_status: 410 }, ago(40));
+
+    const refused = await sgcHealth(env.DB);
+    expect(refused.lastOk).toBe(false);
+    expect(refused.failing?.status).toBe(410);
+    // The oldest failure still unbroken by a success — not the newest, which is how long
+    // SGC has been answering us this way rather than how long ago the last attempt was.
+    expect(Date.parse(refused.failing!.since)).toBeCloseTo(ago(45).getTime(), -3);
+
+    await recordRun(1, {}, ago(1));
+    expect((await sgcHealth(env.DB)).failing).toBeNull();
+  });
+
+  it("stands the wide tick down when the refusal has lasted, and lets the hour's probe through", async () => {
+    await completeBackfill();
+    const calls = serving(FULL);
+
+    // Refused for 45 minutes, last asked 35 minutes ago: past the grace, inside the hour.
+    await recordRun(0, { http_status: 410 }, ago(45));
+    await recordRun(0, { http_status: 410 }, ago(35));
+    await tick(15);
+    expect(calls()).toBe(0);
+
+    // An hour since anything asked: the probe goes, because a probe that stopped could
+    // never see SGC come back.
+    await recordRun(0, { http_status: 410 }, ago(61));
+    await tick(30);
+    expect(calls()).toBe(1);
+  });
+
+  it("keeps the wide tick at full rate for a plain 500, however long it lasts", async () => {
+    await completeBackfill();
+    const calls = serving(FULL);
+    await recordRun(0, { http_status: 500 }, ago(120));
+    await recordRun(0, { http_status: 500 }, ago(5));
+
+    await tick(15);
+    expect(calls()).toBe(1);
   });
 });
