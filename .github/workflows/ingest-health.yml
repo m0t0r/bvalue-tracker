@@ -12,9 +12,13 @@ name: Ingest health
 # It calls /api/health, which is the one route open to a caller with no same-origin
 # signal; every other /api/ route answers 403 to curl by design.
 
+# Switched off 2026-09-20 (repo owner): while Cloudflare refuses the Worker's requests to
+# SGC with 410, the catalogue is stale by a known cause and this job fails — and emails —
+# every half hour without telling anyone anything new. It still runs by hand. To turn the
+# alarm back on once ingest is succeeding again, restore:
+#   schedule:
+#     - cron: "7,37 * * * *"
 on:
-  schedule:
-    - cron: "7,37 * * * *"
   workflow_dispatch:
 
 permissions:
