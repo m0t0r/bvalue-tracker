@@ -701,6 +701,41 @@ describe("the refusal back-off, through the cron", () => {
 });
 
 /**
+ * `lastRun` is the most frequently asked question here — /api/status calls it twice and the
+ * open page re-reads /api/status every minute — and until 0005 it was the one hot query over
+ * `ingest_runs` that had never been indexed. 0004's note says to check EXPLAIN QUERY PLAN
+ * before adding a fifth; adding one to /api/health is what prompted the check.
+ */
+describe("the last run is answered from an index", () => {
+  const plan = async (sql: string) =>
+    (await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>())
+      .results.map((r) => r.detail).join("\n");
+
+  it("walks the index instead of scanning the table", async () => {
+    const detail = await plan("SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
+    expect(detail).toContain("ingest_runs_finished");
+  });
+
+  // This half used ingest_runs_ok and then materialised every matching row into a temporary
+  // b-tree to sort it — ~312 rows a day, so ~28,000 at three months, to answer "what
+  // happened last?". It needs its own index rather than sharing the other one: with
+  // ingest_runs_ok also present the planner prefers that equality seek and keeps the sort.
+  it("sorts nothing to find the last successful run", async () => {
+    const detail = await plan("SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND ok = 1 ORDER BY id DESC LIMIT 1");
+    expect(detail).toContain("ingest_runs_finished_ok");
+    expect(detail).not.toContain("TEMP B-TREE");
+  });
+
+  it("still answers both correctly", async () => {
+    await recordRun(1, {}, new Date(NOW.getTime() - 60_000));
+    await recordRun(0, {}, NOW);
+    const body = (await (await call("/api/status")).json()) as any;
+    expect(body.lastRun.ok).toBe(false);
+    expect(body.lastSuccessfulRun.ok).toBe(true);
+  });
+});
+
+/**
  * What the Worker says about itself while it works.
  *
  * These pin the *fields*, not the wording, because the fields are what a query in the
