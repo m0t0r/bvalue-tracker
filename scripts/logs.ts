@@ -52,8 +52,23 @@ function credentials(): Creds {
   if (token && accountId) return { token, accountId, how: "CLOUDFLARE_API_TOKEN" };
 
   // wrangler's own stored login. Same credential wrangler uses, same account, this machine.
-  const config = join(homedir(), "Library", "Preferences", ".wrangler", "config", "default.toml");
-  const oauth = /^oauth_token\s*=\s*"([^"]+)"/m.exec(readFileSync(config, "utf8").toString())?.[1];
+  // Two places, because wrangler puts it under Library/Preferences on macOS and under
+  // XDG_CONFIG_HOME (or ~/.config) everywhere else. A missing file is the ordinary case for
+  // anyone who has never run `wrangler login`, so it must reach the message below rather
+  // than throw ENOENT over the top of it.
+  const configs = [
+    join(homedir(), "Library", "Preferences", ".wrangler", "config", "default.toml"),
+    join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), ".wrangler", "config", "default.toml"),
+  ];
+  let oauth: string | undefined;
+  for (const path of configs) {
+    try {
+      oauth = /^oauth_token\s*=\s*"([^"]+)"/m.exec(readFileSync(path, "utf8"))?.[1];
+    } catch {
+      continue; // no such file on this platform, or not readable
+    }
+    if (oauth !== undefined) break;
+  }
   if (oauth === undefined) {
     throw new Error(
       "No credentials. Either set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (the token needs\n" +
@@ -161,6 +176,13 @@ async function main(argv: string[]): Promise<void> {
           // The README's standing open item: the free plan allows 10 ms of CPU per
           // invocation and this has never been measured. The runtime is the only thing
           // that can see it, and it publishes it on the invocation log.
+          //
+          // Grouped by trigger — cron against fetch — and **not** by lane, which is not
+          // obtainable here however the query is written: cpuTimeMs lives on the
+          // invocation log, `lane` lives on the lines the Worker itself writes, and all
+          // three lanes hang off the one */5 cron, so they share a trigger. To separate
+          // them, take the wide ticks (minute divisible by 15) from `pnpm logs lanes` and
+          // compare their invocations' CPU against the rest by timestamp.
           parameters: {
             filters,
             calculations: (["p50", "p90", "p99", "max"] as const).map((op) => ({

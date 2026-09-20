@@ -43,7 +43,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 278 tests, offline
+pnpm test                 # 279 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 pnpm logs                 # production's own logs, from here (see Debugging production)
@@ -198,7 +198,7 @@ also carries `lane` and `trigger`.
 | `msg` | Level | When | The fields that matter |
 |---|---|---|---|
 | `tick planned` / `tick stood down` | info | every cron tick | `tickMinute`, `lanes`, `sgcUnwell`, `backfill`, `inFlight` |
-| `ingest ok` | info | a run finished cleanly | `runId`, `fetched`, `inserted`, `updated`, `removed`, `durationMs`, `sgcMs`, `sgcBytes` |
+| `ingest ok` | info | a run finished cleanly | `runId`, `fetched`, `inserted`, `updated`, `removed`, `durationMs`, `sgcMs`, `sgcChars` |
 | `ingest ok with a note` | warn | it worked, but skipped a removal or a bad row | `error` carries the note |
 | `ingest failed` | error | SGC or D1 refused | `httpStatus`, `retryAfterS`, `error` |
 | `reaped abandoned runs: an invocation was killed` | **warn** | a claimed run never wrote a result | `reaped` |
@@ -219,7 +219,7 @@ also carries `lane` and `trigger`.
   only signal for it. The invocation log for the killed tick carries the outcome and
   `$workers.cpuTimeMs`; `exceededCpu` there means the 10 ms limit, and the fix is the paid
   plan or a smaller `SWEEP_CHUNK_DAYS`. If CPU is fine, the suspect is memory — `sgcMs` and
-  `sgcBytes` on the *last* successful run of that lane say how large the responses had got.
+  `sgcChars` on the *last* successful run of that lane say how large the responses had got.
 - **"Nothing has reached SGC for ages and there are no failures."** `pnpm logs lanes
   --since 24h`. A healthy day is roughly four `fast` runs per `wide` one and a `sweep` on
   the hour. All `fast` and no `sweep` is the `tickMinute` fault returning; only `wide` and
@@ -596,8 +596,14 @@ wrote in isolation.
 Still open: that 10 ms has **not been measured**, but it no longer needs a `wrangler tail`
 left running to catch a tick. Workers Logs publishes `$workers.cpuTimeMs` on every
 invocation log, so `pnpm logs cpu --since 24h` reports p50/p90/p99/max across a whole day
-of ticks. **Run it and record the numbers here**, per lane. If a run ever fails with a
-CPU-limit error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
+of ticks. **Run it and record the numbers here.** If a run ever fails with a CPU-limit
+error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
+
+That figure is **per trigger — cron against fetch — and not per lane**, and no query gets
+per-lane out of it: `cpuTimeMs` is on the invocation log, `lane` is on the lines the Worker
+writes, and all three lanes hang off the one `*/5` cron, so they share a trigger. The
+sweep is the lane worth isolating, since it is the one with a `SWEEP_CHUNK_DAYS` knob;
+`pnpm logs lanes` gives its ticks, and their invocations can be matched by timestamp.
 Note that nothing inside the Worker can measure this: `Date.now()` does not advance between
 I/O operations in workerd, so a span with no `await` in it always reads 0 ms. Wall time we
 can measure and do (`durationMs`, `sgcMs`); CPU time only the runtime can see.
@@ -789,10 +795,17 @@ actions are pinned to `@v4` tags rather than commit SHAs.
 
 Two of the four are now *measurable* rather than settled, which is the point of
 [Debugging production](#debugging-production): every ingest run records `sgcMs` and
-`sgcBytes`, so how long SGC holds us and how large its responses get are now on the log
-line and in the three-month analytics history. Read a week of them before choosing a byte
-cap or changing `IN_FLIGHT_MS` — the two remaining questions are exactly "what do these
-numbers actually do in production", and until today nothing was writing them down.
+`sgcChars`, so how long SGC holds us and how large its responses get are now on the log
+line and in the three-month analytics history. Read a week of them before changing
+`IN_FLIGHT_MS` — the remaining questions are exactly "what do these numbers actually do in
+production", and until today nothing was writing them down.
+
+**`sgcChars` is characters, not bytes on the wire**, and a byte cap sized from it would sit
+*below* the real payload and start refusing good responses: SGC's pages are Spanish, and
+every accented character is two UTF-8 bytes to this number's one. It is still the right
+figure for the memory question behind that cap, because it is what the isolate is holding.
+Counting true bytes would mean encoding the whole ~0.8 MB string a second time, which is
+the one thing the 10 ms CPU budget cannot afford.
 
 ### Performance
 

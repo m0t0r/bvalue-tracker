@@ -48,8 +48,13 @@ jobs:
             const h = JSON.parse(readFileSync("health.json", "utf8"));
             const stale = Number(process.env.STALE_AFTER_S);
             if (h.ok !== true) { console.error("health says not ok"); process.exit(1); }
-            if (h.ingestAgeS === null) {
-              console.error("ingest has never succeeded");
+            // Not `=== null`: a *missing* field must fail too. A rollback to a Worker
+            // version from before ingestAgeS existed, or an edge still serving the old
+            // version mid-deploy, answers without it — and `undefined === null` is false
+            // and `undefined > 3600` is false, so this job would pass, green, through
+            // exactly the nine-hour-stale outage it exists to catch.
+            if (typeof h.ingestAgeS !== "number") {
+              console.error(`no usable ingestAgeS in health response: ${JSON.stringify(h)}`);
               process.exit(1);
             }
             if (h.ingestAgeS > stale) {

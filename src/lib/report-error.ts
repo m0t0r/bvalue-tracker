@@ -40,13 +40,17 @@ export function reportError(report: ErrorReport): void {
     void fetch("/api/client-error", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      // The Worker caps the body it will read at 4 KB, so cut here rather than have the
-      // report refused whole for the sake of a long stack.
+      // The Worker caps the body it will read at 4 KB, so every field is cut here rather
+      // than have the whole report refused for the sake of one long one. The URL needs it
+      // as much as the stack does: the page keeps no state there, so anything in the query
+      // string arrived from outside — a link carrying campaign parameters is enough — and
+      // uncapped it would 413 every report from that tab, for a reader whose page is
+      // already broken.
       body: JSON.stringify({
         message: report.message.slice(0, 500),
         stack: report.stack?.slice(0, 2000),
         source: report.source,
-        path: location.pathname + location.search,
+        path: (location.pathname + location.search).slice(0, 200),
       }),
       // The page may be unloading — a failed chunk load often ends in a reload.
       keepalive: true,

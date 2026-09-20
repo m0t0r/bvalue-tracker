@@ -786,7 +786,7 @@ describe("what a tick writes to the log", () => {
     // Answers "is SGC slow?" and "how big are these responses?", neither of which anything
     // recorded before — the second has been an open audit question with no measurement.
     expect(ok.sgcMs).toEqual(expect.any(Number));
-    expect(ok.sgcBytes as number).toBeGreaterThan(0);
+    expect(ok.sgcChars as number).toBeGreaterThan(0);
   });
 
   it("puts an SGC refusal on the line at error, with its status", async () => {

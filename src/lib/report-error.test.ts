@@ -78,6 +78,18 @@ describe("reportError", () => {
     expect(sent().message).toHaveLength(500);
     expect(sent().stack).toHaveLength(2000);
   });
+
+  // The page keeps no state in the URL, so a long query string came from outside — and
+  // uncapped it would 413 every report from that tab, silently, for a reader whose page
+  // is already broken.
+  it("cuts the URL too, however long a link made it", async () => {
+    window.history.replaceState({}, "", `/?utm=${"x".repeat(4000)}`);
+    const { reportError } = await fresh();
+    reportError({ message: "boom", source: "error" });
+    expect(sent().path).toHaveLength(200);
+    expect(JSON.stringify(sent()).length).toBeLessThan(4096);
+    window.history.replaceState({}, "", "/");
+  });
 });
 
 describe("installErrorReporting", () => {
