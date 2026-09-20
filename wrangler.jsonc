@@ -31,13 +31,16 @@
     }
   ],
   "triggers": {
-    // Every 5 min: the trailing 1 day, insert/update only. Every 15th of those minutes it
-    // widens to the trailing 3 days and does removals; on the hour it also re-checks one
-    // older 7-day chunk for revisions. Deliberately ONE pattern: any second pattern lands
-    // within 120 s of this one, inside the 150 s in-flight window, and the two would keep
-    // stealing each other's claim. See scheduled() in worker/index.ts.
-    // The page copy in src/lib/i18n.tsx says "5 minutos"; change them together.
-    "crons": ["*/5 * * * *"]
+    // Every 15 min: the trailing 1 day, insert/update only. Every second tick widens to the
+    // trailing 3 days and does removals; on the hour it also re-checks one older 7-day chunk
+    // for revisions. ~120 SGC requests/day.
+    // Deliberately ONE pattern: the old config had a second, `5 * * * *`, for the sweep, and
+    // at five-minute spacing a second pattern lands within 120 s of the first — inside the
+    // 150 s in-flight window — and the two steal each other's claim. One pattern with the
+    // lane chosen from the tick has no such spacing to get wrong. See worker/plan.ts.
+    // TICK_MS in worker/plan.ts must equal this period, and the page copy in
+    // src/lib/i18n.tsx says "15 minutos"; change all three together.
+    "crons": ["*/15 * * * *"]
   },
   "observability": { "enabled": true }
 }

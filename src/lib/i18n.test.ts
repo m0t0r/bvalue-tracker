@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { REFRESH_MIN_INTERVAL_S } from "../../worker/plan.ts";
 import { dicts, type Lang } from "./i18n.tsx";
+
+/** The cron in wrangler.jsonc, in minutes. The page quotes it in two places. */
+const CRON_EVERY_MIN = 15;
 
 const langs = Object.keys(dicts) as Lang[];
 
@@ -23,9 +27,13 @@ describe("the failed-ingest alert", () => {
 });
 
 describe("the standing note under the refresh button", () => {
-  // \b so that a stray "15 minutos" here cannot pass as the cron's own five.
-  it.each(langs)("names the cron's own five minutes, in %s", (lang) => {
-    expect(dicts[lang].autoUpdate).toMatch(/\b5 min/);
+  it.each(langs)("names the cron's own interval, in %s", (lang) => {
+    expect(dicts[lang].autoUpdate).toMatch(new RegExp(`\\b${CRON_EVERY_MIN} min`));
+  });
+
+  // The long form in the footer says the same thing at length, and drifted from it once.
+  it.each(langs)("says the same interval in the footer, in %s", (lang) => {
+    expect(dicts[lang].autoUpdateLong).toMatch(new RegExp(`\\b${CRON_EVERY_MIN} min`));
   });
 });
 
@@ -36,8 +44,10 @@ describe("the standing note under the refresh button", () => {
  * refusing us the Worker's own wait is an hour.
  */
 describe("the stand-down messages", () => {
+  // It names the visitor throttle, which is the cron's period: the two are one number so
+  // that a press coincides with a tick that was going to happen anyway.
   it.each(langs)("keep refreshWait's claim of a recent successful query, in %s", (lang) => {
-    expect(dicts[lang].refreshWait).toMatch(/5 min/);
+    expect(dicts[lang].refreshWait).toMatch(new RegExp(`\\b${REFRESH_MIN_INTERVAL_S / 60} min`));
   });
 
   it.each(langs)("do not ask the reader to press again while SGC is failing, in %s", (lang) => {

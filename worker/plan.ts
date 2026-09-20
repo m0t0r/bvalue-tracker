@@ -7,8 +7,14 @@ import type { IngestRun } from "./api-types.ts";
  */
 export const IN_FLIGHT_MS = 150_000;
 
-/** The one cron pattern, in milliseconds. See `triggers` in wrangler.jsonc. */
-const TICK_MS = 300_000;
+/**
+ * The one cron pattern, in milliseconds. **It must equal the cron in `wrangler.jsonc`**, or
+ * `tickMinute` snaps to a grid the ticks never land on. `WIDE_TICK_EVERY_MIN` must be a
+ * whole multiple of it, or a lane becomes unreachable — which is how the wide tick and the
+ * sweep went a day without running. The budget test in `worker/test/plan.test.ts` walks a
+ * real hour of ticks and holds all three to one number.
+ */
+const TICK_MS = 900_000;
 
 /**
  * Which tick this is, as a minute of the hour — snapped to the nearest scheduled tick,
@@ -30,11 +36,11 @@ const TICK_MS = 300_000;
 export const tickMinute = (scheduledTime: number) => ((Math.round(scheduledTime / TICK_MS) * TICK_MS) / 60_000) % 60;
 
 /**
- * Every fifteenth minute the five-minute tick loads the full trailing window instead.
- * Exported because it is also the number the page's failed-ingest alert quotes: once a run
- * has failed the fast lane stands down, so the wide tick is the only lane still asking SGC.
+ * Every second tick loads the full trailing window instead of the narrow one: two of the
+ * hour's four, so removals happen twice an hour. A whole multiple of the tick, or the lane
+ * it names can never come up.
  */
-export const WIDE_TICK_EVERY_MIN = 15;
+export const WIDE_TICK_EVERY_MIN = 30;
 export const TRAILING_DAYS = 3;
 /**
  * The fast lane's window. SGC publishes an event 2–5 minutes after it happens, so a
@@ -44,11 +50,13 @@ export const TRAILING_DAYS = 3;
 const TRAILING_FAST_DAYS = 1;
 
 /**
- * The visitor-facing throttle. It counts *any* run, cron included, so with a 5-minute
- * cron a manual press almost always stands down — which is the point: this number, not
- * the number of people with the page open, is what bounds our load on SGC.
+ * The visitor-facing throttle. It counts *any* run, cron included, and **it is the cron's
+ * own period** so that a press almost always coincides with a tick that was going to happen
+ * anyway. That is what makes "visitors do not add to the budget" true rather than hopeful:
+ * drop it below the cron and a reader with a fast finger adds requests we did not count.
+ * This number, not how many people have the page open, is what bounds our load on SGC.
  */
-export const REFRESH_MIN_INTERVAL_S = 300;
+export const REFRESH_MIN_INTERVAL_S = 900;
 /** How long a visitor is asked to wait when another run is already in flight. */
 const IN_FLIGHT_RETRY_S = 5;
 

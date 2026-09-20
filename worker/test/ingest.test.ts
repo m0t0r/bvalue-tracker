@@ -466,16 +466,16 @@ const recordRun = (ok: number, fields: { http_status?: number | null; retry_afte
     .run();
 
 describe("cron lanes", () => {
-  it("loads one trailing day on a five-minute tick and three on a fifteen-minute one", async () => {
+  it("loads one trailing day on a narrow tick and three on a wide one", async () => {
     // Otherwise the wide tick also pulls a history chunk, and that would be the latest run.
     await completeBackfill();
     serving(FULL);
 
-    await tick(5);
+    await tick(15);
     const fast = await latestRun();
     expect(fast.window_start).toBe(expectedWindowStart(fast.started_at as string, 1));
 
-    await tick(15);
+    await tick(30);
     const wide = await latestRun();
     expect(wide.window_start).toBe(expectedWindowStart(wide.started_at as string, 3));
   });
@@ -491,7 +491,7 @@ describe("cron lanes", () => {
       .bind("2026-09-19T00:00:00.000Z").all<{ trigger: string }>();
     expect(triggers.results.map((r) => r.trigger)).toEqual(["cron", "sweep"]);
 
-    await tick(30);
+    await tick(30, { hour: 13 });
     expect((await latestRun()).trigger).toBe("cron");
   });
 
@@ -523,16 +523,16 @@ describe("fast lane back-off, through the cron", () => {
     await completeBackfill();
     const calls = serving(FULL);
 
-    await tick(5);
+    await tick(15);
     expect(calls()).toBe(1);
 
     await recordRun(0, { http_status: 500 });
-    await tick(10);
+    await tick(45);
     expect(calls()).toBe(1);
 
-    await tick(15); // the wide tick keeps probing, whatever SGC has been doing
+    await tick(30); // the wide tick keeps probing, whatever SGC has been doing
     expect(calls()).toBe(2);
-    await tick(20);
+    await tick(15, { hour: 13 });
     expect(calls()).toBe(3);
   });
 
@@ -541,10 +541,10 @@ describe("fast lane back-off, through the cron", () => {
     await recordRun(0, { http_status: 429, retry_after_s: 86_400 });
     const calls = serving(FULL);
 
-    await tick(5);
+    await tick(15);
     expect(calls()).toBe(0);
 
-    await tick(15);
+    await tick(30);
     expect(calls()).toBe(1);
   });
 });
@@ -570,7 +570,7 @@ describe("a run the Worker was killed in the middle of", () => {
     await openRun(10 * 60_000);
     serving(FULL);
 
-    await tick(15); // any tick: readHistory reaps before it reads
+    await tick(30); // any tick: readHistory reaps before it reads
     const reaped = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1")
       .first<Record<string, unknown>>())!;
     expect(reaped.ok).toBe(0);
@@ -587,7 +587,7 @@ describe("a run the Worker was killed in the middle of", () => {
     await openRun(30_000);
     const calls = serving(FULL);
 
-    await tick(5);
+    await tick(15);
     const row = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1")
       .first<Record<string, unknown>>())!;
     expect(row.finished_at).toBeNull();
@@ -602,10 +602,10 @@ describe("a run the Worker was killed in the middle of", () => {
     await openRun(10 * 60_000);
     const calls = serving(FULL);
 
-    await tick(5);
+    await tick(15);
     expect(calls()).toBe(0);
 
-    await tick(15);
+    await tick(30);
     expect(calls()).toBe(1);
   });
 
@@ -613,7 +613,7 @@ describe("a run the Worker was killed in the middle of", () => {
     await completeBackfill();
     await openRun(10 * 60_000);
     serving(FULL);
-    await tick(5); // stands down, but still reaps
+    await tick(15); // stands down, but still reaps
 
     const body = (await (await call("/api/status")).json()) as any;
     expect(body.lastRun).toMatchObject({ ok: false, error: ABANDONED_ERROR });
@@ -662,13 +662,13 @@ describe("the refusal back-off, through the cron", () => {
     // Refused for 45 minutes, last asked 35 minutes ago: past the grace, inside the hour.
     await recordRun(0, { http_status: 410 }, ago(45));
     await recordRun(0, { http_status: 410 }, ago(35));
-    await tick(15);
+    await tick(30);
     expect(calls()).toBe(0);
 
     // An hour since anything asked: the probe goes, because a probe that stopped could
     // never see SGC come back.
     await recordRun(0, { http_status: 410 }, ago(61));
-    await tick(30);
+    await tick(30, { hour: 13 }); // a wide tick off the hour, so the sweep is not in it too
     expect(calls()).toBe(1);
   });
 
@@ -678,7 +678,7 @@ describe("the refusal back-off, through the cron", () => {
     await recordRun(0, { http_status: 500 }, ago(120));
     await recordRun(0, { http_status: 500 }, ago(5));
 
-    await tick(15);
+    await tick(30);
     expect(calls()).toBe(1);
   });
 });
