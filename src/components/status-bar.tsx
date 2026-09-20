@@ -140,7 +140,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
         </CardContent>
       </Card>
       {incomplete ? (
-        <Alert role="status">
+        <Alert variant="caution" role="status">
           {backfill.isPending ? <Spinner aria-label={t.backfillShort} /> : <AlertTriangleIcon />}
           <AlertTitle>{t.backfillTitle(status.backfill.done, status.backfill.total)}</AlertTitle>
           <AlertDescription>
