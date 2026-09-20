@@ -306,8 +306,10 @@ app.post("/api/client-error", async (c) => {
   if (typeof message !== "string" || message === "") return c.json({ error: "bad report" }, 400);
   const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 
-  // Nested, so the dashboard can filter on `page.message`. The logger's own string cap is
-  // a shallow pass and does not reach in here; the 4 KB body cap above is what bounds these.
+  // Nested, so the dashboard can filter on `page.message`. The logger's own string cap is a
+  // shallow pass and does not reach in here, so each field is bounded where it comes in: the
+  // four from the body by the 4 KB cap above, and the user-agent — which is a header, and so
+  // never passed through that cap — right here.
   log(c.env).warn(
     {
       page: {
@@ -315,7 +317,7 @@ app.post("/api/client-error", async (c) => {
         stack: str(stack),
         source: str(source),
         path: str(path),
-        userAgent: c.req.header("user-agent"),
+        userAgent: c.req.header("user-agent")?.slice(0, 512),
       },
     },
     "page error",
