@@ -660,6 +660,17 @@ practices stayed at 100.
   database is the dangerous one: the page back-fills on load, in a loop, with no wait
   between requests. Check `/api/status` and confirm `backfill.done == backfill.total`
   before opening a browser on it. Do not click the refresh button in a loop.
+  **A state the database will not produce is stubbed at the network, not faked in D1.**
+  `agent-browser network route '**/api/status*' --body <json>` puts the page in any state
+  — a failed last run, `backfill.done < total` — without touching the Worker. Stub
+  `**/api/refresh` in the *same* session and before the first `open`: an incomplete
+  back-fill makes `StatusBar`'s effect start the back-fill loop by itself, up to 40
+  `POST /api/refresh` calls with no wait, and that is the one path that reaches SGC. This
+  is how the back-fill and failure alerts were finally looked at (2026-09-20).
+  **`getComputedStyle` returns `oklch()` here, not `rgb()`**, so anything parsing it for
+  channel numbers silently reads the lightness as a red channel and reports nonsense
+  ratios. Rasterise instead: `ctx.fillStyle = <colour>; ctx.fillRect(0,0,1,1)` on a 1×1
+  canvas and read `getImageData`, which gives the sRGB the screen actually shows.
 
 ### The page's scope
 
@@ -745,9 +756,37 @@ colour, motion). Keep to them:
 - Terms: "sismo" only for the mainshock, "evento" for catalogue entries, "valor b",
   "Mc / magnitud de completitud".
 - **Red means something failed.** Cautions ("fewer than 50 events", "history
-  incomplete") are neutral badges with a warning icon.
+  incomplete") are neutral badges with a warning icon. A *badge* stays neutral; an
+  **alert states itself with its own surface** — see the bullet below.
+- **A status alert tints fill, border and title; a note does not.** The two failure
+  alerts (the load error, "la última consulta al SGC falló") take `destructive`, the
+  back-fill notice takes `caution`, and the two notes that are page chrome — "Cómo leer
+  estas cifras" and the scope notice — stay on the neutral `bg-card`, which is also what
+  keeps the notice looking like the fixed scope bar it hands over to. Each state is three
+  tokens in `index.css` and no more (`-surface` the fill, `-edge` the border, `-strong`
+  the title and its icon), one constant hue per ramp.
+  - **What bounds the light fills is the description.** It stays on `--muted-foreground`
+    in every variant, so only the line that names the state is coloured — and that grey
+    clears 4.5:1 on white by just 4.73:1, so a fill any deeper takes it under AA. Hence
+    fills at `oklch(0.988 …)`, about Tailwind's `*-50`, with the **border** carrying the
+    colour at this size, as it does in the shadcn "custom colors" alert these follow.
+    Dark mode has the headroom (the grey sits at 6:1) for a real step off `--card`.
+    Measured in the browser, light then dark: caution title 4.77 and 10.40, failure title
+    8.24 and 6.89, both descriptions 4.56–6.07, borders 1.36 and 2.12 against the page.
+  - **The two `-strong` values are a fixed 0.11 apart in lightness**, red the darker in
+    light mode and amber the lighter in dark. Both alerts can stand in the status bar at
+    once, and their hues alone are 0.048 apart in OKLab for a tritanope — under the 0.10
+    that reads as one colour. Lightness is what survives, as it does for the clusters.
+    Colour is not the only channel here (the words and the icon differ), which is why the
+    hue pair is allowed to be close where a chart's would not be.
+  - Caution is **hue 80**: 52.7° from `--destructive` and 30.3° from the mainshock orange
+    `--chart-2`, so it reads neither as a failure nor as the mainshock. Do not move it
+    nearer either without redoing the measurements — `agent-browser` plus the canvas trick
+    in [Tooling gotchas](#tooling-gotchas) reads the rendered pair straight off the page.
 - De-emphasise with the secondary text colour, never with opacity: the b-value must
-  stay readable exactly when it is least reliable.
+  stay readable exactly when it is least reliable. The destructive alert's description
+  used to be `text-destructive/90`, which is the same mistake and is now the plain
+  secondary colour.
 - Order by importance: the b-value leads the page, above the filters. On a phone it
   must be within the first screen.
 - **The status bar's stats are one wrapping row at every width**, never a two-column grid
@@ -938,8 +977,10 @@ colour, motion). Keep to them:
 - Every control has an accessible name; sliders get theirs through
   `aria-labelledby` on the thumb, which is the element with `role="slider"`.
 
-Not yet verified by anyone: real screen-reader output, a physical touch device,
-Safari, and the back-fill and ingest-failure alerts in their live states.
+Not yet verified by anyone: real screen-reader output, a physical touch device, and
+Safari. The back-fill and ingest-failure alerts have now been seen rendered, in both
+themes, but against a **stubbed** `/api/status` (see [Tooling gotchas](#tooling-gotchas))
+— not yet in a live state driven by SGC itself.
 
 ### Ideas discussed, not built
 
