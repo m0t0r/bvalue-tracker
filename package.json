@@ -13,7 +13,8 @@
     "types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply sgc-swarm --local",
     "db:migrate:remote": "wrangler d1 migrations apply sgc-swarm --remote",
-    "cli": "tsx core/cli.ts"
+    "cli": "tsx core/cli.ts",
+    "logs": "tsx scripts/logs.ts"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.55.0",

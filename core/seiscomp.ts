@@ -212,7 +212,15 @@ export function parseCatalogHtml(html: string): CatalogPage {
     if (!prev || (e.solutionStamp ?? "") > (prev.solutionStamp ?? "")) byId.set(e.id, e);
   }
 
-  return { reportedTotal, duplicatesDropped: events.length - byId.size, skippedRows, events: [...byId.values()] };
+  return {
+    reportedTotal,
+    duplicatesDropped: events.length - byId.size,
+    skippedRows,
+    events: [...byId.values()],
+    // Only what this function can honestly know: it was handed a string, so there was no
+    // network. fetchCatalog fills the other two in.
+    cost: { bytes: html.length, fetchMs: null, attempts: null },
+  };
 }
 
 export interface FetchOptions {
@@ -268,7 +276,13 @@ export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Pr
   // Only transport/HTTP failures are retried; a parse failure is deterministic.
   let lastErr: unknown;
   let html: string | undefined;
+  // Every attempt, and the back-off between them, counts: what we want to know from a slow
+  // run is how long SGC held us, not how long the last try took. The clock only advances
+  // across I/O in workerd, and every await below is I/O, so this span is real there.
+  const startedAt = Date.now();
+  let attempts = 0;
   for (let attempt = 0; attempt <= retries && html === undefined; attempt++) {
+    attempts = attempt + 1;
     if (attempt > 0) await new Promise((r) => setTimeout(r, backoffMs * 2 ** (attempt - 1)));
     try {
       const res = await fetch(SEISCOMP_ENDPOINT, {
@@ -288,6 +302,9 @@ export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Pr
       lastErr = err;
     }
   }
-  if (html !== undefined) return parseCatalogHtml(html);
+  if (html !== undefined) {
+    const page = parseCatalogHtml(html);
+    return { ...page, cost: { ...page.cost, fetchMs: Date.now() - startedAt, attempts } };
+  }
   throw new Error(`SGC catalogue fetch failed after ${retries + 1} attempts`, { cause: lastErr });
 }

@@ -1,0 +1,63 @@
+name: Ingest health
+
+# Asks production one question every half hour: how long is it since ingest last
+# succeeded? Both of this project's real outages looked identical from outside — the
+# Worker up, the page rendering, /api/health answering ok — while the catalogue sat nine
+# hours stale. Nothing external could tell, because nothing external could ask.
+#
+# Cloudflare has no Workers alert on the free plan, so the alarm is this job failing:
+# GitHub emails the repository owner on a failed scheduled run. That is the whole
+# notification system, and it costs nothing.
+#
+# It calls /api/health, which is the one route open to a caller with no same-origin
+# signal; every other /api/ route answers 403 to curl by design.
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest-health
+  cancel-in-progress: true
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask production how fresh the catalogue is
+        if: vars.PRODUCTION_URL != ''
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          # Four wide ticks. One failed run only stands the fast lane down — the wide tick
+          # keeps probing SGC every 15 minutes and is what lets the fast lane back in — so
+          # a single failure must not page anyone. An hour of no success is a real fault,
+          # whether that is SGC refusing us or this Worker being killed mid-run.
+          STALE_AFTER_S: "3600"
+        # Through env rather than interpolated into the script: a repository variable
+        # should not be able to become shell. Same rule as the deploy smoke test.
+        run: |
+          set -o pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 10 --retry-all-errors \
+            "$PRODUCTION_URL/api/health" | tee health.json
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const h = JSON.parse(readFileSync("health.json", "utf8"));
+            const stale = Number(process.env.STALE_AFTER_S);
+            if (h.ok !== true) { console.error("health says not ok"); process.exit(1); }
+            if (h.ingestAgeS === null) {
+              console.error("ingest has never succeeded");
+              process.exit(1);
+            }
+            if (h.ingestAgeS > stale) {
+              // The first thing to read is worker/log.ts output: a "reaped abandoned runs"
+              // warning means an invocation was killed, an "ingest failed" line carries
+              // SGC HTTP status. README, "Debugging production", has the queries.
+              console.error(`catalogue is stale: last successful ingest ${h.ingestAgeS}s ago (limit ${stale}s)`);
+              process.exit(1);
+            }
+            console.log(`ok: last successful ingest ${h.ingestAgeS}s ago, ${h.totalEvents} events`);
+          '

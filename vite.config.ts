@@ -33,4 +33,18 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont()],
   worker: { format: "es" },
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  environments: {
+    /**
+     * A source map for the Worker, and for the Worker only. `upload_source_maps` in
+     * wrangler.jsonc has nothing to upload unless the build emits one, and without it a
+     * stack trace in Workers Logs points at a column in a single minified line.
+     *
+     * Scoped to this environment on purpose: `build.sourcemap` at the top level would also
+     * emit maps for the client bundle, and those are static assets — they would be
+     * published beside the page, add megabytes to the deploy, and hand the whole source to
+     * anyone who asks. Cloudflare fetches the Worker's map itself, out of band, after the
+     * invocation has finished; it is never served to a visitor.
+     */
+    choco: { build: { sourcemap: true } },
+  },
 });

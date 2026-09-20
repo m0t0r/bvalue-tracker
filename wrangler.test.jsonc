@@ -13,5 +13,9 @@
       "simple": { "limit": 120, "period": 60 }
     }
   ],
-  "d1_databases": [{ "binding": "DB", "database_name": "sgc-swarm", "database_id": "test", "migrations_dir": "migrations" }]
+  "d1_databases": [{ "binding": "DB", "database_name": "sgc-swarm", "database_id": "test", "migrations_dir": "migrations" }],
+  // Present so the tests run the same code path production does, rather than the
+  // "binding is undefined" branch. The pool accepts the writes and discards them.
+  "analytics_engine_datasets": [{ "binding": "INGEST_ANALYTICS", "dataset": "sgc_ingest" }],
+  "vars": { "LOG_LEVEL": "info" }
 }
