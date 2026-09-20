@@ -231,10 +231,18 @@ export class SgcHttpError extends Error {
 }
 
 /**
- * 429 and 503 are SGC asking us to stop. They are the one case where the retry loop
- * makes things worse, so they are thrown straight out and left for the caller to sit out.
+ * Whether asking again can plausibly get a different answer. The retry loop is there for a
+ * flaky connection, and a status line is not one — SGC answered.
+ *
+ * 429 and 503 are SGC asking us to stop, and retrying is the one thing that makes being rate
+ * limited worse. Every other 4xx is a deterministic answer about the request itself — 410
+ * Gone, which production saw for the first time on 2026-09-20 — so a second identical request
+ * can only get the same answer and cost the server another one. A 5xx other than 503 can be a
+ * bad moment on their side and keeps the one retry.
  */
-const NO_RETRY_STATUS = new Set([429, 503]);
+export function retryableStatus(status: number): boolean {
+  return status >= 500 && status !== 503;
+}
 
 /** `Retry-After` is either a seconds count or an HTTP date. Returns seconds, or null. */
 export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | null {
@@ -275,8 +283,8 @@ export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Pr
       if (!res.ok) throw new SgcHttpError(res.status, parseRetryAfter(res.headers.get("retry-after")));
       html = await res.text();
     } catch (err) {
-      // Being rate limited is a deterministic answer, not a flaky connection: stop here.
-      if (err instanceof SgcHttpError && NO_RETRY_STATUS.has(err.status)) throw err;
+      // An answer we would only get again is not worth a second request: stop here.
+      if (err instanceof SgcHttpError && !retryableStatus(err.status)) throw err;
       lastErr = err;
     }
   }

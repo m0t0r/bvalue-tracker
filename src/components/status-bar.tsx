@@ -127,9 +127,15 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
               {t.refresh}
             </Button>
             {/* One line is always reserved. The live region announces refresh results; the standing note
-                about automatic updates sits outside it, so it is never read out as if it were news. */}
+                about automatic updates sits outside it, so it is never read out as if it were news.
+                The note goes quiet while a run has failed: it promises a five-minute cadence that
+                has stopped — the fast lane stands down after a failure — and the alert below says
+                fifteen. Two numbers a few pixels apart read as a contradiction, and the alert is
+                the one telling the truth. The line stays, so nothing moves. */}
             <span aria-live="polite" className={message === "" ? "sr-only" : "min-h-4 text-start text-xs text-muted-foreground lg:text-end"}>{message}</span>
-            {message === "" ? <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">{t.autoUpdate}</span> : null}
+            {message === "" ? (
+              <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">{failed ? null : t.autoUpdate}</span>
+            ) : null}
           </div>
         </CardContent>
       </Card>

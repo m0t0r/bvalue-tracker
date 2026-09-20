@@ -184,9 +184,10 @@ describe("fetchCatalog", () => {
     expect(calls()).toBe(1);
   });
 
-  // Retrying is the one thing that makes being rate limited worse, so 429 and 503 leave
-  // the loop on the first response and carry the status out for the ingest back-off.
-  it.each([429, 503])("stops at the first HTTP %i and reports its status", async (status) => {
+  // Retrying is the one thing that makes being rate limited worse, and every other 4xx is a
+  // deterministic answer about the request itself — production met 410 Gone on 2026-09-20.
+  // All of them leave the loop on the first response and carry the status out for the back-off.
+  it.each([429, 503, 410, 403, 404, 400])("stops at the first HTTP %i and reports its status", async (status) => {
     const calls = serves(() => new Response("", { status, headers: { "retry-after": "120" } }));
     const err = await fetchCatalog(query, { retries: 3, backoffMs: 1 }).catch((e: unknown) => e);
     expect(calls()).toBe(1);
