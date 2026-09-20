@@ -176,14 +176,33 @@ export async function reapAbandonedRuns(db: D1Database, now: Date, withinMs = IN
 }
 
 /**
+ * How many finished runs the health rule looks back over. An hour of ticks: long enough to
+ * tell one bad answer from SGC refusing us, and **bounded**, so this read does not grow with
+ * a table that gains ~312 rows a day. A streak longer than the window still reads as a
+ * streak — `failing.since` is then simply the oldest run in view, which only makes the
+ * back-off it feeds more cautious, never less.
+ */
+const HEALTH_WINDOW_RUNS = 12;
+
+/**
  * Deliberately narrower than `lastRun`: the back-off needs the HTTP status, and the status
- * API has no business carrying it. Both halves read the newest row by id and neither filters
+ * API has no business carrying it. Every part reads the newest rows by id and none filters
  * on a caller's clock — a run that finished a moment ago must not be invisible to the guard.
  */
 export async function sgcHealth(db: D1Database): Promise<SgcHealth> {
-  const last = await db
-    .prepare("SELECT ok FROM ingest_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1")
-    .first<{ ok: number }>();
+  // The tail of the history, newest first: `ok` answers the fast lane's rule and the
+  // unbroken run of failures at the front answers "is SGC refusing us, or was that one
+  // bad answer". Walked backwards off the primary key, so it reads twelve rows, not the table.
+  const { results: recent } = await db
+    .prepare(`SELECT ok, http_status, started_at FROM ingest_runs
+              WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT ${HEALTH_WINDOW_RUNS}`)
+    .all<{ ok: number; http_status: number | null; started_at: string }>();
+  const last = recent[0] ?? null;
+  const streak = [];
+  for (const r of recent) {
+    if (r.ok === 1) break;
+    streak.push(r);
+  }
   const limited = await db
     // The IN list matches the partial index ingest_runs_rate_limited exactly; keep them
     // together. finished_at is never null for these rows, but saying so keeps Date.parse
@@ -193,6 +212,11 @@ export async function sgcHealth(db: D1Database): Promise<SgcHealth> {
     .first<{ finished_at: string; retry_after_s: number | null }>();
   return {
     lastOk: last === null ? null : last.ok === 1,
+    // The status is the newest failure's; `since` is the oldest failure still unbroken by a
+    // success, which is how long SGC has been answering us this way.
+    failing: streak.length === 0
+      ? null
+      : { since: streak[streak.length - 1]!.started_at, status: streak[0]!.http_status },
     rateLimit: limited === null ? null : { finishedAt: limited.finished_at, retryAfterS: limited.retry_after_s },
   };
 }

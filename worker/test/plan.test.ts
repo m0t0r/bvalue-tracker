@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { IngestRun } from "../api-types.ts";
-import { dueNow, REFRESH_MIN_INTERVAL_S, TRAILING_DAYS, type IngestHistory, type IngestPlan } from "../plan.ts";
+import { dueNow, REFRESH_MIN_INTERVAL_S, TRAILING_DAYS, type IngestHistory, type IngestPlan, type SgcHealth } from "../plan.ts";
+
+/** SGC answering normally. Every field is named, so a new rule cannot default itself in. */
+const healthy = (over: Partial<SgcHealth> = {}): SgcHealth => ({ lastOk: true, failing: null, rateLimit: null, ...over });
+
+/** The newest finished run failed, and the ones before it, since `since`. */
+const failingSince = (since: Date, status: number | null) =>
+  healthy({ lastOk: false, failing: { since: since.toISOString(), status } });
 
 /** A healthy, idle history with the back-fill finished: the ordinary case. */
 const history = (over: Partial<IngestHistory> = {}): IngestHistory => ({
-  health: { lastOk: true, rateLimit: null },
+  health: healthy(),
   inFlight: false,
   lastRun: null,
   backfill: { done: 6, total: 6 },
@@ -26,7 +33,7 @@ const at = (s: number) => new Date(NOW.getTime() + s * 1000);
 
 /** SGC refused us at NOW, then answered a minute later: only the cooldown can still hold. */
 const rateLimited = (retryAfterS: number | null) =>
-  history({ health: { lastOk: true, rateLimit: { finishedAt: NOW.toISOString(), retryAfterS } } });
+  history({ health: healthy({ rateLimit: { finishedAt: NOW.toISOString(), retryAfterS } }) });
 
 describe("cron lanes", () => {
   it("gives the fast lane one trailing day and never lets it retire an event", () => {
@@ -37,7 +44,7 @@ describe("cron lanes", () => {
 
   // An HTTP status is no weaker a signal than a timeout, so both wait for a success.
   it("stands the fast lane down while the last finished run failed", () => {
-    expect(dueNow(cron(5), NOW, history({ health: { lastOk: false, rateLimit: null } })).steps).toEqual([]);
+    expect(dueNow(cron(5), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toEqual([]);
   });
 
   // Being answered again is not being welcome again: the cooldown outlives the recovery,
@@ -49,7 +56,7 @@ describe("cron lanes", () => {
   });
 
   it("runs the fast lane when no run has ever finished", () => {
-    expect(dueNow(cron(5), NOW, history({ health: { lastOk: null, rateLimit: null } })).steps).toHaveLength(1);
+    expect(dueNow(cron(5), NOW, history({ health: healthy({ lastOk: null }) })).steps).toHaveLength(1);
   });
 
   // Both ends of the clamp are load-bearing. Retry-After: 0 — which an already-elapsed HTTP
@@ -73,7 +80,7 @@ describe("cron lanes", () => {
 
   // The wide tick is what probes SGC while the fast lane waits, so it is what lets it back in.
   it("keeps the wide tick running while the fast lane is standing down", () => {
-    expect(dueNow(cron(15), NOW, history({ health: { lastOk: false, rateLimit: null } })).steps).toHaveLength(1);
+    expect(dueNow(cron(15), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toHaveLength(1);
   });
 
   it("adds one history chunk on the hour, and on no other quarter", () => {
@@ -121,9 +128,73 @@ describe("cron lanes", () => {
     // The one that turned a 410 from a blip into an outage with no way out: with every tick
     // on the fast lane, the first failure stood down the only lane there was.
     it("leaves four lanes an hour that probe SGC while the fast lane is standing down", () => {
-      const ill = plansFor(history({ health: { lastOk: false, rateLimit: null } }));
+      const ill = plansFor(history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }));
       expect(ill.filter((p) => p.steps.length > 0)).toHaveLength(4);
     });
+  });
+});
+
+/**
+ * SGC answered 410 Gone to the Worker for hours on 2026-09-20 while answering the same
+ * request normally from another network — a door held shut, not a bad day. Nothing in the
+ * back-off covered a 4xx: `sgcUnwell` only gates the fast lane, and the wide tick never
+ * stands down, so the probe would have knocked four times an hour indefinitely. It thins to
+ * hourly now; it never stops, because a probe that stopped could not see SGC come back.
+ */
+describe("while SGC is refusing us", () => {
+  const ago = (s: number) => new Date(NOW.getTime() - s * 1000);
+  /** Refused since `sinceS` ago, last asked `lastS` ago. */
+  const refused = (sinceS: number, lastS: number, status = 410) =>
+    history({ health: failingSince(ago(sinceS), status), lastRun: finishedAt(ago(lastS)) });
+
+  it("keeps the wide tick at full rate while the refusal is still young", () => {
+    // One 410 can be a proxy having a moment; an hour of staleness is too much to spend on it.
+    expect(dueNow(cron(15), NOW, refused(600, 300)).steps).toHaveLength(1);
+  });
+
+  it("drops the wide tick to hourly once the refusal has persisted", () => {
+    expect(dueNow(cron(15), NOW, refused(3600, 300)).steps).toEqual([]);
+    expect(dueNow(cron(30), NOW, refused(3600, 900)).steps).toEqual([]);
+  });
+
+  it("never stops probing: the hour's tick still goes", () => {
+    const plan = dueNow(cron(15), NOW, refused(7200, 3601));
+    expect(plan.steps).toEqual([{ lane: "trailing", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }]);
+  });
+
+  // A 5xx is their bad day, not a door: the probe is what recovers from it, at full rate.
+  it.each([500, 502, 504])("leaves the wide tick alone for a run of HTTP %i", (status) => {
+    expect(dueNow(cron(15), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
+  });
+
+  // 429 and 503 have their own cooldown, which SGC itself names; they must not be pulled
+  // into a rule that would ignore Retry-After.
+  it.each([429, 503])("leaves HTTP %i to the Retry-After cooldown", (status) => {
+    expect(dueNow(cron(15), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
+  });
+
+  it("does not slow anything on a failure with no status at all", () => {
+    // A timeout, or a run the Worker was killed in the middle of: no door, just silence.
+    expect(dueNow(cron(15), NOW, refused(7200, 300, null as unknown as number)).steps).toHaveLength(1);
+  });
+
+  // The rule lives once, in this module. The button is the same request from the same
+  // address, so letting it through twelve times an hour would undo the back-off.
+  it("makes the button wait the same hour, and says how long is left", () => {
+    const plan = dueNow(MANUAL, NOW, refused(3600, 600));
+    expect(plan.steps).toEqual([]);
+    expect(plan.retryAfterS).toBe(3000);
+  });
+
+  it("lets the button through once that hour has passed, and holds the claim to it", () => {
+    const plan = dueNow(MANUAL, NOW, refused(7200, 3601));
+    expect(plan.steps).toEqual([{ lane: "trailing", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true }]);
+    expect(plan.minIntervalS).toBe(3600);
+  });
+
+  // The fast lane was already down on `lastOk === false`; this must not quietly open it.
+  it("keeps the fast lane shut throughout", () => {
+    expect(dueNow(cron(5), NOW, refused(7200, 3601)).steps).toEqual([]);
   });
 });
 

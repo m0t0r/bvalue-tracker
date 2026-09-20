@@ -42,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 234 tests, offline
+pnpm test                 # 257 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -174,8 +174,14 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
 - Events are revised after the fact: `automatic` → `manual`, magnitude and location
   change, and events can be withdrawn.
 - Coverage starts 2018-03-01 (stated on the form page).
-- **SGC accepts requests from Cloudflare's network.** Confirmed from the deployed
-  Worker; no proxy or GitHub Actions fallback is needed.
+- **SGC accepted requests from Cloudflare's network, and then stopped** (2026-09-18 →
+  2026-09-20). From 12:40 UTC on 2026-09-20 the deployed Worker got **410 Gone** on requests
+  that had succeeded five minutes earlier, with no deploy in between, while the canary made
+  the *same* request with the *same* user-agent from GitHub's runners and got a normal 200 at
+  13:33. So the endpoint has not moved and the request is not malformed: the difference is
+  the caller. Treat "our network can be refused" as a live possibility, and **the canary is
+  the instrument that tells the two apart** — it reaches SGC from somewhere else. If a
+  fallback is ever needed this is the shape of it; nothing is built yet.
 - The per-event page `https://www.sgc.gov.co/detallesismo/<id>/resumen` exists but
   returns 403 to `curl` without a browser user-agent.
 - **SGC publishes an event about 2–5 minutes after it happens** (measured 2026-09-19
@@ -221,9 +227,7 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   429 and 503 are SGC asking us to stop, and retrying is the one thing that makes being rate
   limited worse; every other 4xx is a deterministic answer about the request itself, so a
   second identical request can only get the same answer and cost the server another one.
-  `Retry-After` (seconds or HTTP date) is honoured. **SGC answered 410 Gone** from 12:40 UTC
-  on 2026-09-20, for hours, on requests that had succeeded minutes earlier — whatever the
-  cause, treat "SGC has withdrawn the endpoint" as something that happens.
+  `Retry-After` (seconds or HTTP date) is honoured.
 - The status is stored on the run (`ingest_runs.http_status`, `retry_after_s`), not parsed
   back out of `error`, so rewording a message cannot quietly disable the back-off.
 - `sgcUnwell` (`worker/plan.ts`) then stands the fast lanes down, on two independent rules. **Any** failed
@@ -232,6 +236,21 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   one. A 429 or 503 additionally holds it down for `Retry-After` or 30 minutes **even once
   a later run has succeeded**, because being answered is not being welcome. The wide tick
   and the sweep keep running throughout, and are what let the fast lane back in.
+- **A refusal thins the probe out; it never stops it** (`sgcRefusing` in `worker/plan.ts`).
+  `sgcUnwell` above gates only the fast lanes, and the wide tick deliberately never stands
+  down — so when SGC began answering **410 Gone** to the Worker on 2026-09-20 there was
+  nothing in the back-off that covered it, and the probe would have knocked on a closed door
+  **96 times a day, indefinitely**. 401, 403, 410 and 451 are a door held shut rather than a
+  bad day: once one of them has persisted for `REFUSAL_GRACE_S` (30 minutes, two wide ticks,
+  so a single 410 from a proxy having a moment costs nothing), the wide tick drops to one
+  probe an hour, and so does the refresh button — a press is the same request from the same
+  address, and the rule lives in `plan.ts` once rather than being restated at a caller. It
+  is deliberately *not* a stand-down: a probe that stopped could never see SGC come back.
+  429 and 503 stay out of that list; they have their own cooldown, which SGC itself names.
+  A 5xx is their bad day and keeps the full rate, because the probe is what recovers from it.
+- **The health rule reads a bounded window of runs** (`HEALTH_WINDOW_RUNS` = 12 in
+  `worker/db.ts`, an hour of ticks). It is what tells one bad answer from a streak, and it is
+  a fixed count on purpose: this is a hot query over a table that gains ~312 rows a day.
 - **The cooldown is clamped to 5 minutes … 6 hours.** Both ends are load-bearing.
   `Retry-After: 0` — which an already-elapsed HTTP date parses to, and clock skew makes
   reachable — would otherwise compute a zero-length cooldown and switch the back-off off in
@@ -729,11 +748,18 @@ colour, motion). Keep to them:
 - **The page says that it updates itself** (under the refresh button, in the footer):
   readers were reloading it. The "5 minutes" in the copy is the cron in
   `wrangler.jsonc`; change them together.
-- **The failed-ingest alert says 15 minutes, not 5**, and the difference is the whole point
-  of the alert: a failed run stands the fast lane down, so from that moment the only lane
-  still asking SGC is the wide tick. `ingestFailedBody` used to promise the reader a retry
-  "cada 5 minutos" in precisely the state where that had stopped being true. The number is
-  `WIDE_TICK_EVERY_MIN` in `worker/plan.ts`; change them together.
+- **The failed-ingest alert names no interval at all, and that is the settled answer.** It
+  said "cada 5 minutos" — the cron's rate — in the one state where the fast lane has stood
+  down and five minutes is wrong. That was changed to fifteen, the wide tick's rate, and
+  within the hour SGC began refusing us and the probe dropped to hourly, so fifteen was wrong
+  too. Three lane rules decide that number and the reader can act on none of them, so
+  `ingestFailedBody` promises a retry and stops there. What it must keep saying is "no hace
+  falta recargar"; `src/lib/i18n.test.ts` holds both halves. Do not put a number back.
+- **Three stand-down messages, three different truths.** `refreshWait` claims SGC answered
+  within the last five minutes, so it may only appear when nothing has failed;
+  `refreshStillFailing` replaces it beside the alert and must not tell the reader to press
+  again, because while SGC is refusing us the Worker's own wait is an hour; `refreshFailed`
+  is for the request from the *page* failing, which is a different thing again.
 - **The refresh button standing down is good news, not a countdown.** With a 5-minute
   cron the 5-minute throttle refuses most presses, so `refreshWait` says the reader
   already has the newest data instead of asking them to wait N minutes. It is a timed

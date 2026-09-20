@@ -87,9 +87,15 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   // `stoodDown` sticks until the next press, but the claim it makes — SGC was queried in
   // the last five minutes — stops being true the moment a run fails. The alert below says
   // so; this must not contradict it.
+  // Standing down means something different in each state, and saying the wrong one is worse
+  // than saying nothing: while SGC is failing the press really did reach nothing, and while
+  // SGC is being refused outright the Worker's own wait is an hour, so "press again" would be
+  // bad advice. refreshWait's claim — SGC answered in the last five minutes — is only true
+  // when nothing has failed.
   const message = refresh.isPending ? t.refreshing
     : refresh.isError ? t.refreshFailed
-    : stoodDown && !failed ? t.refreshWait
+    : stoodDown && failed ? t.refreshStillFailing
+    : stoodDown ? t.refreshWait
     : "";
 
   // The newest event's time reaches SGC's own page for it, the same link the table's time column
