@@ -462,7 +462,7 @@ describe("API", () => {
 async function tick(minute: number, { hour = 12, offsetS = 45 } = {}) {
   // scheduled() awaits its own work, so unlike the refresh route it needs no execution context.
   const at = new Date(Date.UTC(2026, 8, 19, hour, minute) + offsetS * 1000);
-  await worker.scheduled!({ cron: "*/5 * * * *", scheduledTime: at.getTime(), noRetry() {} }, env);
+  await worker.scheduled!({ cron: "*/15 * * * *", scheduledTime: at.getTime(), noRetry() {} }, env);
 }
 
 const latestRun = async () =>
@@ -766,11 +766,15 @@ describe("what a tick writes to the log", () => {
     serving(FULL);
     const got = lines();
 
-    await tick(5);
-    expect(withMsg(got(), "tick planned")[0]).toMatchObject({ level: "info", tickMinute: 5, lanes: ["fast"] });
-
+    // The hour's four ticks, each of which should say something different about itself.
     await tick(15);
-    expect(withMsg(got(), "tick planned")[1]).toMatchObject({ tickMinute: 15, lanes: ["wide"] });
+    expect(withMsg(got(), "tick planned")[0]).toMatchObject({ level: "info", tickMinute: 15, lanes: ["fast"] });
+
+    await tick(30);
+    expect(withMsg(got(), "tick planned")[1]).toMatchObject({ tickMinute: 30, lanes: ["wide"] });
+
+    await tick(0);
+    expect(withMsg(got(), "tick planned")[2]).toMatchObject({ tickMinute: 0, lanes: ["wide", "sweep"] });
   });
 
   it("records what the run cost and what it changed", async () => {
@@ -778,7 +782,7 @@ describe("what a tick writes to the log", () => {
     serving(FULL);
     const got = lines();
 
-    await tick(5);
+    await tick(15);
     const ok = withMsg(got(), "ingest ok")[0]!;
     expect(ok).toMatchObject({ level: "info", lane: "fast", trigger: "cron" });
     expect(ok.runId).toEqual(expect.any(Number));
@@ -794,7 +798,7 @@ describe("what a tick writes to the log", () => {
     serves(() => new Response("", { status: 410 }));
     const got = lines();
 
-    await tick(15); // the wide tick, which never stands down for SGC's health
+    await tick(30); // the wide tick, which never stands down for SGC's health
     expect(withMsg(got(), "ingest failed")[0]).toMatchObject({ level: "error", httpStatus: 410, lane: "wide" });
   });
 
