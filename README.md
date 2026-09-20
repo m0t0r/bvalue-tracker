@@ -175,11 +175,15 @@ before guessing; the reasoning behind each piece is under
 | **D1 `ingest_runs`** | The same outcomes, authoritative, and what the page and the lane rules actually read. | forever | `wrangler d1 execute` |
 | **`GET /api/health`** | `ingestAgeS`, `lastRunOk` — right now, from outside, with no credentials. | — | `curl` |
 
-`pnpm logs` needs an API token with *Account · Workers Observability · Read*
-(`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`). A `wrangler login` OAuth token is
-**not** enough — verified 2026-09-20, it answers 403 *Authentication error*, because its
-`workers_tail:read` scope is the live tail and not the stored logs. The script says so when
-it happens.
+`pnpm logs` needs `CLOUDFLARE_API_TOKEN` to hold an API token with *Account · Workers
+Observability · Read*; the account comes from `wrangler.jsonc`, and `CLOUDFLARE_ACCOUNT_ID`
+only overrides it. A `wrangler login` OAuth token is **not** enough — verified 2026-09-20,
+it answers 403 *Authentication error*, because its `workers_tail:read` scope is the live
+tail and not the stored logs. The script says so when it happens.
+
+**None of this is needed to read the logs**, only to read them from a terminal: the
+Worker's *Observability* tab in the dashboard queries the same data over an ordinary
+browser login, and is the faster route for a one-off incident.
 
 ```sh
 pnpm logs                                  # the last hour, oldest first
