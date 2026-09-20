@@ -117,8 +117,8 @@ const RATE_LIMIT_MAX_COOLDOWN_S = 21_600;
  * Whether SGC is answering well enough for a fast lane to open. There is one rule and both
  * fast lanes — the cron's narrow tick and the back-fill's no-wait refresh — read it here:
  *
- * - **any** failed run holds them down until one succeeds. The wide tick keeps probing every
- *   15 minutes, so that is what lets them back in — a run failing with an HTTP status is no
+ * - **any** failed run holds them down until one succeeds. The wide tick keeps probing on its
+ *   own interval, so that is what lets them back in — a run failing with an HTTP status is no
  *   weaker a signal than one that timed out.
  * - a 429 or 503 additionally holds them down for `Retry-After` (bounded) or 30 minutes,
  *   even once a later run has succeeded, because being answered is not being welcome.
@@ -143,12 +143,15 @@ export function sgcUnwell(health: SgcHealth, now: Date): boolean {
  */
 const REFUSAL_STATUSES = new Set([401, 403, 410, 451]);
 /**
- * How long a refusal has to persist before we believe it. Two wide ticks: a single 410 can
- * be a proxy having a moment, and dropping to an hourly probe on one answer would make
- * every blip cost an hour of staleness.
+ * How long a refusal has to persist before we believe it: **two wide ticks**, so one of them
+ * still goes at full rate and a 410 from a proxy having a moment costs one tick, not an hour.
+ * It is derived, not written down, because writing it down is how it broke: at 1800 s against
+ * 30-minute wide ticks the first tick after a failure landed exactly *on* the boundary, the
+ * grace was unreachable, and a single 410 bought 90 minutes of silence — the freeze this whole
+ * rule exists to prevent. `plan.test.ts` walks that timeline tick by tick.
  */
-const REFUSAL_GRACE_S = 1800;
-/** What the probe drops to once we believe it: one an hour instead of four. */
+const REFUSAL_GRACE_S = 2 * WIDE_TICK_EVERY_MIN * 60;
+/** What the probe drops to once we believe it: one an hour instead of two. */
 const REFUSED_PROBE_INTERVAL_S = 3600;
 
 /**
@@ -167,11 +170,17 @@ export function sgcRefusing(health: SgcHealth, now: Date): boolean {
   return now.getTime() - Date.parse(health.failing.since) >= REFUSAL_GRACE_S * 1000;
 }
 
-/** Seconds since anything last asked SGC, from the newest finished run. Infinity if none. */
+/**
+ * Seconds since anything last *asked* SGC — measured from when the run started, not when it
+ * finished. What these intervals ration is requests leaving, and a request leaves at the
+ * start. Measured from `finished_at`, a run's own 1–13 s pushed every comparison just past
+ * its interval, so the tick an hour later missed the hourly probe by three seconds and the
+ * wait silently became an hour and a half.
+ */
 function sinceLastRunS(history: IngestHistory, now: Date): number {
   const last = history.lastRun;
   if (last === null) return Infinity;
-  return (now.getTime() - Date.parse(last.finishedAt ?? last.startedAt)) / 1000;
+  return (now.getTime() - Date.parse(last.startedAt)) / 1000;
 }
 
 /**
@@ -219,8 +228,8 @@ function refreshPlan(now: Date, history: IngestHistory): IngestPlan {
 
   const sinceLastS = sinceLastRunS(history, now);
   // While SGC is refusing us the button waits as long as the cron does. A press is the same
-  // request from the same address, so letting it through twelve times an hour would undo the
-  // back-off above — and this rule belongs here, once, not restated at a caller.
+  // request from the same address, so letting it through on the ordinary throttle would undo
+  // the back-off above — and this rule belongs here, once, not restated at a caller.
   const waitS = sgcRefusing(history.health, now) ? REFUSED_PROBE_INTERVAL_S : REFRESH_MIN_INTERVAL_S;
   if (!fastLane && sinceLastS < waitS) {
     return { steps: [], retryAfterS: Math.ceil(waitS - sinceLastS), minIntervalS: null };

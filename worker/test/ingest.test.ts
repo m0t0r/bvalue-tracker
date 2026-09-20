@@ -659,9 +659,9 @@ describe("the refusal back-off, through the cron", () => {
     await completeBackfill();
     const calls = serving(FULL);
 
-    // Refused for 45 minutes, last asked 35 minutes ago: past the grace, inside the hour.
-    await recordRun(0, { http_status: 410 }, ago(45));
-    await recordRun(0, { http_status: 410 }, ago(35));
+    // Refused for 90 minutes, last asked 10 minutes ago: past the grace, inside the hour.
+    await recordRun(0, { http_status: 410 }, ago(90));
+    await recordRun(0, { http_status: 410 }, ago(10));
     await tick(30);
     expect(calls()).toBe(0);
 
