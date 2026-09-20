@@ -1,0 +1,29 @@
+-- The fifth hot query over this table, and the one the other four hid: `lastRun`.
+--
+-- 0004's note says to check EXPLAIN QUERY PLAN before adding a fifth. Adding one to
+-- /api/health is what prompted the check, and it found that `lastRun` had never been
+-- indexed at all — while being the *most* frequently asked question here. /api/status calls
+-- it twice, and the open page re-reads /api/status every minute, so both of these ran on
+-- every poll from every reader:
+--
+--   ... WHERE finished_at IS NOT NULL            ORDER BY id DESC LIMIT 1  -- SCAN ingest_runs
+--   ... WHERE finished_at IS NOT NULL AND ok = 1 ORDER BY id DESC LIMIT 1  -- TEMP B-TREE
+--
+-- The first was a full table scan. The second used ingest_runs_ok to find the ok = 1 rows
+-- and then materialised every one of them into a temporary b-tree to sort by id.
+-- ingest_runs grows ~312 rows a day, so at three months that is ~28,000 rows read to answer
+-- "what happened last?" — the same shape of mistake 0003 and 0004 each fixed, and the free
+-- plan allows 5,000,000 D1 rows read a day.
+--
+-- Both are partial over `finished_at IS NOT NULL`, because an unfinished run is never the
+-- last run: that is 0004's territory, and the two migrations partition the table between
+-- them. `id DESC` matches the ORDER BY, so neither query sorts anything — each walks its
+-- index and stops at the first entry.
+--
+-- Two indexes rather than one, verified with EXPLAIN QUERY PLAN against the whole index set
+-- rather than in isolation: a single (id DESC, ok) index does serve both queries when it is
+-- the only candidate, but with ingest_runs_ok also present the planner prefers that one's
+-- equality seek for the ok = 1 half and keeps the sort. Giving that half its own leading
+-- `ok` column is what settles it.
+CREATE INDEX ingest_runs_finished ON ingest_runs(id DESC) WHERE finished_at IS NOT NULL;
+CREATE INDEX ingest_runs_finished_ok ON ingest_runs(ok, id DESC) WHERE finished_at IS NOT NULL;

@@ -43,7 +43,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 275 tests, offline
+pnpm test                 # 278 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 pnpm logs                 # production's own logs, from here (see Debugging production)
@@ -578,6 +578,20 @@ two more covering searches over the sweep rows alone. `runInFlight` was the one 
 and `reapAbandonedRuns` the same treatment: `ingest_runs_unfinished` is partial over
 `finished_at IS NULL`, which normally holds one row or none. Check `EXPLAIN QUERY PLAN`
 before adding a fifth; `worker/test/ingest.test.ts` asserts this one.
+
+**Doing that check found the fifth, and it was the biggest of them: `lastRun`.** It had
+never been indexed at all, while being the most frequently asked question here —
+`/api/status` calls it twice and the open page re-reads `/api/status` *every minute*, so
+this ran on every poll from every reader. `lastRun(false)` was a full table scan;
+`lastRun(true)` used `ingest_runs_ok` and then materialised every ok = 1 row into a
+temporary b-tree to sort it, which at three months is ~28,000 rows read to answer "what
+happened last?". `migrations/0005` adds two partial indexes over `finished_at IS NOT NULL`,
+both keyed `id DESC` so neither query sorts anything. **Two, not one**, and that is the
+lesson worth keeping: a single `(id DESC, ok)` index serves both queries when it is the
+only candidate, and stops serving the `ok = 1` half the moment `ingest_runs_ok` is in the
+picture, because the planner prefers that one's equality seek and keeps the sort. Run
+`EXPLAIN QUERY PLAN` against the **whole index set**, never against the index you just
+wrote in isolation.
 
 Still open: that 10 ms has **not been measured**, but it no longer needs a `wrangler tail`
 left running to catch a tick. Workers Logs publishes `$workers.cpuTimeMs` on every
