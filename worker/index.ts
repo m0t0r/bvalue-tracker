@@ -6,9 +6,20 @@ import { MAINSHOCK_ID } from "../core/seiscomp.ts";
 import type { StatusResponse, StoredEvent } from "./api-types.ts";
 import { lastRun, toStored, type EventRow } from "./db.ts";
 import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
-import { dueNow } from "./plan.ts";
+import { asLevel, logger, type Logger } from "./log.ts";
+import { dueNow, sgcUnwell, tickMinute } from "./plan.ts";
 
 const app = new Hono<{ Bindings: Env }>();
+
+/**
+ * This invocation's logger. `LOG_LEVEL` is a var in wrangler.jsonc, so turning `debug` on
+ * for an investigation is a one-line deploy and turning it back off cannot be forgotten in
+ * some call site. The read routes deliberately do not use this: their status and CPU time
+ * are already in the invocation log Cloudflare writes for every request, and a second line
+ * per request would spend the free plan's 200,000/day on something we already have.
+ */
+const log = (env: Env, bindings: Record<string, unknown> = {}): Logger =>
+  logger(bindings, asLevel(env.LOG_LEVEL));
 
 /**
  * The page's own fetches carry Sec-Fetch-Site: same-origin; a cross-site page's do not.
@@ -64,11 +75,32 @@ app.use("/api/*", async (c, next) => {
   return c.json({ error: "forbidden" }, 403);
 });
 
-/** Liveness for CI and uptime checks: the Worker answered and D1 is readable. */
+/**
+ * Liveness for CI and uptime checks: the Worker answered and D1 is readable.
+ *
+ * It also carries how long ago ingest last succeeded, because this is the only route open
+ * to a caller without a same-origin signal and therefore the only thing an external alarm
+ * can ask. That number is what the two real outages had in common: the Worker was up, the
+ * page rendered, `/api/health` would have said `ok`, and the catalogue was nine hours
+ * stale. `ingestAgeS` is the field to alert on — see .github/workflows/ingest-health.yml.
+ *
+ * Still no catalogue data: an age and a count say nothing about any event.
+ */
 app.get("/api/health", async (c) => {
   const agg = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM events").first<{ n: number }>();
+  const ok = await lastRun(c.env.DB, true);
+  const last = await lastRun(c.env.DB, false);
+  const ageS = (r: { finishedAt: string | null } | null) =>
+    r?.finishedAt == null ? null : Math.max(0, Math.round((Date.now() - Date.parse(r.finishedAt)) / 1000));
   c.header("cache-control", "no-store");
-  return c.json({ ok: true, totalEvents: agg?.n ?? 0 });
+  return c.json({
+    ok: true,
+    totalEvents: agg?.n ?? 0,
+    /** Seconds since ingest last succeeded. null when it never has. */
+    ingestAgeS: ageS(ok),
+    /** Whether the most recent finished run succeeded. null when none has. */
+    lastRunOk: last === null ? null : last.ok,
+  });
 });
 
 interface EventFilter {
@@ -199,21 +231,96 @@ app.get("/api/b-windows.csv", async (c) => {
 app.post("/api/refresh", async (c) => {
   const db = c.env.DB;
   const now = new Date();
-  const standDown = async (retryAfterS: number) =>
-    c.json({ ...(await status(db)), refreshed: false, retryAfterS } satisfies StatusResponse);
+  const l = log(c.env, { trigger: "manual" });
+  const standDown = async (retryAfterS: number, why: string) => {
+    // A press that stands down is the normal case with a 5-minute cron, so this is not a
+    // warning. It is logged because "the button does nothing" is the report we would get,
+    // and the reason it did nothing is otherwise nowhere.
+    l.info({ retryAfterS, why }, "refresh stood down");
+    return c.json({ ...(await status(db)), refreshed: false, retryAfterS } satisfies StatusResponse);
+  };
 
   // One reading of the run history, one decision from it. The checks inside dueNow only
   // answer with a useful retryAfterS; the guard that actually holds is the atomic claim,
   // which the plan's minIntervalS carries into ingest().
-  const plan = dueNow({ kind: "manual" }, now, await readHistory(db, now));
-  if (plan.steps.length === 0) return standDown(plan.retryAfterS ?? 5);
+  const history = await readHistory(db, now, l);
+  const plan = dueNow({ kind: "manual" }, now, history);
+  if (plan.steps.length === 0) {
+    return standDown(plan.retryAfterS ?? 5, history.inFlight ? "in flight" : "throttled");
+  }
 
-  const work = runPlan({ db }, plan);
+  const work = runPlan({ db, log: l, analytics: c.env.INGEST_ANALYTICS }, plan);
   // Keep the ingest alive if the visitor closes the tab mid-request.
   c.executionCtx.waitUntil(work);
   // null means a concurrent caller won the claim, so nothing was sent to SGC.
-  if ((await work) === null) return standDown(5);
+  if ((await work) === null) return standDown(5, "claim held");
   return c.json({ ...(await status(db)), refreshed: true } satisfies StatusResponse);
+});
+
+/**
+ * What broke in the reader's browser.
+ *
+ * The page's own failures were the one part of this system with no record at all: a
+ * MapLibre worker that never loads, a Recharts crash, a chunk that 404s after a deploy
+ * all leave the reader with a broken page and leave us with nothing. This is the smallest
+ * thing that fixes that — it writes a log line and touches no storage.
+ *
+ * It is **not** an open endpoint: it sits under /api/*, so the same-origin check and the
+ * 120/minute per-IP rate limit already apply to it exactly as they do to /api/events. A
+ * caller with no same-origin signal gets 403 before this handler runs.
+ */
+const CLIENT_ERROR_MAX_BYTES = 4096;
+
+/** Read at most `max` bytes and give up rather than buffering whatever was sent. */
+async function readCapped(body: ReadableStream<Uint8Array> | null, max: number): Promise<string | null> {
+  if (body === null) return null;
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) { await reader.cancel(); return null; }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) { all.set(chunk, at); at += chunk.byteLength; }
+  return new TextDecoder().decode(all);
+}
+
+app.post("/api/client-error", async (c) => {
+  c.header("cache-control", "no-store");
+  const raw = await readCapped(c.req.raw.body, CLIENT_ERROR_MAX_BYTES);
+  if (raw === null) return c.body(null, 413);
+
+  let sent: unknown;
+  try { sent = JSON.parse(raw); } catch { return c.json({ error: "bad report" }, 400); }
+  if (typeof sent !== "object" || sent === null) return c.json({ error: "bad report" }, 400);
+
+  // Only these four fields are read, and each only if it is a string: whatever else the
+  // body carried is dropped here rather than logged. A log line is a place a reader's
+  // browser can put text, so the field list is a closed one.
+  const { message, stack, source, path } = sent as Record<string, unknown>;
+  if (typeof message !== "string" || message === "") return c.json({ error: "bad report" }, 400);
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+
+  // Nested, so the dashboard can filter on `page.message`. The logger's own string cap is
+  // a shallow pass and does not reach in here; the 4 KB body cap above is what bounds these.
+  log(c.env).warn(
+    {
+      page: {
+        message,
+        stack: str(stack),
+        source: str(source),
+        path: str(path),
+        userAgent: c.req.header("user-agent"),
+      },
+    },
+    "page error",
+  );
+  return c.body(null, 204);
 });
 
 app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
@@ -233,7 +340,10 @@ app.onError((err, c) => {
     c.header("cache-control", "no-store");
     return c.json({ error: "cluster must be shallow or deep" }, 400);
   }
-  console.error(err);
+  // The route is on the line because a 500 with no path is a 500 you cannot reproduce.
+  // `err` is flattened by the logger, so the stack survives JSON — `console.error(err)`
+  // alone gave Workers Logs an object that serialises to `{}`.
+  log(c.env).error({ err, method: c.req.method, path: c.req.path }, "unhandled error");
   c.header("cache-control", "no-store");
   return c.json({ error: "internal error" }, 500);
 });
@@ -254,7 +364,33 @@ export default {
     // The real clock, not the scheduled minute: a failure recorded seconds ago still counts
     // against the fast lane, while which lane this tick *is* comes from scheduledTime.
     const now = new Date();
-    const plan = dueNow({ kind: "cron", scheduledTime: controller.scheduledTime }, now, await readHistory(env.DB, now));
-    await runPlan({ db: env.DB }, plan);
+    const minute = tickMinute(controller.scheduledTime);
+    const l = log(env, { trigger: "cron", tickMinute: minute });
+    try {
+      const history = await readHistory(env.DB, now, l);
+      const plan = dueNow({ kind: "cron", scheduledTime: controller.scheduledTime }, now, history);
+      /**
+       * The line that would have caught the tickMinute fault in one query. `lanes` is what
+       * this tick decided to do; grouping 24 hours of these by it should show four fast
+       * ticks for every wide one and a sweep on the hour. For a day it was `["fast"]` every
+       * single time and nothing said so. `scheduledAt` is on the line too, because the
+       * dispatch is at :45 past and that offset is the whole reason the snap exists.
+       */
+      l.info({
+        scheduledAt: new Date(controller.scheduledTime).toISOString(),
+        lanes: plan.steps.map((s) => s.lane),
+        sgcUnwell: sgcUnwell(history.health, now),
+        backfill: `${history.backfill.done}/${history.backfill.total}`,
+        inFlight: history.inFlight,
+      }, plan.steps.length === 0 ? "tick stood down" : "tick planned");
+
+      await runPlan({ db: env.DB, log: l, analytics: env.INGEST_ANALYTICS }, plan);
+    } catch (err) {
+      // A throw here is otherwise only an uncaught-exception log with no idea which lane
+      // it was in. Logged with the tick's own fields, then rethrown so the runtime still
+      // records the invocation as failed.
+      l.error({ err }, "tick failed");
+      throw err;
+    }
   },
 } satisfies ExportedHandler<Env>;

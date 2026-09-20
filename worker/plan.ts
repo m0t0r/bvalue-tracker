@@ -82,8 +82,18 @@ export interface IngestHistory {
   backfill: { done: number; total: number };
 }
 
+/**
+ * The lane is the name of the rule that chose this step, and it is the field the logs and
+ * the analytics dataset are grouped by. It is not decoration: for a day after the
+ * five-minute cadence shipped every tick took the fast lane and nobody could see it,
+ * because nothing anywhere wrote down which lane a tick had taken. `fast` and `wide`
+ * differ in window width and in whether they may retire an event; a visitor's press runs
+ * `wide`, because that is exactly the work it does.
+ */
+export type IngestLane = "fast" | "wide" | "sweep";
+
 export type IngestStep =
-  | { lane: "trailing"; trigger: IngestRun["trigger"]; days: number; allowRemovals: boolean }
+  | { lane: "fast" | "wide"; trigger: IngestRun["trigger"]; days: number; allowRemovals: boolean }
   | { lane: "sweep" };
 
 /** Who is asking. The cron carries the tick's own minute; a visitor's press carries nothing. */
@@ -198,7 +208,7 @@ export function dueNow(caller: Caller, now: Date, history: IngestHistory): Inges
     // The real clock, not the scheduled minute: a failure recorded seconds ago still counts.
     if (sgcUnwell(history.health, now)) return { steps: [], retryAfterS: null, minIntervalS: null };
     return {
-      steps: [{ lane: "trailing", trigger: "cron", days: TRAILING_FAST_DAYS, allowRemovals: false }],
+      steps: [{ lane: "fast", trigger: "cron", days: TRAILING_FAST_DAYS, allowRemovals: false }],
       retryAfterS: null,
       minIntervalS: null,
     };
@@ -211,7 +221,7 @@ export function dueNow(caller: Caller, now: Date, history: IngestHistory): Inges
     return { steps: [], retryAfterS: null, minIntervalS: null };
   }
 
-  const steps: IngestStep[] = [{ lane: "trailing", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }];
+  const steps: IngestStep[] = [{ lane: "wide", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }];
   // One older 7-day chunk on the hour, to catch late revisions — and on every wide tick
   // while history is still incomplete, rather than waiting an hour per week of back-fill.
   if (history.backfill.done < history.backfill.total || minute === 0) steps.push({ lane: "sweep" });
@@ -239,6 +249,6 @@ function refreshPlan(now: Date, history: IngestHistory): IngestPlan {
   // the lane is shut, and so what lets it open again.
   const step: IngestStep = incomplete
     ? { lane: "sweep" }
-    : { lane: "trailing", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true };
+    : { lane: "wide", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true };
   return { steps: [step], retryAfterS: null, minIntervalS: fastLane ? null : waitS };
 }

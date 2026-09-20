@@ -38,7 +38,7 @@ const rateLimited = (retryAfterS: number | null) =>
 describe("cron lanes", () => {
   it("gives the fast lane one trailing day and never lets it retire an event", () => {
     expect(dueNow(cron(15), NOW, history()).steps).toEqual([
-      { lane: "trailing", trigger: "cron", days: 1, allowRemovals: false },
+      { lane: "fast", trigger: "cron", days: 1, allowRemovals: false },
     ]);
   });
 
@@ -74,7 +74,7 @@ describe("cron lanes", () => {
 
   it("gives the wide tick three trailing days, with removals", () => {
     expect(dueNow(cron(30), NOW, history()).steps).toEqual([
-      { lane: "trailing", trigger: "cron", days: 3, allowRemovals: true },
+      { lane: "wide", trigger: "cron", days: 3, allowRemovals: true },
     ]);
   });
 
@@ -99,7 +99,7 @@ describe("cron lanes", () => {
   it("reads a tick that landed a tenth of a second early as the minute it was meant for", () => {
     const early = { kind: "cron" as const, scheduledTime: Date.UTC(2026, 8, 19, 12, 30) - 100 };
     expect(dueNow(early, NOW, history()).steps).toEqual([
-      { lane: "trailing", trigger: "cron", days: 3, allowRemovals: true },
+      { lane: "wide", trigger: "cron", days: 3, allowRemovals: true },
     ]);
   });
 
@@ -115,7 +115,7 @@ describe("cron lanes", () => {
     const MINUTES = [0, 15, 30, 45];
     const plansFor = (h: IngestHistory) =>
       MINUTES.map((m) => dueNow({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, h));
-    const isWide = (p: IngestPlan) => p.steps.some((s) => s.lane === "trailing" && s.days === TRAILING_DAYS);
+    const isWide = (p: IngestPlan) => p.steps.some((s) => s.lane === "wide" && s.days === TRAILING_DAYS);
     const hasSweep = (p: IngestPlan) => p.steps.some((s) => s.lane === "sweep");
 
     it("alternates wide and narrow, and sweeps on the hour", () => {
@@ -258,7 +258,7 @@ describe("the visitor's refresh", () => {
 
   it("re-reads the trailing window once the wait has elapsed, and keeps the throttle on the claim", () => {
     const plan = dueNow(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), history({ lastRun: finishedAt(NOW) }));
-    expect(plan.steps).toEqual([{ lane: "trailing", trigger: "manual", days: 3, allowRemovals: true }]);
+    expect(plan.steps).toEqual([{ lane: "wide", trigger: "manual", days: 3, allowRemovals: true }]);
     expect(plan.minIntervalS).toBe(REFRESH_MIN_INTERVAL_S);
   });
 

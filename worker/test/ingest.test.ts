@@ -1,7 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
 import { ABANDONED_ERROR, sgcHealth } from "../db.ts";
@@ -427,7 +427,24 @@ describe("API", () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     const res = await callRaw("/api/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, totalEvents: 786 });
+    // ingestAgeS is what an external alarm reads: it is the only way anything outside can
+    // tell a live Worker serving a nine-hour-old catalogue from a healthy one.
+    expect(await res.json()).toEqual({ ok: true, totalEvents: 786, ingestAgeS: 0, lastRunOk: true });
+  });
+
+  it("reports a stale catalogue on /api/health even though the Worker is fine", async () => {
+    // A successful run, long ago, and nothing since: exactly the shape of both real outages.
+    await env.DB.prepare(
+      `INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok)
+       VALUES (?1, ?1, 'cron', ?1, ?1, 1)`,
+    ).bind(new Date(Date.now() - 9 * 3600_000).toISOString()).run();
+    const body = (await (await callRaw("/api/health")).json()) as { ok: boolean; ingestAgeS: number };
+    expect(body.ok).toBe(true);
+    expect(body.ingestAgeS).toBeGreaterThan(8 * 3600);
+  });
+
+  it("says so when ingest has never succeeded", async () => {
+    expect(await (await callRaw("/api/health")).json()).toMatchObject({ ingestAgeS: null, lastRunOk: null });
   });
 
   it("returns JSON 404 for unknown API routes", async () => {
@@ -680,5 +697,130 @@ describe("the refusal back-off, through the cron", () => {
 
     await tick(30);
     expect(calls()).toBe(1);
+  });
+});
+
+/**
+ * What the Worker says about itself while it works.
+ *
+ * These pin the *fields*, not the wording, because the fields are what a query in the
+ * Workers Logs dashboard can group by — and each one below is the answer to a question
+ * that took hours to answer without it. See README, "Debugging production".
+ */
+describe("what a tick writes to the log", () => {
+  /** Every console line this block produced, as the single object each one must be. */
+  function lines(): () => Record<string, unknown>[] {
+    const out: Record<string, unknown>[] = [];
+    for (const m of ["debug", "info", "warn", "error"] as const) {
+      vi.spyOn(console, m).mockImplementation((...args: unknown[]) => {
+        if (args.length === 1 && typeof args[0] === "object" && args[0] !== null) {
+          out.push(args[0] as Record<string, unknown>);
+        }
+      });
+    }
+    return () => out;
+  }
+  const withMsg = (all: Record<string, unknown>[], msg: string) => all.filter((l) => l.msg === msg);
+
+  afterEach(() => vi.restoreAllMocks());
+
+  // The line that would have caught the tickMinute fault in one query: for a day every
+  // tick took the fast lane, 195 times in a row, and nothing anywhere wrote the lane down.
+  it("says which lane the tick chose, and which minute chose it", async () => {
+    await completeBackfill();
+    serving(FULL);
+    const got = lines();
+
+    await tick(5);
+    expect(withMsg(got(), "tick planned")[0]).toMatchObject({ level: "info", tickMinute: 5, lanes: ["fast"] });
+
+    await tick(15);
+    expect(withMsg(got(), "tick planned")[1]).toMatchObject({ tickMinute: 15, lanes: ["wide"] });
+  });
+
+  it("records what the run cost and what it changed", async () => {
+    await completeBackfill();
+    serving(FULL);
+    const got = lines();
+
+    await tick(5);
+    const ok = withMsg(got(), "ingest ok")[0]!;
+    expect(ok).toMatchObject({ level: "info", lane: "fast", trigger: "cron" });
+    expect(ok.runId).toEqual(expect.any(Number));
+    expect(ok.durationMs).toEqual(expect.any(Number));
+    // Answers "is SGC slow?" and "how big are these responses?", neither of which anything
+    // recorded before — the second has been an open audit question with no measurement.
+    expect(ok.sgcMs).toEqual(expect.any(Number));
+    expect(ok.sgcBytes as number).toBeGreaterThan(0);
+  });
+
+  it("puts an SGC refusal on the line at error, with its status", async () => {
+    await completeBackfill();
+    serves(() => new Response("", { status: 410 }));
+    const got = lines();
+
+    await tick(15); // the wide tick, which never stands down for SGC's health
+    expect(withMsg(got(), "ingest failed")[0]).toMatchObject({ level: "error", httpStatus: 410, lane: "wide" });
+  });
+
+  // The one line that says "an invocation of this Worker was killed". It was true 112 times
+  // in a row on 2026-09-20 and nothing said so, which is why it is a warn and not an info.
+  it("warns when it finds a run the Worker was killed in the middle of", async () => {
+    await completeBackfill();
+    await env.DB
+      .prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
+                VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
+      .bind(new Date(Date.now() - 10 * 60_000).toISOString())
+      .run();
+    serving(FULL);
+    const got = lines();
+
+    await tick(15);
+    expect(withMsg(got(), "reaped abandoned runs: an invocation was killed")[0])
+      .toMatchObject({ level: "warn", reaped: 1 });
+  });
+});
+
+/**
+ * The page's own failures were the one part of this system with no record at all. This is
+ * not an open endpoint: it sits under /api/*, so the same-origin check and the per-IP rate
+ * limit already stand in front of it, and it writes a log line and stores nothing.
+ */
+describe("POST /api/client-error", () => {
+  const report = (body: unknown) =>
+    call("/api/client-error", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
+
+  it("accepts a report from the page and stores nothing", async () => {
+    const before = await runCount();
+    expect((await report({ message: "TypeError: x is not a function", source: "error" })).status).toBe(204);
+    expect(await runCount()).toBe(before);
+    expect(await count()).toBe(0);
+  });
+
+  it("is refused without a same-origin signal, like every other /api route", async () => {
+    expect((await callRaw("/api/client-error", { method: "POST", body: "{}" })).status).toBe(403);
+  });
+
+  it("refuses a body that is not a report", async () => {
+    expect((await report("not json")).status).toBe(400);
+    expect((await report({ stack: "only a stack" })).status).toBe(400);
+    expect((await report({ message: "" })).status).toBe(400);
+  });
+
+  // A log line is a place a reader's browser can put text, so what it may put there is
+  // bounded before anything is read, not after.
+  it("refuses a body over the cap without buffering it", async () => {
+    expect((await report({ message: "x".repeat(8000) })).status).toBe(413);
+  });
+
+  it("reads only the fields it knows, and drops the rest", async () => {
+    const out: Record<string, unknown>[] = [];
+    vi.spyOn(console, "warn").mockImplementation((...a: unknown[]) => void out.push(a[0] as Record<string, unknown>));
+    await report({ message: "boom", source: "error", path: "/", surprise: "dropped" });
+    vi.restoreAllMocks();
+    expect(out[0]).toMatchObject({ level: "warn", msg: "page error" });
+    expect(out[0]!.page).toEqual({
+      message: "boom", source: "error", path: "/", stack: undefined, userAgent: undefined,
+    });
   });
 });

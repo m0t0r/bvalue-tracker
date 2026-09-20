@@ -4,10 +4,13 @@ import { createRoot } from "react-dom/client";
 import { App } from "@/App";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
+import { installErrorReporting } from "@/lib/report-error";
 import { initTheme } from "@/lib/theme";
 import "./index.css";
 
 initTheme();
+// Before the first render, so a crash while mounting is reported too.
+installErrorReporting();
 
 const queryClient = new QueryClient({
   // refetchOnWindowFocus is left at the library default (true): a stale query refetches when the tab

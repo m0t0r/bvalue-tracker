@@ -85,7 +85,14 @@ describe("parseCatalogHtml on the captured response", () => {
 
 describe("parseCatalogHtml failure modes", () => {
   it("returns an empty page for a genuine zero-result response", () => {
-    expect(parseCatalogHtml(EMPTY)).toEqual({ reportedTotal: 0, duplicatesDropped: 0, skippedRows: [], events: [] });
+    expect(parseCatalogHtml(EMPTY)).toEqual({
+      reportedTotal: 0,
+      duplicatesDropped: 0,
+      skippedRows: [],
+      events: [],
+      // Parsed from a string, so there was no network to describe.
+      cost: { bytes: EMPTY.length, fetchMs: null, attempts: null },
+    });
   });
 
   it("collapses a row the server repeats, as SGC does on large queries", () => {
@@ -170,6 +177,18 @@ describe("fetchCatalog", () => {
     const page = await fetchCatalog(query, { backoffMs: 1 });
     expect(calls()).toBe(3);
     expect(page.events).toHaveLength(786);
+  });
+
+  // None of this was visible from outside: a hanging SGC request and a fast empty one look
+  // the same in ingest_runs, and "responses are buffered with no byte cap" was an open
+  // audit question with no measurement behind it. The retry is counted too, because what a
+  // slow run costs is how long SGC held us, not how long the last attempt took.
+  it("reports what the response cost: its size and how many requests it took", async () => {
+    serves(() => HttpResponse.error(), ok);
+    const page = await fetchCatalog(query, { backoffMs: 1 });
+    expect(page.cost.bytes).toBe(FULL.length);
+    expect(page.cost.attempts).toBe(2);
+    expect(page.cost.fetchMs).toBeGreaterThanOrEqual(0);
   });
 
   it("gives up after the retry budget and keeps the cause", async () => {

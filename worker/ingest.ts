@@ -1,7 +1,9 @@
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions } from "../core/seiscomp.ts";
+import { recordRun } from "./analytics.ts";
 import type { IngestRun } from "./api-types.ts";
 import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastRun, reapAbandonedRuns, runBatched, runInFlight, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
-import { IN_FLIGHT_MS, TRAILING_DAYS, type IngestHistory, type IngestPlan } from "./plan.ts";
+import { silentLogger, type Logger } from "./log.ts";
+import { IN_FLIGHT_MS, TRAILING_DAYS, type IngestHistory, type IngestLane, type IngestPlan } from "./plan.ts";
 
 const DAY_MS = 86_400_000;
 export const SWEEP_CHUNK_DAYS = 7;
@@ -14,6 +16,13 @@ export interface IngestDeps {
   fetchOptions?: FetchOptions;
   /** Guard widths for the atomic claim. A visitor's refresh also passes minIntervalS. */
   guard?: { inFlightMs?: number; minIntervalS?: number | null };
+  /**
+   * Where this invocation says what it did. Defaults to silence so a caller that has no
+   * invocation to hang a log off — a test calling ingest() directly — needs no ceremony.
+   */
+  log?: Logger;
+  /** The 3-month record of ingest runs. Absent in local dev and in tests. */
+  analytics?: AnalyticsEngineDataset;
 }
 
 export interface IngestOptions {
@@ -23,6 +32,8 @@ export interface IngestOptions {
    * so one short response could retire real ones. The wide tick and the sweep still do it.
    */
   allowRemovals?: boolean;
+  /** Which rule chose this run. Carried into the log line and the analytics point. */
+  lane?: IngestLane;
 }
 
 /** How much of a window may be unparsable before the whole response is distrusted. */
@@ -51,6 +62,12 @@ export async function ingest(
   const nowIso = (deps.now ?? new Date()).toISOString();
   const from = windowStart.toISOString();
   const to = windowEnd.toISOString();
+  const lane = opts.lane ?? (trigger === "sweep" ? "sweep" : "wide");
+  const log = (deps.log ?? silentLogger).child({ lane, trigger });
+  // Wall time, not CPU: in workerd the clock only advances across I/O, so this measures
+  // how long SGC and D1 held the invocation. What the invocation *burned* is
+  // $workers.cpuTimeMs in Workers Logs, which the runtime alone can see.
+  const startedMs = Date.now();
 
   // Claiming and opening the run is one atomic statement: two callers racing here
   // must not both end up talking to SGC.
@@ -64,16 +81,56 @@ export async function ingest(
     inFlightSince: new Date(nowMs - (deps.guard?.inFlightMs ?? IN_FLIGHT_MS)).toISOString(),
     finishedSince: minIntervalS === null ? null : new Date(nowMs - minIntervalS * 1000).toISOString(),
   });
-  if (runId === null) return null;
+  if (runId === null) {
+    // Not a failure: another run holds the claim and this one must stand down. Worth a line
+    // anyway — a burst of these is how contention between the cron and the button looks.
+    log.debug({ windowStart: from, windowEnd: to }, "ingest stood down: claim held");
+    return null;
+  }
 
-  const finish = async (fields: Record<string, number | string | null>) => {
+  /**
+   * The one place a run ends. Every outcome goes through here, so the D1 row, the log line
+   * and the 3-month analytics point can never tell three different stories.
+   */
+  const finish = async (
+    fields: Record<string, number | string | null>,
+    sgc: { ms: number | null; bytes: number | null } = { ms: null, bytes: null },
+  ) => {
     const cols = Object.keys(fields);
     await db
       .prepare(`UPDATE ingest_runs SET finished_at = ?, ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
       .bind(new Date().toISOString(), ...Object.values(fields), runId)
       .run();
     const row = await db.prepare("SELECT * FROM ingest_runs WHERE id = ?").bind(runId).first<RunRow>();
-    return toRun(row!);
+    const run = toRun(row!);
+
+    const httpStatus = row!.http_status;
+    const retryAfterS = row!.retry_after_s;
+    const durationMs = Date.now() - startedMs;
+    const line = {
+      runId,
+      windowStart: from,
+      windowEnd: to,
+      fetched: run.fetched,
+      inserted: run.inserted,
+      updated: run.updated,
+      removed: run.removed,
+      durationMs,
+      sgcMs: sgc.ms,
+      sgcBytes: sgc.bytes,
+      httpStatus,
+      retryAfterS,
+      ...(run.error === null ? {} : { error: run.error }),
+    };
+    // A note on a successful run (a skipped removal, an unparsable row) is not an error but
+    // must not read as an ordinary success either: it is the shape the 2026-09-19 "one bad
+    // row froze the window" fault had.
+    if (!run.ok) log.error(line, "ingest failed");
+    else if (run.error !== null) log.warn(line, "ingest ok with a note");
+    else log.info(line, "ingest ok");
+
+    recordRun(deps.analytics, run, { lane, durationMs, sgcMs: sgc.ms, httpStatus, retryAfterS }, log);
+    return run;
   };
 
   try {
@@ -119,11 +176,18 @@ export async function ingest(
     }
 
     await runBatched(db, stmts);
-    return await finish({ ok: 1, fetched: page.events.length, inserted, updated, removed, error: note });
+    return await finish(
+      { ok: 1, fetched: page.events.length, inserted, updated, removed, error: note },
+      { ms: page.cost.fetchMs, bytes: page.cost.bytes },
+    );
   } catch (err) {
     const e = err as Error;
     const cause = e.cause ? ` (${String(e.cause)})` : "";
     const http = sgcHttpError(err);
+    // The stack goes in the log, never in the D1 `error` column: that column is read back
+    // by the page, and a visitor is never shown a stack (README, "Concurrency and failure
+    // lessons"). The two are deliberately different widths of the same fact.
+    log.debug({ err: e, attempt: "ingest" }, "ingest threw");
     return await finish({
       ok: 0,
       error: `${e.message}${cause}`.slice(0, 500),
@@ -170,7 +234,7 @@ export async function ingestSweep(deps: IngestDeps): Promise<IngestRun | null> {
   const chunks = sweepChunks(now);
   chunks.sort((a, b) => (last.get(a.start.toISOString()) ?? "").localeCompare(last.get(b.start.toISOString()) ?? ""));
   const next = chunks[0]!;
-  return ingest(deps, next.start, next.end, "sweep");
+  return ingest(deps, next.start, next.end, "sweep", { lane: "sweep" });
 }
 
 export async function backfillProgress(db: D1Database, now: Date): Promise<{ done: number; total: number }> {
@@ -186,11 +250,17 @@ export async function backfillProgress(db: D1Database, now: Date): Promise<{ don
  * Everything the recorded runs say, in one snapshot, so the plan is decided from one
  * reading of the table rather than from four that can disagree mid-tick.
  */
-export async function readHistory(db: D1Database, now: Date): Promise<IngestHistory> {
+export async function readHistory(db: D1Database, now: Date, log: Logger = silentLogger): Promise<IngestHistory> {
   // First close the books on any run the Worker was killed in the middle of. Everything
   // below reads finished runs, so until this happens a killed run is invisible: it is
   // neither the last run nor a failure, and the fast lane goes on as if SGC were fine.
-  await reapAbandonedRuns(db, now);
+  const reaped = await reapAbandonedRuns(db, now);
+  // The one signal that says "an invocation of this Worker was killed". On 2026-09-20 it
+  // was true 112 times in a row and nothing anywhere said so. It is a warn, not an info,
+  // because a non-zero count is never normal: ingest() records its own failures, so a row
+  // left open means the invocation died — out of memory, out of CPU, or evicted mid-fetch.
+  // This is the line to alert on, and the line to look for first in any stale-data report.
+  if (reaped > 0) log.warn({ reaped }, "reaped abandoned runs: an invocation was killed");
   return {
     health: await sgcHealth(db),
     inFlight: await runInFlight(db, now),
@@ -212,7 +282,7 @@ export async function runPlan(deps: IngestDeps, plan: IngestPlan): Promise<Inges
     const d: IngestDeps = { ...deps, guard: { ...deps.guard, minIntervalS: i === 0 ? plan.minIntervalS : null } };
     const run = step.lane === "sweep"
       ? await ingestSweep(d)
-      : await ingestTrailing(d, step.trigger, { days: step.days, allowRemovals: step.allowRemovals });
+      : await ingestTrailing(d, step.trigger, { days: step.days, allowRemovals: step.allowRemovals, lane: step.lane });
     if (i === 0) first = run;
   }
   return first;
