@@ -33,7 +33,9 @@
   // The ingest history that outlives Workers Logs' 3 days. Free plan: 100,000 data points
   // a day written and 10,000 read queries, kept for 3 months; we write ~350 a day, one per
   // ingest run. The field POSITIONS are the schema — see worker/analytics.ts, and only
-  // ever append. No dashboard step is needed: the dataset is created by the first write.
+  // ever append. The dataset is created by the first write, but Analytics Engine has to be
+  // enabled ONCE PER ACCOUNT in the dashboard first: until it is, every deploy carrying
+  // this binding is rejected with error 10089. See README's Deploy section.
   "analytics_engine_datasets": [{ "binding": "INGEST_ANALYTICS", "dataset": "sgc_ingest" }],
   "vars": {
     // The floor for worker/log.ts. "debug" for an investigation, then back to "info":

@@ -133,6 +133,16 @@ reads both. Keep the default untranslated: scripts depend on it.
 | D1 database | `sgc-swarm` |
 | `workers.dev` subdomain | `sgc-swarm` (account-wide; shared by every Worker in the account) |
 
+**Once per account, before the first deploy that carries the Analytics Engine binding:**
+enable Analytics Engine at
+[dash.cloudflare.com/\<account\>/workers/analytics-engine](https://dash.cloudflare.com/007ce3d670b57672f62e4ffd3869dfc5/workers/analytics-engine).
+Until it is enabled, `wrangler deploy` uploads the assets, resolves the bindings, and *then*
+fails the version call with `code: 10089` — "You need to enable Analytics Engine". Creating a
+blank dataset from that page is the flow that flips the switch; name it `sgc_ingest` with
+binding `INGEST_ANALYTICS` so the dashboard matches `wrangler.jsonc` instead of leaving a
+stray empty dataset beside the real one. It stays invisible in the dashboard until the first
+ingest tick writes to it, which is normal.
+
 ```sh
 pnpm exec wrangler whoami      # confirm the account before a first deploy of anything
 pnpm db:migrate:remote
@@ -727,6 +737,11 @@ why it is shaped the way it is. All of it was measured here, on 2026-09-20.
   allowance, and every run stays readable for a season. Its **field positions are its
   schema** — a query says `blob2`, not a name — so only ever append, and leave a dead slot
   empty rather than closing the gap.
+- **The dataset is auto-created; Analytics Engine is not auto-enabled.** Cloudflare's docs
+  say only the first half, and `wrangler deploy --dry-run` cannot catch the second, so the
+  CI run that shipped the observability work died at `code: 10089` after a clean build
+  (verified 2026-09-20). It is one click per account, not per Worker or per dataset, and
+  once done it stays done — see the Deploy section.
 - **`upload_source_maps` needs the build to emit a map**, and the map must be the Worker's
   only. `build.sourcemap` at the top level would also emit maps for the client bundle, and
   those are static assets: they would be published beside the page and hand over the whole
