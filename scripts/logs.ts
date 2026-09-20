@@ -46,39 +46,56 @@ function sinceMs(v: string): number {
 
 interface Creds { token: string; accountId: string; how: string }
 
-function credentials(): Creds {
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  if (token && accountId) return { token, accountId, how: "CLOUDFLARE_API_TOKEN" };
-
-  // wrangler's own stored login. Same credential wrangler uses, same account, this machine.
-  // Two places, because wrangler puts it under Library/Preferences on macOS and under
-  // XDG_CONFIG_HOME (or ~/.config) everywhere else. A missing file is the ordinary case for
-  // anyone who has never run `wrangler login`, so it must reach the message below rather
-  // than throw ENOENT over the top of it.
+/**
+ * The OAuth token `wrangler login` stored on this machine. Two places, because wrangler puts
+ * it under Library/Preferences on macOS and under XDG_CONFIG_HOME (or ~/.config) elsewhere.
+ * A missing file is the ordinary case for anyone who has never logged in, so it returns
+ * undefined rather than throwing ENOENT over the top of the message that explains what to do.
+ */
+function wranglerOauthToken(): string | undefined {
   const configs = [
     join(homedir(), "Library", "Preferences", ".wrangler", "config", "default.toml"),
     join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), ".wrangler", "config", "default.toml"),
   ];
-  let oauth: string | undefined;
   for (const path of configs) {
     try {
-      oauth = /^oauth_token\s*=\s*"([^"]+)"/m.exec(readFileSync(path, "utf8"))?.[1];
+      const found = /^oauth_token\s*=\s*"([^"]+)"/m.exec(readFileSync(path, "utf8"))?.[1];
+      if (found !== undefined) return found;
     } catch {
       continue; // no such file on this platform, or not readable
     }
-    if (oauth !== undefined) break;
   }
+  return undefined;
+}
+
+/**
+ * The account and the token are resolved **independently**, which is the whole point: they
+ * used to be one `token && accountId` check, so setting only CLOUDFLARE_API_TOKEN fell
+ * silently through to the wrangler login — which this endpoint refuses. You would set a
+ * freshly minted token, still get 403, and conclude the token was wrong.
+ *
+ * The account id is pinned in wrangler.jsonc precisely so nothing here has to guess it, and
+ * CLOUDFLARE_ACCOUNT_ID is only needed to point somewhere else.
+ */
+function credentials(): Creds {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+    ?? /"account_id"\s*:\s*"([^"]+)"/.exec(readFileSync("wrangler.jsonc", "utf8"))?.[1];
+  if (accountId === undefined) {
+    throw new Error("No account: set CLOUDFLARE_ACCOUNT_ID, or run this from a checkout with account_id in wrangler.jsonc.");
+  }
+
+  const fromEnv = process.env.CLOUDFLARE_API_TOKEN;
+  if (fromEnv) return { token: fromEnv, accountId, how: "CLOUDFLARE_API_TOKEN" };
+
+  const oauth = wranglerOauthToken();
   if (oauth === undefined) {
     throw new Error(
-      "No credentials. Either set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (the token needs\n" +
-      "Account · Workers Observability · Read), or run `pnpm exec wrangler login`.",
+      "No credentials. Either set CLOUDFLARE_API_TOKEN (it needs Account · Workers\n" +
+      "Observability · Read), or run `pnpm exec wrangler login` — though a login is not\n" +
+      "enough for this endpoint; its scopes stop at the live tail.",
     );
   }
-  // The account is pinned in wrangler.jsonc precisely so nothing here has to guess it.
-  const pinned = /"account_id"\s*:\s*"([^"]+)"/.exec(readFileSync("wrangler.jsonc", "utf8"))?.[1];
-  if (pinned === undefined) throw new Error("no account_id in wrangler.jsonc");
-  return { token: oauth, accountId: pinned, how: "your wrangler login" };
+  return { token: oauth, accountId, how: "your wrangler login" };
 }
 
 type Filter = { key: string; operation: string; type: string; value: string | number };
@@ -100,7 +117,8 @@ async function query(creds: Creds, body: Record<string, unknown>): Promise<Recor
         "\n  Account · Workers Observability · Read" +
         "\n(https://dash.cloudflare.com/profile/api-tokens), then:" +
         "\n  export CLOUDFLARE_API_TOKEN=…" +
-        `\n  export CLOUDFLARE_ACCOUNT_ID=${creds.accountId}`
+        `\n(the account, ${creds.accountId}, comes from wrangler.jsonc; CLOUDFLARE_ACCOUNT_ID` +
+        "\noverrides it only if you need to point somewhere else.)"
       : "";
     throw new Error(`telemetry query failed (HTTP ${res.status}): ${why}${scopes}`);
   }
