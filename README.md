@@ -43,7 +43,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 302 tests, offline
+pnpm test                 # 309 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 pnpm logs                 # production's own logs, from here (see Debugging production)
@@ -623,7 +623,9 @@ wrote in isolation.
 #### The CPU budget
 
 **Measured 2026-09-20, and it is the most serious thing in this file.** `$workers.cpuTimeMs`
-over 24 hours of production, 878 invocations:
+over 24 hours of production, 878 invocations — taken while the cron was still `*/5`, so the
+counts are ~2.6× what `*/15` now produces. **The per-invocation figures below are unaffected
+by the cadence**: they are what one tick costs, and one tick does the same work either way.
 
 | | n | median | p90 | p99 | max |
 |---|---|---|---|---|---|
@@ -638,15 +640,27 @@ busiest uses nine. It survives because that ceiling is not enforced continuously
 the outage in [Concurrency and failure lessons](#concurrency-and-failure-lessons), and
 nothing in the code stops it recurring — the Worker is living on unenforced headroom.
 
+Going back to `*/15` cuts the *number* of invocations from 312 to 120 a day, and so cuts
+total CPU by the same ratio. If what triggered enforcement was aggregate rather than
+per-invocation — which is unproven either way — that helps. It does nothing for the
+per-tick figure, which is the one over the limit, so do not read the cadence change as
+having fixed this.
+
 The fetch side is fine: `/api/status`, the route the open page polls every minute, is 3 ms
 median and 16 ms max, and `/api/refresh` is 6 ms median.
 
-So the choice is **the paid plan, or getting a tick under 10 ms**. Before reaching for
-either, find where the 26 ms goes — the candidates are `parseCatalogHtml` over ~0.8 MB of
-HTML and the `computeStats` pipeline, neither of which has been profiled, and the wide tick
-does two ingests in one invocation while the sweep parses the largest chunk
-(`SWEEP_CHUNK_DAYS`). `pnpm logs lanes` plus the new `lane` field is what makes that
-attributable, now that a tick says which lane it took.
+The choice was the paid plan or getting a tick under 10 ms, and **the decision is to stay on
+the free plan** (repo owner, 2026-09-20). So the work is to get a tick under 10 ms, and the
+first step is to find where the 26 ms goes rather than guess: the candidates are
+`parseCatalogHtml` over ~0.8 MB of HTML and the `computeStats` pipeline, neither of which
+has been profiled, and the wide tick does two ingests in one invocation while the sweep
+parses the largest chunk (`SWEEP_CHUNK_DAYS`). `pnpm logs lanes` plus the new `lane` field
+is what makes that attributable, now that a tick says which lane it took.
+
+Nothing has been done about it yet. Until something is, the Worker keeps running over the
+limit and the 2026-09-20 outage can repeat at any time, with the only warning being
+`reaped abandoned runs` in the logs and the stale-catalogue alarm in
+`.github/workflows/ingest-health.yml`.
 
 `pnpm logs cpu --since 24h` reproduces the table above. Note `p50` is not a valid operator
 in that API — it is `median`; `p90`, `p95`, `p99`, `avg`, `min`, `max`, `sum`, `stddev` and

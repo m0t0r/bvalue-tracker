@@ -138,12 +138,16 @@ describe("cron lanes", () => {
      * disagreed the hour quietly became twelve requests with no removals and no sweep for a
      * day. This counts what an hour of ticks actually sends: 4 trailing + 1 sweep = 120/day,
      * which is the figure the README's budget is derived from.
+     *
+     * Split by lane rather than counting "not the sweep": the day that went wrong had the
+     * right *number* of requests and the wrong lanes, so a total alone would have passed.
      */
     it("sends five requests an hour, which is the budget the README quotes", () => {
       const sent = plansFor(history()).flatMap((p) => p.steps);
       expect(sent).toHaveLength(5);
       expect(sent.filter((s) => s.lane === "sweep")).toHaveLength(1);
-      expect(sent.filter((s) => s.lane === "trailing")).toHaveLength(4);
+      expect(sent.filter((s) => s.lane === "wide")).toHaveLength(2);
+      expect(sent.filter((s) => s.lane === "fast")).toHaveLength(2);
     });
   });
 });
