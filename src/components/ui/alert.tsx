@@ -8,8 +8,14 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: "bg-card text-card-foreground",
+        // A state tints its whole surface: fill, border, and the title and icon that name it.
+        // The description is left on `--muted-foreground` by `AlertDescription`, so only the
+        // line that states the state is coloured — and the fill is chosen to keep that grey
+        // above 4.5:1. The values and why they are these values are in `index.css`.
         destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+          "border-destructive-edge bg-destructive-surface text-destructive-strong *:[svg]:text-current",
+        caution:
+          "border-caution-edge bg-caution-surface text-caution-strong *:[svg]:text-current",
       },
     },
     defaultVariants: {
