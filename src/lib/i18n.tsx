@@ -9,9 +9,9 @@ const es = {
   lastUpdate: "Última consulta al SGC",
   never: "nunca",
   refresh: "Actualizar ahora",
-  autoUpdate: "Se actualiza sola cada 5 minutos",
+  autoUpdate: "Se actualiza sola cada 15 minutos",
   refreshing: "Consultando al SGC…",
-  refreshWait: "Ya tienes los datos más recientes: el SGC se consultó hace menos de 5 minutos.",
+  refreshWait: "Ya tienes los datos más recientes: el SGC se consultó hace menos de 15 minutos.",
   refreshFailed: "No se pudo consultar al SGC. Inténtalo de nuevo en unos minutos.",
   refreshStillFailing: "No se envió: ya hay un reintento en camino.",
   ingestFailed: "La última consulta al SGC falló",
@@ -151,7 +151,7 @@ const es = {
     "La secuencia son dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
   ],
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: "El catálogo se consulta al SGC cada 5 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
+  autoUpdateLong: "El catálogo se consulta al SGC cada 15 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
   timeNote: "Las fechas y horas son de Colombia (UTC−5). Los CSV descargados usan UTC.",
 };
 
@@ -166,9 +166,9 @@ const en: Dict = {
   lastUpdate: "Last SGC query",
   never: "never",
   refresh: "Refresh now",
-  autoUpdate: "Updates itself every 5 minutes",
+  autoUpdate: "Updates itself every 15 minutes",
   refreshing: "Querying SGC…",
-  refreshWait: "You already have the latest data: SGC was queried less than 5 minutes ago.",
+  refreshWait: "You already have the latest data: SGC was queried less than 15 minutes ago.",
   refreshFailed: "Unable to query SGC. Try again in a few minutes.",
   refreshStillFailing: "Not sent: a retry is already on the way.",
   ingestFailed: "The last SGC query failed",
@@ -308,7 +308,7 @@ const en: Dict = {
     "The sequence is two groups of events at different depths. As of 19 September 2026 the deep group, the mainshock's own, had nearly all of its activity in the first week; almost everything since belongs to the shallow group, and that is where the b-value falls. The deep group's b-value comes from few events, so its margin of error is wide.",
   ],
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: "The catalogue is read from SGC every 5 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
+  autoUpdateLong: "The catalogue is read from SGC every 15 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
   timeNote: "Dates and times are Colombia time (UTC−5). Downloaded CSVs use UTC.",
 };
 

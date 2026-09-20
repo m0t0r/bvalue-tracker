@@ -37,26 +37,26 @@ const rateLimited = (retryAfterS: number | null) =>
 
 describe("cron lanes", () => {
   it("gives the fast lane one trailing day and never lets it retire an event", () => {
-    expect(dueNow(cron(5), NOW, history()).steps).toEqual([
+    expect(dueNow(cron(15), NOW, history()).steps).toEqual([
       { lane: "trailing", trigger: "cron", days: 1, allowRemovals: false },
     ]);
   });
 
   // An HTTP status is no weaker a signal than a timeout, so both wait for a success.
   it("stands the fast lane down while the last finished run failed", () => {
-    expect(dueNow(cron(5), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toEqual([]);
+    expect(dueNow(cron(15), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toEqual([]);
   });
 
   // Being answered again is not being welcome again: the cooldown outlives the recovery,
   // which is also the only way to observe it — until a run succeeds the rule above applies.
   it("keeps the fast lane down for Retry-After after a 429, then lets it back in", () => {
     const limited = rateLimited(600);
-    expect(dueNow(cron(5), at(599), limited).steps).toEqual([]);
-    expect(dueNow(cron(5), at(601), limited).steps).toHaveLength(1);
+    expect(dueNow(cron(15), at(599), limited).steps).toEqual([]);
+    expect(dueNow(cron(15), at(601), limited).steps).toHaveLength(1);
   });
 
   it("runs the fast lane when no run has ever finished", () => {
-    expect(dueNow(cron(5), NOW, history({ health: healthy({ lastOk: null }) })).steps).toHaveLength(1);
+    expect(dueNow(cron(15), NOW, history({ health: healthy({ lastOk: null }) })).steps).toHaveLength(1);
   });
 
   // Both ends of the clamp are load-bearing. Retry-After: 0 — which an already-elapsed HTTP
@@ -68,19 +68,19 @@ describe("cron lanes", () => {
     ["caps an absurd Retry-After at six hours", 1e9, 21_600],
   ])("%s", (_name, retryAfterS, waitS) => {
     const limited = rateLimited(retryAfterS);
-    expect(dueNow(cron(5), at(waitS - 1), limited).steps).toEqual([]);
-    expect(dueNow(cron(5), at(waitS + 1), limited).steps).toHaveLength(1);
+    expect(dueNow(cron(15), at(waitS - 1), limited).steps).toEqual([]);
+    expect(dueNow(cron(15), at(waitS + 1), limited).steps).toHaveLength(1);
   });
 
   it("gives the wide tick three trailing days, with removals", () => {
-    expect(dueNow(cron(15), NOW, history()).steps).toEqual([
+    expect(dueNow(cron(30), NOW, history()).steps).toEqual([
       { lane: "trailing", trigger: "cron", days: 3, allowRemovals: true },
     ]);
   });
 
   // The wide tick is what probes SGC while the fast lane waits, so it is what lets it back in.
   it("keeps the wide tick running while the fast lane is standing down", () => {
-    expect(dueNow(cron(15), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toHaveLength(1);
+    expect(dueNow(cron(30), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toHaveLength(1);
   });
 
   it("adds one history chunk on the hour, and on no other quarter", () => {
@@ -97,7 +97,7 @@ describe("cron lanes", () => {
   // A boundary landing at :14:59.9 must not read as minute 14 and quietly demote the wide
   // tick to a fast one, which would skip that tick's removals and its back-fill chunk.
   it("reads a tick that landed a tenth of a second early as the minute it was meant for", () => {
-    const early = { kind: "cron" as const, scheduledTime: Date.UTC(2026, 8, 19, 12, 15) - 100 };
+    const early = { kind: "cron" as const, scheduledTime: Date.UTC(2026, 8, 19, 12, 30) - 100 };
     expect(dueNow(early, NOW, history()).steps).toEqual([
       { lane: "trailing", trigger: "cron", days: 3, allowRemovals: true },
     ]);
@@ -111,25 +111,39 @@ describe("cron lanes", () => {
    * sweep, and no lane left that ignores SGC's health, so one 410 stopped the Worker
    * talking to SGC at all. Each offset below is a dispatch time, in seconds from the tick.
    */
-  describe.each([0, 45, 149, -149])("dispatched %i s from the tick", (offsetS) => {
-    const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  describe.each([0, 45, 449, -449])("dispatched %i s from the tick", (offsetS) => {
+    const MINUTES = [0, 15, 30, 45];
     const plansFor = (h: IngestHistory) =>
       MINUTES.map((m) => dueNow({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, h));
     const isWide = (p: IngestPlan) => p.steps.some((s) => s.lane === "trailing" && s.days === TRAILING_DAYS);
     const hasSweep = (p: IngestPlan) => p.steps.some((s) => s.lane === "sweep");
 
-    it("puts four wide ticks on the quarters and one sweep on the hour", () => {
+    it("alternates wide and narrow, and sweeps on the hour", () => {
       const hour = plansFor(history());
-      expect(hour.map(isWide)).toEqual([true, false, false, true, false, false, true, false, false, true, false, false]);
+      expect(hour.map(isWide)).toEqual([true, false, true, false]);
       expect(hour.filter(hasSweep)).toHaveLength(1);
       expect(hasSweep(hour[0]!)).toBe(true);
     });
 
     // The one that turned a 410 from a blip into an outage with no way out: with every tick
     // on the fast lane, the first failure stood down the only lane there was.
-    it("leaves four lanes an hour that probe SGC while the fast lane is standing down", () => {
+    it("leaves lanes an hour that probe SGC while the fast lane is standing down", () => {
       const ill = plansFor(history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }));
-      expect(ill.filter((p) => p.steps.length > 0)).toHaveLength(4);
+      expect(ill.filter((p) => p.steps.length > 0)).toHaveLength(2);
+    });
+
+    /**
+     * The budget, as a number rather than a paragraph in the README. Three constants decide
+     * it — the cron in wrangler.jsonc, TICK_MS, and WIDE_TICK_EVERY_MIN — and when they
+     * disagreed the hour quietly became twelve requests with no removals and no sweep for a
+     * day. This counts what an hour of ticks actually sends: 4 trailing + 1 sweep = 120/day,
+     * which is the figure the README's budget is derived from.
+     */
+    it("sends five requests an hour, which is the budget the README quotes", () => {
+      const sent = plansFor(history()).flatMap((p) => p.steps);
+      expect(sent).toHaveLength(5);
+      expect(sent.filter((s) => s.lane === "sweep")).toHaveLength(1);
+      expect(sent.filter((s) => s.lane === "trailing")).toHaveLength(4);
     });
   });
 });
@@ -149,33 +163,33 @@ describe("while SGC is refusing us", () => {
 
   it("keeps the wide tick at full rate while the refusal is still young", () => {
     // One 410 can be a proxy having a moment; an hour of staleness is too much to spend on it.
-    expect(dueNow(cron(15), NOW, refused(600, 300)).steps).toHaveLength(1);
+    expect(dueNow(cron(30), NOW, refused(600, 300)).steps).toHaveLength(1);
   });
 
   it("drops the wide tick to hourly once the refusal has persisted", () => {
-    expect(dueNow(cron(15), NOW, refused(3600, 300)).steps).toEqual([]);
+    expect(dueNow(cron(30), NOW, refused(3600, 300)).steps).toEqual([]);
     expect(dueNow(cron(30), NOW, refused(3600, 900)).steps).toEqual([]);
   });
 
   it("never stops probing: the hour's tick still goes", () => {
-    const plan = dueNow(cron(15), NOW, refused(7200, 3601));
+    const plan = dueNow(cron(30), NOW, refused(7200, 3601));
     expect(plan.steps).toEqual([{ lane: "trailing", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }]);
   });
 
   // A 5xx is their bad day, not a door: the probe is what recovers from it, at full rate.
   it.each([500, 502, 504])("leaves the wide tick alone for a run of HTTP %i", (status) => {
-    expect(dueNow(cron(15), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
+    expect(dueNow(cron(30), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
   });
 
   // 429 and 503 have their own cooldown, which SGC itself names; they must not be pulled
   // into a rule that would ignore Retry-After.
   it.each([429, 503])("leaves HTTP %i to the Retry-After cooldown", (status) => {
-    expect(dueNow(cron(15), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
+    expect(dueNow(cron(30), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
   });
 
   it("does not slow anything on a failure with no status at all", () => {
     // A timeout, or a run the Worker was killed in the middle of: no door, just silence.
-    expect(dueNow(cron(15), NOW, refused(7200, 300, null as unknown as number)).steps).toHaveLength(1);
+    expect(dueNow(cron(30), NOW, refused(7200, 300, null as unknown as number)).steps).toHaveLength(1);
   });
 
   // The rule lives once, in this module. The button is the same request from the same
@@ -194,7 +208,7 @@ describe("while SGC is refusing us", () => {
 
   // The fast lane was already down on `lastOk === false`; this must not quietly open it.
   it("keeps the fast lane shut throughout", () => {
-    expect(dueNow(cron(5), NOW, refused(7200, 3601)).steps).toEqual([]);
+    expect(dueNow(cron(15), NOW, refused(7200, 3601)).steps).toEqual([]);
   });
 });
 
@@ -209,16 +223,18 @@ describe("the visitor's refresh", () => {
 
   // The throttle counts *any* run, cron included: that number, not the number of people
   // with the page open, is what bounds our load on SGC.
-  it("counts down the five minutes since the last run, whoever started it", () => {
+  // Written off REFRESH_MIN_INTERVAL_S, not off the number it happens to hold: the throttle
+  // is tied to the cron's period and has moved once already.
+  it("counts down the throttle since the last run, whoever started it", () => {
     const plan = dueNow(MANUAL, at(120), history({ lastRun: finishedAt(NOW) }));
     expect(plan.steps).toEqual([]);
-    expect(plan.retryAfterS).toBe(180);
+    expect(plan.retryAfterS).toBe(REFRESH_MIN_INTERVAL_S - 120);
   });
 
   it("re-reads the trailing window once the wait has elapsed, and keeps the throttle on the claim", () => {
-    const plan = dueNow(MANUAL, at(301), history({ lastRun: finishedAt(NOW) }));
+    const plan = dueNow(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), history({ lastRun: finishedAt(NOW) }));
     expect(plan.steps).toEqual([{ lane: "trailing", trigger: "manual", days: 3, allowRemovals: true }]);
-    expect(plan.minIntervalS).toBe(300);
+    expect(plan.minIntervalS).toBe(REFRESH_MIN_INTERVAL_S);
   });
 
   it("loads one missing history chunk per press, without the usual wait", () => {
@@ -233,7 +249,9 @@ describe("the visitor's refresh", () => {
   // fast lane was standing down. Both now read sgcUnwell, so the button falls back to the
   // ordinary five minutes — the lane is closed, the button is not.
   it("closes the back-fill fast lane during a cooldown, even once SGC is answering again", () => {
-    const limited = { ...rateLimited(600), backfill: { done: 2, total: 6 }, lastRun: finishedAt(NOW) };
+    // The cooldown has to outlast the throttle, or the second half below measures the
+    // throttle expiring rather than the cooldown still holding the fast lane shut.
+    const limited = { ...rateLimited(REFRESH_MIN_INTERVAL_S * 4), backfill: { done: 2, total: 6 }, lastRun: finishedAt(NOW) };
     expect(limited.health.lastOk).toBe(true); // a later run succeeded: only the cooldown holds
 
     const during = dueNow(MANUAL, at(1), limited);
@@ -241,7 +259,7 @@ describe("the visitor's refresh", () => {
     expect(during.retryAfterS).toBe(REFRESH_MIN_INTERVAL_S - 1);
 
     // The wait is all it costs. The sweep is what lets the fast lane back in, so it still runs.
-    const after = dueNow(MANUAL, at(301), limited);
+    const after = dueNow(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), limited);
     expect(after.steps).toEqual([{ lane: "sweep" }]);
     expect(after.minIntervalS).toBe(REFRESH_MIN_INTERVAL_S);
   });

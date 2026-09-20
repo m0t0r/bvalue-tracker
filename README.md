@@ -42,7 +42,7 @@ pnpm dev                  # page + Worker + local D1 on one port
 # The header is required: /api/* refuses a caller with no same-origin signal (see API).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
-pnpm test                 # 257 tests, offline
+pnpm test                 # 274 tests, offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
 ```
@@ -64,16 +64,16 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 
 | Trigger | What it does |
 |---|---|
-| Cron `*/5 * * * *`, tick minute not divisible by 15 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](#sgc-rate-limits-and-the-request-budget). |
-| Cron `*/5 * * * *`, tick minute divisible by 15 | Re-reads the trailing 3 days, with removals. |
-| Cron `*/5 * * * *`, tick minute 0 | The above, then re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. While history is incomplete this sweep runs on **every** wide tick instead of hourly. |
-| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 5 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. Since the cron now runs on the same 5-minute period and the throttle counts *any* run, a press usually stands down; that is the intended outcome and `refreshWait` says the reader already has the newest data rather than counting down. |
-| Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than 5 minutes. The Worker's own 5-minute limit is what protects SGC, whatever the number of visitors. |
+| Cron `*/15 * * * *`, tick minute not divisible by 30 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](#sgc-rate-limits-and-the-request-budget). |
+| Cron `*/15 * * * *`, tick minute divisible by 30 | Re-reads the trailing 3 days, with removals. |
+| Cron `*/15 * * * *`, tick minute 0 | The above, then re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. While history is incomplete this sweep runs on **every** wide tick instead of hourly. |
+| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 15 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. Since the throttle is the cron's own period and counts *any* run, a press usually stands down; that is the intended outcome and `refreshWait` says the reader already has the newest data rather than counting down. |
+| Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than the throttle. The Worker's own limit is what protects SGC, whatever the number of visitors. |
 | The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
 
-The tick's own minute is `tickMinute(scheduledTime)`, which snaps to the nearest
-five-minute tick — never to the nearest minute, because the dispatch is not punctual and
-that mistake cost a day of wide ticks. See [the lane note](#concurrency-and-failure-lessons).
+The tick's own minute is `tickMinute(scheduledTime)`, which snaps to the nearest tick —
+never to the nearest minute, because the dispatch is not punctual and that mistake cost a
+day of wide ticks. `TICK_MS` in `worker/plan.ts` must equal the cron above. See [the lane note](#concurrency-and-failure-lessons).
 
 Ingest upserts by event id, only touches rows whose data changed, marks events
 SGC stops returning as removed (never deletes), and changes nothing when the
@@ -188,7 +188,13 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
   against production: every `first_seen_at` landed on a cron boundary, and the smallest
   origin-time-to-`first_seen_at` gap across the live-detected events was 5.0 min, with a
   second at 6.8 min). Our own cron was the larger delay, which is why it is 5 minutes.
-  Polling faster than SGC publishes buys nothing, so do not go below 5.
+  Polling faster than SGC publishes buys nothing, so **never go below 5**. We ran at 5 for
+  one day (2026-09-19 → 20) and then went back to **15 deliberately** — not because 5 was
+  too fast for SGC in any measured sense, but because SGC began refusing this Worker's
+  address the next afternoon and ~120 requests/day is the load that had run for weeks
+  without incident. The cost is median detection going from ~5 min back to ~10. Revisit it
+  only once SGC has been answering us steadily again, and change the three constants
+  together (see the budget below).
 - Analyst-revised events can appear hours late — two events from 00:43 and 00:55 were
   first seen at 05:45 and 06:15. No polling rate fixes that; it is what the sweep is for.
 
@@ -212,16 +218,23 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
 
 - We send an identifying `user-agent` (`sgc-swarm-research/0.1`) and query with the
   bounding box and the narrowest window that answers the question.
-- The budget: **~312 SGC requests/day, ~29 MB/day**, against ~120/day and ~16 MB/day at
-  the 15-minute cadence. Requests tripled; bytes roughly doubled, because the fast lane
-  asks for less. Measured, not guessed: a response is 7.7 KB of page chrome plus
-  1.00 KB per row (the two fixtures), and at the September 2026 rate the fast lane's
-  span holds ~59 rows against the wide span's ~109 and a sweep chunk's ~173 — so ~67,
-  ~117 and ~182 KB per request, over 192 fast ticks, 96 wide ticks and 24 sweeps.
+- The budget: **~120 SGC requests/day, ~16 MB/day** — 48 narrow ticks, 48 wide ticks and
+  24 sweeps. Measured, not guessed: a response is 7.7 KB of page chrome plus 1.00 KB per row
+  (the two fixtures), and at the September 2026 rate the narrow span holds ~59 rows against
+  the wide span's ~109 and a sweep chunk's ~173 — so ~67, ~117 and ~182 KB per request.
   Re-derive these if the sequence's rate changes; they scale with events per day.
+  **Three constants decide this number and they have to agree**: the cron in
+  `wrangler.jsonc`, `TICK_MS` and `WIDE_TICK_EVERY_MIN` in `worker/plan.ts`. When they did
+  not, an hour silently became twelve requests with no removals and no sweep at all, for a
+  day. The budget is a test now, not a paragraph: `plan.test.ts` walks a real hour of ticks
+  at four dispatch offsets and counts what it sends.
+  For reference, the 5-minute cadence we ran for one day was **~312/day, ~29 MB/day**.
 - Visitors do not add to that. `REFRESH_MIN_INTERVAL_S` counts *any* run, cron included,
-  so with a 5-minute cron a manual refresh nearly always stands down. **That number, not
-  the number of people with the page open, is what bounds our load on SGC.**
+  and **it is set to the cron's own period** so a press nearly always coincides with a tick
+  that was going to happen anyway. That is what makes this bullet true rather than hopeful:
+  drop the throttle below the cron and a reader with a fast finger adds requests the budget
+  above never counted. **That number, not the number of people with the page open, is what
+  bounds our load on SGC.**
 - **Only a 5xx other than 503 is ever retried** (`retryableStatus` in `core/seiscomp.ts`).
   The retry loop exists for a flaky connection, and a status line is not one: SGC answered.
   429 and 503 are SGC asking us to stop, and retrying is the one thing that makes being rate
@@ -357,7 +370,7 @@ Each of these was a real bug in production or in review:
   an ordinary failed run, and none of it needed a second rule. **The cause of the kills is
   still unknown** — Workers Logs are the only place that would say, and they keep three
   days. `ok = 0` with no `error` was the one state the schema allowed and nothing wrote.
-- The back-fill fast lane (no 5-minute wait) is only open while SGC is answering.
+- The back-fill fast lane (no throttle wait) is only open while SGC is answering.
   After a failed run everyone waits, so a broken SGC is never hammered.
 - **One module decides what ingest is due, and both callers ask it** (architecture review
   candidate 02, 2026-09-19). `dueNow` in `worker/plan.ts` takes the clock and one reading of
@@ -376,7 +389,8 @@ Each of these was a real bug in production or in review:
 - The sweep orders chunks by last **attempt**, not last success. Otherwise one
   chunk that keeps failing is retried forever and starves the rest.
 - **There is exactly one cron pattern, and a second one cannot be added safely.** Every
-  lane hangs off `*/5` and is chosen by `scheduledTime`'s minute. A second pattern lands at
+  lane hangs off the one cron and is chosen by `scheduledTime`'s minute. At the 5-minute
+  cadence a second pattern lands at
   best 120 s from this one — the furthest a non-multiple-of-5 minute can sit from a tick —
   and that is *inside* `IN_FLIGHT_MS` (150 s), so the two keep landing in each other's claim
   window: in one direction `claimIngestRun` drops a run silently, in the other the older run
@@ -417,12 +431,13 @@ Each of these was a real bug in production or in review:
 The account is on the **Workers free plan**, whose ceilings are 100,000 requests/day,
 5,000,000 D1 rows read/day, 100,000 D1 rows written/day, 50 subrequests and 50 D1 queries
 per invocation, and **10 ms CPU per invocation** — wall time is not the limit, and runs
-finish in 1–13 s of it. 312 cron invocations a day and ~70k D1 rows read are nowhere near
+finish in 1–13 s of it. 96 cron invocations a day and ~70k D1 rows read are nowhere near
 the daily allowances; 10 ms CPU is the one that could bite, and **polling more often does
-not change per-invocation CPU**, so the 5-minute cadence neither helps nor hurts it.
+not change per-invocation CPU**, so the cadence neither helps nor hurts it.
 
 That ~70k only holds because `ingest_runs` is indexed for it. **Do not add a hot query
-over `ingest_runs` without an index**: the table now grows ~312 rows/day, and the four
+over `ingest_runs` without an index**: the table grows ~120 rows/day (~312 at the
+5-minute cadence, which is what the figures below were measured at), and the four
 queries that run on a tick — `readHistory`'s rate-limit lookup (192/day), `runInFlight`,
 `backfillProgress` and `ingestSweep` — were full scans when the 5-minute cadence landed.
 Unindexed, that is ~5.4M rows/day at three months and ~21M at a year, i.e. through the
@@ -674,7 +689,7 @@ practices stayed at 100.
   by selector.
   **Give it data without touching SGC.** Copy a populated `.wrangler/` from another
   checkout, then, in the copy only, set the newest successful `ingest_runs` row's
-  `finished_at` to now. That closes the Worker's five-minute guard, so neither the page's
+  `finished_at` to now. That closes the Worker's refresh guard, so neither the page's
   focus refresh nor a click on the refresh button reaches the government server. An empty
   database is the dangerous one: the page back-fills on load, in a loop, with no wait
   between requests. Check `/api/status` and confirm `backfill.done == backfill.total`
@@ -790,10 +805,12 @@ colour, motion). Keep to them:
   which is why `/api/status` carries `newestEventId` beside `newestEventTime`. Both keep the UTC
   form on hover. A time that identifies no single event (the last SGC query) is not a link.
 - **The page says that it updates itself** (under the refresh button, in the footer):
-  readers were reloading it. The "5 minutes" in the copy is the cron in
-  `wrangler.jsonc`; change them together.
+  readers were reloading it. The "15 minutes" in `autoUpdate` and `autoUpdateLong` is the
+  cron in `wrangler.jsonc`, and `refreshWait`'s is `REFRESH_MIN_INTERVAL_S`, which is the
+  same number for the reason given under the budget. `src/lib/i18n.test.ts` holds all three
+  to it; change them together.
 - **The failed-ingest alert names no interval at all, and that is the settled answer.** It
-  said "cada 5 minutos" — the cron's rate — in the one state where the fast lane has stood
+  said the cron's own rate — in the one state where the fast lane has stood
   down and five minutes is wrong. That was changed to fifteen, the wide tick's rate, and
   within the hour SGC began refusing us and the probe dropped to hourly, so fifteen was wrong
   too. Three lane rules decide that number and the reader can act on none of them, so
@@ -804,8 +821,8 @@ colour, motion). Keep to them:
   `refreshStillFailing` replaces it beside the alert and must not tell the reader to press
   again, because while SGC is refusing us the Worker's own wait is an hour; `refreshFailed`
   is for the request from the *page* failing, which is a different thing again.
-- **The refresh button standing down is good news, not a countdown.** With a 5-minute
-  cron the 5-minute throttle refuses most presses, so `refreshWait` says the reader
+- **The refresh button standing down is good news, not a countdown.** The throttle is the
+  cron's own period, so it refuses most presses, so `refreshWait` says the reader
   already has the newest data instead of asking them to wait N minutes. It is a timed
   factual claim, so it is hidden as soon as a run fails — otherwise it would sit on
   screen asserting a recent successful query right beside the "la última consulta falló"
