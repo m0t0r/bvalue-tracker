@@ -69,6 +69,25 @@ function wranglerOauthToken(): string | undefined {
 }
 
 /**
+ * `.env` at the checkout root, if there is one. Node's own loader, so nothing is added to
+ * the dependency tree, and it does **not** override a variable already exported — so
+ * `CLOUDFLARE_API_TOKEN=… pnpm logs` still beats the file, which is the precedence anyone
+ * would expect. A missing file is the ordinary case and not an error.
+ *
+ * `.env` is gitignored. **Never give a secret here a `VITE_` prefix**: Vite reads this same
+ * file and inlines every `VITE_`-prefixed value into the client bundle, which is published
+ * as a static asset. A token named `CLOUDFLARE_API_TOKEN` is invisible to the page; the same
+ * token named `VITE_CLOUDFLARE_API_TOKEN` would be served to every visitor.
+ */
+function loadDotEnv(): void {
+  try {
+    process.loadEnvFile();
+  } catch {
+    // No .env in this directory, which is how most checkouts run.
+  }
+}
+
+/**
  * The account and the token are resolved **independently**, which is the whole point: they
  * used to be one `token && accountId` check, so setting only CLOUDFLARE_API_TOKEN fell
  * silently through to the wrangler login — which this endpoint refuses. You would set a
@@ -78,6 +97,7 @@ function wranglerOauthToken(): string | undefined {
  * CLOUDFLARE_ACCOUNT_ID is only needed to point somewhere else.
  */
 function credentials(): Creds {
+  loadDotEnv();
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
     ?? /"account_id"\s*:\s*"([^"]+)"/.exec(readFileSync("wrangler.jsonc", "utf8"))?.[1];
   if (accountId === undefined) {

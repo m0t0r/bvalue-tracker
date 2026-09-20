@@ -176,10 +176,16 @@ before guessing; the reasoning behind each piece is under
 | **`GET /api/health`** | `ingestAgeS`, `lastRunOk` — right now, from outside, with no credentials. | — | `curl` |
 
 `pnpm logs` needs `CLOUDFLARE_API_TOKEN` to hold an API token with *Account · Workers
-Observability · Read*; the account comes from `wrangler.jsonc`, and `CLOUDFLARE_ACCOUNT_ID`
-only overrides it. A `wrangler login` OAuth token is **not** enough — verified 2026-09-20,
-it answers 403 *Authentication error*, because its `workers_tail:read` scope is the live
-tail and not the stored logs. The script says so when it happens.
+Observability · Read* — in the environment, or in `.env` (gitignored; copy `.env.example`).
+The account comes from `wrangler.jsonc`, and `CLOUDFLARE_ACCOUNT_ID` only overrides it. A
+`wrangler login` OAuth token is **not** enough — verified 2026-09-20, it answers 403
+*Authentication error*, because its `workers_tail:read` scope is the live tail and not the
+stored logs. The script says so when it happens.
+
+**Nothing in `.env` may carry a `VITE_` prefix.** Vite reads that same file and inlines
+every `VITE_`-prefixed value into the client bundle, which ships as a static asset —
+`CLOUDFLARE_API_TOKEN` is invisible to the page, `VITE_CLOUDFLARE_API_TOKEN` would be
+served to every visitor. Nothing this project runs in the browser needs a secret at all.
 
 **None of this is needed to read the logs**, only to read them from a terminal: the
 Worker's *Observability* tab in the dashboard queries the same data over an ordinary
@@ -494,12 +500,28 @@ Each of these was a real bug in production or in review:
   hours does not push the visitor's throttle out by hours. Everything downstream then sees
   an ordinary failed run, and none of it needed a second rule. `ok = 0` with no `error` was
   the one state the schema allowed and nothing wrote.
-  - **The cause of the kills is still unknown**, and the three-day log window that made it
-    unanswerable is why the observability work happened. `reapAbandonedRuns` returning a
-    non-zero count is now a **warn** — `reaped abandoned runs: an invocation was killed` —
-    which is the one line that says an invocation of this Worker died rather than failed.
-    Alert on it, and read it first in any report of stale data. The invocation log beside it
-    carries `$workers.cpuTimeMs` and the outcome, which is what would name the cause.
+  - **The cause was the CPU limit, not memory** — measured from Workers Logs on 2026-09-20,
+    two days before the window closed. `$workers.outcome` over 02:00–13:00 UTC: **112
+    `exceededCpu`** against 58 `ok`, and 112 is exactly the number of abandoned runs. The
+    long-standing hypothesis in the security audit — `res.text()` buffering an unbounded SGC
+    response and running the isolate out of memory — is **wrong**; no invocation ran out of
+    memory. Do not add a byte cap on that reasoning.
+    - It was not a deploy: `$workers.scriptVersion.id` is the same `1355e096` before, during
+      and after. It was not a code path that got slower either — successful scheduled runs
+      used a median of **34 ms** CPU in the six hours before and **40 ms** during, while the
+      killed ones died at a median of **10 ms**. A fixed 10 ms ceiling cannot let a 40 ms run
+      finish, so what changed was the *enforcement*, not the work.
+    - **The real lesson is worse than the outage.** This Worker's cron invocations normally
+      need 34–40 ms of CPU, three to four times the free plan's documented **10 ms**. It
+      survives because that ceiling is not enforced continuously — and for nine hours on
+      2026-09-20 it was, and every single tick died: 12 killed per hour, 03:00–11:00, not one
+      success. Nothing in the code prevents that happening again. See
+      [the CPU budget](#the-cpu-budget).
+  - `reapAbandonedRuns` returning a non-zero count is now a **warn** — `reaped abandoned
+    runs: an invocation was killed` — which is the one line that says an invocation of this
+    Worker died rather than failed. Alert on it, and read it first in any report of stale
+    data. The invocation log beside it carries `$workers.outcome` and `$workers.cpuTimeMs`,
+    which is what named the cause above.
 - The back-fill fast lane (no throttle wait) is only open while SGC is answering.
   After a failed run everyone waits, so a broken SGC is never hammered.
 - **One module decides what ingest is due, and both callers ask it** (architecture review
@@ -597,11 +619,38 @@ picture, because the planner prefers that one's equality seek and keeps the sort
 `EXPLAIN QUERY PLAN` against the **whole index set**, never against the index you just
 wrote in isolation.
 
-Still open: that 10 ms has **not been measured**, but it no longer needs a `wrangler tail`
-left running to catch a tick. Workers Logs publishes `$workers.cpuTimeMs` on every
-invocation log, so `pnpm logs cpu --since 24h` reports p50/p90/p99/max across a whole day
-of ticks. **Run it and record the numbers here.** If a run ever fails with a CPU-limit
-error, the fixes are the paid plan or smaller sweep chunks (`SWEEP_CHUNK_DAYS`).
+<a id="the-cpu-budget"></a>
+#### The CPU budget
+
+**Measured 2026-09-20, and it is the most serious thing in this file.** `$workers.cpuTimeMs`
+over 24 hours of production, 878 invocations:
+
+| | n | median | p90 | p99 | max |
+|---|---|---|---|---|---|
+| **scheduled** (cron ticks) | 268 | **26 ms** | 54 | 81 | **94 ms** |
+| **fetch** (page + API) | 568 | 5 ms | 10 | 20 | 43 ms |
+| — successful scheduled only | 156 | **37 ms** | 59 | 81 | 94 ms |
+
+**A cron tick normally uses three to four times the free plan's 10 ms limit**, and the
+busiest uses nine. It survives because that ceiling is not enforced continuously — and on
+2026-09-20 it was, for nine hours, and **every tick died**: 112 `exceededCpu` invocations,
+12 an hour from 03:00 to 11:00 UTC, not one success. Same code version throughout. That is
+the outage in [Concurrency and failure lessons](#concurrency-and-failure-lessons), and
+nothing in the code stops it recurring — the Worker is living on unenforced headroom.
+
+The fetch side is fine: `/api/status`, the route the open page polls every minute, is 3 ms
+median and 16 ms max, and `/api/refresh` is 6 ms median.
+
+So the choice is **the paid plan, or getting a tick under 10 ms**. Before reaching for
+either, find where the 26 ms goes — the candidates are `parseCatalogHtml` over ~0.8 MB of
+HTML and the `computeStats` pipeline, neither of which has been profiled, and the wide tick
+does two ingests in one invocation while the sweep parses the largest chunk
+(`SWEEP_CHUNK_DAYS`). `pnpm logs lanes` plus the new `lane` field is what makes that
+attributable, now that a tick says which lane it took.
+
+`pnpm logs cpu --since 24h` reproduces the table above. Note `p50` is not a valid operator
+in that API — it is `median`; `p90`, `p95`, `p99`, `avg`, `min`, `max`, `sum`, `stddev` and
+`count` all work.
 
 That figure is **per trigger — cron against fetch — and not per lane**, and no query gets
 per-lane out of it: `cpuTimeMs` is on the invocation log, `lane` is on the lines the Worker
@@ -797,12 +846,19 @@ Still open, with no confirmed exploit — detail in `NEEDS-VALIDATION.md`: the r
 no `LIMIT` or range cap (the rate limit bounds volume, not a single query); and the CI
 actions are pinned to `@v4` tags rather than commit SHAs.
 
-Two of the four are now *measurable* rather than settled, which is the point of
+**One of the four is now answered, and the answer is no.** "SGC responses are buffered with
+no byte cap" was carried as a memory risk, and it was the leading explanation for the
+2026-09-20 kills. It was wrong: those invocations died `exceededCpu`, not out of memory —
+see [Concurrency and failure lessons](#concurrency-and-failure-lessons). Nothing here has
+ever been observed running out of memory. A byte cap may still be worth having as a guard
+against a pathological response, but **do not add one believing it fixes the outage**, and
+size it from a week of real `sgcChars` rather than from a guess.
+
+The other two are now *measurable* rather than settled, which is the point of
 [Debugging production](#debugging-production): every ingest run records `sgcMs` and
 `sgcChars`, so how long SGC holds us and how large its responses get are now on the log
 line and in the three-month analytics history. Read a week of them before changing
-`IN_FLIGHT_MS` — the remaining questions are exactly "what do these numbers actually do in
-production", and until today nothing was writing them down.
+`IN_FLIGHT_MS` — and until today nothing was writing them down.
 
 **`sgcChars` is characters, not bytes on the wire**, and a byte cap sized from it would sit
 *below* the real payload and start refusing good responses: SGC's pages are Spanish, and
