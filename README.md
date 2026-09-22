@@ -176,6 +176,11 @@ Everything below exists because two faults ran for hours with nothing to read. S
 before guessing; the reasoning behind each piece is under
 [Observability decisions](#observability-decisions).
 
+Written-up incidents live in `.claude/incidents/`. The one to read first is
+[2026-09-20](.claude/incidents/2026-09-20-ingest-outage-and-sgc-refusal.md): a 9-hour ingest
+outage and the SGC refusal that followed it, with the measurements behind both — including
+why this Worker has never fitted the free plan's 10 ms per-invocation CPU limit.
+
 ### The four places to look
 
 | Where | Holds | Kept | Read it with |
@@ -231,7 +236,8 @@ also carries `lane` and `trigger`.
 
 - **"The page is showing old data."** `curl $PRODUCTION_URL/api/health` first: `ingestAgeS`
   is the whole answer to *how* stale. Then `pnpm logs --since 6h --level error`. An
-  `ingest failed` line with `httpStatus` means SGC refused us — the back-off is working as
+  `ingest failed` line with `httpStatus` means we were refused — read `sgcHeaders` before
+  saying by whom; the 2026-09-20 refusal came from Cloudflare, not from SGC — the back-off is working as
   designed and the wide tick is still probing. **No error lines at all is the worse case**:
   look for `reaped abandoned runs`, which means invocations are being killed rather than
   failing.
@@ -304,38 +310,72 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
 - Events are revised after the fact: `automatic` → `manual`, magnitude and location
   change, and events can be withdrawn.
 - Coverage starts 2018-03-01 (stated on the form page).
-- **SGC accepted requests from Cloudflare's network, and then stopped** (2026-09-18 →
-  2026-09-20). From 12:40 UTC on 2026-09-20 the deployed Worker got **410 Gone** on requests
-  that had succeeded five minutes earlier, with no deploy in between, while the canary made
-  the *same* request with the *same* user-agent from GitHub's runners and got a normal 200 at
-  13:33. So the endpoint has not moved and the request is not malformed: the difference is
-  the caller. Treat "our network can be refused" as a live possibility, and **the canary is
-  the instrument that tells the two apart** — it reaches SGC from somewhere else. If a
-  fallback is ever needed this is the shape of it; nothing is built yet.
-  - The host is SGC's own (`190.121.155.237`, in a /26 LACNIC registers to SGC), with no CDN
-    in front, so the 410 is written by something SGC runs. **Which thing is in the log**: an
-    `ingest failed` line carries `sgcHeaders` and `sgcBody`, the refusal's own headers and
-    first 600 characters. Read those before theorising — a stock Apache "Gone" page means a
-    hand-written rule, a vendor block page names the appliance.
+- **The 410 is written on Cloudflare's network, and SGC's server never sees the request**
+  (refused since 2026-09-20 12:40 UTC; the refusal's own body read at 16:00 UTC). The deployed
+  Worker began getting **410 Gone** on requests that had succeeded five minutes earlier, with
+  no deploy in between, while the canary made the *same* request with the *same* user-agent
+  from GitHub's runners and got a normal 200 — at 13:33, and again on its 14:43 schedule. The
+  difference is the caller, and **the canary is the instrument that tells the two apart**: it
+  reaches SGC from somewhere else.
+  - **Who wrote the refusal, from the probe** (run 364, 16:00:04 UTC; `pnpm logs --since 3h
+    --msg "ingest failed"`). `sgcBody` is a 152-byte generic block page —
+    `<title>Request Denied!</title>`, "If you have any questions, please contact the admin" —
+    and `sgcHeaders` are `server: cloudflare`, `cf-ray: a3e20a72bc0fa126-SIN`,
+    `cf-cache-status: DYNAMIC`, `connection: close`. An Apache origin cannot emit `cf-ray` or
+    `cf-cache-status`; a Cloudflare edge adds them. Seven headers, and no `nel`, `report-to`
+    or `alt-svc`, say it was synthesised there rather than proxied from an origin. The
+    evidence cap is 24 headers (`EVIDENCE_HEADERS`), so that is all of them, not the first few.
+  - **SGC is not behind Cloudflare.** `bdrsnc.sgc.gov.co` resolves — system resolver and
+    1.1.1.1 alike — to `190.121.155.237`, SGC's own /26 at LACNIC and in none of Cloudflare's
+    published ranges; `sgc.gov.co` and `www` are on AWS, the zone's nameservers are Route 53.
+    Nothing of SGC's resolves into Cloudflare. So the rest of the internet, canary included,
+    never touches Cloudflare on the way to SGC. **We are the exception**: a Worker `fetch()`
+    resolves inside Cloudflare's network, which is the one place this request can be
+    intercepted without SGC being involved.
+  - Two candidate writers remain, and nothing observable from outside separates them: a
+    Cloudflare zone covering this hostname inside the network (a domain can be added to an
+    account and its nameservers never switched, and that zone's WAF still answers our
+    subrequest), or Cloudflare's own block on Worker traffic to this destination. Cloudflare
+    documents `cf.worker.upstream_zone` as the field a zone uses to block a *named* Worker's
+    subrequests, so "aimed at us" stays possible under either. `cf-ray: a3e20a72bc0fa126` is
+    the handle to quote when asking Cloudflare or SGC.
+  - **It lifted by itself, and rate is the leading explanation** (revised 2026-09-22). The last
+    410 was at 2026-09-21 07:31 UTC and the next probe, at 09:01, succeeded, with no change on
+    our side. It began after 19 h 40 m at 12 requests/hour (the CPU-killed ticks still sent
+    theirs) and ended after ~20 h at 1–2 an hour. It has not recurred at `*/15`. The earlier
+    "not a rate limit, SGC never saw the requests" rests on an **untested** assumption: that a
+    Worker subrequest to a non-Cloudflare origin comes back without `server: cloudflare` and
+    `cf-ray`. If Cloudflare adds those headers anyway, SGC's firewall refusing Cloudflare's
+    egress addresses fits the evidence equally well. Test it against any non-Cloudflare origin
+    before quoting either writer.
   - Every outbound Worker request carries a `CF-Worker: sgc-swarm.workers.dev` header that
     we cannot remove, so a block need not be by address at all.
+  - **The other end of the chain, confirmed from off Cloudflare's network** (repo owner's
+    laptop, 2026-09-20 16:16:53 UTC, while the Worker was being refused): the same URL answers
+    `200 OK`, `Server: Apache/2.2.11 (Unix) mod_ssl/2.2.11 OpenSSL/0.9.8k DAV/2 PHP/5.2.9
+    mod_perl/2.0.4 Perl/v5.10.0`, `X-Powered-By: PHP/5.2.9`, 7,351 bytes of form page — and
+    not one `cf-*` header. SGC's own server is healthy and has no Cloudflare in front of it,
+    so the 410 and the 200 are two different machines answering the same URL. Note `curl` to
+    SGC is refused by the agent permission classifier, so this check needs the repo owner's
+    hands (`!curl -sS -D - -o /dev/null <url>`) or a Bash rule.
 - The per-event page `https://www.sgc.gov.co/detallesismo/<id>/resumen` exists but
   returns 403 to `curl` without a browser user-agent.
 - **SGC publishes an event about 2–5 minutes after it happens** (measured 2026-09-19
   against production: every `first_seen_at` landed on a cron boundary, and the smallest
   origin-time-to-`first_seen_at` gap across the live-detected events was 5.0 min, with a
   second at 6.8 min). Our own cron was the larger delay, which is why it is 5 minutes.
-  Polling faster than SGC publishes buys nothing, so **never go below 5**. We ran at 5 for
+  Polling faster than SGC publishes buys nothing, so **never go below 5** — and while a tick costs more than 10 ms CPU, **never go below 15**, because `*/5` is what got the Worker CPU-killed on 2026-09-20 (see [the CPU budget](#the-cpu-budget)). We ran at 5 for
   one day (2026-09-19 → 20) and then went back to **15 deliberately** — not because 5 was
-  too fast for SGC in any measured sense, but because SGC began refusing this Worker's
-  address the next afternoon and ~120 requests/day is the lower of the only two loads we
+  too fast for SGC in any measured sense, but because this Worker's requests began being refused
+  the next afternoon — with Cloudflare headers on the refusal, though who wrote it is unconfirmed — and ~120 requests/day is the lower of the only two loads we
   have ever run. **It had not "run for weeks"**, as this paragraph once said: `ingest_runs`
-  begins 2026-09-18 18:00 UTC, so the Worker's whole history with SGC before the refusal is
-  42 hours — ~5 requests/hour for the first 26, then 12/hour round the clock for 16, and the
-  410 arrived at the end of those 16. That is a correlation on a sample of one, not a
+  begins 2026-09-18 23:30 UTC, so the Worker's whole history with SGC before the refusal is
+  ~37 hours — ~5 requests/hour for the first ~17, then 12/hour round the clock for 19 h 40 m
+  (CPU-killed ticks still sent theirs), and the 410 arrived at the end of those. It lifted by
+  itself ~20 h later at 1–2 probes/hour, and has not recurred at `*/15`. That is a correlation on a sample of one, not a
   measured limit, but no claim here that a cadence is "known safe" has evidence behind it.
   The cost is median detection going from ~5 min back to ~10. Revisit it
-  only once SGC has been answering us steadily again, and change the three constants
+  only once per-tick CPU is under 10 ms (see [the CPU budget](#the-cpu-budget)), and change the three constants
   together (see the budget below).
 - Analyst-revised events can appear hours late — two events from 00:43 and 00:55 were
   first seen at 05:45 and 06:15. No polling rate fixes that; it is what the sweep is for.
@@ -397,7 +437,7 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   and the sweep keep running throughout, and are what let the fast lane back in.
 - **A refusal thins the probe out; it never stops it** (`sgcRefusing` in `worker/plan.ts`).
   `sgcUnwell` above gates only the fast lanes, and the wide tick deliberately never stands
-  down — so when SGC began answering **410 Gone** to the Worker on 2026-09-20 there was
+  down — so when **410 Gone** began coming back to the Worker on 2026-09-20 there was
   nothing in the back-off that covered it, and the probe would have knocked on a closed door
   **96 times a day, indefinitely**. 401, 403, 410 and 451 are a door held shut rather than a
   bad day: once one of them has persisted for `REFUSAL_GRACE_S` — **two wide ticks, derived
@@ -535,8 +575,9 @@ Each of these was a real bug in production or in review:
       finish, so what changed was the *enforcement*, not the work.
     - **The real lesson is worse than the outage.** This Worker's cron invocations normally
       need 34–40 ms of CPU, three to four times the free plan's documented **10 ms**. It
-      survives because that ceiling is not enforced continuously — and for nine hours on
-      2026-09-20 it was, and every single tick died: 12 killed per hour, 03:00–11:00, not one
+      survives because Cloudflare tolerates *infrequent* overruns — and after ~10 hours of
+      12 over-limit ticks an hour at `*/5`, it stopped tolerating them for nine hours on
+      2026-09-20, and every single tick died: 12 killed per hour, 03:00–11:00, not one
       success. Nothing in the code prevents that happening again. See
       [the CPU budget](#the-cpu-budget).
   - `reapAbandonedRuns` returning a non-zero count is now a **warn** — `reaped abandoned
@@ -606,8 +647,8 @@ The account is on the **Workers free plan**, whose ceilings are 100,000 requests
 5,000,000 D1 rows read/day, 100,000 D1 rows written/day, 50 subrequests and 50 D1 queries
 per invocation, and **10 ms CPU per invocation** — wall time is not the limit, and runs
 finish in 1–13 s of it. 96 cron invocations a day, and the ~70k D1 rows read measured at
-312, are nowhere near the daily allowances; 10 ms CPU is the one that could bite, and **polling more often does
-not change per-invocation CPU**, so the cadence neither helps nor hurts it.
+312, are nowhere near the daily allowances; 10 ms CPU is the one that could bite, and **the
+cadence decides whether it does** — see [the CPU budget](#the-cpu-budget).
 
 That ~70k only holds because `ingest_runs` is indexed for it. **Do not add a hot query
 over `ingest_runs` without an index**: the table grows ~120 rows/day, and the four queries
@@ -662,11 +703,16 @@ busiest uses nine. It survives because that ceiling is not enforced continuously
 the outage in [Concurrency and failure lessons](#concurrency-and-failure-lessons), and
 nothing in the code stops it recurring — the Worker is living on unenforced headroom.
 
-Going back to `*/15` cuts the *number* of invocations from 312 to 120 a day, and so cuts
-total CPU by the same ratio. If what triggered enforcement was aggregate rather than
-per-invocation — which is unproven either way — that helps. It does nothing for the
-per-tick figure, which is the one over the limit, so do not read the cadence change as
-having fixed this.
+**The cadence is what decides whether that overrun is tolerated** (corrected 2026-09-22; this
+paragraph used to say the opposite). Cloudflare's limits page says each isolate has "built-in
+flexibility" for a Worker that "infrequently runs over the configured limit", and that one
+"hitting the limit consistently" is terminated. The only kills in this Worker's history came
+~10 h into the `*/5` cadence (12 over-limit ticks an hour). At `*/15` it has run 28 h straight
+(2026-09-21 09:00 → 09-22 13:00) at a median ~60 ms and up to **170 ms** per tick, heavier than
+the ticks that were killed, with **zero** `exceededCpu`. So: **never go below `*/15` while a
+tick costs more than 10 ms.** That is observed safe, not guaranteed. The tolerance is
+unpublished, so cutting per-tick CPU is still the real fix. Full measurements are in the
+[2026-09-20 postmortem](.claude/incidents/2026-09-20-ingest-outage-and-sgc-refusal.md).
 
 The fetch side is fine: `/api/status`, the route the open page polls every minute, is 3 ms
 median and 16 ms max, and `/api/refresh` is 6 ms median.
@@ -1164,7 +1210,7 @@ colour, motion). Keep to them:
 - **The failed-ingest alert names no interval at all, and that is the settled answer.** It
   named the cron's own rate, in the one state where the fast lane has stood down and the
   cron's rate is wrong. It was changed to the wide tick's rate instead, and within the hour
-  SGC began refusing us and the probe dropped to hourly, so that was wrong too. Three lane rules decide that number and the reader can act on none of them, so
+  the 410s began and the probe dropped to hourly, so that was wrong too. Three lane rules decide that number and the reader can act on none of them, so
   `ingestFailedBody` promises a retry and stops there. What it must keep saying is "no hace
   falta recargar"; `src/lib/i18n.test.ts` holds both halves. Do not put a number back.
 - **Three stand-down messages, three different truths.** `refreshWait` claims SGC answered
