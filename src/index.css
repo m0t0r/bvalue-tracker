@@ -43,6 +43,11 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    /* The groups card's scrolling daily strips: the bar counts and dates, and the bars' tops. */
+    --text-2xs: 0.625rem;
+    --radius-px: 1px;
+    /* Cast by the pinned y axis of "Magnitud en el tiempo" once the plot has scrolled under it. */
+    --shadow-pin: 6px 0 8px -7px var(--pin-shadow);
 }
 
 :root {
@@ -156,6 +161,21 @@
      the digits beside it are the same fact, so they must travel together. Change one, change both. */
   --ease-move: cubic-bezier(0.2, 0, 0, 1);
   --duration-move: 550ms;
+  --pin-shadow: rgb(0 0 0 / 0.35);
+}
+.dark {
+  --pin-shadow: rgb(255 255 255 / 0.22);
+}
+
+/* The b scale's error band: a full-width capsule cut to the band by `--from` and `--to`. `inset(… round)`
+   keeps both ends a true half-circle at any width. */
+@utility band-clip {
+  clip-path: inset(0 var(--to) 0 var(--from) round 9999px);
+}
+@utility transition-clip-path {
+  transition-property: clip-path;
+  transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
 }
 
 /* Content that replaces a skeleton eases in instead of popping. Seen once per load, so it may animate. */

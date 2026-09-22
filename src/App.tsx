@@ -26,7 +26,6 @@ const BOverTimeChart = lazy(() => import("@/components/charts/b-over-time").then
 const FmdChart = lazy(() => import("@/components/charts/fmd").then((m) => ({ default: m.FmdChart })));
 const MagnitudeTimeChart = lazy(() => import("@/components/charts/magnitude-time").then((m) => ({ default: m.MagnitudeTimeChart })));
 const EventMap = lazy(() => import("@/components/event-map"));
-const row = (i: number) => ({ "--i": i }) as CSSProperties;
 
 export function App() {
   const { t, lang, setLang } = useI18n();
@@ -62,13 +61,11 @@ export function App() {
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-3xl font-semibold tracking-tight text-balance">{t.title}</h1>
           <div className="ml-auto flex items-center gap-2">
-            {/* On touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
-            <Button variant="outline" size="sm" lang={other} onClick={() => setLang(other)}
-              className="pointer-coarse:h-10 pointer-coarse:px-4 pointer-coarse:text-sm pointer-coarse:after:-inset-x-0 pointer-coarse:after:-inset-y-0.5">
+            {/* The `-touch` sizes: on touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
+            <Button variant="outline" size="sm-touch" lang={other} onClick={() => setLang(other)}>
               {lang === "es" ? "English" : "Español"}
             </Button>
-            <Button variant="outline" size="icon-sm" aria-label={dark ? t.themeToLight : t.themeToDark} onClick={toggleTheme}
-              className="pointer-coarse:size-10 pointer-coarse:after:-inset-0.5">
+            <Button variant="outline" size="icon-sm-touch" aria-label={dark ? t.themeToLight : t.themeToDark} onClick={toggleTheme}>
               {dark ? <SunIcon className="size-4 pointer-coarse:size-5" /> : <MoonIcon className="size-4 pointer-coarse:size-5" />}
             </Button>
           </div>
@@ -126,21 +123,20 @@ export function App() {
               </Card>
             ) : (
               <>
-                <div className="enter grid gap-6 lg:grid-cols-2" style={row(1)}>
+                <div className="enter grid gap-6 lg:grid-cols-2" style={{ "--i": 1 } as CSSProperties}>
                   <Deferred title={t.fmdTitle}>
                     <FmdChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
                   </Deferred>
-                  {/* h-96 canvas plus the depth/magnitude legend under it. */}
-                  <Deferred title={t.mapTitle} height="h-[26rem]">
+                  <Deferred title={t.mapTitle} height="map">
                     <EventMap events={deferred.shown} />
                   </Deferred>
                 </div>
-                <div className="enter" style={row(2)}>
+                <div className="enter" style={{ "--i": 2 } as CSSProperties}>
                   <Deferred title={t.magTimeTitle}>
                     <MagnitudeTimeChart events={deferred.shown} />
                   </Deferred>
                 </div>
-                <div className="enter" style={row(3)}><EventsTable events={deferred.shown} /></div>
+                <div className="enter" style={{ "--i": 3 } as CSSProperties}><EventsTable events={deferred.shown} /></div>
               </>
             )}
           </>

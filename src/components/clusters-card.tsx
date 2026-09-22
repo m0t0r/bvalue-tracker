@@ -1,5 +1,5 @@
 import { AlertTriangleIcon } from "lucide-react";
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FlowNumber } from "@/components/flow-number";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Badge } from "@/components/ui/badge";
@@ -61,16 +61,16 @@ const DailyStrip = memo(function DailyStrip({ days, max, cluster, label, caption
     <div ref={attach} onScroll={() => scroll.onScroll(cluster)}
       role="group" aria-label={label} tabIndex={dense ? 0 : undefined}
       className={cn("w-full min-w-0 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring", dense && "overflow-x-auto overscroll-x-contain")}>
-      <div aria-hidden className={cn("flex items-end", dense ? "h-24 gap-0.5" : "h-10 gap-px")} style={dense ? { width: n * PX_PER_DAY } : undefined}>
+      <div aria-hidden className={cn("flex items-end", dense ? "h-24 w-(--strip-w) gap-0.5" : "h-10 gap-px")} style={dense ? { "--strip-w": `${n * PX_PER_DAY}px` } as CSSProperties : undefined}>
         {days.map((d, i) => {
           const c = d[cluster];
           return (
             <div key={d.start} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-0.5">
-              {dense && c > 0 ? <span className="text-center text-[0.625rem] leading-none text-muted-foreground">{c}</span> : null}
-              <span className={cn("rounded-t-[1px]", c > 0 ? FILL[cluster] : "bg-border")}
-                style={{ height: c > 0 ? `${Math.max(6, (c / max) * (dense ? 60 : 100))}%` : 1 }} />
+              {dense && c > 0 ? <span className="text-center text-2xs leading-none text-muted-foreground">{c}</span> : null}
+              <span className={cn("h-(--bar-h) rounded-t-px", c > 0 ? FILL[cluster] : "bg-border")}
+                style={{ "--bar-h": c > 0 ? `${Math.max(6, (c / max) * (dense ? 60 : 100))}%` : "1px" } as CSSProperties} />
               {dense ? (
-                <span className="h-3 overflow-visible text-[0.625rem] leading-3 whitespace-nowrap text-muted-foreground">
+                <span className="h-3 overflow-visible text-2xs leading-3 whitespace-nowrap text-muted-foreground">
                   {i % LABEL_EVERY === 0 ? fmtDay(d.start, lang) : ""}
                 </span>
               ) : null}
@@ -136,7 +136,7 @@ export function ClustersCard({ events, stats, selection }: { events: readonly St
                     </h3>
                     <p className="text-sm text-muted-foreground">{t.clusterWhere[c](CLUSTER_DEPTH_KM)}</p>
                   </div>
-                  <Button variant={on ? "secondary" : "outline"} size="sm" aria-pressed={on} className="shrink-0 pointer-coarse:h-10 pointer-coarse:px-4"
+                  <Button variant={on ? "secondary" : "outline"} size="sm-touch" aria-pressed={on} className="shrink-0"
                     onClick={() => selection.onChange(on ? "all" : c)}>
                     {on ? t.clusterClear : t.clusterOnly}
                   </Button>

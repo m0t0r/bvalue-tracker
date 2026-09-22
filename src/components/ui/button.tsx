@@ -18,18 +18,36 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        // A disclosure that should not compete with the text it sits under ("Detalle técnico").
+        "link-muted": "text-muted-foreground underline-offset-4 hover:underline",
       },
       size: {
         default:
           "h-8 pointer-coarse:after:absolute pointer-coarse:after:-inset-y-1.5 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 pointer-coarse:after:absolute pointer-coarse:after:-inset-x-1 pointer-coarse:after:-inset-y-2 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        // `sm`, but on touch the button itself grows to 40px and its hit area to 44px, rather than
+        // relying on an invisible hit area alone. The page's own controls use this.
+        "sm-touch":
+          "h-7 pointer-coarse:h-10 pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-0.5 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 pointer-coarse:px-4 text-xs pointer-coarse:text-sm in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        // A sortable column header: `sm`'s height, the table's own text size, tighter sides.
+        header:
+          "h-7 pointer-coarse:after:absolute pointer-coarse:after:-inset-x-1 pointer-coarse:after:-inset-y-2 gap-1 rounded-[min(var(--radius-md),12px)] px-2 text-sm has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        // A link-button inside running text: no box of its own.
+        inline:
+          "h-auto pointer-coarse:after:absolute pointer-coarse:after:-inset-x-1 pointer-coarse:after:-inset-y-2 gap-1 rounded-[min(var(--radius-md),12px)] p-0 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        // `inline`, but on touch it grows to 40px, and its hit area to 44px, like `sm-touch`.
+        "inline-touch":
+          "h-auto pointer-coarse:h-10 pointer-coarse:after:absolute pointer-coarse:after:-inset-x-2 pointer-coarse:after:-inset-y-0.5 gap-1 rounded-[min(var(--radius-md),12px)] p-0 pointer-coarse:pr-4 text-xs pointer-coarse:text-sm [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         icon: "size-8 pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5",
         "icon-xs":
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
           "size-7 pointer-coarse:after:absolute pointer-coarse:after:-inset-2 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
+        // `icon-sm`, growing on touch like `sm-touch`.
+        "icon-sm-touch":
+          "size-7 pointer-coarse:size-10 pointer-coarse:after:absolute pointer-coarse:after:-inset-0.5 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
       },
     },

@@ -12,9 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
  * loads immediately, one screen after the shell has painted.
  *
  * The placeholder is the same card with the same title, so only the drawing arrives late and
- * nothing below it moves. `height` must match the chart's own container (`h-80`, `h-96`).
+ * nothing below it moves. `height` names the drawing, whose container the skeleton must match.
  */
-export function Deferred({ title, height = "h-80", children }: { title: string; height?: string; children: ReactNode }) {
+export function Deferred({ title, height = "chart", children }: { title: string; height?: "chart" | "map"; children: ReactNode }) {
   // No observer (an old browser, a test environment): draw it rather than leave a skeleton.
   const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
   // Latched: once drawn, a card is never swapped back for its skeleton when it scrolls away.
@@ -31,7 +31,8 @@ export function Deferred({ title, height = "h-80", children }: { title: string; 
         <CardDescription><Skeleton className="h-4 w-full max-w-md" /></CardDescription>
       </CardHeader>
       <CardContent>
-        <Skeleton className={`w-full ${height}`} />
+        {/* A chart's h-80, or the map's h-96 canvas plus the depth/magnitude legend under it. */}
+        <Skeleton className={height === "map" ? "h-104 w-full" : "h-80 w-full"} />
       </CardContent>
     </Card>
   );

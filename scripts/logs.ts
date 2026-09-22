@@ -154,7 +154,7 @@ function printEvents(result: Record<string, any>): void {
   }
   // Oldest first: an incident reads forwards.
   for (const e of [...events].reverse()) {
-    const f = { ...(e.source ?? e.$workers?.source ?? {}), ...e };
+    const f = { ...(e.source ?? e.$workers?.source), ...e };
     const when = f.time ?? (e.timestamp ? new Date(e.timestamp).toISOString() : "?");
     const level = String(f.level ?? "?").toUpperCase().padEnd(5);
     const msg = f.msg ?? f.message ?? "";

@@ -13,7 +13,6 @@ import { toCsv } from "../../core/csv";
 import type { StoredEvent } from "@/lib/api";
 import { downloadCsv } from "@/lib/download";
 import { fmtIsoDateTime, fmtNum, fmtRegion, fmtUtc, sgcEventUrl } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 const features = tableFeatures({
@@ -95,7 +94,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
           </Empty>
         ) : (
           <div className="relative after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-8 after:bg-linear-to-l after:from-card lg:after:hidden" title={t.scrollHint}>
-          <Table className="[&_td]:px-1 [&_th]:px-1">
+          <Table size="sm">
             <TableHeader>
               {table.getHeaderGroups().map((group) => (
                 <TableRow key={group.id}>
@@ -106,7 +105,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
                     return (
                       <TableHead key={header.id} className={numeric ? "text-end" : undefined}
                         aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}>
-                        <Button variant="ghost" size="sm" className={cn("text-sm", numeric ? "-me-2.5" : "-ms-2.5", "px-2")} onClick={header.column.getToggleSortingHandler()}>
+                        <Button variant="ghost" size="header" className={numeric ? "-me-2.5" : "-ms-2.5"} onClick={header.column.getToggleSortingHandler()}>
                           <table.FlexRender header={header} />
                           <Icon data-icon="inline-end" className={sorted ? undefined : "opacity-40"} />
                         </Button>

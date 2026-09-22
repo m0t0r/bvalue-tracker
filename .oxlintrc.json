@@ -1,8 +1,26 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "jsPlugins": ["@shadcn/lint"],
+  "ignorePatterns": [".agents/", ".claude/"],
+  "settings": {
+    "shadcn": {
+      "ignoreImports": ["^@/components/ui/collapsible$"],
+      "note": "Design-system rules and approved exceptions: docs/frontend.md, \"Design-system lint\"."
+    }
+  },
   "rules": {
-    "shadcn/no-restyle": ["error", { "allow": ["layout"] }],
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": ["layout"],
+        "contracts": [
+          {
+            "pattern": "^(Alert|CardContent|FieldGroup|Tabs|TabsContent)$",
+            "allow": ["layout", "spacing"]
+          }
+        ]
+      }
+    ],
     "shadcn/no-raw-colors": "error",
     "shadcn/no-arbitrary-values": ["error", { "allow": ["layout"] }],
     "shadcn/no-inline-styles": "error",

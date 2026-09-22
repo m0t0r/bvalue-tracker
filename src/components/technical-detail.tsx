@@ -3,25 +3,23 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 /**
  * The collapsed "Detalle técnico" under a plain-language message: a raw error string, the test behind a
- * sentence, or the fine print under a headline number. `className` sets the body's type size — prose the
- * reader is meant to sit and read takes `text-sm`; the default `text-xs` suits a short string.
+ * sentence, or the fine print under a headline number. `size` sets the body's type size — prose the
+ * reader is meant to sit and read takes `sm`; the default `xs` suits a short string.
  */
-export function TechnicalDetail({ children, className }: { children: ReactNode; className?: string }) {
+export function TechnicalDetail({ children, size = "xs" }: { children: ReactNode; size?: "xs" | "sm" }) {
   const { t } = useI18n();
   return (
     <Collapsible className="flex flex-col items-start gap-1">
       <CollapsibleTrigger asChild>
-        <Button variant="link" size="sm" // On touch the trigger itself grows to 40px, and its hit area to 44px, like the page's other controls.
-          className="group h-auto p-0 text-xs text-muted-foreground has-data-[icon=inline-start]:pl-0 pointer-coarse:h-10 pointer-coarse:pr-4 pointer-coarse:text-sm pointer-coarse:after:-inset-x-2 pointer-coarse:after:-inset-y-0.5">
+        <Button variant="link-muted" size="inline-touch" className="group">
           <ChevronRightIcon data-icon="inline-start" className="transition-transform duration-150 ease-out group-data-[state=open]:rotate-90" />
           {t.technicalDetail}
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className={cn("text-xs break-words", className)}>{children}</CollapsibleContent>
+      <CollapsibleContent className={size === "sm" ? "text-sm break-words" : "text-xs break-words"}>{children}</CollapsibleContent>
     </Collapsible>
   );
 }

@@ -1,7 +1,7 @@
 import { Map as MapLibreMap, NavigationControl, Popup, setWorkerUrl, type GeoJSONSource, type MapLayerMouseEvent } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
 import { MAINSHOCK_ID } from "@/lib/filters";
@@ -120,13 +120,14 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
           <div className="flex items-center gap-2">
             <span className="whitespace-nowrap">{t.depth}</span>
             <span>0</span>
+            {/* oxlint-disable-next-line shadcn/no-inline-styles -- The legend is drawn from the map's own hex stops, which MapLibre needs as hex. */}
             <span className="h-2 w-20 shrink-0 rounded-full sm:w-28" style={{ background: `linear-gradient(to right, ${DEPTH_STOPS.map(([, c]) => c).join(",")})` }} />
             <span>120+</span>
           </div>
           <div className="flex items-center gap-3">
             {[2, 3, 4, 5].map((mag) => (
               <span key={mag} className="flex items-center gap-1">
-                <span className="inline-block rounded-full bg-muted-foreground" style={{ width: mag * 3.2, height: mag * 3.2 }} />
+                <span className="inline-block size-(--dot) rounded-full bg-muted-foreground" style={{ "--dot": `${mag * 3.2}px` } as CSSProperties} />
                 M{mag}
               </span>
             ))}
