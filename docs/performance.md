@@ -36,6 +36,15 @@ practices stayed at 100.
   answers `max-age=0, must-revalidate` and every repeat visit revalidates the bundle, the
   stylesheet and the font. `index.html` must stay on the revalidating default: it is the file
   that points at the hashed ones.
+- **No `compress()` or `cache()` middleware in the Worker, on purpose** (checked 2026-09-22).
+  Cloudflare's edge already compresses Worker responses: `/api/events` in production answers
+  `content-encoding: br`. `compress()` would spend Worker CPU to produce gzip, which is worse
+  than brotli, and CPU is the one budget this Worker runs short of
+  ([the CPU budget](ingest.md#the-cpu-budget)). `cache()` uses the Cache API, which is kept
+  per data centre, and `cache.delete` purges only the data centre it runs in. The page must
+  get the new body right after a refresh (every API route is `no-cache` for that reason), so
+  there would be no way to invalidate a cached copy everywhere. A cached response would also
+  be up to 15 minutes stale by design.
 - **The LCP element is the header subtitle**, and it is drawn by React, so LCP can never beat
   "bundle downloaded and executed" (~1.0 s even unthrottled). Putting a static header in
   `index.html` would fix that, and was left undone on purpose: the CSP has no `'unsafe-inline'`
