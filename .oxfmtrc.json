@@ -6,6 +6,13 @@
     ".claude/",
     "test/fixtures/",
     "worker-configuration.d.ts",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+    "**/*.md"
+  ],
+  "overrides": [
+    {
+      "files": ["src/components/ui/**"],
+      "options": { "semi": false, "printWidth": 80, "trailingComma": "es5" }
+    }
   ]
 }

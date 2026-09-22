@@ -28,7 +28,7 @@ describe("Colombian time", () => {
 });
 
 describe("region names", () => {
-  it("drops the \", Colombia\" every SGC region ends with, and only at the end", () => {
+  it('drops the ", Colombia" every SGC region ends with, and only at the end', () => {
     expect(fmtRegion("Sipi - Choco, Colombia")).toBe("Sipi - Choco");
     expect(fmtRegion("San Jose del Palmar - Choco,Colombia")).toBe("San Jose del Palmar - Choco");
     expect(fmtRegion("Colombia, Pacific Ocean")).toBe("Colombia, Pacific Ocean");

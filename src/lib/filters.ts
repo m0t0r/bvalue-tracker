@@ -26,7 +26,12 @@ export interface Filters extends EventFilters {
 }
 
 export const DEFAULT_FILTERS: Filters = {
-  from: "2026-08-10", to: "", minMag: 0, manualOnly: false, excludeMainshock: false, mc: null,
+  from: "2026-08-10",
+  to: "",
+  minMag: 0,
+  manualOnly: false,
+  excludeMainshock: false,
+  mc: null,
 };
 
 export function applyFilters(events: readonly StoredEvent[], f: EventFilters): StoredEvent[] {
@@ -35,7 +40,9 @@ export function applyFilters(events: readonly StoredEvent[], f: EventFilters): S
   const to = f.to ? dayBounds(f.to)[1] : "9999";
   return events.filter(
     (e) =>
-      e.time >= from && e.time <= to && e.mag >= f.minMag &&
+      e.time >= from &&
+      e.time <= to &&
+      e.mag >= f.minMag &&
       (!f.manualOnly || e.status === "manual") &&
       (!f.excludeMainshock || e.id !== MAINSHOCK_ID),
   );
@@ -66,7 +73,10 @@ export function activeFilterChips(f: Filters, cluster: ClusterChoice, t: Dict, l
     // Colombian days, like the fields themselves and every other date on the page.
     const a = f.from ? fmtDay(Date.parse(dayBounds(f.from)[0]), lang) : "";
     const b = f.to ? fmtDay(Date.parse(dayBounds(f.to)[1]), lang) : "";
-    chips.push({ key: "dates", label: a && b ? t.chipRange(a, b) : a ? t.chipFrom(a) : b ? t.chipTo(b) : t.chipAllDates });
+    chips.push({
+      key: "dates",
+      label: a && b ? t.chipRange(a, b) : a ? t.chipFrom(a) : b ? t.chipTo(b) : t.chipAllDates,
+    });
   }
   if (f.minMag !== DEFAULT_FILTERS.minMag) chips.push({ key: "minMag", label: t.chipMinMag(f.minMag.toFixed(1)) });
   if (f.manualOnly) chips.push({ key: "manualOnly", label: t.chipManual });

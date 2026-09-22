@@ -21,8 +21,13 @@
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import type { StoredEvent } from "@/lib/api";
 import {
-  DEFAULT_FILTERS, activeFilterChips, applyFilters,
-  type ClusterChoice, type EventFilters, type FilterChip, type Filters,
+  DEFAULT_FILTERS,
+  activeFilterChips,
+  applyFilters,
+  type ClusterChoice,
+  type EventFilters,
+  type FilterChip,
+  type Filters,
 } from "@/lib/filters";
 import type { Dict, Lang } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
@@ -176,7 +181,10 @@ export function useScope(events: readonly StoredEvent[] | undefined): PageScope 
   // "The last 7 days" in the groups card is measured from the clock, not from the data: without a
   // clock the count would freeze for as long as the events themselves did. An hour is fine enough.
   const hour = Math.floor(useNow() / 3_600_000) * 3_600_000;
-  const measured = useMemo(() => measure(sel, { mc, cluster, magScope }, hour + 3_600_000), [sel, mc, cluster, magScope, hour]);
+  const measured = useMemo(
+    () => measure(sel, { mc, cluster, magScope }, hour + 3_600_000),
+    [sel, mc, cluster, magScope, hour],
+  );
   const view = useMemo(() => ({ ...sel, ...measured }), [sel, measured]);
 
   const deferred = {
@@ -196,7 +204,13 @@ export function useScope(events: readonly StoredEvent[] | undefined): PageScope 
 
   const selectCluster = useMemo(() => ({ cluster, onChange: setCluster }), [cluster, setCluster]);
   const magTabs = useMemo(
-    () => ({ value: magScope, onChange: setMagScope, magType: view.magType, typeCount: view.ofType.length, total: view.shown.length }),
+    () => ({
+      value: magScope,
+      onChange: setMagScope,
+      magType: view.magType,
+      typeCount: view.ofType.length,
+      total: view.shown.length,
+    }),
     [magScope, setMagScope, view.magType, view.ofType, view.shown],
   );
 

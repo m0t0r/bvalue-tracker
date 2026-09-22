@@ -17,18 +17,42 @@ import { computeStats } from "../../core/gr";
  * magnitude types and both have enough events above Mc to be fitted.
  */
 const GROUPS: [n: number, deep: number, mag: number, magType: string][] = [
-  [50, 30, 2.0, "MLr_1"], [40, 2, 2.4, "MLr_1"], [20, 8, 2.7, "MLr_1"], [12, 6, 3.0, "MLr_1"], [8, 4, 3.4, "MLr_1"],
-  [30, 3, 2.4, "MLv"], [6, 3, 3.1, "MLv"], [4, 2, 4.2, "MLv"],
+  [50, 30, 2.0, "MLr_1"],
+  [40, 2, 2.4, "MLr_1"],
+  [20, 8, 2.7, "MLr_1"],
+  [12, 6, 3.0, "MLr_1"],
+  [8, 4, 3.4, "MLr_1"],
+  [30, 3, 2.4, "MLv"],
+  [6, 3, 3.1, "MLv"],
+  [4, 2, 4.2, "MLv"],
 ];
 
-const ev = (i: number, mag: number, depthKm: number, magType: string, over: Partial<StoredEvent> = {}): StoredEvent => ({
+const ev = (
+  i: number,
+  mag: number,
+  depthKm: number,
+  magType: string,
+  over: Partial<StoredEvent> = {},
+): StoredEvent => ({
   id: `SGC2026z${String(i).padStart(4, "0")}`,
   time: new Date(Date.UTC(2026, 7, 10, 12, 34, 27) + i * 5 * 3_600_000).toISOString(),
-  lat: 4.5, lon: -76.7, depthKm, mag, magType,
-  phases: 12, rmsS: 0.4, gapDeg: 120, errLatKm: 1, errLonKm: 1, errDepthKm: 2,
-  region: "Istmina, Chocó, Colombia", status: i % 5 === 0 ? "manual" : "automatic",
+  lat: 4.5,
+  lon: -76.7,
+  depthKm,
+  mag,
+  magType,
+  phases: 12,
+  rmsS: 0.4,
+  gapDeg: 120,
+  errLatKm: 1,
+  errLonKm: 1,
+  errDepthKm: 2,
+  region: "Istmina, Chocó, Colombia",
+  status: i % 5 === 0 ? "manual" : "automatic",
   solutionStamp: null,
-  firstSeenAt: "2026-09-19T00:00:00.000Z", updatedAt: "2026-09-19T00:00:00.000Z", removedAt: null,
+  firstSeenAt: "2026-09-19T00:00:00.000Z",
+  updatedAt: "2026-09-19T00:00:00.000Z",
+  removedAt: null,
   ...over,
 });
 
@@ -66,7 +90,11 @@ describe("the Mc every b-value on the page is fitted above", () => {
   it("follows the reader's own Mc into every group and tab, when they set one", () => {
     for (const cluster of CLUSTERS) {
       for (const magScope of TABS) {
-        const view = pageView(EVENTS, scope({ cluster, magScope, filters: { ...DEFAULT_SCOPE.filters, mc: 2.9 } }), NOW);
+        const view = pageView(
+          EVENTS,
+          scope({ cluster, magScope, filters: { ...DEFAULT_SCOPE.filters, mc: 2.9 } }),
+          NOW,
+        );
         expect(view.stats.mc).toBe(2.9);
         expect(view.clusters.shallow.stats.mc).toBe(2.9);
         expect(view.clusters.deep.stats.mc).toBe(2.9);
@@ -139,7 +167,11 @@ describe("what the scope bar names", () => {
   });
 
   it("names the depth group and the filters as one list", () => {
-    const chips = scopeChips(scope({ cluster: "deep", filters: { ...DEFAULT_SCOPE.filters, minMag: 2.5, mc: 2.9 } }), dicts.es, "es");
+    const chips = scopeChips(
+      scope({ cluster: "deep", filters: { ...DEFAULT_SCOPE.filters, minMag: 2.5, mc: 2.9 } }),
+      dicts.es,
+      "es",
+    );
     expect(chips.map((c) => c.key)).toEqual(["cluster", "minMag", "mc"]);
   });
 });

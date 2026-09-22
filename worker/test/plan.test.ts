@@ -1,9 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { IngestRun } from "../api-types.ts";
-import { dueNow, REFRESH_MIN_INTERVAL_S, TRAILING_DAYS, type IngestHistory, type IngestPlan, type SgcHealth } from "../plan.ts";
+import {
+  dueNow,
+  REFRESH_MIN_INTERVAL_S,
+  TRAILING_DAYS,
+  type IngestHistory,
+  type IngestPlan,
+  type SgcHealth,
+} from "../plan.ts";
 
 /** SGC answering normally. Every field is named, so a new rule cannot default itself in. */
-const healthy = (over: Partial<SgcHealth> = {}): SgcHealth => ({ lastOk: true, failing: null, rateLimit: null, ...over });
+const healthy = (over: Partial<SgcHealth> = {}): SgcHealth => ({
+  lastOk: true,
+  failing: null,
+  rateLimit: null,
+  ...over,
+});
 
 /** The newest finished run failed, and the ones before it, since `since`. */
 const failingSince = (since: Date, status: number | null) =>
@@ -24,9 +36,18 @@ const MANUAL = { kind: "manual" } as const;
 
 /** A finished, successful run — all the plan reads of it is when it ended. */
 const finishedAt = (d: Date): IngestRun => ({
-  id: 1, startedAt: d.toISOString(), finishedAt: d.toISOString(), trigger: "cron",
-  windowStart: d.toISOString(), windowEnd: d.toISOString(), ok: true,
-  fetched: 0, inserted: 0, updated: 0, removed: 0, error: null,
+  id: 1,
+  startedAt: d.toISOString(),
+  finishedAt: d.toISOString(),
+  trigger: "cron",
+  windowStart: d.toISOString(),
+  windowEnd: d.toISOString(),
+  ok: true,
+  fetched: 0,
+  inserted: 0,
+  updated: 0,
+  removed: 0,
+  error: null,
 });
 
 const at = (s: number) => new Date(NOW.getTime() + s * 1000);
@@ -44,7 +65,13 @@ describe("cron lanes", () => {
 
   // An HTTP status is no weaker a signal than a timeout, so both wait for a success.
   it("stands the fast lane down while the last finished run failed", () => {
-    expect(dueNow(cron(15), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toEqual([]);
+    expect(
+      dueNow(
+        cron(15),
+        NOW,
+        history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }),
+      ).steps,
+    ).toEqual([]);
   });
 
   // Being answered again is not being welcome again: the cooldown outlives the recovery,
@@ -80,7 +107,13 @@ describe("cron lanes", () => {
 
   // The wide tick is what probes SGC while the fast lane waits, so it is what lets it back in.
   it("keeps the wide tick running while the fast lane is standing down", () => {
-    expect(dueNow(cron(30), NOW, history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) })).steps).toHaveLength(1);
+    expect(
+      dueNow(
+        cron(30),
+        NOW,
+        history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }),
+      ).steps,
+    ).toHaveLength(1);
   });
 
   it("adds one history chunk on the hour, and on no other quarter", () => {
@@ -114,7 +147,9 @@ describe("cron lanes", () => {
   describe.each([0, 45, 449, -449])("dispatched %i s from the tick", (offsetS) => {
     const MINUTES = [0, 15, 30, 45];
     const plansFor = (h: IngestHistory) =>
-      MINUTES.map((m) => dueNow({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, h));
+      MINUTES.map((m) =>
+        dueNow({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, h),
+      );
     const isWide = (p: IngestPlan) => p.steps.some((s) => s.lane === "wide" && s.days === TRAILING_DAYS);
     const hasSweep = (p: IngestPlan) => p.steps.some((s) => s.lane === "sweep");
 
@@ -128,7 +163,9 @@ describe("cron lanes", () => {
     // The one that turned a 410 from a blip into an outage with no way out: with every tick
     // on the fast lane, the first failure stood down the only lane there was.
     it("leaves lanes an hour that probe SGC while the fast lane is standing down", () => {
-      const ill = plansFor(history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }));
+      const ill = plansFor(
+        history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }),
+      );
       expect(ill.filter((p) => p.steps.length > 0)).toHaveLength(2);
     });
 
@@ -186,8 +223,8 @@ describe("while SGC is refusing us", () => {
       lastRun: { ...finishedAt(new Date(T)), ok: false },
     });
     const at = (min: number) =>
-      dueNow({ kind: "cron", scheduledTime: T + min * 60_000 }, new Date(T + min * 60_000), oneFailure)
-        .steps.length > 0;
+      dueNow({ kind: "cron", scheduledTime: T + min * 60_000 }, new Date(T + min * 60_000), oneFailure).steps.length >
+      0;
 
     expect(at(15)).toBe(false); // narrow lane: down on the failure alone, as it always was
     expect(at(30)).toBe(true); // the wide tick still goes — this is the grace
@@ -280,7 +317,11 @@ describe("the visitor's refresh", () => {
   it("closes the back-fill fast lane during a cooldown, even once SGC is answering again", () => {
     // The cooldown has to outlast the throttle, or the second half below measures the
     // throttle expiring rather than the cooldown still holding the fast lane shut.
-    const limited = { ...rateLimited(REFRESH_MIN_INTERVAL_S * 4), backfill: { done: 2, total: 6 }, lastRun: finishedAt(NOW) };
+    const limited = {
+      ...rateLimited(REFRESH_MIN_INTERVAL_S * 4),
+      backfill: { done: 2, total: 6 },
+      lastRun: finishedAt(NOW),
+    };
     expect(limited.health.lastOk).toBe(true); // a later run succeeded: only the cooldown holds
 
     const during = dueNow(MANUAL, at(1), limited);

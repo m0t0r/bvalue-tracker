@@ -27,7 +27,9 @@ function install(installErrorReporting: () => void): void {
   }) as typeof window.addEventListener;
   installErrorReporting();
   window.addEventListener = add;
-  removeListeners.push(() => { for (const [t, fn] of added) window.removeEventListener(t, fn); });
+  removeListeners.push(() => {
+    for (const [t, fn] of added) window.removeEventListener(t, fn);
+  });
 }
 
 beforeEach(() => {

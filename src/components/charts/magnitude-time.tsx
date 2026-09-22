@@ -1,4 +1,13 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from "react";
 import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, XAxis, YAxis, ZAxis } from "recharts";
 import { useResizeObserver } from "usehooks-ts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +23,8 @@ import { CLUSTER_DEPTH_KM, clusterOf } from "../../../core/clusters";
 // The shallow cluster keeps the page's blue; the deep one, which went quiet after the first week, is
 // a teal set well away from the blue in lightness as well as hue. Orange stays the mainshock's alone.
 const config = {
-  mag: { label: "M", color: "var(--chart-1)" }, deep: { label: "M", color: "var(--chart-4)" },
+  mag: { label: "M", color: "var(--chart-1)" },
+  deep: { label: "M", color: "var(--chart-4)" },
   main: { label: "M7.4", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
@@ -52,7 +62,15 @@ function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
 export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] }) {
   const { t, lang } = useI18n();
   const { points, deepPoints, main, daily, domain, days, count } = useMemo(() => {
-    const pts = events.map((e) => ({ t: Date.parse(e.time), mag: e.mag, time: e.time, region: e.region, id: e.id, depthKm: e.depthKm, cluster: clusterOf(e) }));
+    const pts = events.map((e) => ({
+      t: Date.parse(e.time),
+      mag: e.mag,
+      time: e.time,
+      region: e.region,
+      id: e.id,
+      depthKm: e.depthKm,
+      cluster: clusterOf(e),
+    }));
     // The day histogram is `dailyCounts`, shared with the groups card: a bar sits at the middle of
     // its own day, and the time axis spans the whole of the first day to the whole of the last.
     const byDay = dailyCounts(events);
@@ -63,7 +81,9 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
       deepPoints: pts.filter((p) => p.id !== MAINSHOCK_ID && p.cluster === "deep"),
       main: pts.filter((p) => p.id === MAINSHOCK_ID),
       daily: byDay.days.map((d) => ({ t: d.start + DAY / 2, total: d.total, shallow: d.shallow, deep: d.deep })),
-      domain: [lo, hi] as [number, number], days: Math.max(1, byDay.days.length), count: countAxis(byDay.maxTotal),
+      domain: [lo, hi] as [number, number],
+      days: Math.max(1, byDay.days.length),
+      count: countAxis(byDay.maxTotal),
     };
   }, [events]);
 
@@ -101,17 +121,47 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
   }, []);
 
   const xAxis = (labels: boolean) => (
-    <XAxis dataKey="t" type="number" scale="time" domain={domain} ticks={ticks} height={X_AXIS_H}
-      tickFormatter={(ms: number) => fmtDay(ms, lang)} tick={labels}
-      tickLine={false} axisLine={false} tickMargin={8} minTickGap={40} padding={FIRST_TICK_PAD} />
+    <XAxis
+      dataKey="t"
+      type="number"
+      scale="time"
+      domain={domain}
+      ticks={ticks}
+      height={X_AXIS_H}
+      tickFormatter={(ms: number) => fmtDay(ms, lang)}
+      tick={labels}
+      tickLine={false}
+      axisLine={false}
+      tickMargin={8}
+      minTickGap={40}
+      padding={FIRST_TICK_PAD}
+    />
   );
   const yMag = (pinned: boolean) => (
-    <YAxis dataKey="mag" type="number" domain={[1, 8]} ticks={[2, 3, 4, 5, 6, 7]}
-      tickLine={false} interval={0} axisLine={false} width={AXIS_W} hide={!pinned} />
+    <YAxis
+      dataKey="mag"
+      type="number"
+      domain={[1, 8]}
+      ticks={[2, 3, 4, 5, 6, 7]}
+      tickLine={false}
+      interval={0}
+      axisLine={false}
+      width={AXIS_W}
+      hide={!pinned}
+    />
   );
   const yCount = (pinned: boolean) => (
-    <YAxis type="number" domain={count.domain} ticks={count.ticks} allowDecimals={false}
-      tickLine={false} interval={0} axisLine={false} width={AXIS_W} hide={!pinned} />
+    <YAxis
+      type="number"
+      domain={count.domain}
+      ticks={count.ticks}
+      allowDecimals={false}
+      tickLine={false}
+      interval={0}
+      axisLine={false}
+      width={AXIS_W}
+      hide={!pinned}
+    />
   );
   // Pinned while the plot scrolls under it, so a dot always has a magnitude beside it. It is opaque
   // and, once scrolled, casts a shadow: the one cue that the chart continues to the left.
@@ -135,15 +185,24 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
             </li>
           ))}
         </ul>
-        <div ref={scroller} onScroll={onScroll} role="group" aria-label={t.magTimeRegion} tabIndex={0}
-          className="overflow-x-auto overscroll-x-contain rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring">
-          <div className="flex w-[calc(var(--axis-col)+var(--plot-w))] flex-col gap-6"
-            style={{ "--axis-col": `${AXIS_COL}px`, "--plot-w": `${plotW}px` } as CSSProperties}>
+        <div
+          ref={scroller}
+          onScroll={onScroll}
+          role="group"
+          aria-label={t.magTimeRegion}
+          tabIndex={0}
+          className="overflow-x-auto overscroll-x-contain rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring"
+        >
+          <div
+            className="flex w-[calc(var(--axis-col)+var(--plot-w))] flex-col gap-6"
+            style={{ "--axis-col": `${AXIS_COL}px`, "--plot-w": `${plotW}px` } as CSSProperties}
+          >
             <div className="flex">
               <div className={pinnedCol}>
                 <ChartContainer config={config} className="aspect-auto h-64 w-full">
                   <ScatterChart margin={PINNED_SCATTER_MARGIN} data={seed}>
-                    {xAxis(false)}{yMag(true)}
+                    {xAxis(false)}
+                    {yMag(true)}
                     <Scatter data={seed} fill="none" stroke="none" isAnimationActive={false} />
                   </ScatterChart>
                 </ChartContainer>
@@ -154,18 +213,37 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                   {xAxis(true)}
                   {yMag(false)}
                   <ZAxis range={[28, 28]} />
-                  <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={({ active, payload }) => {
-                    const p = payload?.[0]?.payload as (typeof points)[number] | undefined;
-                    if (!active || !p) return null;
-                    return (
-                      <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
-                        <div className="font-medium tabular-nums">M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)}</div>
-                        <div className="text-muted-foreground">{t.clusterName[p.cluster]} · {p.depthKm.toFixed(0)} km · {fmtRegion(p.region)}</div>
-                      </div>
-                    );
-                  }} />
-                  <Scatter data={points} fill="var(--color-mag)" fillOpacity={0.55} stroke="var(--color-mag)" isAnimationActive={false} />
-                  <Scatter data={deepPoints} fill="var(--color-deep)" fillOpacity={0.55} stroke="var(--color-deep)" isAnimationActive={false} />
+                  <ChartTooltip
+                    cursor={{ strokeDasharray: "3 3" }}
+                    content={({ active, payload }) => {
+                      const p = payload?.[0]?.payload as (typeof points)[number] | undefined;
+                      if (!active || !p) return null;
+                      return (
+                        <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
+                          <div className="font-medium tabular-nums">
+                            M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)}
+                          </div>
+                          <div className="text-muted-foreground">
+                            {t.clusterName[p.cluster]} · {p.depthKm.toFixed(0)} km · {fmtRegion(p.region)}
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Scatter
+                    data={points}
+                    fill="var(--color-mag)"
+                    fillOpacity={0.55}
+                    stroke="var(--color-mag)"
+                    isAnimationActive={false}
+                  />
+                  <Scatter
+                    data={deepPoints}
+                    fill="var(--color-deep)"
+                    fillOpacity={0.55}
+                    stroke="var(--color-deep)"
+                    isAnimationActive={false}
+                  />
                   <Scatter data={main} fill="var(--color-main)" shape="star" isAnimationActive={false}>
                     <ZAxis range={[160, 160]} />
                   </Scatter>
@@ -178,29 +256,39 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                 <div className={pinnedCol}>
                   <ChartContainer config={config} className="aspect-auto h-36 w-full">
                     <BarChart margin={PINNED_BAR_MARGIN} data={seed}>
-                      {xAxis(false)}{yCount(true)}
+                      {xAxis(false)}
+                      {yCount(true)}
                       <Bar dataKey="total" fill="none" isAnimationActive={false} />
                     </BarChart>
                   </ChartContainer>
                 </div>
-                <ChartContainer config={{ total: { label: t.dailyTitle, color: "var(--chart-1)" } }}
-                  className="aspect-auto h-36 w-(--plot-w) shrink-0">
+                <ChartContainer
+                  config={{ total: { label: t.dailyTitle, color: "var(--chart-1)" } }}
+                  className="aspect-auto h-36 w-(--plot-w) shrink-0"
+                >
                   <BarChart data={daily} margin={BAR_MARGIN} barCategoryGap={2} title={t.dailyTitle}>
                     <CartesianGrid vertical={false} />
                     {xAxis(true)}
                     {yCount(false)}
-                    <ChartTooltip cursor={{ fillOpacity: 0.08 }} content={({ active, payload }) => {
-                      const p = payload?.[0]?.payload as (typeof daily)[number] | undefined;
-                      if (!active || !p) return null;
-                      return (
-                        <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
-                          <div><span className="font-medium">{p.total}</span> · {fmtDate(p.t, lang)}</div>
-                          {p.deep > 0 && p.shallow > 0 ? (
-                            <div className="text-muted-foreground">{t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}</div>
-                          ) : null}
-                        </div>
-                      );
-                    }} />
+                    <ChartTooltip
+                      cursor={{ fillOpacity: 0.08 }}
+                      content={({ active, payload }) => {
+                        const p = payload?.[0]?.payload as (typeof daily)[number] | undefined;
+                        if (!active || !p) return null;
+                        return (
+                          <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
+                            <div>
+                              <span className="font-medium">{p.total}</span> · {fmtDate(p.t, lang)}
+                            </div>
+                            {p.deep > 0 && p.shallow > 0 ? (
+                              <div className="text-muted-foreground">
+                                {t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }}
+                    />
                     <Bar dataKey="shallow" stackId="day" fill="var(--chart-1)" isAnimationActive={false} />
                     <Bar dataKey="deep" stackId="day" fill="var(--chart-4)" isAnimationActive={false} />
                   </BarChart>

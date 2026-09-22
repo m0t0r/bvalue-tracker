@@ -14,21 +14,33 @@ import { Skeleton } from "@/components/ui/skeleton";
  * The placeholder is the same card with the same title, so only the drawing arrives late and
  * nothing below it moves. `height` names the drawing, whose container the skeleton must match.
  */
-export function Deferred({ title, height = "chart", children }: { title: string; height?: "chart" | "map"; children: ReactNode }) {
+export function Deferred({
+  title,
+  height = "chart",
+  children,
+}: {
+  title: string;
+  height?: "chart" | "map";
+  children: ReactNode;
+}) {
   // No observer (an old browser, a test environment): draw it rather than leave a skeleton.
   const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
   // Latched: once drawn, a card is never swapped back for its skeleton when it scrolls away.
   const { ref: slot } = useIntersectionObserver({
     rootMargin: "600px",
     freezeOnceVisible: true,
-    onChange: (isIntersecting) => { if (isIntersecting) setNear(true); },
+    onChange: (isIntersecting) => {
+      if (isIntersecting) setNear(true);
+    },
   });
 
   const placeholder = (
     <Card className="h-full" aria-busy="true">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription><Skeleton className="h-4 w-full max-w-md" /></CardDescription>
+        <CardDescription>
+          <Skeleton className="h-4 w-full max-w-md" />
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {/* A chart's h-80, or the map's h-96 canvas plus the depth/magnitude legend under it. */}

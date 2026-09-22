@@ -81,7 +81,10 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   const started = useRef(false);
   const startBackfill = backfill.mutate;
   useEffect(() => {
-    if (incomplete && !started.current) { started.current = true; startBackfill(); }
+    if (incomplete && !started.current) {
+      started.current = true;
+      startBackfill();
+    }
   }, [incomplete, startBackfill]);
 
   const ok = status?.lastSuccessfulRun ?? null;
@@ -92,9 +95,14 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   const lastQueryMs = ok?.finishedAt ? Date.parse(ok.finishedAt) : null;
   const busy = refresh.isPending || backfill.isPending || incomplete;
   const autoRefresh = refresh.mutate;
-  useEffect(() => focusManager.subscribe((focused) => {
-    if (focused && !busy && lastQueryMs !== null && Date.now() - lastQueryMs > AUTO_REFRESH_AFTER_MS) autoRefresh({ auto: true });
-  }), [busy, lastQueryMs, autoRefresh]);
+  useEffect(
+    () =>
+      focusManager.subscribe((focused) => {
+        if (focused && !busy && lastQueryMs !== null && Date.now() - lastQueryMs > AUTO_REFRESH_AFTER_MS)
+          autoRefresh({ auto: true });
+      }),
+    [busy, lastQueryMs, autoRefresh],
+  );
 
   const failed = status?.lastRun && !status.lastRun.ok ? status.lastRun : null;
   // `stoodDown` sticks until the next press, but the claim it makes — SGC was queried in
@@ -105,21 +113,32 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   // SGC is being refused outright the Worker's own wait is an hour, so "press again" would be
   // bad advice. refreshWait's claim — SGC answered in the last five minutes — is only true
   // when nothing has failed.
-  const message = refresh.isPending ? t.refreshing
-    : refresh.isError ? t.refreshFailed
-    : stoodDown && failed ? t.refreshStillFailing
-    : stoodDown ? t.refreshWait
-    : "";
+  const message = refresh.isPending
+    ? t.refreshing
+    : refresh.isError
+      ? t.refreshFailed
+      : stoodDown && failed
+        ? t.refreshStillFailing
+        : stoodDown
+          ? t.refreshWait
+          : "";
 
   // The newest event's time reaches SGC's own page for it, the same link the table's time column
   // carries, with the same UTC form one hover away. An event with no id cannot happen — the id is
   // the primary key — but the status API types it as nullable, so it falls back to plain text.
   const newestEvent = !status?.newestEventTime ? null : status.newestEventId ? (
-    <a className="underline underline-offset-4" href={sgcEventUrl(status.newestEventId)} target="_blank" rel="noreferrer"
-      title={fmtUtc(status.newestEventTime)}>
+    <a
+      className="underline underline-offset-4"
+      href={sgcEventUrl(status.newestEventId)}
+      target="_blank"
+      rel="noreferrer"
+      title={fmtUtc(status.newestEventTime)}
+    >
       {fmtDateTime(status.newestEventTime, lang)}
     </a>
-  ) : fmtDateTime(status.newestEventTime, lang);
+  ) : (
+    fmtDateTime(status.newestEventTime, lang)
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -130,13 +149,21 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
               line whole instead of folding "18 sept 2026, 17:08" in half. Which stats share a line is
               then a consequence of the text, so a longer date or a narrower phone needs nothing here. */}
           <div className="flex flex-wrap gap-x-6 gap-y-4 sm:gap-x-10">
-            <Stat label={t.events} value={shown === null ? null : <FlowNumber value={shown} lang={lang} />}
-              hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined} />
-            <Stat label={t.newestEvent} value={status ? (newestEvent ?? "—") : null}
-              hint={status?.newestEventTime ? relativeTime(status.newestEventTime, lang, now) : undefined} />
-            <Stat label={t.lastUpdate}
+            <Stat
+              label={t.events}
+              value={shown === null ? null : <FlowNumber value={shown} lang={lang} />}
+              hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined}
+            />
+            <Stat
+              label={t.newestEvent}
+              value={status ? (newestEvent ?? "—") : null}
+              hint={status?.newestEventTime ? relativeTime(status.newestEventTime, lang, now) : undefined}
+            />
+            <Stat
+              label={t.lastUpdate}
               value={status ? (ok?.finishedAt ? relativeTime(ok.finishedAt, lang, now) : t.never) : null}
-              hint={ok?.finishedAt ? fmtDateTime(ok.finishedAt, lang) : undefined} />
+              hint={ok?.finishedAt ? fmtDateTime(ok.finishedAt, lang) : undefined}
+            />
           </div>
           {/* Below lg this block wraps onto its own line at the start edge, so it reads from there; beside the stats it hugs the end edge. */}
           <div className="flex flex-col items-start gap-2 lg:items-end">
@@ -151,9 +178,16 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
                 has stopped — the fast lane stands down after a failure — and the alert below says
                 fifteen. Two numbers a few pixels apart read as a contradiction, and the alert is
                 the one telling the truth. The line stays, so nothing moves. */}
-            <span aria-live="polite" className={message === "" ? "sr-only" : "min-h-4 text-start text-xs text-muted-foreground lg:text-end"}>{message}</span>
+            <span
+              aria-live="polite"
+              className={message === "" ? "sr-only" : "min-h-4 text-start text-xs text-muted-foreground lg:text-end"}
+            >
+              {message}
+            </span>
             {message === "" ? (
-              <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">{failed ? null : t.autoUpdate}</span>
+              <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">
+                {failed ? null : t.autoUpdate}
+              </span>
             ) : null}
           </div>
         </CardContent>
@@ -165,7 +199,9 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
           <AlertDescription>
             {t.backfillBody}
             {backfill.isPending ? null : (
-              <Button variant="outline" size="sm" onClick={() => backfill.mutate()}>{t.backfillAction}</Button>
+              <Button variant="outline" size="sm" onClick={() => backfill.mutate()}>
+                {t.backfillAction}
+              </Button>
             )}
           </AlertDescription>
         </Alert>

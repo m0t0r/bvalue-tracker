@@ -36,8 +36,16 @@ interface Props {
 /** A number whose digits roll to the new value, so the reader sees which figures a filter moved. Honours prefers-reduced-motion. */
 export function FlowNumber({ value, digits = 0, lang, prefix, suffix, className }: Props) {
   return (
-    <NumberFlow value={value} locales={digits > 0 ? "en-US" : lang} prefix={prefix} suffix={suffix} className={cn(MASK, className)}
+    <NumberFlow
+      value={value}
+      locales={digits > 0 ? "en-US" : lang}
+      prefix={prefix}
+      suffix={suffix}
+      className={cn(MASK, className)}
       format={{ minimumFractionDigits: digits, maximumFractionDigits: digits }}
-      transformTiming={MOVE} spinTiming={MOVE} opacityTiming={FADE} />
+      transformTiming={MOVE}
+      spinTiming={MOVE}
+      opacityTiming={FADE}
+    />
   );
 }

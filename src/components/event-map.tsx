@@ -1,4 +1,11 @@
-import { Map as MapLibreMap, NavigationControl, Popup, setWorkerUrl, type GeoJSONSource, type MapLayerMouseEvent } from "maplibre-gl";
+import {
+  Map as MapLibreMap,
+  NavigationControl,
+  Popup,
+  setWorkerUrl,
+  type GeoJSONSource,
+  type MapLayerMouseEvent,
+} from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, type CSSProperties } from "react";
@@ -14,7 +21,12 @@ import { useIsDark } from "@/lib/theme";
 setWorkerUrl(workerUrl);
 
 // Sequential single hue, light → dark with depth. Kept as hex: MapLibre cannot parse the oklch tokens.
-const DEPTH_STOPS: [number, string][] = [[0, "#9ec5f4"], [40, "#5598e7"], [80, "#256abf"], [120, "#0d366b"]];
+const DEPTH_STOPS: [number, string][] = [
+  [0, "#9ec5f4"],
+  [40, "#5598e7"],
+  [80, "#256abf"],
+  [120, "#0d366b"],
+];
 
 const toGeoJson = (events: readonly StoredEvent[]) => ({
   type: "FeatureCollection" as const,
@@ -39,7 +51,10 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
     const m = new MapLibreMap({
       container: el.current!,
       style: `https://tiles.openfreemap.org/styles/${dark ? "dark" : "positron"}`,
-      center: [-76.6, 4.75], zoom: 7.6, attributionControl: { compact: true }, cooperativeGestures: true,
+      center: [-76.6, 4.75],
+      zoom: 7.6,
+      attributionControl: { compact: true },
+      cooperativeGestures: true,
       locale: {
         "Map.Title": t.mapTitle,
         "NavigationControl.ZoomIn": t.zoomIn,
@@ -65,7 +80,9 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
     m.on("load", () => {
       m.addSource("events", { type: "geojson", data: toGeoJson(latest.current) });
       m.addLayer({
-        id: "events", type: "circle", source: "events",
+        id: "events",
+        type: "circle",
+        source: "events",
         // Draw small events last so large circles never bury them.
         layout: { "circle-sort-key": ["-", 10, ["get", "mag"]] },
         paint: {
@@ -94,12 +111,22 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
         body.className = "text-muted-foreground";
         body.textContent = `${fmtDateTime(p.time, lang)} · ${fmtRegion(p.region)}`;
         node.append(head, body);
-        popup.setLngLat((f.geometry as unknown as { coordinates: [number, number] }).coordinates).setDOMContent(node).addTo(m);
+        popup
+          .setLngLat((f.geometry as unknown as { coordinates: [number, number] }).coordinates)
+          .setDOMContent(node)
+          .addTo(m);
       });
-      m.on("mouseleave", "events", () => { shownId = null; m.getCanvas().style.cursor = ""; popup.remove(); });
+      m.on("mouseleave", "events", () => {
+        shownId = null;
+        m.getCanvas().style.cursor = "";
+        popup.remove();
+      });
     });
     map.current = m;
-    return () => { m.remove(); map.current = null; };
+    return () => {
+      m.remove();
+      map.current = null;
+    };
   }, [dark, t, lang]);
 
   useEffect(() => {
@@ -115,19 +142,28 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* The canvas is a keyboard stop (arrows pan, +/- zoom); its own outline is clipped, so the frame shows focus. */}
-        <div ref={el} className="h-96 w-full overflow-hidden rounded-lg border has-[canvas:focus-visible]:outline-2 has-[canvas:focus-visible]:outline-offset-2 has-[canvas:focus-visible]:outline-ring" />
+        <div
+          ref={el}
+          className="h-96 w-full overflow-hidden rounded-lg border has-[canvas:focus-visible]:outline-2 has-[canvas:focus-visible]:outline-offset-2 has-[canvas:focus-visible]:outline-ring"
+        />
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <span className="whitespace-nowrap">{t.depth}</span>
             <span>0</span>
-            {/* oxlint-disable-next-line shadcn/no-inline-styles -- The legend is drawn from the map's own hex stops, which MapLibre needs as hex. */}
-            <span className="h-2 w-20 shrink-0 rounded-full sm:w-28" style={{ background: `linear-gradient(to right, ${DEPTH_STOPS.map(([, c]) => c).join(",")})` }} />
+            <span
+              className="h-2 w-20 shrink-0 rounded-full sm:w-28"
+              // oxlint-disable-next-line shadcn/no-inline-styles -- Drawn from the map's own hex stops, which MapLibre needs as hex.
+              style={{ background: `linear-gradient(to right, ${DEPTH_STOPS.map(([, c]) => c).join(",")})` }}
+            />
             <span>120+</span>
           </div>
           <div className="flex items-center gap-3">
             {[2, 3, 4, 5].map((mag) => (
               <span key={mag} className="flex items-center gap-1">
-                <span className="inline-block size-(--dot) rounded-full bg-muted-foreground" style={{ "--dot": `${mag * 3.2}px` } as CSSProperties} />
+                <span
+                  className="inline-block size-(--dot) rounded-full bg-muted-foreground"
+                  style={{ "--dot": `${mag * 3.2}px` } as CSSProperties}
+                />
                 M{mag}
               </span>
             ))}

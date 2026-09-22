@@ -63,8 +63,7 @@ export function reportError(report: ErrorReport): void {
   }
 }
 
-const message = (v: unknown): string =>
-  v instanceof Error ? `${v.name}: ${v.message}` : String(v);
+const message = (v: unknown): string => (v instanceof Error ? `${v.name}: ${v.message}` : String(v));
 
 /**
  * React 19 rethrows an uncaught render error so that it reaches `window`'s error event,

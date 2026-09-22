@@ -25,7 +25,12 @@ afterAll(() => server.close());
 /** Makes SGC answer this way, and hands back how many requests it has taken so far. */
 function serves(respond: () => Response): () => number {
   let calls = 0;
-  server.use(http.post(SEISCOMP_ENDPOINT, () => { calls++; return respond(); }));
+  server.use(
+    http.post(SEISCOMP_ENDPOINT, () => {
+      calls++;
+      return respond();
+    }),
+  );
   return () => calls;
 }
 const serving = (html: string) => serves(() => HttpResponse.html(html));
@@ -40,8 +45,7 @@ const deps = (html: string, now = NOW) => {
 const count = async (where = "1=1") =>
   (await env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE ${where}`).first<{ n: number }>())!.n;
 
-const runCount = async () =>
-  (await env.DB.prepare("SELECT COUNT(*) AS n FROM ingest_runs").first<{ n: number }>())!.n;
+const runCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM ingest_runs").first<{ n: number }>())!.n;
 
 /** Rewrites one table cell of the row belonging to `id`. */
 function editRow(html: string, id: string, edit: (row: string) => string): string {
@@ -83,9 +87,13 @@ afterEach(() => server.resetHandlers());
 /** Marks every history chunk as swept, as a finished back-fill would. */
 async function completeBackfill() {
   const old = "2026-01-01T00:00:00.000Z";
-  await env.DB.batch(sweepChunks(new Date()).map((c) =>
-    env.DB.prepare("INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok) VALUES (?, ?, 'sweep', ?, ?, 1)")
-      .bind(old, old, c.start.toISOString(), c.end.toISOString())));
+  await env.DB.batch(
+    sweepChunks(new Date()).map((c) =>
+      env.DB.prepare(
+        "INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok) VALUES (?, ?, 'sweep', ?, ?, 1)",
+      ).bind(old, old, c.start.toISOString(), c.end.toISOString()),
+    ),
+  );
 }
 
 describe("ingest", () => {
@@ -103,13 +111,23 @@ describe("ingest", () => {
   it("updates exactly the row whose magnitude and status changed", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     const revised = editRow(FULL, "SGC2026skywaa", (row) =>
-      row.replace("<center>2.1</center>", "<center>2.4</center>").replace("<center>manual</center>", "<center>automatic</center>"));
+      row
+        .replace("<center>2.1</center>", "<center>2.4</center>")
+        .replace("<center>manual</center>", "<center>automatic</center>"),
+    );
     const later = new Date(NOW.getTime() + 3_600_000);
     const run = await ingest(deps(revised, later), FROM, TO, "manual");
     expect(run).toMatchObject({ ok: true, inserted: 0, updated: 1, removed: 0 });
 
-    const row = await env.DB.prepare("SELECT mag, status, first_seen_at, updated_at FROM events WHERE id = 'SGC2026skywaa'").first();
-    expect(row).toEqual({ mag: 2.4, status: "automatic", first_seen_at: NOW.toISOString(), updated_at: later.toISOString() });
+    const row = await env.DB.prepare(
+      "SELECT mag, status, first_seen_at, updated_at FROM events WHERE id = 'SGC2026skywaa'",
+    ).first();
+    expect(row).toEqual({
+      mag: 2.4,
+      status: "automatic",
+      first_seen_at: NOW.toISOString(),
+      updated_at: later.toISOString(),
+    });
     expect(await count(`updated_at = '${later.toISOString()}'`)).toBe(1);
   });
 
@@ -206,7 +224,12 @@ describe("sweep", () => {
 describe("API", () => {
   it("sends the security headers the static-asset layer cannot reach", async () => {
     // Refusals, API 404s and the catch-all 404 carry them too: the middleware wraps everything.
-    for (const res of [await call("/api/status"), await callRaw("/api/status"), await call("/api/nope"), await callRaw("/nope")]) {
+    for (const res of [
+      await call("/api/status"),
+      await callRaw("/api/status"),
+      await call("/api/nope"),
+      await callRaw("/nope"),
+    ]) {
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
       expect(res.headers.get("referrer-policy")).toBe("no-referrer");
       expect(res.headers.get("strict-transport-security")).toBe("max-age=63072000; includeSubDomains; preload");
@@ -368,8 +391,11 @@ describe("API", () => {
 
   it("refresh stands down while another run is in flight", async () => {
     const calls = serving(FULL);
-    await env.DB.prepare("INSERT INTO ingest_runs (started_at, trigger, window_start, window_end) VALUES (?, 'cron', ?, ?)")
-      .bind(new Date().toISOString(), FROM.toISOString(), TO.toISOString()).run();
+    await env.DB.prepare(
+      "INSERT INTO ingest_runs (started_at, trigger, window_start, window_end) VALUES (?, 'cron', ?, ?)",
+    )
+      .bind(new Date().toISOString(), FROM.toISOString(), TO.toISOString())
+      .run();
     const res = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(res.refreshed).toBe(false);
     expect(calls()).toBe(0);
@@ -377,7 +403,14 @@ describe("API", () => {
   });
 
   it("never lets an error response be cached", async () => {
-    const broken = { ...env, DB: { prepare: () => { throw new Error("D1 down"); } } as unknown as D1Database };
+    const broken = {
+      ...env,
+      DB: {
+        prepare: () => {
+          throw new Error("D1 down");
+        },
+      } as unknown as D1Database,
+    };
     const req = new Request("https://x.test/api/events", { headers: { "sec-fetch-site": "same-origin" } });
     const res = await worker.fetch(req, broken, {} as ExecutionContext);
     expect(res.status).toBe(500);
@@ -396,13 +429,10 @@ describe("API", () => {
     },
   );
 
-  it.each(["cross-site", "same-site", "none"])(
-    "refuses /api/events when Sec-Fetch-Site is %s",
-    async (site) => {
-      const res = await callRaw("/api/events", { headers: { "sec-fetch-site": site } });
-      expect(res.status).toBe(403);
-    },
-  );
+  it.each(["cross-site", "same-site", "none"])("refuses /api/events when Sec-Fetch-Site is %s", async (site) => {
+    const res = await callRaw("/api/events", { headers: { "sec-fetch-site": site } });
+    expect(res.status).toBe(403);
+  });
 
   it("refuses a cross-site POST /api/refresh without touching SGC", async () => {
     const calls = serving(FULL);
@@ -424,7 +454,9 @@ describe("API", () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     const status = (await (await call("/api/status")).json()) as any;
     expect(status.newestEventTime).toBe("2026-09-18T22:08:54Z");
-    const row = await env.DB.prepare("SELECT id FROM events WHERE time = ?").bind(status.newestEventTime).first<{ id: string }>();
+    const row = await env.DB.prepare("SELECT id FROM events WHERE time = ?")
+      .bind(status.newestEventTime)
+      .first<{ id: string }>();
     expect(status.newestEventId).toBe(row!.id);
   });
 
@@ -443,7 +475,9 @@ describe("API", () => {
     await env.DB.prepare(
       `INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok)
        VALUES (?1, ?1, 'cron', ?1, ?1, 1)`,
-    ).bind(new Date(Date.now() - 9 * 3600_000).toISOString()).run();
+    )
+      .bind(new Date(Date.now() - 9 * 3600_000).toISOString())
+      .run();
     const body = (await (await callRaw("/api/health")).json()) as { ok: boolean; ingestAgeS: number };
     expect(body.ok).toBe(true);
     expect(body.ingestAgeS).toBeGreaterThan(8 * 3600);
@@ -489,11 +523,20 @@ function expectedWindowStart(startedAt: string, days: number): string {
 }
 
 /** Records a finished run, as the back-off reads them. */
-const recordRun = (ok: number, fields: { http_status?: number | null; retry_after_s?: number | null } = {}, finishedAt = NOW) =>
-  env.DB
-    .prepare(`INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, retry_after_s)
+const recordRun = (
+  ok: number,
+  fields: { http_status?: number | null; retry_after_s?: number | null } = {},
+  finishedAt = NOW,
+) =>
+  env.DB.prepare(`INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, retry_after_s)
               VALUES (?, ?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?, ?, ?)`)
-    .bind(finishedAt.toISOString(), finishedAt.toISOString(), ok, fields.http_status ?? null, fields.retry_after_s ?? null)
+    .bind(
+      finishedAt.toISOString(),
+      finishedAt.toISOString(),
+      ok,
+      fields.http_status ?? null,
+      fields.retry_after_s ?? null,
+    )
     .run();
 
 describe("cron lanes", () => {
@@ -519,7 +562,8 @@ describe("cron lanes", () => {
 
     await tick(0);
     const triggers = await env.DB.prepare("SELECT trigger FROM ingest_runs WHERE started_at > ? ORDER BY id")
-      .bind("2026-09-19T00:00:00.000Z").all<{ trigger: string }>();
+      .bind("2026-09-19T00:00:00.000Z")
+      .all<{ trigger: string }>();
     expect(triggers.results.map((r) => r.trigger)).toEqual(["cron", "sweep"]);
 
     await tick(30, { hour: 13 });
@@ -590,8 +634,7 @@ describe("fast lane back-off, through the cron", () => {
 describe("a run the Worker was killed in the middle of", () => {
   /** A claimed run that never came back, started `agoMs` ago on the real clock. */
   const openRun = (agoMs: number) =>
-    env.DB
-      .prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
+    env.DB.prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
                 VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
       .bind(new Date(Date.now() - agoMs).toISOString())
       .run();
@@ -602,8 +645,9 @@ describe("a run the Worker was killed in the middle of", () => {
     serving(FULL);
 
     await tick(30); // any tick: readHistory reaps before it reads
-    const reaped = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1")
-      .first<Record<string, unknown>>())!;
+    const reaped = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1").first<
+      Record<string, unknown>
+    >())!;
     expect(reaped.ok).toBe(0);
     expect(reaped.error).toBe(ABANDONED_ERROR);
     // Dated when it stopped counting as in flight, never later: a row that sat there for
@@ -619,8 +663,9 @@ describe("a run the Worker was killed in the middle of", () => {
     const calls = serving(FULL);
 
     await tick(15);
-    const row = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1")
-      .first<Record<string, unknown>>())!;
+    const row = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1").first<
+      Record<string, unknown>
+    >())!;
     expect(row.finished_at).toBeNull();
     // And it still holds the claim, so this tick did not reach SGC either.
     expect(calls()).toBe(0);
@@ -654,8 +699,9 @@ describe("a run the Worker was killed in the middle of", () => {
   // refresh. Unindexed it read the whole table — the fourth hot query over it, and the one
   // 0003 missed. Partial, so the ordinary case reads a near-empty index.
   it("is looked up through the partial index, not a scan of every run ever recorded", async () => {
-    const { results } = await env.DB
-      .prepare("EXPLAIN QUERY PLAN SELECT 1 AS x FROM ingest_runs WHERE finished_at IS NULL AND started_at > ? LIMIT 1")
+    const { results } = await env.DB.prepare(
+      "EXPLAIN QUERY PLAN SELECT 1 AS x FROM ingest_runs WHERE finished_at IS NULL AND started_at > ? LIMIT 1",
+    )
       .bind(NOW.toISOString())
       .all<{ detail: string }>();
     expect(results.map((r) => r.detail).join("\n")).toContain("ingest_runs_unfinished");
@@ -722,8 +768,9 @@ describe("the refusal back-off, through the cron", () => {
  */
 describe("the last run is answered from an index", () => {
   const plan = async (sql: string) =>
-    (await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>())
-      .results.map((r) => r.detail).join("\n");
+    (await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>()).results
+      .map((r) => r.detail)
+      .join("\n");
 
   it("walks the index instead of scanning the table", async () => {
     const detail = await plan("SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
@@ -735,7 +782,9 @@ describe("the last run is answered from an index", () => {
   // happened last?". It needs its own index rather than sharing the other one: with
   // ingest_runs_ok also present the planner prefers that equality seek and keeps the sort.
   it("sorts nothing to find the last successful run", async () => {
-    const detail = await plan("SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND ok = 1 ORDER BY id DESC LIMIT 1");
+    const detail = await plan(
+      "SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND ok = 1 ORDER BY id DESC LIMIT 1",
+    );
     expect(detail).toContain("ingest_runs_finished_ok");
     expect(detail).not.toContain("TEMP B-TREE");
   });
@@ -820,8 +869,7 @@ describe("what a tick writes to the log", () => {
   // in a row on 2026-09-20 and nothing said so, which is why it is a warn and not an info.
   it("warns when it finds a run the Worker was killed in the middle of", async () => {
     await completeBackfill();
-    await env.DB
-      .prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
+    await env.DB.prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
                 VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
       .bind(new Date(Date.now() - 10 * 60_000).toISOString())
       .run();
@@ -829,8 +877,10 @@ describe("what a tick writes to the log", () => {
     const got = lines();
 
     await tick(15);
-    expect(withMsg(got(), "reaped abandoned runs: an invocation was killed")[0])
-      .toMatchObject({ level: "warn", reaped: 1 });
+    expect(withMsg(got(), "reaped abandoned runs: an invocation was killed")[0]).toMatchObject({
+      level: "warn",
+      reaped: 1,
+    });
   });
 });
 
@@ -893,7 +943,11 @@ describe("POST /api/client-error", () => {
     vi.restoreAllMocks();
     expect(out[0]).toMatchObject({ level: "warn", msg: "page error" });
     expect(out[0]!.page).toEqual({
-      message: "boom", source: "error", path: "/", stack: undefined, userAgent: undefined,
+      message: "boom",
+      source: "error",
+      path: "/",
+      stack: undefined,
+      userAgent: undefined,
     });
   });
 });

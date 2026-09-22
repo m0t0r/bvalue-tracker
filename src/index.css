@@ -6,67 +6,67 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-caution-strong: var(--caution-strong);
-    --color-caution-edge: var(--caution-edge);
-    --color-caution-surface: var(--caution-surface);
-    --color-destructive-strong: var(--destructive-strong);
-    --color-destructive-edge: var(--destructive-edge);
-    --color-destructive-surface: var(--destructive-surface);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
-    /* The groups card's scrolling daily strips: the bar counts and dates, and the bars' tops. */
-    --text-2xs: 0.625rem;
-    --radius-px: 1px;
-    /* Cast by the pinned y axis of "Magnitud en el tiempo" once the plot has scrolled under it. */
-    --shadow-pin: 6px 0 8px -7px var(--pin-shadow);
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", sans-serif;
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-caution-strong: var(--caution-strong);
+  --color-caution-edge: var(--caution-edge);
+  --color-caution-surface: var(--caution-surface);
+  --color-destructive-strong: var(--destructive-strong);
+  --color-destructive-edge: var(--destructive-edge);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  /* The groups card's scrolling daily strips: the bar counts and dates, and the bars' tops. */
+  --text-2xs: 0.625rem;
+  --radius-px: 1px;
+  /* Cast by the pinned y axis of "Magnitud en el tiempo" once the plot has scrolled under it. */
+  --shadow-pin: 6px 0 8px -7px var(--pin-shadow);
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    /* A status alert tints its whole surface, so the state is read before the words are. Three
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  /* A status alert tints its whole surface, so the state is read before the words are. Three
        roles per state and no more: `surface` is the fill, `edge` the border, `strong` the title
        and its icon. The description stays `--muted-foreground` in both, which is what bounds the
        fill: that grey clears 4.5:1 on white by only 4.73:1, so a fill any deeper than these takes
@@ -74,78 +74,78 @@
        example these follow; the fill is a whisper behind it. The two `strong` values are set a
        fixed 0.11 apart in lightness — red darker, amber lighter — because a protanope or a
        deuteranope has little else to tell a failure from a caution by. See docs/frontend.md, "Interface conventions". */
-    --destructive-surface: oklch(0.988 0.005 27.3);
-    --destructive-edge: oklch(0.9 0.052 27.3);
-    --destructive-strong: oklch(0.44 0.18 27.3);
-    /* Caution, for a state that is not a failure: "red means something failed" and this is not
+  --destructive-surface: oklch(0.988 0.005 27.3);
+  --destructive-edge: oklch(0.9 0.052 27.3);
+  --destructive-strong: oklch(0.44 0.18 27.3);
+  /* Caution, for a state that is not a failure: "red means something failed" and this is not
        red. Hue 80 is 52.7° from `--destructive` and 30.3° from the mainshock orange `--chart-2`,
        both well past the 15° inside which two hues read as one colour. Constant hue across all
        three steps, so the fill, the border and the title are one ramp rather than three picks. */
-    --caution-surface: oklch(0.987 0.012 80);
-    --caution-edge: oklch(0.9 0.085 80);
-    --caution-strong: oklch(0.55 0.115 80);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.575 0.163 255.5);
-    /* Hex, alone in this file: event-map.tsx reads this one through getComputedStyle and
+  --caution-surface: oklch(0.987 0.012 80);
+  --caution-edge: oklch(0.9 0.085 80);
+  --caution-strong: oklch(0.55 0.115 80);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.575 0.163 255.5);
+  /* Hex, alone in this file: event-map.tsx reads this one through getComputedStyle and
        MapLibre cannot parse an oklch string. oklch(0.620 0.164 49.7). */
-    --chart-2: #d16100;
-    --chart-3: oklch(0.556 0 0);
-    --chart-4: oklch(0.4 0.068 195);
-    --radius: 0.625rem;
+  --chart-2: #d16100;
+  --chart-3: oklch(0.556 0 0);
+  --chart-4: oklch(0.4 0.068 195);
+  --radius: 0.625rem;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    /* See the light block for the roles. Dark mode has room the light one does not — the grey
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  /* See the light block for the roles. Dark mode has room the light one does not — the grey
        description sits at 6:1 here — so the fills are a real step off `--card` (0.205) rather
        than the whisper they have to be on white. The `strong` pair keeps the same 0.11 gap,
        the other way up: on a dark ground the amber is the lighter of the two. */
-    --destructive-surface: oklch(0.26 0.02 22.2);
-    --destructive-edge: oklch(0.4 0.07 22.2);
-    --destructive-strong: oklch(0.76 0.135 22.2);
-    --caution-surface: oklch(0.26 0.02 80);
-    --caution-edge: oklch(0.4 0.075 80);
-    --caution-strong: oklch(0.87 0.124 80);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.622 0.161 255.1);
-    /* See the light block: hex because MapLibre reads it. oklch(0.719 0.190 49.9). */
-    --chart-2: #fe7802;
-    --chart-3: oklch(0.708 0 0);
-    --chart-4: oklch(0.85 0.085 195);
+  --destructive-surface: oklch(0.26 0.02 22.2);
+  --destructive-edge: oklch(0.4 0.07 22.2);
+  --destructive-strong: oklch(0.76 0.135 22.2);
+  --caution-surface: oklch(0.26 0.02 80);
+  --caution-edge: oklch(0.4 0.075 80);
+  --caution-strong: oklch(0.87 0.124 80);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.622 0.161 255.1);
+  /* See the light block: hex because MapLibre reads it. oklch(0.719 0.190 49.9). */
+  --chart-2: #fe7802;
+  --chart-3: oklch(0.708 0 0);
+  --chart-4: oklch(0.85 0.085 195);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring;
-    }
+  }
   body {
     @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans antialiased;
     /* Room for the scope bar, which is fixed to the top of the window and is there for the whole
        page below the scope notice; without this the browser can scroll a control the reader has
        just tabbed to underneath it. */
     scroll-padding-top: 4rem;
-    }
+  }
 }
 :root {
   /* Stronger than the built-in ease-out: fast start, so the UI feels like it answers immediately. */
@@ -180,7 +180,9 @@
 
 /* Content that replaces a skeleton eases in instead of popping. Seen once per load, so it may animate. */
 .enter {
-  transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out);
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out);
   transition-delay: calc(var(--i, 0) * 50ms);
 
   @starting-style {
@@ -210,7 +212,15 @@
 .maplibregl-popup-content {
   @apply rounded-lg border bg-popover px-3 py-2 text-popover-foreground shadow-xl;
 }
-.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--popover); }
-.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: var(--popover); }
-.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--popover); }
-.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--popover); }
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: var(--popover);
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: var(--popover);
+}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--popover);
+}
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--popover);
+}

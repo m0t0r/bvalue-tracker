@@ -3,8 +3,14 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
-  CHOCO_SWARM_BBOX, SEISCOMP_ENDPOINT, buildFormBody, fetchCatalog, formatFormDate, parseCatalogHtml,
-  parseRetryAfter, sgcHttpError,
+  CHOCO_SWARM_BBOX,
+  SEISCOMP_ENDPOINT,
+  buildFormBody,
+  fetchCatalog,
+  formatFormDate,
+  parseCatalogHtml,
+  parseRetryAfter,
+  sgcHttpError,
 } from "../core/seiscomp.ts";
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -13,7 +19,11 @@ const FULL = fixture("seiscomp-2026-08-10_2026-09-18.html");
 // Real response to a query whose date range matched nothing.
 const EMPTY = fixture("seiscomp-empty.html");
 
-const query = { start: new Date("2026-08-10T00:00:00Z"), end: new Date("2026-09-18T00:00:00Z"), bbox: CHOCO_SWARM_BBOX };
+const query = {
+  start: new Date("2026-08-10T00:00:00Z"),
+  end: new Date("2026-09-18T00:00:00Z"),
+  bbox: CHOCO_SWARM_BBOX,
+};
 
 describe("form request", () => {
   it("formats dates as dd/mm/yyyy, the only shape the server accepts", () => {
@@ -24,9 +34,17 @@ describe("form request", () => {
   it("posts the bbox under the form's real field names with wide-open quality filters", () => {
     const body = buildFormBody(query);
     expect(Object.fromEntries(body)).toMatchObject({
-      inicial: "10/08/2026", final: "18/09/2026", ubi: "cuadrante",
-      longitudStart: "-77.4", longitudEnd: "-76.1", latitudStart: "4.1", latitudEnd: "5.6",
-      magnitudStart: "0", gapEnd: "360", eprofmax: "999", Submit: "Consultar",
+      inicial: "10/08/2026",
+      final: "18/09/2026",
+      ubi: "cuadrante",
+      longitudStart: "-77.4",
+      longitudEnd: "-76.1",
+      latitudStart: "4.1",
+      latitudEnd: "5.6",
+      magnitudStart: "0",
+      gapEnd: "360",
+      eprofmax: "999",
+      Submit: "Consultar",
     });
   });
 });
@@ -43,9 +61,17 @@ describe("parseCatalogHtml on the captured response", () => {
     expect(page.events[0]).toEqual({
       id: "SGC2026pqqmro",
       time: "2026-08-10T12:34:27Z",
-      lat: 4.99093472, lon: -76.29174107, depthKm: 103.4093192,
-      mag: 7.4, magType: "Mw", phases: 119, rmsS: 1.2, gapDeg: 79,
-      errLatKm: 1.603, errLonKm: 1.916, errDepthKm: 3.49,
+      lat: 4.99093472,
+      lon: -76.29174107,
+      depthKm: 103.4093192,
+      mag: 7.4,
+      magType: "Mw",
+      phases: 119,
+      rmsS: 1.2,
+      gapDeg: 79,
+      errLatKm: 1.603,
+      errLonKm: 1.916,
+      errDepthKm: 3.49,
       region: "San Jose del Palmar - Choco, Colombia",
       status: "manual",
       solutionStamp: "2026-08-10T19:08:37Z",
@@ -139,7 +165,9 @@ describe("parseCatalogHtml failure modes", () => {
   });
 
   it("rejects a changed column layout", () => {
-    expect(() => parseCatalogHtml(FULL.replaceAll("<th>Mag.</th>", "<th>Magnitud local</th><th>x</th>"))).toThrow(/layout changed/);
+    expect(() => parseCatalogHtml(FULL.replaceAll("<th>Mag.</th>", "<th>Magnitud local</th><th>x</th>"))).toThrow(
+      /layout changed/,
+    );
   });
 });
 
@@ -164,7 +192,12 @@ describe("fetchCatalog", () => {
 
   it("POSTs the form body and parses the response", async () => {
     let seen: Request | undefined;
-    server.use(http.post(SEISCOMP_ENDPOINT, ({ request }) => { seen = request.clone(); return ok(); }));
+    server.use(
+      http.post(SEISCOMP_ENDPOINT, ({ request }) => {
+        seen = request.clone();
+        return ok();
+      }),
+    );
     const page = await fetchCatalog(query);
     expect(page.events).toHaveLength(786);
     expect(seen!.url).toContain("consulta_sismo.php");
@@ -173,7 +206,11 @@ describe("fetchCatalog", () => {
   });
 
   it("retries transport and HTTP failures", async () => {
-    const calls = serves(() => HttpResponse.error(), () => new Response("bad gateway", { status: 502 }), ok);
+    const calls = serves(
+      () => HttpResponse.error(),
+      () => new Response("bad gateway", { status: 502 }),
+      ok,
+    );
     const page = await fetchCatalog(query, { backoffMs: 1 });
     expect(calls()).toBe(3);
     expect(page.events).toHaveLength(786);
@@ -216,10 +253,13 @@ describe("fetchCatalog", () => {
   // The 2026-09-20 410 reached the Worker and not GitHub's runners, and the status could not
   // say whether a web-server rule, a firewall or a block page had written it.
   it("keeps who wrote a refusal: its headers and the start of its body, both bounded", async () => {
-    serves(() => new Response(`<h1>Gone</h1>\n\n  ${"x".repeat(5000)}`, {
-      status: 410,
-      headers: { server: "Apache", "set-cookie": "sid=1", "x-long": "y".repeat(1000) },
-    }));
+    serves(
+      () =>
+        new Response(`<h1>Gone</h1>\n\n  ${"x".repeat(5000)}`, {
+          status: 410,
+          headers: { server: "Apache", "set-cookie": "sid=1", "x-long": "y".repeat(1000) },
+        }),
+    );
     const { evidence } = sgcHttpError(await fetchCatalog(query).catch((e: unknown) => e))!;
     expect(evidence!.headers.server).toBe("Apache");
     expect(evidence!.headers["set-cookie"]).toBeUndefined();

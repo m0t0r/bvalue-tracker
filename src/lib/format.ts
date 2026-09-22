@@ -13,7 +13,14 @@ const formatters = (opts: Intl.DateTimeFormatOptions): Record<Lang, Intl.DateTim
   es: new Intl.DateTimeFormat("es", { timeZone: TIME_ZONE, ...opts }),
   en: new Intl.DateTimeFormat("en-GB", { timeZone: TIME_ZONE, ...opts }),
 });
-const DATE_TIME = formatters({ day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const DATE_TIME = formatters({
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 const DATE = formatters({ day: "numeric", month: "short", year: "numeric" });
 const DAY_MONTH = formatters({ day: "numeric", month: "short" });
 
@@ -30,7 +37,8 @@ export const fmtDate = (ms: number, lang: Lang) => DATE[lang].format(ms);
 /** Axis tick: "18 sept" */
 export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms);
 /** Sortable "2026-09-18 17:43" for the table, in Colombian time. */
-export const fmtIsoDateTime = (iso: string) => new Date(Date.parse(iso) + TZ_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");
+export const fmtIsoDateTime = (iso: string) =>
+  new Date(Date.parse(iso) + TZ_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");
 /** The same instant as the catalogue and the CSV give it: "2026-09-18 22:43 UTC". */
 export const fmtUtc = (iso: string) => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 /** The instant (ms) at which the Colombian calendar day containing `iso` begins. */

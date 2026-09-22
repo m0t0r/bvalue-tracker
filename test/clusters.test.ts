@@ -71,7 +71,9 @@ describe("computeClusterStats on the captured catalogue", () => {
   });
 
   it("counts recent activity: the shallow cluster is active, the deep one has gone quiet", () => {
-    expect(s.shallow.recent).toBe(fixture.filter((e) => e.depthKm < 70 && Date.parse(e.time) > NOW - 7 * 86_400_000).length);
+    expect(s.shallow.recent).toBe(
+      fixture.filter((e) => e.depthKm < 70 && Date.parse(e.time) > NOW - 7 * 86_400_000).length,
+    );
     expect(s.shallow.recent).toBeGreaterThan(100);
     expect(s.deep.recent).toBeLessThan(5);
     expect(s.shallow.recentMaxMag).toBe(4.9);
@@ -83,7 +85,11 @@ describe("computeClusterStats on the captured catalogue", () => {
   it("does not depend on where in the 55–75 km gap the cut falls", () => {
     const mc = s.all.mc!;
     for (const cut of [55, 60, 65, 75]) {
-      const b = (deep: boolean) => bValue(fixture.filter((e) => (e.depthKm >= cut) === deep).map((e) => e.mag), mc).b;
+      const b = (deep: boolean) =>
+        bValue(
+          fixture.filter((e) => e.depthKm >= cut === deep).map((e) => e.mag),
+          mc,
+        ).b;
       expect(Math.abs(b(false) - s.shallow.stats.fit!.b)).toBeLessThan(0.01);
       expect(Math.abs(b(true) - s.deep.stats.fit!.b)).toBeLessThan(0.03);
     }
@@ -108,7 +114,11 @@ describe("computeClusterStats on the captured catalogue", () => {
 });
 
 describe("computeClusterStats at the edges", () => {
-  const ev = (mag: number, depthKm: number, i = 0) => ({ mag, depthKm, time: new Date(Date.UTC(2026, 7, 10) + i * 60_000).toISOString() });
+  const ev = (mag: number, depthKm: number, i = 0) => ({
+    mag,
+    depthKm,
+    time: new Date(Date.UTC(2026, 7, 10) + i * 60_000).toISOString(),
+  });
 
   it("shares the pooled Mc even when a cluster's own Mc is higher, and says so", () => {
     // 300 shallow events peaking at M2.0; 100 deep ones peaking at M2.8.
@@ -158,7 +168,11 @@ describe("computeClusterStats at the edges", () => {
 
   it("works without the mainshock, which belongs to the deep cluster", () => {
     expect(clusterOf(fixture.find((e) => e.id === MAINSHOCK_ID)!)).toBe("deep");
-    const c = computeClusterStats(fixture.filter((e) => e.id !== MAINSHOCK_ID), null, NOW);
+    const c = computeClusterStats(
+      fixture.filter((e) => e.id !== MAINSHOCK_ID),
+      null,
+      NOW,
+    );
     expect(c.deep.stats.count).toBe(146);
     expect(c.deep.stats.fit!.n).toBe(89);
   });

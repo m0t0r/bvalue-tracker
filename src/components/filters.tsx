@@ -72,9 +72,15 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
               {(field) => (
                 <Field data-invalid={!!formError}>
                   <FieldLabel htmlFor={field.name}>{t.from}</FieldLabel>
-                  <Input id={field.name} type="date" min="2018-03-01" aria-invalid={!!formError}
+                  <Input
+                    id={field.name}
+                    type="date"
+                    min="2018-03-01"
+                    aria-invalid={!!formError}
                     aria-describedby={formError ? "date-error" : undefined}
-                    value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} />
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
                   {formError ? <FieldError id="date-error">{String(formError)}</FieldError> : null}
                 </Field>
               )}
@@ -83,9 +89,14 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
               {(field) => (
                 <Field data-invalid={!!formError}>
                   <FieldLabel htmlFor={field.name}>{t.to}</FieldLabel>
-                  <Input id={field.name} type="date" aria-invalid={!!formError}
+                  <Input
+                    id={field.name}
+                    type="date"
+                    aria-invalid={!!formError}
                     aria-describedby={formError ? "date-error" : undefined}
-                    value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} />
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
                 </Field>
               )}
             </form.Field>
@@ -95,9 +106,15 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
                   <FieldLabel id="minMag-label">
                     {t.minMag}: <span>M{field.state.value.toFixed(1)}</span>
                   </FieldLabel>
-                  <Slider aria-labelledby="minMag-label" aria-valuetext={`M${field.state.value.toFixed(1)}`}
-                    min={0} max={5} step={0.1} value={[field.state.value]}
-                    onValueChange={([v]) => field.handleChange(v ?? 0)} />
+                  <Slider
+                    aria-labelledby="minMag-label"
+                    aria-valuetext={`M${field.state.value.toFixed(1)}`}
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    value={[field.state.value]}
+                    onValueChange={([v]) => field.handleChange(v ?? 0)}
+                  />
                 </Field>
               )}
             </form.Field>
@@ -110,21 +127,31 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
                     <FieldLabel id="mc-label">
                       {t.mcLabel}: <span>{shown.toFixed(1)}</span>
                     </FieldLabel>
-                    <Slider aria-labelledby="mc-label" aria-valuetext={shown.toFixed(1)}
-                      min={2} max={4} step={0.1} value={[shown]}
-                      onValueChange={([v]) => field.handleChange(v ?? null)} />
+                    <Slider
+                      aria-labelledby="mc-label"
+                      aria-valuetext={shown.toFixed(1)}
+                      min={2}
+                      max={4}
+                      step={0.1}
+                      value={[shown]}
+                      onValueChange={([v]) => field.handleChange(v ?? null)}
+                    />
                     <FieldDescription>
                       {manual ? (
                         <Button type="button" variant="link" size="inline" onClick={() => field.handleChange(null)}>
                           {t.mcBackToAuto}
                         </Button>
-                      ) : t.mcAuto}
+                      ) : (
+                        t.mcAuto
+                      )}
                     </FieldDescription>
                   </Field>
                 );
               }}
             </form.Field>
-            <p className="max-w-[75ch] text-sm text-pretty text-muted-foreground sm:col-span-2 lg:col-span-4">{t.mcHelp}</p>
+            <p className="max-w-[75ch] text-sm text-pretty text-muted-foreground sm:col-span-2 lg:col-span-4">
+              {t.mcHelp}
+            </p>
             <form.Field name="manualOnly">
               {(field) => (
                 <Field orientation="horizontal">

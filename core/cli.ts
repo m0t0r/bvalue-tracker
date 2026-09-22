@@ -46,11 +46,21 @@ function report(label: string, events: SeismicEvent[], mcOverride?: number): num
   const maxc = mcMaxCurvature(mags);
   const gft = mcGoodnessOfFit(mags);
   const candidates: [string, number | null][] =
-    mcOverride !== undefined ? [["given", mcOverride]] : [["MAXC", maxc], ["GFT90", gft]];
+    mcOverride !== undefined
+      ? [["given", mcOverride]]
+      : [
+          ["MAXC", maxc],
+          ["GFT90", gft],
+        ];
   for (const [name, mc] of candidates) {
-    if (mc === null) { console.log(`  Mc[${name}] not found`); continue; }
+    if (mc === null) {
+      console.log(`  Mc[${name}] not found`);
+      continue;
+    }
     const r = bValue(mags, mc);
-    console.log(`  Mc[${name}]=${mc.toFixed(1)}  b=${r.b.toFixed(3)} ± ${r.sigmaB.toFixed(3)}  a=${r.a.toFixed(2)}  n=${r.n}`);
+    console.log(
+      `  Mc[${name}]=${mc.toFixed(1)}  b=${r.b.toFixed(3)} ± ${r.sigmaB.toFixed(3)}  a=${r.a.toFixed(2)}  n=${r.n}`,
+    );
   }
   return mcOverride ?? maxc;
 }
@@ -59,9 +69,13 @@ async function cmdBvalue(argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
     options: {
-      input: { type: "string" }, mc: { type: "string" },
-      "manual-only": { type: "boolean" }, "exclude-mainshock": { type: "boolean" }, windows: { type: "boolean" },
-      "windows-out": { type: "string" }, cluster: { type: "string" },
+      input: { type: "string" },
+      mc: { type: "string" },
+      "manual-only": { type: "boolean" },
+      "exclude-mainshock": { type: "boolean" },
+      windows: { type: "boolean" },
+      "windows-out": { type: "string" },
+      cluster: { type: "string" },
     },
   });
   if (!values.input) throw new Error("--input is required");
@@ -75,10 +89,17 @@ async function cmdBvalue(argv: string[]): Promise<void> {
 
   const byType = new Map<string, number>();
   for (const e of events) byType.set(e.magType, (byType.get(e.magType) ?? 0) + 1);
-  console.log("magnitude types:", [...byType].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}=${n}`).join(" "));
+  console.log(
+    "magnitude types:",
+    [...byType]
+      .sort((a, b) => b[1] - a[1])
+      .map(([t, n]) => `${t}=${n}`)
+      .join(" "),
+  );
 
   const cluster = values.cluster;
-  if (cluster !== undefined && cluster !== "shallow" && cluster !== "deep") throw new Error("--cluster must be shallow or deep");
+  if (cluster !== undefined && cluster !== "shallow" && cluster !== "deep")
+    throw new Error("--cluster must be shallow or deep");
 
   const mc = report("all events", events, mcOverride);
 
@@ -87,12 +108,18 @@ async function cmdBvalue(argv: string[]): Promise<void> {
   console.log(`\n== depth clusters, cut at ${CLUSTER_DEPTH_KM} km, shared Mc=${mc.toFixed(1)}`);
   for (const c of CLUSTERS) {
     const { stats, recent, ownMcHigher } = clusters[c];
-    const fit = stats.fit ? `b=${stats.fit.b.toFixed(3)} ± ${stats.fit.sigmaB.toFixed(3)}  n=${stats.fit.n}` : "too few events at or above Mc";
-    console.log(`  ${c.padEnd(8)} ${String(stats.count).padStart(4)} events  ${fit}  last ${RECENT_DAYS} days: ${recent}${ownMcHigher ? `  (own Mc ${stats.mcMaxc} is higher: b may be biased low)` : ""}`);
+    const fit = stats.fit
+      ? `b=${stats.fit.b.toFixed(3)} ± ${stats.fit.sigmaB.toFixed(3)}  n=${stats.fit.n}`
+      : "too few events at or above Mc";
+    console.log(
+      `  ${c.padEnd(8)} ${String(stats.count).padStart(4)} events  ${fit}  last ${RECENT_DAYS} days: ${recent}${ownMcHigher ? `  (own Mc ${stats.mcMaxc} is higher: b may be biased low)` : ""}`,
+    );
   }
   if (clusters.difference) {
     const { p } = clusters.difference;
-    console.log(`  Utsu test: p=${p.toFixed(3)} -> ${p < 0.05 ? "the b-values differ" : "the b-values cannot be told apart"}`);
+    console.log(
+      `  Utsu test: p=${p.toFixed(3)} -> ${p < 0.05 ? "the b-values differ" : "the b-values cannot be told apart"}`,
+    );
   }
 
   console.log("\n  FMD (lowest bins):");
@@ -103,7 +130,9 @@ async function cmdBvalue(argv: string[]): Promise<void> {
   // Same pipeline as the page and the API, so the three cannot disagree.
   const { windows } = cluster ? clusters[cluster].stats : computeStats(events, mcOverride ?? null);
   if (values.windows) {
-    console.log(`\n  b over time${cluster ? `, ${cluster} cluster` : ""} (${WINDOW_SIZE}-event windows, step ${WINDOW_STEP}, fixed Mc=${mc.toFixed(1)}):`);
+    console.log(
+      `\n  b over time${cluster ? `, ${cluster} cluster` : ""} (${WINDOW_SIZE}-event windows, step ${WINDOW_STEP}, fixed Mc=${mc.toFixed(1)}):`,
+    );
     for (const w of windows) {
       console.log(`    ${w.from.slice(0, 16)} .. ${w.to.slice(0, 16)}  b=${w.b.toFixed(2)} ± ${w.sigmaB.toFixed(2)}`);
     }
@@ -118,7 +147,10 @@ const [cmd, ...rest] = process.argv.slice(2);
 try {
   if (cmd === "fetch") await cmdFetch(rest);
   else if (cmd === "bvalue") await cmdBvalue(rest);
-  else { console.error(USAGE); process.exit(2); }
+  else {
+    console.error(USAGE);
+    process.exit(2);
+  }
 } catch (err) {
   console.error(`error: ${(err as Error).message}`);
   if ((err as Error).cause) console.error(`cause: ${String((err as Error).cause)}`);

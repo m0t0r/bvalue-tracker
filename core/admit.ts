@@ -5,7 +5,10 @@ import type { SeismicEvent } from "./types.ts";
  * field clause alone — each door prefixes its own locator (a table row, a line in a file).
  */
 export class EventRejected extends Error {
-  constructor(readonly field: string, reason: string) {
+  constructor(
+    readonly field: string,
+    reason: string,
+  ) {
     super(`${field} ${reason}`);
     this.name = "EventRejected";
   }

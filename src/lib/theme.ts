@@ -40,11 +40,17 @@ export function toggleTheme() {
   try {
     if (next === (system.matches ? "dark" : "light")) localStorage.removeItem(STORAGE_KEY);
     else localStorage.setItem(STORAGE_KEY, next);
-  } catch { /* private mode: the choice lasts for this visit only */ }
+  } catch {
+    /* private mode: the choice lasts for this visit only */
+  }
   apply();
 }
 
-const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => listeners.delete(l);
+};
 
 /** True when the dark theme is showing. Re-renders on system changes and on toggle. */
-export const useIsDark = () => useSyncExternalStore(subscribe, () => document.documentElement.classList.contains("dark"));
+export const useIsDark = () =>
+  useSyncExternalStore(subscribe, () => document.documentElement.classList.contains("dark"));

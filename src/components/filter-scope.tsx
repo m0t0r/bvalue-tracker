@@ -64,11 +64,17 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
       {/* One row wherever there is room for one, so that the bar above reads as the same object come
           back rather than a second thing. The group's depth and place take the row below, because
           only one of the chips has any more to say. */}
-      <Alert ref={notice} role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 *:[svg]:translate-y-0">
+      <Alert
+        ref={notice}
+        role="status"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 *:[svg]:translate-y-0"
+      >
         <FilterIcon className="text-muted-foreground" />
         <span className="text-sm font-medium">{t.scopeTitle(...counts)}</span>
         <div className="flex flex-wrap items-center gap-1.5">
-          {chips.map((c) => <Chip key={c.key} chip={c} />)}
+          {chips.map((c) => (
+            <Chip key={c.key} chip={c} />
+          ))}
         </div>
         {/* ps-7 lines it up under the count rather than under the icon: 1rem of icon and the row's 0.75rem gap. */}
         {where ? <p className="order-last w-full ps-7 text-sm text-muted-foreground">{where}</p> : null}
@@ -96,10 +102,10 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
           "transition-transform ease-(--ease-slide) motion-reduce:transition-opacity",
           past
             ? "translate-y-0 duration-260 motion-reduce:opacity-100"
-            // The extra 1.5rem clears `shadow-lg`, which would otherwise hang into the top of the
-            // page as a grey band while the bar itself is out of sight.
-            // Leaving is quicker than arriving: the reader has already moved on.
-            : "pointer-events-none translate-y-[calc(-100%_-_1.5rem)] duration-180 motion-reduce:translate-y-0 motion-reduce:opacity-0",
+            : // The extra 1.5rem clears `shadow-lg`, which would otherwise hang into the top of the
+              // page as a grey band while the bar itself is out of sight.
+              // Leaving is quicker than arriving: the reader has already moved on.
+              "pointer-events-none translate-y-[calc(-100%_-_1.5rem)] duration-180 motion-reduce:translate-y-0 motion-reduce:opacity-0",
         )}
       >
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 sm:gap-3 sm:px-6">
@@ -111,9 +117,15 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
           {/* One line at every width: the bar's height must not change as it slides in. A phone has
               room for the first chip, which is the cluster whenever one is chosen; the rest are counted. */}
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-            {chips.map((c, i) => <Chip key={c.key} chip={c} className={i > 0 ? "max-sm:hidden" : undefined} />)}
+            {chips.map((c, i) => (
+              <Chip key={c.key} chip={c} className={i > 0 ? "max-sm:hidden" : undefined} />
+            ))}
           </div>
-          {chips.length > 1 ? <Badge variant="outline" className="shrink-0 sm:hidden">+{chips.length - 1}</Badge> : null}
+          {chips.length > 1 ? (
+            <Badge variant="outline" className="shrink-0 sm:hidden">
+              +{chips.length - 1}
+            </Badge>
+          ) : null}
           <Button tabIndex={-1} variant="outline" size="sm-touch" className="shrink-0" onClick={onClear}>
             <XIcon data-icon="inline-start" />
             {t.scopeClear}
