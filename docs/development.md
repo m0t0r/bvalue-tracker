@@ -48,6 +48,8 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 - **`vitest` is held at 4.x**: `@cloudflare/vitest-pool-workers` does not support 5.
   For the same reason `compatibility_date` cannot be newer than the pool's bundled
   runtime (it errored on 2026-09-01; 2026-08-20 works). Everything else is on latest.
+  `.github/dependabot.yml` ignores vitest majors for this reason; drop that rule when
+  the pool supports 5.
 - **Local D1 storage is keyed by `database_id`.** Change the id in `wrangler.jsonc`
   and local dev silently gets a new, empty database with no tables (`no such table:
   events`). Re-run `pnpm db:migrate:local` and refill.

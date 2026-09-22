@@ -37,6 +37,24 @@ repository settings:
 - secret `CLOUDFLARE_ACCOUNT_ID`
 - variable `PRODUCTION_URL` = the deployed URL, e.g. `https://choco.<subdomain>.workers.dev` (optional; enables the smoke test)
 
+## Dependency updates
+
+Dependabot (`.github/dependabot.yml`) opens weekly PRs for npm (pnpm) and GitHub Actions.
+Each new release waits a 7-day cooldown first; security updates skip it. Patch and minor
+updates come as one grouped PR per ecosystem. Majors come one PR each. Majors are ignored
+for `vitest` (held at 4.x, see [development.md](development.md#tooling-gotchas)) and
+`@types/node` (tracks the Node LTS in CI and `engines.node`).
+
+`dependabot-automerge.yml` merges a Dependabot PR **and deploys it** when all of these hold:
+CI passed on its head commit, every commit on it is Dependabot's own signed commit, and
+every `update-type` in the commit message is patch or minor. Anything else stays open for a
+person, including a PR someone has pushed to. It runs on `workflow_run`, not
+`pull_request`, so it needs neither branch protection nor the repository's auto-merge
+setting. A merge made with `GITHUB_TOKEN` does not fire `on: push`, so after merging it
+dispatches CI on `main` itself, and the deploy still waits for that run's tests. That job is
+also why `ci.yml` has a `workflow_dispatch` trigger and cancels only superseded PR runs,
+never a `main` run that may be mid-deploy.
+
 ## Scheduled checks
 
 `sgc-canary.yml` runs the live SGC test daily so a change to their form is noticed.

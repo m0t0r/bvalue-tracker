@@ -114,7 +114,10 @@ leaks nothing; no secrets in source or history; CI cannot deploy from a pull req
 Still open, with no confirmed exploit: the read routes have
 no `LIMIT` or range cap (the rate limit bounds volume, not a single query); and the CI
 actions are pinned to major tags (`checkout@v7`, `setup-node@v7`, `pnpm/action-setup@v6`,
-all on the `node24` runtime) rather than commit SHAs.
+all on the `node24` runtime) rather than commit SHAs. Dependabot keeps them and the npm
+dependencies current, and patch/minor updates merge and deploy with no review; the 7-day
+cooldown and the signed-commit check are the guards (see
+[deployment.md](deployment.md#dependency-updates)).
 
 **One of the four is now answered, and the answer is no.** "SGC responses are buffered with
 no byte cap" was carried as a memory risk, and it was the leading explanation for the
