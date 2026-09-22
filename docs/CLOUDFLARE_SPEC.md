@@ -89,12 +89,13 @@ Be a polite client: one scheduled request per interval, a descriptive
 
 One Worker serving static assets plus a JSON API, a D1 database, and a Cron Trigger.
 
-```
-Cron Trigger ─┐
-POST /api/refresh ─┴─> ingest() ──fetchCatalog──> SGC
-                          │
-                          └─> D1 (events, ingest_runs)
-Browser ──> static assets (SPA) ──> GET /api/* ──> D1
+```mermaid
+flowchart LR
+  cron["Cron Trigger"] --> ingest["ingest()"]
+  refresh["POST /api/refresh"] --> ingest
+  ingest -- fetchCatalog --> sgc["SGC"]
+  ingest --> d1[("D1<br/>events, ingest_runs")]
+  browser["Browser"] --> assets["static assets (SPA)"] --> api["GET /api/*"] --> d1
 ```
 
 Before writing config or bindings, load the `cloudflare`, `wrangler` and

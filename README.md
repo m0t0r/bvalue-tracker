@@ -35,10 +35,21 @@ terms in plain words.
 
 ## How it works
 
-```
-SGC "Consulta Experta" form ──POST──▶ Worker cron (every 15 min) ──▶ D1
-                                                                      │
-                     React page ◀── same-origin JSON API ◀── Worker ◀─┘
+```mermaid
+flowchart LR
+  sgc["SGC “Consulta Experta” form"]
+  d1[("D1")]
+  page["React page"]
+  subgraph worker["Cloudflare Worker (Hono)"]
+    direction TB
+    cron["Cron Trigger<br/>every 15 min"]
+    api["Same-origin JSON API"]
+  end
+
+  sgc <-- "POST / HTML" --> cron
+  cron -- "parsed events" --> d1
+  d1 --> api
+  api -- JSON --> page
 ```
 
 - **Source:** SGC's "Consulta Experta SeisComP" form. One POST returns every event in
