@@ -22,7 +22,7 @@ export function fmd(mags: readonly number[], dm = DEFAULT_DM): FmdBin[] {
   const ks = mags.map((m) => bin(m, dm));
   let lo = Infinity, hi = -Infinity;
   for (const k of ks) { if (k < lo) lo = k; if (k > hi) hi = k; }
-  const counts = new Array<number>(hi - lo + 1).fill(0);
+  const counts = Array.from({ length: hi - lo + 1 }, () => 0);
   for (const k of ks) counts[k - lo]!++;
   const out: FmdBin[] = [];
   let cum = 0;

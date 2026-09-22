@@ -1,4 +1,4 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, XAxis, YAxis, ZAxis } from "recharts";
 import { useResizeObserver } from "usehooks-ts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,8 +115,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
   );
   // Pinned while the plot scrolls under it, so a dot always has a magnitude beside it. It is opaque
   // and, once scrolled, casts a shadow: the one cue that the chart continues to the left.
-  const pinnedCol = cn("sticky left-0 z-10 shrink-0 bg-card",
-    scrolled && "shadow-[6px_0_8px_-7px_rgb(0_0_0/0.35)] dark:shadow-[6px_0_8px_-7px_rgb(255_255_255/0.22)]");
+  const pinnedCol = cn("sticky left-0 z-10 w-(--axis-col) shrink-0 bg-card", scrolled && "shadow-pin");
   // Recharts lays out nothing for a chart with no data, so the pinned charts carry one invisible
   // point. Both scales are given explicitly above, so it cannot move a tick.
   const seed = useMemo(() => [{ t: domain[0], mag: 2, total: 0 }], [domain]);
@@ -138,9 +137,10 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
         </ul>
         <div ref={scroller} onScroll={onScroll} role="group" aria-label={t.magTimeRegion} tabIndex={0}
           className="overflow-x-auto overscroll-x-contain rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring">
-          <div className="flex flex-col gap-6" style={{ width: AXIS_COL + plotW }}>
+          <div className="flex w-[calc(var(--axis-col)+var(--plot-w))] flex-col gap-6"
+            style={{ "--axis-col": `${AXIS_COL}px`, "--plot-w": `${plotW}px` } as CSSProperties}>
             <div className="flex">
-              <div className={pinnedCol} style={{ width: AXIS_COL }}>
+              <div className={pinnedCol}>
                 <ChartContainer config={config} className="aspect-auto h-64 w-full">
                   <ScatterChart margin={PINNED_SCATTER_MARGIN} data={seed}>
                     {xAxis(false)}{yMag(true)}
@@ -148,7 +148,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                   </ScatterChart>
                 </ChartContainer>
               </div>
-              <ChartContainer config={config} className="aspect-auto h-64 shrink-0" style={{ width: plotW }}>
+              <ChartContainer config={config} className="aspect-auto h-64 w-(--plot-w) shrink-0">
                 <ScatterChart margin={SCATTER_MARGIN} title={t.magTimeTitle} desc={t.magTimeDesc}>
                   <CartesianGrid vertical={false} />
                   {xAxis(true)}
@@ -175,7 +175,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
             <div className="flex flex-col gap-2">
               <h3 className="sticky left-0 w-fit text-sm font-medium">{t.dailyTitle}</h3>
               <div className="flex">
-                <div className={pinnedCol} style={{ width: AXIS_COL }}>
+                <div className={pinnedCol}>
                   <ChartContainer config={config} className="aspect-auto h-36 w-full">
                     <BarChart margin={PINNED_BAR_MARGIN} data={seed}>
                       {xAxis(false)}{yCount(true)}
@@ -184,7 +184,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                   </ChartContainer>
                 </div>
                 <ChartContainer config={{ total: { label: t.dailyTitle, color: "var(--chart-1)" } }}
-                  className="aspect-auto h-36 shrink-0" style={{ width: plotW }}>
+                  className="aspect-auto h-36 w-(--plot-w) shrink-0">
                   <BarChart data={daily} margin={BAR_MARGIN} barCategoryGap={2} title={t.dailyTitle}>
                     <CartesianGrid vertical={false} />
                     {xAxis(true)}

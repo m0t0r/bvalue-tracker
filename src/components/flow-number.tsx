@@ -1,4 +1,5 @@
 import NumberFlow from "@number-flow/react";
+import { cn } from "@/lib/utils";
 
 // The roll is on-screen movement, not an entrance, so it does not use the page's front-loaded
 // --ease-out: that curve covers most of the distance in the first 90ms, and the digits read as a
@@ -18,8 +19,9 @@ const FADE = { duration: 300, easing: "ease-out" };
 // their baseline; at text-5xl the b-value's row was 72px against 48px. Taking the same amount back
 // as a negative margin leaves the mask exactly where it was — it is drawn, not typeset, and nothing
 // clips it — while the box measures like the text it replaces, so a FlowNumber sits on the line.
-// The expression is the library's own (`number-flow`'s shadow CSS); keep the two in step.
-const MASK = "calc(round(nearest, var(--number-flow-mask-height, 0.25em) / 2, 1px) * -2)";
+// The expression is the library's own (`number-flow`'s shadow CSS); keep the two in step. Written out
+// whole, not built from a variable, so Tailwind can find the class.
+const MASK = "-my-[calc(round(nearest,var(--number-flow-mask-height,0.25em)/2,1px)*2)]";
 
 interface Props {
   value: number;
@@ -34,8 +36,7 @@ interface Props {
 /** A number whose digits roll to the new value, so the reader sees which figures a filter moved. Honours prefers-reduced-motion. */
 export function FlowNumber({ value, digits = 0, lang, prefix, suffix, className }: Props) {
   return (
-    <NumberFlow value={value} locales={digits > 0 ? "en-US" : lang} prefix={prefix} suffix={suffix} className={className}
-      style={{ marginBlock: MASK }}
+    <NumberFlow value={value} locales={digits > 0 ? "en-US" : lang} prefix={prefix} suffix={suffix} className={cn(MASK, className)}
       format={{ minimumFractionDigits: digits, maximumFractionDigits: digits }}
       transformTiming={MOVE} spinTiming={MOVE} opacityTiming={FADE} />
   );

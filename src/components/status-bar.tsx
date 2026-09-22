@@ -48,7 +48,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   // `auto` is a refresh the page started by itself on return to the tab. If the server stands down
   // because SGC was queried recently, that is the expected outcome and is not reported to the reader.
   const refresh = useMutation({
-    mutationFn: (_: { auto: boolean }) => postRefresh(),
+    mutationFn: (_vars: { auto: boolean }) => postRefresh(),
     onSuccess: (res, { auto }) => {
       setStoodDown(!res.refreshed && !auto);
       // Events follow by themselves: App refetches them when status reports a newer successful ingest.

@@ -36,9 +36,6 @@ export interface IngestOptions {
   lane?: IngestLane;
 }
 
-/** How much of a window may be unparsable before the whole response is distrusted. */
-const MAX_SKIPPED_SHARE = 0.1;
-
 const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
 /**

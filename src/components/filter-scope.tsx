@@ -13,8 +13,9 @@ const DOT: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--c
 
 function Chip({ chip, className }: { chip: FilterChip; className?: string }) {
   return (
-    <Badge variant="outline" className={cn("shrink-0 gap-1.5", className)}>
-      {chip.cluster ? <span aria-hidden className={cn("size-1.5 rounded-full", DOT[chip.cluster])} /> : null}
+    <Badge variant="outline" className={cn("shrink-0", className)}>
+      {/* me-0.5 widens the badge's own gap-1 to 1.5 for the dot alone. */}
+      {chip.cluster ? <span aria-hidden className={cn("me-0.5 size-1.5 rounded-full", DOT[chip.cluster])} /> : null}
       {chip.label}
     </Badge>
   );
@@ -71,7 +72,7 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
         </div>
         {/* ps-7 lines it up under the count rather than under the icon: 1rem of icon and the row's 0.75rem gap. */}
         {where ? <p className="order-last w-full ps-7 text-sm text-muted-foreground">{where}</p> : null}
-        <Button variant="outline" size="sm" className="ms-auto pointer-coarse:h-10 pointer-coarse:px-4" onClick={onClear}>
+        <Button variant="outline" size="sm-touch" className="ms-auto" onClick={onClear}>
           <XIcon data-icon="inline-start" />
           {t.scopeClear}
         </Button>
@@ -94,11 +95,11 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
           // the one case where not moving is the point.
           "transition-transform ease-(--ease-slide) motion-reduce:transition-opacity",
           past
-            ? "translate-y-0 duration-[260ms] motion-reduce:opacity-100"
+            ? "translate-y-0 duration-260 motion-reduce:opacity-100"
             // The extra 1.5rem clears `shadow-lg`, which would otherwise hang into the top of the
             // page as a grey band while the bar itself is out of sight.
             // Leaving is quicker than arriving: the reader has already moved on.
-            : "pointer-events-none translate-y-[calc(-100%_-_1.5rem)] duration-[180ms] motion-reduce:translate-y-0 motion-reduce:opacity-0",
+            : "pointer-events-none translate-y-[calc(-100%_-_1.5rem)] duration-180 motion-reduce:translate-y-0 motion-reduce:opacity-0",
         )}
       >
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 sm:gap-3 sm:px-6">
@@ -113,7 +114,7 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
             {chips.map((c, i) => <Chip key={c.key} chip={c} className={i > 0 ? "max-sm:hidden" : undefined} />)}
           </div>
           {chips.length > 1 ? <Badge variant="outline" className="shrink-0 sm:hidden">+{chips.length - 1}</Badge> : null}
-          <Button tabIndex={-1} variant="outline" size="sm" className="shrink-0 pointer-coarse:h-10 pointer-coarse:px-4" onClick={onClear}>
+          <Button tabIndex={-1} variant="outline" size="sm-touch" className="shrink-0" onClick={onClear}>
             <XIcon data-icon="inline-start" />
             {t.scopeClear}
           </Button>

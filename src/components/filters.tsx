@@ -115,7 +115,7 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
                       onValueChange={([v]) => field.handleChange(v ?? null)} />
                     <FieldDescription>
                       {manual ? (
-                        <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => field.handleChange(null)}>
+                        <Button type="button" variant="link" size="inline" onClick={() => field.handleChange(null)}>
                           {t.mcBackToAuto}
                         </Button>
                       ) : t.mcAuto}

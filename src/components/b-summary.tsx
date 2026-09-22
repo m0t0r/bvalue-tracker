@@ -1,4 +1,5 @@
 import { AlertTriangleIcon } from "lucide-react";
+import type { CSSProperties } from "react";
 import { FlowNumber } from "@/components/flow-number";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +23,10 @@ interface Row { label: string; sub?: string; b: number; sigma: number; main: boo
 // on the compositor through the render pass a filter change spends on the main thread — the same
 // pass the digits already glide through. On `left`/`right` they froze there while the digits rolled.
 const MOVE = "duration-(--duration-move) ease-(--ease-move) motion-reduce:transition-none";
-const SLIDE = `transition-transform ${MOVE}`;
-const CLIP = `transition-[clip-path] ${MOVE}`;
+// The positions are data, so they arrive as custom properties (`--at`, `--from`, `--to`) and the classes
+// that read them stay static.
+const SLIDE = `translate-x-(--at) transition-transform ${MOVE}`;
+const CLIP = `band-clip transition-clip-path ${MOVE}`;
 
 /**
  * The start, the whole and the end of the sequence on one b scale, so the drift is visible without
@@ -56,14 +59,14 @@ function BScale({ rows }: { rows: Row[] }) {
               </span>
             </div>
             <div aria-hidden className="relative h-2 rounded-full bg-muted">
-              <div className={cn(SLIDE, "absolute inset-0")} style={{ transform: `translateX(${x(1)})` }}>
+              <div className={cn(SLIDE, "absolute inset-0")} style={{ "--at": x(1) } as CSSProperties}>
                 <div className="absolute -inset-y-1 left-0 w-px bg-muted-foreground" />
               </div>
               {/* Clipped rather than sized: `inset(… round)` keeps both ends a true half-circle at any
                   width, where scaling one capsule would flatten them into ellipses. */}
               <div className={cn(CLIP, "absolute inset-0 bg-(--chart-1)/35")}
-                style={{ clipPath: `inset(0 ${100 - pct(r.b + r.sigma)}% 0 ${pct(r.b - r.sigma)}% round 9999px)` }} />
-              <div className={cn(SLIDE, "absolute inset-0")} style={{ transform: `translateX(${x(r.b)})` }}>
+                style={{ "--from": `${pct(r.b - r.sigma)}%`, "--to": `${100 - pct(r.b + r.sigma)}%` } as CSSProperties} />
+              <div className={cn(SLIDE, "absolute inset-0")} style={{ "--at": x(r.b) } as CSSProperties}>
                 <div className={cn("absolute top-1/2 left-0 -translate-1/2 rounded-full bg-(--chart-1) ring-2 ring-card", r.main ? "size-3.5" : "size-3")} />
               </div>
             </div>
@@ -71,7 +74,7 @@ function BScale({ rows }: { rows: Row[] }) {
         ))}
         <div aria-hidden className="relative h-4 text-xs text-muted-foreground">
           <span className="absolute left-0">{lo.toFixed(1)}</span>
-          <span className={cn(SLIDE, "absolute inset-x-0")} style={{ transform: `translateX(${x(1)})` }}>
+          <span className={cn(SLIDE, "absolute inset-x-0")} style={{ "--at": x(1) } as CSSProperties}>
             <span className="absolute -translate-x-1/2">b = 1</span>
           </span>
           <span className="absolute right-0">{hi.toFixed(1)}</span>
@@ -109,7 +112,7 @@ export function BSummary({ stats, incomplete, tabs, cluster }: { stats: Stats; i
     </p>
   ) : null;
   const detail = magType === null && gft === null ? null : (
-    <TechnicalDetail className="text-sm">
+    <TechnicalDetail size="sm">
       <div className="flex flex-col gap-2 text-pretty text-muted-foreground">
         {magType === null ? null : (
           <>
