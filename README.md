@@ -49,8 +49,7 @@ SGC "Consulta Experta" form ──POST──▶ Worker cron (every 15 min) ─�
   Workers free plan.
 - **Frontend:** React with shadcn/ui, TanStack Query, Form and Table, Recharts and
   MapLibre GL.
-- **Statistics:** written and tested here in `core/gr.ts`. There is no usable
-  seismology package on npm.
+- **Statistics:** written and tested here in `core/gr.ts`.
 
 ## Project structure
 

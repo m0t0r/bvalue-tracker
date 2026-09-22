@@ -1,4 +1,6 @@
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { secureHeaders } from "hono/secure-headers";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
 import { computeStats, type CatalogStats } from "../core/gr.ts";
@@ -43,16 +45,12 @@ function isSameOrigin(c: Context<{ Bindings: Env }>): boolean {
 /**
  * The page's own security headers come from public/_headers, which is the static-asset
  * layer; /api/* runs worker-first and never passes through it, and neither does the 404 for
- * a path that matches no asset. These are the three that mean anything for a response with
- * no markup in it: no MIME sniffing, no Referer sent onward, and the same HSTS promise the
- * page makes — a host makes it once, for every response.
+ * a path that matches no asset. Hono's defaults, set after the handler, so 403s, 429s, 404s
+ * and 500s carry them too. The one override is HSTS: the same two-year promise the page
+ * makes, since a host makes it once, for every response. No CSP or Permissions-Policy: a
+ * JSON or plain-text body renders nothing for them to govern.
  */
-app.use("*", async (c, next) => {
-  await next();
-  c.header("x-content-type-options", "nosniff");
-  c.header("referrer-policy", "no-referrer");
-  c.header("strict-transport-security", "max-age=63072000; includeSubDomains; preload");
-});
+app.use("*", secureHeaders({ strictTransportSecurity: "max-age=63072000; includeSubDomains; preload" }));
 
 /**
  * Rate limit first, then the origin check: a caller that ignores both still cannot
@@ -271,32 +269,20 @@ app.post("/api/refresh", async (c) => {
  */
 const CLIENT_ERROR_MAX_BYTES = 4096;
 
-/** Read at most `max` bytes and give up rather than buffering whatever was sent. */
-async function readCapped(body: ReadableStream<Uint8Array> | null, max: number): Promise<string | null> {
-  if (body === null) return null;
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) { await reader.cancel(); return null; }
-    chunks.push(value);
-  }
-  const all = new Uint8Array(size);
-  let at = 0;
-  for (const chunk of chunks) { all.set(chunk, at); at += chunk.byteLength; }
-  return new TextDecoder().decode(all);
-}
+/**
+ * The cap holds before the handler reads a byte: a declared Content-Length over it is refused
+ * unread, and a chunked body is abandoned the moment it crosses it rather than buffered first.
+ */
+const clientErrorLimit = bodyLimit({
+  maxSize: CLIENT_ERROR_MAX_BYTES,
+  onError: (c) => c.body(null, 413, { "cache-control": "no-store" }),
+});
 
-app.post("/api/client-error", async (c) => {
+app.post("/api/client-error", clientErrorLimit, async (c) => {
   c.header("cache-control", "no-store");
-  const raw = await readCapped(c.req.raw.body, CLIENT_ERROR_MAX_BYTES);
-  if (raw === null) return c.body(null, 413);
 
   let sent: unknown;
-  try { sent = JSON.parse(raw); } catch { return c.json({ error: "bad report" }, 400); }
+  try { sent = await c.req.json(); } catch { return c.json({ error: "bad report" }, 400); }
   if (typeof sent !== "object" || sent === null) return c.json({ error: "bad report" }, 400);
 
   // Only these four fields are read, and each only if it is a string: whatever else the
