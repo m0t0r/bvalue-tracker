@@ -132,12 +132,3 @@ figures here change over time.
 
 The statistics describe the sequence recorded so far. **They are not a forecast** and
 must not be used for safety decisions. For official information, consult SGC.
-
-## Contributing
-
-Issues and pull requests are welcome. Before opening a pull request:
-
-- run `pnpm typecheck` and `pnpm test`;
-- add every new user-facing string in both languages in `src/lib/i18n.tsx`;
-- never add anything that sends repeated requests to SGC. Tests use the captured
-  fixtures in `test/fixtures/`.
