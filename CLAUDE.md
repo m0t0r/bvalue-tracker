@@ -1,4 +1,4 @@
-# sgc-swarm
+# bvalue-tracker
 
 Read `README.md`, then the `docs/` file for the area you are changing, in full, before
 changing it. They hold verified facts about the SGC data source, dead ends not to retry,

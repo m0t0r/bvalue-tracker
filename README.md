@@ -1,6 +1,6 @@
-# sgc-swarm
+# bvalue-tracker
 
-[![CI](https://github.com/m0t0r/sgc-swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/m0t0r/sgc-swarm/actions/workflows/ci.yml)
+[![CI](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml)
 
 A live monitor for the earthquake sequence in Chocó, Colombia, that followed the
 M7.4 San José del Palmar earthquake of 2026-08-10 12:34:27 UTC. It keeps a

@@ -1,5 +1,5 @@
 {
-  "name": "sgc-swarm",
+  "name": "bvalue-tracker",
   "private": true,
   "type": "module",
   "scripts": {

@@ -2,6 +2,8 @@
 
 The app is one Cloudflare Worker (`choco`) with a D1 database (`sgc-swarm`), an Analytics
 Engine dataset (`sgc_ingest`) and one Cron Trigger. It runs on the Workers **free plan**.
+The `sgc-swarm` names predate the project's rename to bvalue-tracker and are kept, because
+renaming a D1 database means migrating its data.
 
 ## Deploying your own copy
 
