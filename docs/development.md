@@ -27,6 +27,8 @@ curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 pnpm test                 # offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
+pnpm lint                 # oxlint + @shadcn/lint (see docs/frontend.md, "Design-system lint")
+pnpm format               # oxfmt; CI runs `pnpm format:check`
 pnpm logs                 # production's own logs, from here (see docs/operations.md)
 ```
 
@@ -115,8 +117,20 @@ pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
 - Tailwind 4 already wraps `hover:` in `@media (hover: hover)`; do not add that guard.
 - `src/components/ui/*` is shadcn source that we **have modified** (focus rings,
   slider naming, `CardTitle` as `h2`, chart tick selector, legend wrapping, touch hit
-  areas, press scale, no `transition-all`). Re-adding a component with the shadcn CLI
-  would overwrite those; use `--diff` first.
+  areas, press scale, no `transition-all`, the lint's extra `Button` sizes and variant and
+  `Table`'s `size`, the chart legend's swatch colour through `--color-bg`). Re-adding a
+  component with the shadcn CLI would overwrite those; use `--diff` first. oxfmt formats this
+  directory in shadcn's own style (no semicolons, 80 columns) so that diff stays readable.
+- **oxfmt leaves Markdown alone** (`**/*.md` in `.oxfmtrc.json`). It pads every table to its
+  widest cell, which pushed these hand-wrapped docs' table rows past 140 columns and rewrote a
+  closed postmortem without changing a word of it.
+- **An `oxlint-disable-next-line` for a JSX attribute goes inside the tag**, as a `//` line
+  directly above the attribute. A `{/* … */}` comment above the element stops matching as soon
+  as oxfmt breaks the element's attributes onto their own lines.
+- **Headless Chrome does not match `pointer: coarse`**, even with `agent-browser set device`,
+  so the touch sizes cannot be seen that way. To measure them, rewrite the rules in the page:
+  walk `document.styleSheets` and set every `CSSMediaRule` whose `media.mediaText` mentions
+  `pointer: coarse` to `all`.
 - **Checking the page headlessly**: `agent-browser` (CLI, on PATH) drives a real
   browser against `pnpm dev`; `agent-browser skills get core` is its own guide. Full-page
   screenshots often miss the charts and the map, so scroll and take viewport screenshots

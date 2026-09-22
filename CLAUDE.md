@@ -16,7 +16,10 @@ and interface conventions. Most of it cannot be inferred from the code.
 | deploy, CI, `wrangler.jsonc` | `docs/deployment.md` |
 | tests, build, dependencies | `docs/development.md` ("Tooling gotchas") |
 
-- Checks before finishing any change: `pnpm typecheck` and `pnpm test`.
+- Checks before finishing any change: `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
+  `pnpm test`. Fix lint errors rather than silencing them; `docs/frontend.md` ("Design-system
+  lint") says how the design-system rules are meant to be satisfied and lists the approved
+  exceptions.
 - `agent-browser` (a CLI, already on PATH) is always available for looking at the
   real page: UI and copy reviews, accessibility checks, screenshots, before/after
   comparisons. Use it rather than reasoning about the rendered page from source.
