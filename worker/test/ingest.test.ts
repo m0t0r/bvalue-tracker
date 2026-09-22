@@ -210,6 +210,11 @@ describe("API", () => {
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
       expect(res.headers.get("referrer-policy")).toBe("no-referrer");
       expect(res.headers.get("strict-transport-security")).toBe("max-age=63072000; includeSubDomains; preload");
+      // No other site may read an API body as a subresource, or frame a response.
+      expect(res.headers.get("cross-origin-resource-policy")).toBe("same-origin");
+      expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      // Nothing here renders markup, so a page-level policy would govern nothing.
+      expect(res.headers.get("content-security-policy")).toBeNull();
     }
   });
 
@@ -844,12 +849,32 @@ describe("POST /api/client-error", () => {
     expect((await report("not json")).status).toBe(400);
     expect((await report({ stack: "only a stack" })).status).toBe(400);
     expect((await report({ message: "" })).status).toBe(400);
+    expect((await call("/api/client-error", { method: "POST" })).status).toBe(400);
   });
 
   // A log line is a place a reader's browser can put text, so what it may put there is
   // bounded before anything is read, not after.
   it("refuses a body over the cap without buffering it", async () => {
-    expect((await report({ message: "x".repeat(8000) })).status).toBe(413);
+    const res = await report({ message: "x".repeat(8000) });
+    expect(res.status).toBe(413);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  // No Content-Length to refuse up front, so the cap has to hold while the stream is read.
+  const streamed = (bytes: number) =>
+    call("/api/client-error", {
+      method: "POST",
+      body: new ReadableStream({
+        start(ctl) {
+          ctl.enqueue(new TextEncoder().encode(JSON.stringify({ message: "x".repeat(bytes) })));
+          ctl.close();
+        },
+      }),
+    });
+
+  it("caps a chunked body too", async () => {
+    expect((await streamed(8000)).status).toBe(413);
+    expect((await streamed(100)).status).toBe(204);
   });
 
   it("reads only the fields it knows, and drops the rest", async () => {

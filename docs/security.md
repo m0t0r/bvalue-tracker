@@ -51,8 +51,9 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   curl `/api/status`, which now 403s.
 - **`POST /api/client-error` is a write route that writes nothing.** It is the one route
   that takes a body from the reader, so: it inherits the same-origin check and the rate
-  limit from `/api/*`; its body is capped at 4 KB *while being read*, so an oversized one is
-  abandoned rather than buffered and then refused; and exactly four fields are read out of
+  limit from `/api/*`; its body is capped at 4 KB by Hono's `bodyLimit()` before the handler
+  reads it (a declared `Content-Length` over the cap is refused unread, and a chunked body is
+  abandoned as it crosses the cap); and exactly four fields are read out of
   it, each only if it is a string. It reaches no table and no SGC request. See
   [the page's own failures](operations.md#the-pages-own-failures).
 - **`/api/health` gained an age, not a catalogue.** `ingestAgeS` and `lastRunOk` say how
@@ -66,13 +67,24 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
 - **The response headers are the two files below, and nothing else sets them**
   (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
 
-  | | `public/_headers` (the page) | `worker/index.ts` middleware (every Worker route) |
+  | | `public/_headers` (the page) | `worker/index.ts` `secureHeaders()` (every Worker route) |
   |---|---|---|
-  | CSP, X-Frame-Options, Permissions-Policy, COOP, CORP | yes | no — a JSON body renders nothing |
-  | HSTS, X-Content-Type-Options, Referrer-Policy | yes | yes, including on 403/429/404/500 |
+  | CSP, Permissions-Policy | yes | no — a JSON body renders nothing |
+  | X-Frame-Options | `DENY` | `SAMEORIGIN` (Hono's default) |
+  | HSTS, X-Content-Type-Options, Referrer-Policy, COOP, CORP | yes | yes, including on 403/429/404/500 |
 
-  The middleware is `app.use("*")`, not `/api/*`, because the Worker also answers the 404
-  for any path that matches no asset (see `not_found_handling` below).
+  The Worker side is Hono's `secureHeaders()` with its defaults, which also adds a few
+  inert legacy headers (`X-XSS-Protection: 0`, `X-DNS-Prefetch-Control`, and so on). The
+  one override is HSTS, so both files make the same two-year promise. It is `app.use("*")`,
+  not `/api/*`, because the Worker also answers the 404 for any path that matches no asset
+  (see `not_found_handling` below).
+- **No `cors()` and no `csrf()` middleware, on purpose.** `/api/*` is for the page, which is
+  same-origin, so it sends no CORS headers at all and the browser refuses cross-origin
+  reads by default. Adding `cors()` could only loosen that. Hono's `csrf()` checks only
+  unsafe methods with a form content type (`urlencoded`, `multipart`, `text/plain`), and
+  the same-origin gate in front of `/api/*` already refuses every such request, and every
+  `GET` too. It would never fire. The gate stays hand-written because no built-in covers
+  safe methods.
 
   `Permissions-Policy` denies every feature: the page asks for no geolocation, camera,
   microphone or clipboard, and the map has no locate control, so an allow-list anywhere
