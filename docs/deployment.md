@@ -29,7 +29,8 @@ pnpm deploy
 
 ## Continuous deployment
 
-Pushes to `main` run `.github/workflows/ci.yml`: typecheck → tests → build, then on
+Pushes to `main` run `.github/workflows/ci.yml`: typecheck → lint → format check → tests →
+build, then on
 `main` D1 migrations → `wrangler deploy` → smoke test. The deploy job needs these
 repository settings:
 
@@ -48,7 +49,9 @@ for `vitest` (held at 4.x, see [development.md](development.md#tooling-gotchas))
 `dependabot-automerge.yml` merges a Dependabot PR **and deploys it** when all of these hold:
 CI passed on its head commit, every commit on it is Dependabot's own signed commit, and
 every `update-type` in the commit message is patch or minor. Anything else stays open for a
-person, including a PR someone has pushed to. It runs on `workflow_run`, not
+person, including a PR someone has pushed to. oxlint, oxfmt and `@shadcn/lint` release
+often, and a patch or minor bump can add findings or change formatting. CI then fails on
+`pnpm lint` or `pnpm format:check`, and the PR stays open until someone fixes it. It runs on `workflow_run`, not
 `pull_request`, so it needs neither branch protection nor the repository's auto-merge
 setting. A merge made with `GITHUB_TOKEN` does not fire `on: push`, so after merging it
 dispatches CI on `main` itself, and the deploy still waits for that run's tests. That job is

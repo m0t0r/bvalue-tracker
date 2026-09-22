@@ -243,9 +243,9 @@ colour, motion). Keep to them:
   strip widens its tile instead of scrolling, the width it measures grows, and it flips back out
   of scrolling mode.
 - "Detalle técnico" is one component (`technical-detail.tsx`, on shadcn `Collapsible`), used by
-  the load error, the failed-ingest alert, the groups card and the b card. It takes a `className`
-  for the body's type size: `text-sm` for prose meant to be read, the default `text-xs` for a raw
-  error string. `CardDescription` caps itself at 75ch; a card that wants a full-width subtitle
+  the load error, the failed-ingest alert, the groups card and the b card. It takes a `size`
+  for the body's type: `"sm"` for prose meant to be read, the default `"xs"` for a raw error
+  string. `CardDescription` caps itself at 75ch; a card that wants a full-width subtitle
   passes `max-w-none`.
 - **The b card's fine print is collapsed** — the magnitude-scale caveat and the goodness-of-fit
   Mc. Open, it made the card half again as tall as "Valor b en el tiempo" beside it, and because
@@ -352,3 +352,54 @@ Not yet verified by anyone: real screen-reader output, a physical touch device, 
 Safari. The back-fill and ingest-failure alerts have now been seen rendered, in both
 themes, but against a **stubbed** `/api/status` (see [Tooling gotchas](development.md#tooling-gotchas))
 — not yet in a live state driven by SGC itself.
+
+## Design-system lint
+
+`pnpm lint` runs oxlint with [`@shadcn/lint`](https://github.com/shadcn-ui/lint), set up in
+`.oxlintrc.json` with all six of its rules at `error`, as its adoption guide gives them:
+`no-restyle` and `no-arbitrary-values` allow layout classes, and `no-restyle`,
+`no-arbitrary-values` and `require-static-classes` are off inside `src/components/ui/`, which
+styles itself. `no-raw-colors` and `no-inline-styles` stay on there. The rules' messages end with
+a pointer to this section. What they ask, and how this page answers them:
+
+- **A component's look is a variant or a size, not a `className`.** Callers pass only layout
+  (margin, width, position, `flex-1`, `group`). Where a page needed more, it became part of the
+  component:
+  - `Button` sizes `sm-touch` and `icon-sm-touch` are `sm` and `icon-sm` that grow to 40 px on a
+    coarse pointer, with text at 14 px and a 44 px hit area. They carry the convention "on touch
+    the control grows, rather than relying on an invisible hit area alone". Before the lint, each
+    page control wrote it out itself, and they had drifted: the language button had 14 px text and
+    a 44 px hit area, while "Quitar filtros" and the group buttons kept 12 px text and `sm`'s
+    56 px hit area. They now share the language button's values, so on touch those three buttons
+    changed.
+  - `Button` size `header` is the sortable column header (`sm` with the table's 14 px text);
+    `inline` is a link-button inside running text, with no box of its own; `inline-touch` is
+    `inline` growing like `sm-touch`. Variant `link-muted` is the "Detalle técnico" trigger.
+  - `Table` takes `size="sm"`: 4 px cell sides, for the events table.
+  - `TechnicalDetail` takes `size` rather than a `className`; `Deferred` takes `height="map"`
+    rather than a class. A class string built at runtime cannot be checked.
+- **Containers may be spaced by the page.** One `no-restyle` contract lets `Alert`,
+  `CardContent`, `FieldGroup`, `Tabs` and `TabsContent` take spacing (gap, padding) as well as
+  layout: they own no arrangement of their own, and what goes in them is the caller's.
+  `Collapsible` is shadcn's unstyled Radix wrapper with no classes of its own, so it is left out
+  of component recognition (`ignoreImports`) rather than given a contract.
+- **Values come from the theme.** A value the design needs and Tailwind's scale lacks becomes a
+  token in `index.css`: `text-2xs` (0.625 rem) and `--radius-px` (`rounded-t-px`) for the groups
+  card's daily strips, and `shadow-pin`, the pinned y axis's shadow, which reads its colour from `--pin-shadow` so dark
+  mode can change it. `band-clip` and `transition-clip-path` are `@utility` classes for the
+  b scale's error band. The linter reads the theme, so it suggests these by name.
+- **Data reaches CSS through custom properties, never an inline property.** A position or width
+  computed from data is set as `style={{ "--at": … } as CSSProperties}` and read by a static class
+  (`translate-x-(--at)`, `w-(--plot-w)`, `h-(--bar-h)`). Write the object literally in the JSX: a
+  helper that returns it cannot be read, and is reported as a dynamic style.
+
+**Approved exceptions**, each marked where it is with `oxlint-disable-next-line` and a reason:
+
+- `event-map.tsx`, the depth legend's gradient. It is drawn from `DEPTH_STOPS`, the same hex
+  constants the map paints with (MapLibre cannot parse the `oklch` tokens), so the legend cannot
+  disagree with the map.
+- `ui/chart.tsx`, shadcn's `ChartStyle` `<style>` element, which scopes each chart's colour
+  variables to that chart for each theme.
+
+A new exception goes the same way: in the code, next to what it excuses, with the reason. Never
+switch a rule off for a file. `rg "oxlint-disable"` lists them all.
