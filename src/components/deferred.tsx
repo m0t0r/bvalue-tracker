@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
+import { useIntersectionObserver } from "usehooks-ts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -14,23 +15,14 @@ import { Skeleton } from "@/components/ui/skeleton";
  * nothing below it moves. `height` must match the chart's own container (`h-80`, `h-96`).
  */
 export function Deferred({ title, height = "h-80", children }: { title: string; height?: string; children: ReactNode }) {
-  const slot = useRef<HTMLDivElement>(null);
-  const [near, setNear] = useState(false);
-
-  useEffect(() => {
-    if (near) return;
-    const el = slot.current;
-    // No observer (an old browser, a test environment): draw it rather than leave a skeleton.
-    if (el === null || typeof IntersectionObserver === "undefined") {
-      setNear(true);
-      return;
-    }
-    const io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) setNear(true);
-    }, { rootMargin: "600px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [near]);
+  // No observer (an old browser, a test environment): draw it rather than leave a skeleton.
+  const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
+  // Latched: once drawn, a card is never swapped back for its skeleton when it scrolls away.
+  const { ref: slot } = useIntersectionObserver({
+    rootMargin: "600px",
+    freezeOnceVisible: true,
+    onChange: (isIntersecting) => { if (isIntersecting) setNear(true); },
+  });
 
   const placeholder = (
     <Card className="h-full" aria-busy="true">

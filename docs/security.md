@@ -104,7 +104,7 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   no client-side router, so the SPA fallback only meant that `/robots.txt`, `/favicon.ico`,
   `/llms.txt` and every crawler's guess answered **200 with the whole app** — a soft 404 that
   also made Lighthouse call robots.txt invalid. An asset miss now falls through to the Worker,
-  whose catch-all answers `404 not found` as `text/plain`, with the three headers above.
+  whose `notFound` handler answers `404 not found` as `text/plain`, with the headers above.
 
 Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
 regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use

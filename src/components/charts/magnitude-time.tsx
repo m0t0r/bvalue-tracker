@@ -1,5 +1,6 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, XAxis, YAxis, ZAxis } from "recharts";
+import { useResizeObserver } from "usehooks-ts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import type { StoredEvent } from "@/lib/api";
@@ -67,14 +68,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
   }, [events]);
 
   const scroller = useRef<HTMLDivElement>(null);
-  const [viewW, setViewW] = useState(0);
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setViewW(entry!.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const { width: viewW = 0 } = useResizeObserver({ ref: scroller as RefObject<HTMLDivElement> });
 
   const roomW = Math.max(0, viewW - AXIS_COL);
   const plotW = viewW > 0 && viewW < DENSE_BELOW ? Math.max(roomW, days * PX_PER_DAY) : roomW;
