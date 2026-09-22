@@ -254,6 +254,7 @@ describe("API", () => {
     const bad = await call("/api/stats?cluster=middle");
     expect(bad.status).toBe(400);
     expect(bad.headers.get("cache-control")).toBe("no-store");
+    expect(await bad.json()).toEqual({ error: "cluster must be shallow or deep" });
 
     const manual = (await (await call("/api/stats?mc=2.5")).json()) as any;
     expect(manual.mc).toBe(2.5);
@@ -453,7 +454,15 @@ describe("API", () => {
   });
 
   it("returns JSON 404 for unknown API routes", async () => {
-    expect((await call("/api/nope")).status).toBe(404);
+    const res = await call("/api/nope");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "not found" });
+    // A known path with the wrong method is unknown too.
+    expect((await call("/api/refresh")).status).toBe(404);
+  });
+
+  it("origin checks an unknown API path before answering it", async () => {
+    expect((await callRaw("/api/nope")).status).toBe(403);
   });
 });
 

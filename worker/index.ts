@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
@@ -168,11 +169,10 @@ app.get("/api/status", async (c) => {
 });
 
 /** `cluster=shallow|deep` narrows a response to one depth cluster. Anything else is refused rather than silently ignored. */
-class BadCluster extends Error {}
 function parseCluster(q: Record<string, string>): Cluster | null {
   if (q.cluster === undefined || q.cluster === "") return null;
   if (q.cluster === "shallow" || q.cluster === "deep") return q.cluster;
-  throw new BadCluster();
+  throw new HTTPException(400, { message: "cluster must be shallow or deep" });
 }
 const ofCluster = (events: StoredEvent[], cluster: Cluster | null) =>
   cluster === null ? events : events.filter((e) => clusterOf(e) === cluster);
@@ -311,22 +311,24 @@ app.post("/api/client-error", clientErrorLimit, async (c) => {
   return c.body(null, 204);
 });
 
-app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
-
 /**
- * Anything else only reaches the Worker when the asset layer found no file for it
- * (`not_found_handling: "none"`), so it is a real 404 and says so, rather than handing back
- * the whole page with a 200 and letting a crawler believe the path exists.
+ * An unknown /api/ path answers in JSON, like the rest of the API. Anything else only reaches
+ * the Worker when the asset layer found no file for it (`not_found_handling: "none"`), so it is
+ * a real 404 and says so, rather than handing back the whole page with a 200 and letting a
+ * crawler believe the path exists. The /api/* middleware runs before this, so an unknown API
+ * path is still rate limited and origin checked.
  */
-app.all("*", (c) => {
+app.notFound((c) => {
+  if (c.req.path.startsWith("/api/")) return c.json({ error: "not found" }, 404);
   c.header("cache-control", "no-store");
   return c.text("not found\n", 404);
 });
 
 app.onError((err, c) => {
-  if (err instanceof BadCluster) {
+  // A refusal a route chose to make, such as a bad `cluster`: its status and message, not a 500.
+  if (err instanceof HTTPException) {
     c.header("cache-control", "no-store");
-    return c.json({ error: "cluster must be shallow or deep" }, 400);
+    return c.json({ error: err.message }, err.status);
   }
   // The route is on the line because a 500 with no path is a 500 you cannot reproduce.
   // `err` is flattened by the logger, so the stack survives JSON — `console.error(err)`
