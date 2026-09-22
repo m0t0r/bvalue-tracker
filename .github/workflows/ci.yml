@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # dependabot-automerge.yml dispatches this on main after merging, because a merge made
+  # with GITHUB_TOKEN does not fire `push`.
+  workflow_dispatch:
 
 # Neither job calls the GitHub API; say so rather than inheriting the default scope.
 permissions:
@@ -11,7 +14,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only PR runs are superseded. On main a run may be mid-deploy, between the D1
+  # migration and wrangler deploy, and a dispatch from auto-merge must not cut it off.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -34,7 +39,7 @@ jobs:
 
   deploy:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     concurrency:

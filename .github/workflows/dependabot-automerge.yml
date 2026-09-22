@@ -1,0 +1,79 @@
+name: Dependabot auto-merge
+
+# Merges a Dependabot PR once CI has passed on it, for patch and minor updates only;
+# majors stay open for a person. Merging to main deploys, so this is a deploy trigger.
+#
+# workflow_run rather than pull_request, for two reasons:
+# - It starts only after CI has passed on the exact commit, so it needs neither branch
+#   protection nor the repository's auto-merge setting, both of which are off.
+# - It can deploy. A merge made with GITHUB_TOKEN does not fire `on: push`, so CI's
+#   deploy job would never run and the update would sit on main until the next push
+#   shipped it unannounced. workflow_dispatch is an event GITHUB_TOKEN may start, so
+#   this job dispatches CI on main after merging; the deploy still waits for its tests.
+#
+# workflow_run runs the copy of this file on main, never the PR's, so a PR cannot
+# change what this job does.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: dependabot-automerge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # merge
+      pull-requests: write # merge
+      actions: write # dispatch CI on main
+    steps:
+      - name: Merge a passing patch or minor update, then deploy it
+        # Through env, nothing interpolated into the script; the commit message it reads
+        # comes from the PR and is only ever grepped.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          pr=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls" --jq \
+            '[.[] | select(.state == "open" and .user.login == "dependabot[bot]" and .head.sha == $ENV.HEAD_SHA)][0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "No open Dependabot PR has $HEAD_SHA as its head; nothing to do."
+            exit 0
+          fi
+
+          # Every commit must be Dependabot's own, signed one. A person pushing to the
+          # branch takes the PR out of auto-merge.
+          others=$(gh api "repos/$GH_REPO/pulls/$pr/commits" --paginate --jq \
+            '.[] | select(.author.login != "dependabot[bot]" or .commit.verification.verified != true) | .sha')
+          if [ -n "$others" ]; then
+            echo "PR #$pr has commits that are not Dependabot's signed commits; leaving it for review."
+            exit 0
+          fi
+
+          # Dependabot writes one "update-type:" line per dependency into the commit
+          # message; dependabot/fetch-metadata parses the same block, but only runs on a
+          # pull_request event. Every line must be patch or minor.
+          types=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA" --jq .commit.message \
+            | grep -oE 'update-type: version-update:semver-[a-z]+' | sed 's/.*semver-//' | sort -u || true)
+          echo "PR #$pr update types: $(echo $types)"
+          if [ -z "$types" ] || grep -qvxE 'patch|minor' <<<"$types"; then
+            echo "Not a patch or minor update; leaving PR #$pr for review."
+            exit 0
+          fi
+
+          # --match-head-commit: refuse if Dependabot pushed again after this CI run.
+          gh pr merge "$pr" --squash --match-head-commit "$HEAD_SHA"
+          gh workflow run ci.yml --ref main

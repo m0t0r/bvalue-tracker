@@ -1,0 +1,34 @@
+version: 2
+
+# Patch and minor updates arrive as one grouped PR per ecosystem, which
+# dependabot-automerge.yml merges and deploys once CI passes. Majors arrive one PR each
+# and wait for a person. Security updates are not delayed by the cooldown.
+updates:
+  - package-ecosystem: npm # covers pnpm
+    directory: /
+    schedule:
+      interval: weekly
+    # A week's delay before proposing a new release: most malicious or broken publishes
+    # are yanked within days, and these PRs deploy without a person looking at them.
+    cooldown:
+      default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # @cloudflare/vitest-pool-workers does not support vitest 5 (docs/development.md).
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      # Follows the Node LTS that CI and engines.node run, not the newest Node.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
