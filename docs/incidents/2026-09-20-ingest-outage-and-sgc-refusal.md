@@ -8,7 +8,7 @@
 | **Duration** | A: 09-20 02:50 → 12:10 (9 h 20 m). B: 09-20 12:40 → 09-21 between 07:31 and 09:01 (~19–20 h) |
 | **Total time without a successful ingest** | 09-20 02:50 → 09-21 09:01, apart from six successful ticks between 12:10 and 12:35: ~30 h |
 | **Data loss** | None. See [Recovery](#recovery-and-current-state) |
-| **Authors** | Repo owner, with Claude Code sessions |
+| **Authors** | Maintainer, with Claude Code sessions |
 | **Blameless** | Yes |
 | **Revised** | 2026-09-22, after a final investigation. The first version's root cause for A was **wrong**; see [Corrections](#corrections-to-the-first-version) |
 
@@ -77,7 +77,7 @@ Colombia time (UTC−5), where the commits are stamped. Those rows are corrected
 | 13:33, 14:43 | GitHub canary requests SGC directly: **200** | Actions |
 | ~14:15 | Cron back to `*/15`. The refusal back-off (`sgcRefusing`) cuts the load to about one wide probe and one sweep an hour | Workers Logs, D1 |
 | 16:00:04 | First captured refusal body: `cf-ray: a3e20a72bc0fa126-SIN` | Workers Logs |
-| 16:16:53 | Repo owner's laptop: **200** from `Apache/2.2.11`, no `cf-*` headers | manual curl |
+| 16:16:53 | A machine off Cloudflare's network: **200** from `Apache/2.2.11`, no `cf-*` headers | manual curl |
 | 17:10 → 09-21 05:01 | The refusal is identical from the MIA, SIN and FRA colos | Workers Logs |
 | **09-21 07:31:17** | Last 410 | D1 |
 | **09-21 09:01:49** | **First success in 20 h 21 m.** Incident B ends. It needed no change on our side | D1 |

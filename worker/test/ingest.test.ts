@@ -740,7 +740,7 @@ describe("the last run is answered from an index", () => {
  *
  * These pin the *fields*, not the wording, because the fields are what a query in the
  * Workers Logs dashboard can group by — and each one below is the answer to a question
- * that took hours to answer without it. See README, "Debugging production".
+ * that took hours to answer without it. See docs/operations.md, "Debugging production".
  */
 describe("what a tick writes to the log", () => {
   /** Every console line this block produced, as the single object each one must be. */

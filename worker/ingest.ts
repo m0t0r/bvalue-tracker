@@ -187,7 +187,7 @@ export async function ingest(
     const cause = e.cause ? ` (${String(e.cause)})` : "";
     const http = sgcHttpError(err);
     // The stack goes in the log, never in the D1 `error` column: that column is read back
-    // by the page, and a visitor is never shown a stack (README, "Concurrency and failure
+    // by the page, and a visitor is never shown a stack (docs/ingest.md, "Concurrency and failure
     // lessons"). The two are deliberately different widths of the same fact.
     log.debug({ err: e, attempt: "ingest" }, "ingest threw");
     return await finish({

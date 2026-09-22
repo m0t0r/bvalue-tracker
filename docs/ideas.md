@@ -1,0 +1,21 @@
+# Ideas discussed, not built
+
+- **"Was it felt in Pereira?"** Apply an intensity prediction equation to each
+  event (magnitude, hypocentral distance, depth → Mercalli intensity at a town). A
+  rough pass suggested an event in these clusters needs about M4 to be noticed in
+  Pereira (46–185 km away), M5 to be clearly felt, M6 to be strong. That pass used
+  coefficients written from memory from a shallow-crust equation: **do not ship it**.
+  Use an equation for intermediate-depth events and calibrate against SGC's
+  "sismo sentido" reports.
+- **"Will one be felt soon?"** Standard aftershock forecasting (Omori decay + the
+  b-value, as USGS publishes) gives a probability of M ≥ X in the next N days, which
+  the intensity step turns into a chance of felt shaking. The Istmina cluster is not
+  decaying like a textbook sequence, so model the clusters separately. Present any
+  such number as an unofficial estimate with its uncertainty, name SGC as the
+  authority, and have the researcher check the method before it goes public.
+- Per-cluster depth over time; migration plots; cumulative
+  seismic moment; filtering by RMS/GAP/location error; a view of SGC's revisions,
+  which our database records and SGC does not publish.
+- Notifications (for example M ≥ 4.5) are a small addition to the cron. Do not
+  alert on b itself: it invites reading it as a warning.
+- Cross-check against the USGS and ISC catalogues for the same box.

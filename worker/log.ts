@@ -2,7 +2,7 @@
  * One module owns what the Worker says about itself.
  *
  * Everything here exists to make Workers Logs able to *answer questions*, not just to
- * print. Two production faults were invisible for hours each (README, "Concurrency and
+ * print. Two production faults were invisible for hours each (docs/ingest.md, "Concurrency and
  * failure lessons") and neither would have survived one query against a structured log:
  * every tick taking the fast lane for a day, and 112 invocations killed mid-ingest. The
  * fields below are chosen so those two questions are a group-by, not a reading exercise.

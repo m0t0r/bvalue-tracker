@@ -1,0 +1,141 @@
+# Development
+
+## Code layout
+
+| Path | What |
+|---|---|
+| `core/` | Shared, runtime-neutral logic: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), statistics (`gr.ts`, including the one `computeStats` pipeline), CSV, CLI. Used by the Worker, the browser and Node. |
+| `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`). |
+| `src/` | React page: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL. `lib/i18n.tsx` holds every user-facing string in `es` and `en`. |
+| `migrations/` | D1 schema. |
+| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`). |
+| `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18. |
+| `src/**/*.test.ts` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
+| `docs/CLOUDFLARE_SPEC.md` | The original design spec, kept for history. Its §3 lists every verified fact about the SGC endpoint. |
+
+## Local setup
+
+```sh
+pnpm install
+pnpm db:migrate:local     # once, and again whenever database_id in wrangler.jsonc changes (see Tooling gotchas)
+pnpm dev                  # page + Worker + local D1 on one port
+
+# fill the local database: each call loads one missing week (6 calls on a fresh DB).
+# The header is required: /api/* refuses a caller with no same-origin signal (see docs/api.md).
+curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
+
+pnpm test                 # offline
+pnpm test:live            # one test against the real SGC server
+pnpm typecheck
+pnpm logs                 # production's own logs, from here (see docs/operations.md)
+```
+
+## CLI
+
+```sh
+pnpm cli fetch --out data/events.csv
+pnpm cli bvalue --input data/events.csv --windows
+pnpm cli bvalue --input data/events.csv --windows-out data/b-windows.csv
+pnpm cli bvalue --input data/events.csv --mc 2.5 --manual-only --exclude-mainshock
+pnpm cli bvalue --input data/events.csv --cluster shallow --windows   # always prints both clusters; --cluster narrows the windows
+pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
+```
+
+`--bbox` is `lonMin,latMin,lonMax,latMax`; use the `=` form because the value starts with a minus.
+
+## Tooling gotchas
+
+- **`vitest` is held at 4.x**: `@cloudflare/vitest-pool-workers` does not support 5.
+  For the same reason `compatibility_date` cannot be newer than the pool's bundled
+  runtime (it errored on 2026-09-01; 2026-08-20 works). Everything else is on latest.
+- **Local D1 storage is keyed by `database_id`.** Change the id in `wrangler.jsonc`
+  and local dev silently gets a new, empty database with no tables (`no such table:
+  events`). Re-run `pnpm db:migrate:local` and refill.
+- D1 is **not reset between tests** in this pool version; `worker/test` clears the
+  tables in `beforeEach`. Tests call the Worker with `createExecutionContext()`
+  because the refresh route uses `waitUntil`.
+- **SGC is stubbed with MSW, in both test projects** — `msw/node`'s `setupServer` works
+  inside the Workers pool as well as under Node (`nodejs_compat` is on). Handlers are
+  registered for `SEISCOMP_ENDPOINT` and the server listens with
+  `onUnhandledRequest: "error"`, so a test cannot reach `bdrsnc.sgc.gov.co` by accident.
+  It replaced `vi.stubGlobal("fetch", …)` and a `fetchImpl` option on `FetchOptions` that
+  existed only for tests; `fetchCatalog` now calls `fetch` directly. `msw` is `false` in
+  `pnpm-workspace.yaml`'s `allowBuilds`: its build script only copies the browser service
+  worker, which nothing here uses. `worker.fetch(...)` in `worker/test` is not a network
+  call — it invokes the Worker's own handler, which is the system under test.
+- **`test/live.test.ts` must stay unmocked.** It is the daily canary against the real SGC
+  form. `pnpm test:live` runs that file alone, so no MSW server is ever loaded in it.
+- `wrangler.test.jsonc` exists because the real config has `assets` without a
+  directory (the Vite plugin supplies it), which the test pool rejects.
+- **MapLibre GL 6 ships its worker as a separate module** that imports a shared
+  chunk. Import it with `?worker&url` and `setWorkerUrl`, with `worker: { format: "es" }`
+  in `vite.config.ts`. A plain `?url` import works in dev and breaks in production.
+  Without any of this the map's `load` event never fires and the map stays blank
+  with no error.
+- **TanStack Table is v9**, not the v8 that shadcn's data-table docs show:
+  `useTable` + `tableFeatures({ rowSortingFeature, sortedRowModel, sortFns, … })`,
+  state via the selector passed as `useTable`'s second argument (`table.state`),
+  `table.FlexRender`. The package ships its own guides under
+  `node_modules/@tanstack/react-table/skills/`. shadcn does not depend on it.
+- **Recharts 3 renamed its tick class.** shadcn's chart CSS targets
+  `.recharts-cartesian-axis-tick text`, which no longer matches, so axis labels fall
+  back to `#666` and fail contrast in dark mode. `ui/chart.tsx` also targets
+  `.recharts-cartesian-axis-tick-value`. Re-check this after regenerating the component.
+- Recharts charts accept `title` and `desc`; we use them as the charts' text alternative.
+- The frequency–magnitude chart draws a cumulative dot only where an event exists.
+  A dot at every 0.1 step turned the lone M7.4 into 25 dots at N = 1, which read as data.
+- A `ScatterChart` with a time axis derives a single tick on its own. We pass
+  explicit weekly `ticks`, shared with the bar chart below it — see the scrolling
+  mobile chart under [Interface conventions](frontend.md#interface-conventions) for how the tick
+  spacing and the pinned y axes work.
+- **Recharts silently drops a tick whose label would cross the edge of the plot**
+  (`isVisible` in its `TickUtils`), and passing explicit `ticks` does not override it.
+  That hid the first date on "Magnitud en el tiempo" — 10 August, the day of the
+  mainshock, which sits exactly on the domain's left edge. The fix is `padding` on the
+  `XAxis` (`FIRST_TICK_PAD`, half a date label wide): it moves the scale, so the label
+  stays centred on its own day. `interval="preserveStartEnd"` also shows it, but by
+  nudging the label inward, and the room it takes then costs the *second* tick on a
+  phone — checked in a browser, since jsdom measures every label as 0 wide and hides
+  nothing.
+- pnpm 12 blocks dependency build scripts. `pnpm-workspace.yaml` allows `esbuild`,
+  `workerd` and `sharp`; without that, installs fail with `ERR_PNPM_IGNORED_BUILDS`.
+- TypeScript is split into `tsconfig.app.json` (DOM), `tsconfig.worker.json`
+  (Workers types) and `tsconfig.node.json`, because DOM and Workers globals conflict.
+  Run `pnpm types` after changing `wrangler.jsonc`.
+- **Refetch on focus is TanStack Query's built-in `refetchOnWindowFocus`**, left at its
+  default. Do not add a custom `focusManager` listener. In v5 "focus" means the tab
+  becoming visible (`visibilitychange`); returning from another window or app while
+  the tab stayed visible refetches nothing, by the library's design. Identical
+  refetched data re-renders nothing (structural sharing), so relative times need
+  their own clock: `useNow`.
+- **Cron Triggers do not fire under `pnpm dev`.** Locally the data only changes when
+  the refresh button or `POST /api/refresh` is used.
+- Tailwind 4 already wraps `hover:` in `@media (hover: hover)`; do not add that guard.
+- `src/components/ui/*` is shadcn source that we **have modified** (focus rings,
+  slider naming, `CardTitle` as `h2`, chart tick selector, legend wrapping, touch hit
+  areas, press scale, no `transition-all`). Re-adding a component with the shadcn CLI
+  would overwrite those; use `--diff` first.
+- **Checking the page headlessly**: `agent-browser` (CLI, on PATH) drives a real
+  browser against `pnpm dev`; `agent-browser skills get core` is its own guide. Full-page
+  screenshots often miss the charts and the map, so scroll and take viewport screenshots
+  instead. Recharts marks are real DOM nodes — a scatter dot is `path#<event id>`, so a
+  tooltip can be raised with `hover`. The map is a canvas: its popups cannot be reached
+  by selector.
+  **Give it data without touching SGC.** Copy a populated `.wrangler/` from another
+  checkout, then, in the copy only, set the newest successful `ingest_runs` row's
+  `finished_at` to now. That closes the Worker's refresh guard, so neither the page's
+  focus refresh nor a click on the refresh button reaches the government server. An empty
+  database is the dangerous one: the page back-fills on load, in a loop, with no wait
+  between requests. Check `/api/status` and confirm `backfill.done == backfill.total`
+  before opening a browser on it. Do not click the refresh button in a loop.
+  **A state the database will not produce is stubbed at the network, not faked in D1.**
+  `agent-browser network route '**/api/status*' --body <json>` puts the page in any state
+  — a failed last run, `backfill.done < total` — without touching the Worker. Stub
+  `**/api/refresh` in the *same* session and before the first `open`: an incomplete
+  back-fill makes `StatusBar`'s effect start the back-fill loop by itself, up to 40
+  `POST /api/refresh` calls with no wait, and that is the one path that reaches SGC. This
+  is how the back-fill and failure alerts were finally looked at (2026-09-20).
+  **`getComputedStyle` returns `oklch()` here, not `rgb()`**, so anything parsing it for
+  channel numbers silently reads the lightness as a red channel and reports nonsense
+  ratios. Rasterise instead: `ctx.fillStyle = <colour>; ctx.fillRect(0,0,1,1)` on a 1×1
+  canvas and read `getImageData`, which gives the sRGB the screen actually shows.

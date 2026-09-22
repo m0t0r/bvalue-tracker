@@ -68,7 +68,7 @@
        it under AA. The border is what carries the colour at this size, as it does in the shadcn
        example these follow; the fill is a whisper behind it. The two `strong` values are set a
        fixed 0.11 apart in lightness — red darker, amber lighter — because a protanope or a
-       deuteranope has little else to tell a failure from a caution by. See the README. */
+       deuteranope has little else to tell a failure from a caution by. See docs/frontend.md, "Interface conventions". */
     --destructive-surface: oklch(0.988 0.005 27.3);
     --destructive-edge: oklch(0.9 0.052 27.3);
     --destructive-strong: oklch(0.44 0.18 27.3);

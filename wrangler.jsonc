@@ -35,7 +35,7 @@
   // ingest run. The field POSITIONS are the schema — see worker/analytics.ts, and only
   // ever append. The dataset is created by the first write, but Analytics Engine has to be
   // enabled ONCE PER ACCOUNT in the dashboard first: until it is, every deploy carrying
-  // this binding is rejected with error 10089. See README's Deploy section.
+  // this binding is rejected with error 10089. See docs/deployment.md.
   "analytics_engine_datasets": [{ "binding": "INGEST_ANALYTICS", "dataset": "sgc_ingest" }],
   "vars": {
     // The floor for worker/log.ts. "debug" for an investigation, then back to "info":

@@ -64,7 +64,7 @@ jobs:
             if (h.ingestAgeS > stale) {
               // The first thing to read is worker/log.ts output: a "reaped abandoned runs"
               // warning means an invocation was killed, an "ingest failed" line carries
-              // SGC HTTP status. README, "Debugging production", has the queries.
+              // SGC HTTP status. docs/operations.md, "Debugging production", has the queries.
               console.error(`catalogue is stale: last successful ingest ${h.ingestAgeS}s ago (limit ${stale}s)`);
               process.exit(1);
             }

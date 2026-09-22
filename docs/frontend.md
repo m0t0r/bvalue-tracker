@@ -1,0 +1,354 @@
+# The page
+
+## The page's scope
+
+**One module owns what the page is narrowed to, and everything read off it**
+(`src/lib/scope.ts`, architecture review candidate 03, 2026-09-19). A `Scope` is the filters form,
+the depth group and the b card's magnitude tab; `pageView(events, scope, now)` derives the whole
+page from it and is a plain function, so a test runs exactly what the page runs. `useScope` adds
+only React — the state, three memo layers, the deferred copies and the two control objects the
+groups card and the b card take. `App.tsx` is layout.
+
+- **The rule it exists for: every fit the page shows is above the Mc of the whole filtered
+  catalogue.** Narrowing to a depth group or to one magnitude type changes which events are counted
+  and nothing else. `computeClusterStats` keeps the group half; `measure` keeps the magnitude half,
+  which before this lived as one argument inside a component body — swap `clusters.all.mc` there for
+  the reader's own `filters.mc` and one tab silently fits its own distribution. `pageView` is where
+  that is now tested, across every group × tab combination.
+  - The fixture in `src/lib/scope.test.ts` is **synthetic on purpose**. On the real catalogue every
+    Mc estimate lands on 2.3, so the mistake passes unnoticed; that catalogue peaks at M2.4 while
+    the commonest magnitude type and the deep group each peak at M2.0, and the swap reads as a
+    different number. Reinstating the swap was checked to fail it.
+- **Mc moves the figures and never the selection**, so the derivation is layered and each layer is
+  given exactly the part of the scope it may read. `applyFilters` takes `EventFilters`, which has no
+  `mc` field at all — the guard is in the type, not in a `mc: null` argument at the call site as it
+  used to be. `selectBase` is keyed on the filters, `selectShown` on the group, `measure` on the
+  rest. So dragging the Mc slider rebuilds no array, and choosing a group leaves `base` — the two
+  daily strips in the groups card — untouched. Checked in a browser: after four steps of the Mc
+  slider the MapLibre canvas and the table's first row are the same DOM nodes.
+- The `page` vitest project runs on `happy-dom` with `@testing-library/react`, for that one seam.
+  Everything else it holds is a pure function; do not reach for a renderer where `pageView` will do.
+
+## Events per day
+
+**One module counts events per Colombian day, and both charts that draw them ask it**
+(`src/lib/daily-counts.ts`, architecture review candidate 06, 2026-09-19). `dailyCounts(events)`
+returns one record per day — `start`, `shallow`, `deep`, `total` — plus two maxima. The stacked
+"eventos por día" bars under "Magnitud en el tiempo" and the two per-group strips in the groups
+card had each written their own version, and they disagreed. Do not add a third: `grep dayStart`
+should only ever reach `format.ts` and this module.
+
+- **It returns a flat array of days, not `from`/`to`/a day count.** Each day carries its own
+  `start`, so the range is read off the array. An empty catalogue therefore has no range to
+  misreport — the groups card's end labels used to compute theirs from a `from` of 0 and render
+  "1 ene 1970". That path is dead today (`App.tsx` renders the card only when `base` is non-empty),
+  and the guard in `DailyStrip` is what keeps it dead.
+- **There are two named maxima, and which one a chart uses is a claim about its scale.**
+  `maxTotal` is the busiest day's total and is the stacked bars' y axis; `maxCluster` is the most
+  any one cluster had on a day and is the scale the two strips **share**, which is the whole point
+  of the strips — one group going quiet while the other carries on has to be visible without
+  reading a number. The review's finding was that the two implementations disagreed about what a
+  single `max` meant. Do not collapse them back into one.
+- **It assumes nothing about the order events arrive in.** It scans for its range rather than
+  reading `events[0]` and `events[last]`, which is what `magnitude-time` used to do. One extra pass
+  over ~800 events, and nothing breaks quietly if `/api/events` ever loses its `ORDER BY time`.
+- **An event whose `time` cannot be parsed is left out, not thrown on.** It runs inside a render,
+  there is no error boundary in `src/`, and the D1 read path is deliberately outside the admission
+  gate (see [Security decisions](security.md)), so one bad row must cost
+  that event and not the dashboard. Both implementations it replaced dropped such an event
+  silently; a bare `days[i]!` would have turned that into a white screen. Tests pin it.
+- It takes a structural type rather than `StoredEvent`, and imports nothing with JSX or the `@`
+  alias, so `test/` (the Node project) can hand it parsed fixture events — the same shape, and for
+  the same reason, as `src/lib/format.ts`. Its tests are mutation-checked; the figures in them were
+  counted independently in Python from the same 786 events.
+
+## Interface conventions
+
+Settled in a six-domain interface review (accessibility, layout, copy, typography,
+colour, motion). Keep to them:
+
+- **Spanish is the default** regardless of browser language; the toggle's choice is
+  remembered per device. Every new string goes into both `es` and `en` in
+  `src/lib/i18n.tsx`, which TypeScript enforces.
+- **Every date and time on the page is Colombian time** (`America/Bogota`, UTC−5, no
+  daylight saving), whatever the reader's device says. That covers the filter dates and
+  the daily counts, which are Colombian calendar days. The CSV, the API and its
+  `from`/`to` filters stay in UTC; the table shows the UTC form on hover. All of it goes
+  through `src/lib/format.ts`; do not format a date anywhere else.
+- **SGC ends every region with ", Colombia"**, which says nothing on a page about one
+  Colombian sequence. `fmtRegion` in `src/lib/format.ts` strips it, and the table, the
+  magnitude-chart tooltip and the map popup all go through it. The CSV and the API keep
+  the region exactly as SGC gives it.
+- **The zone is stated once, in the footer** (`timeNote`), and never repeated on an
+  individual timestamp. It used to hang off every one of them — the two status-bar
+  hints, the map popup, the magnitude and b-over-time tooltips, the table's column
+  header, and "los días son días de Colombia" under the magnitude chart — which read as
+  a disclaimer being restated rather than a fact. A new timestamp gets no zone label.
+- **No relative time is counted in seconds, and no unit runs past the next one up.**
+  `relativeTime` goes from "hace menos de un minuto" straight to whole minutes, to whole hours at
+  60 minutes, to whole days at 24 hours. "hace 66 segundos" and "hace 86 minutos" both left the
+  reader doing the arithmetic, and `useNow` ticks every 30 s, so a figure in seconds was stale as
+  often as it was right. Under a minute it says so in words, which also answers the small negative
+  a device clock running fast produces (it used to read "dentro de 5 segundos"). Days stay numeric
+  — "hace 1 día", never "ayer": elapsed hours do not say which calendar day an event fell on, and
+  the exact date is always beside it. Those two phrases are the **only** user-facing strings outside
+  `i18n.tsx`, because `src/lib/format.ts` is also imported by the Node test project, which has
+  neither the `@` alias nor JSX; `Record<Lang, string>` keeps both languages required there.
+- **A time that identifies one event is a link to SGC's own page for it** (`sgcEventUrl` in
+  `src/lib/format.ts`): the table's time column, and "Evento más reciente" in the status bar —
+  which is why `/api/status` carries `newestEventId` beside `newestEventTime`. Both keep the UTC
+  form on hover. A time that identifies no single event (the last SGC query) is not a link.
+- **The page says that it updates itself** (under the refresh button, in the footer):
+  readers were reloading it. The "15 minutes" in `autoUpdate` and `autoUpdateLong` is the
+  cron in `wrangler.jsonc`, and `refreshWait`'s is `REFRESH_MIN_INTERVAL_S`, which is the
+  same number for the reason given under the budget. `src/lib/i18n.test.ts` holds all three
+  to it; change them together.
+- **The failed-ingest alert names no interval at all, and that is the settled answer.** It
+  named the cron's own rate, in the one state where the fast lane has stood down and the
+  cron's rate is wrong. It was changed to the wide tick's rate instead, and within the hour
+  the 410s began and the probe dropped to hourly, so that was wrong too. Three lane rules decide that number and the reader can act on none of them, so
+  `ingestFailedBody` promises a retry and stops there. What it must keep saying is "no hace
+  falta recargar"; `src/lib/i18n.test.ts` holds both halves. Do not put a number back.
+- **Three stand-down messages, three different truths.** `refreshWait` claims SGC answered
+  within the last five minutes, so it may only appear when nothing has failed;
+  `refreshStillFailing` replaces it beside the alert and must not tell the reader to press
+  again, because while SGC is refusing us the Worker's own wait is an hour; `refreshFailed`
+  is for the request from the *page* failing, which is a different thing again.
+- **The refresh button standing down is good news, not a countdown.** The throttle is the
+  cron's own period, so it refuses most presses, so `refreshWait` says the reader
+  already has the newest data instead of asking them to wait N minutes. It is a timed
+  factual claim, so it is hidden as soon as a run fails — otherwise it would sit on
+  screen asserting a recent successful query right beside the "la última consulta falló"
+  alert, and it sticks until the next press.
+- **Decimal point everywhere** ("M7.4", "Mc = 2.0"), matching SGC, the CSV and every
+  computed number. Never mix in decimal commas.
+- Terms: "sismo" only for the mainshock, "evento" for catalogue entries, "valor b",
+  "Mc / magnitud de completitud".
+- **Red means something failed.** Cautions ("fewer than 50 events", "history
+  incomplete") are neutral badges with a warning icon. A *badge* stays neutral; an
+  **alert states itself with its own surface** — see the bullet below.
+- **A status alert tints fill, border and title; a note does not.** The two failure
+  alerts (the load error, "la última consulta al SGC falló") take `destructive`, the
+  back-fill notice takes `caution`, and the two notes that are page chrome — "Cómo leer
+  estas cifras" and the scope notice — stay on the neutral `bg-card`, which is also what
+  keeps the notice looking like the fixed scope bar it hands over to. Each state is three
+  tokens in `index.css` and no more (`-surface` the fill, `-edge` the border, `-strong`
+  the title and its icon), one constant hue per ramp.
+  - **What bounds the light fills is the description.** It stays on `--muted-foreground`
+    in every variant, so only the line that names the state is coloured — and that grey
+    clears 4.5:1 on white by just 4.73:1, so a fill any deeper takes it under AA. Hence
+    fills at `oklch(0.988 …)`, about Tailwind's `*-50`, with the **border** carrying the
+    colour at this size, as it does in the shadcn "custom colors" alert these follow.
+    Dark mode has the headroom (the grey sits at 6:1) for a real step off `--card`.
+    Measured in the browser, light then dark: caution title 4.77 and 10.40, failure title
+    8.24 and 6.89, both descriptions 4.56–6.07, borders 1.36 and 2.12 against the page.
+  - **The two `-strong` values are a fixed 0.11 apart in lightness**, red the darker in
+    light mode and amber the lighter in dark. Both alerts can stand in the status bar at
+    once, and their hues alone are 0.048 apart in OKLab for a tritanope — under the 0.10
+    that reads as one colour. Lightness is what survives, as it does for the clusters.
+    Colour is not the only channel here (the words and the icon differ), which is why the
+    hue pair is allowed to be close where a chart's would not be.
+  - Caution is **hue 80**: 52.7° from `--destructive` and 30.3° from the mainshock orange
+    `--chart-2`, so it reads neither as a failure nor as the mainshock. Do not move it
+    nearer either without redoing the measurements — `agent-browser` plus the canvas trick
+    in [Tooling gotchas](development.md#tooling-gotchas) reads the rendered pair straight off the page.
+- De-emphasise with the secondary text colour, never with opacity: the b-value must
+  stay readable exactly when it is least reliable. The destructive alert's description
+  used to be `text-destructive/90`, which is the same mistake and is now the plain
+  secondary colour.
+- Order by importance: the b-value leads the page, above the filters. On a phone it
+  must be within the first screen.
+- **The status bar's stats are one wrapping row at every width**, never a two-column grid
+  on a phone. The stats are not the same size — "Eventos" is three digits, "Evento más
+  reciente" is "18 sept 2026, 17:08" — so equal halves broke the date across two lines
+  below 480 px, which is every phone, leaving it two lines tall beside a number one line
+  tall. Each stat is now as wide as its own longest line, and one that no longer fits
+  beside its neighbour takes the next line whole: the date stays on one line down to
+  320 px, and which stats share a line follows from the text rather than from a
+  breakpoint. Nothing here needs revisiting when a stat is added, a figure grows a digit
+  or a translation gets longer.
+- **"Magnitud en el tiempo" scrolls sideways when it is too narrow to read.** Below
+  768 px of plot width every Colombian day gets `PX_PER_DAY` (28 px) instead of the
+  whole range being squeezed in, which on a phone drew one solid band. The bars themselves
+  come from `dailyCounts` (see [Events per day](#events-per-day)). The scatter and
+  the "eventos por día" bars sit in **one** scroll container so a single gesture moves
+  both, and both y axes are pinned: each is a second, data-less chart in a `sticky`
+  column, which only lines up because the pinned and scrolling charts are given the
+  same margins, the same `X_AXIS_H` and — for the counts — the same explicit domain and
+  `ticks` (`countAxis`). `interval={0}`, or Recharts quietly drops one of them.
+  The view starts at the newest events and stays there through a refresh unless the
+  reader has scrolled away from the right edge. Date ticks go from weekly to whatever
+  fits in `TICK_GAP` while it scrolls. Above 768 px nothing changes.
+- **Choosing a cluster narrows the whole page**, like a filter: "Ver solo este grupo" in the
+  "Dos grupos de eventos" card. It is one of the settings the scope notice below names, and it sits
+  outside the cards because a cluster can be emptied by the other filters, and the control must not
+  vanish with it. The comparison was tried inside the b card
+  first (as rows on its b scale): the card grew to ~1,400 px, the groups landed far below the
+  fold and the chart beside it was left mostly empty, so it has its own card. Shallow is the
+  page's blue and deep the teal (`--chart-1`, `--chart-4`) everywhere; orange stays the
+  mainshock's. "Grupo", never "cúmulo" or "enjambre". The 7-day counts are counts: nothing in
+  that card may read as a forecast.
+- **What the page is narrowed by is said once, in two places** (`src/components/filter-scope.tsx`).
+  `activeFilterChips` in `src/lib/filters.ts` is the single list: a setting earns a chip only where
+  it differs from `DEFAULT_FILTERS`, so an untouched page produces none and neither presentation
+  appears. Mc is in the list although it selects no events — it moves the b-value, and a Mc left on
+  by hand is what a reader forgets. "Quitar filtros" clears the cluster *and* the filters form,
+  which both go through `useScope`'s `clear`: `FiltersCard` is controlled, so the page owns the
+  values and the form renders them. It used to be given a `resetSignal` to bump instead, and the
+  reason that protocol existed is still a rule — **a reader's half-typed `from > to` must survive**.
+  The form remembers the last object it handed up and compares by identity, so while it is invalid
+  it emits nothing, `value` stays the last good object, and nothing resets underneath them.
+  - The **notice** sits in the flow under the status bar. It is the accessible one and the only one
+    in the tab order, laid out as one row wherever there is room, so the bar reads as the same
+    object come back rather than a second thing.
+  - The **bar** is fixed to the top of the window and **hands over from the notice**: it slides in
+    once the notice has left the top of the window, and slides away when the reader comes back up
+    to it. So exactly one of the two states the scope at any time, and the reader is never without
+    it — which is the whole reason the bar exists, since everything below the fold is a chart drawn
+    from a filtered catalogue. One `IntersectionObserver` on the notice decides it: no scroll
+    handler, no pixel threshold, nothing running on a scroll frame. It watches `entry`, not
+    `isIntersecting` alone, and requires `boundingClientRect.bottom <= 0` — a notice out of view
+    *below* the fold, which is where a short screen starts, is not one the bar may stand in for.
+    It is `aria-hidden` with its button out of the tab order, because it is a second view of a
+    notice a screen reader has already read out and can still reach. The hand-over is the same
+    pixel in both directions (checked in the browser, 2 px either side of it), so a reader parked
+    exactly on that edge can wobble the bar in and out; a CSS transition retargets from wherever it
+    is, so that reads as wavering rather than flashing, and it is not worth a scroll listener.
+    - It was **shy** first — away on the way down, back on the way up, on a scroll-direction
+      listener with 8 px of hysteresis. Two things were wrong with it: the reader lost the scope
+      exactly while moving through the charts it applies to, and a 45 px move under a fade reads
+      as the bar blinking rather than arriving. Do not reinstate the direction rule without the
+      first problem's answer.
+  - Its background is **opaque**, not a frosted pane: dense text and charts scroll under it, and a
+    sentence ghosting through the line that states the scope defeats the point. The shadow is what
+    separates it from the page and needs a solid surface; in dark mode the shadow does nothing and
+    `border-b` carries it. Enter is 260 ms and leave 180 ms, **transform only** — a fade over the
+    same time reads as an appearance, and it is the edge travelling that says the bar came from the
+    top of the window. The hidden position is `calc(-100% - 1.5rem)`: `-100%` alone parks the bar
+    off-screen but leaves `shadow-lg` hanging into the page as a grey band, and the 1.5rem clears
+    it. Write the `calc` as `calc(-100%_-_1.5rem)` — CSS needs the spaces around the minus, and
+    without them the utility is silently dropped and the bar never hides at all.
+    `prefers-reduced-motion` drops the movement and fades instead. The curve is `--ease-slide`
+    (`cubic-bezier(0.32, 0.72, 0, 1)`), not the page's `--ease-out`: `--ease-out` is tuned for a
+    control answering a click and puts 90% of the travel in its first 95 ms, which over this
+    distance is a pop. Measured in the browser, the bar now leaves the top edge at ~60 ms and
+    lands at ~230 ms.
+  - On a phone the bar shows the first chip and counts the rest (`+3`), and shortens the count to
+    "639 de 786". Both are pure CSS at the `sm` breakpoint, so its height never changes as it slides.
+- **The per-group daily strips in that card scroll sideways when narrow**, on the same idea as
+  "Magnitud en el tiempo", and off the same `dailyCounts` (see [Events per day](#events-per-day)):
+  below `MIN_BAR` (10 px) per day each day gets `PX_PER_DAY` (28 px), the
+  strip starts at the newest day, each bar carries its count and every third day its date, and
+  one gesture moves both strips. Every ancestor up to the tile needs `min-w-0`; without it the
+  strip widens its tile instead of scrolling, the width it measures grows, and it flips back out
+  of scrolling mode.
+- "Detalle técnico" is one component (`technical-detail.tsx`, on shadcn `Collapsible`), used by
+  the load error, the failed-ingest alert, the groups card and the b card. It takes a `className`
+  for the body's type size: `text-sm` for prose meant to be read, the default `text-xs` for a raw
+  error string. `CardDescription` caps itself at 75ch; a card that wants a full-width subtitle
+  passes `max-w-none`.
+- **The b card's fine print is collapsed** — the magnitude-scale caveat and the goodness-of-fit
+  Mc. Open, it made the card half again as tall as "Valor b en el tiempo" beside it, and because
+  the two share a grid row the chart was stretched to match: 189 px of its card was empty. Folded,
+  the row is 569 px instead of 779 px. Fold nothing whose only other home is that card: the
+  mixed magnitude types and "no es un pronóstico" stay in the open under "Cómo leer estas cifras",
+  which is what makes hiding them here safe. The chart itself keeps its fixed `h-80` and stays
+  centred in whatever height the row has; letting it grow to fill would steepen the slope of a
+  b-value decline the page is careful not to oversell.
+- **A chart grows into the space beside it only where the extra height cannot mislead.**
+  Cards in a two-column row are stretched to the taller one, so a fixed-height chart leaves a
+  void under its legend. "Distribución frecuencia–magnitud" therefore fills its card (`flex-1`
+  with `min-h-80`) instead of sitting at `h-80` with ~90 px blank beneath it: both of its axes
+  are read off the data, so the room only spreads its points out. "Valor b en el tiempo" is the
+  counter-example directly above — with a pinned y axis, height is a claim about the slope.
+- A failed load shows the error only. It must never draw an empty dashboard that
+  tells the reader to change their filters.
+- **A chart or the map arrives in its own card, already titled.** They are loaded on approach
+  (`Deferred`, see [Performance](performance.md)), so on a slow connection the reader first sees
+  the card with its heading and a skeleton the size of the drawing. Never a bare grey box, and
+  never a card that changes height when the drawing lands.
+- Charts and the map redraw on every filter change, so they do not animate. The
+  headline numbers do (`FlowNumber`, wrapping `@number-flow/react`): digits roll to
+  the new value in 550 ms with `cubic-bezier(0.2, 0, 0, 1)` so the reader sees which
+  figures a filter moved. 300 ms with the page's front-loaded `--ease-out` read as a
+  jump; the library's 900 ms default lags behind a dragged slider. The roll
+  runs on the main thread, so the charts, map and table take `useDeferredValue`
+  copies of the data and are wrapped in `memo`: rendered in the same pass they
+  blocked for 300–400 ms per slider step and the digits simply jumped. Entry
+  animation is limited to the once-per-load `.enter` rows and respects
+  `prefers-reduced-motion`.
+- **A `FlowNumber` has to measure like the text it replaces.** The library pads its box above and
+  below by `round(nearest, var(--number-flow-mask-height, 0.25em) / 2, 1px) * 2` — room for the
+  mask that fades a rolling digit out as it leaves the top or the bottom — and that padding is in
+  the box, so the element stood taller than the plain text beside it: 32 px against 28 px at
+  `text-xl`, 72 px against 48 px at `text-5xl`. In the status bar that dropped the "Eventos" hint
+  4 px below the two hints next to it and put the count 2 px off their baseline, and it is where
+  the b card's extra 24 px came from. `flow-number.tsx` takes the same amount back as a negative
+  `margin-block`. The mask is drawn, not typeset, and nothing clips it, so it stays exactly where
+  it was and only the measurement changes. Keep the expression in step with the library's, and
+  do not reach for `--number-flow-mask-height: 0` instead: that deletes the fade.
+- **The b card's marks travel on that same roll**, because a mark and the figure
+  written beside it are one fact and a mark that jumped while the digits were still
+  turning read as two events. `--ease-move` and `--duration-move` in `index.css` are
+  `FlowNumber`'s `MOVE` written in CSS; change one and change the other. Every row
+  figure on the scale is a `FlowNumber` too — the scale's end labels are not, since
+  they are the ruler rather than a reading off it. Each mark rides a full-width layer
+  moved by a percentage of its own width, so its position is a `transform`, and the
+  error band is a full-width capsule cut by `clip-path: inset(… round 9999px)` —
+  which keeps both ends a true half-circle at any width, where scaling one capsule
+  flattens them into ellipses. Nothing there touches layout, so the marks keep
+  gliding on the compositor through the render pass a filter change spends on the
+  main thread, the same pass the digits already glide through; on `left`/`right`
+  they froze in it while the digits rolled on.
+- The theme follows the operating system unless overridden; choosing the theme the
+  system already uses clears the override (`src/lib/theme.ts`). The map rebuilds on
+  theme and language change.
+- Map colours stay as hex constants because MapLibre cannot parse the `oklch`
+  tokens. Dots carry an outline that contrasts with the basemap, so neither end of
+  the depth ramp disappears. `--chart-2` is the one token in `index.css` written as hex
+  for the same reason — `event-map.tsx` reads it through `getComputedStyle` for the
+  mainshock ring. Everything else in that file is `oklch`; keep it that way.
+- **The two clusters must differ in lightness, not only in hue** (colour review,
+  2026-09-19). Shallow blue and deep grey were both mid-lightness — `oklch(0.575)`
+  against `oklch(0.556)`, a measured 1.07:1 — and the one place they touch is the
+  stacked "eventos por día" bars, where the boundary was invisible in light mode.
+  The deep cluster moved off the recessive grey onto its own `--chart-4`, a teal
+  (`oklch(0.4 0.068 195)` light, `oklch(0.85 0.085 195)` dark) set **60° from the
+  blue in hue and 0.175 / 0.228 away in lightness**. Both halves are load-bearing:
+  a teal at the blue's own lightness is a different colour to most readers and the
+  *same* colour to a tritanope, because tritanopia takes the blue–teal difference
+  away and leaves nothing behind. Lightness is what survives every kind of colour
+  blindness, so any hue chosen here needs a lightness gap as well.
+  `--chart-3` stays the recessive neutral and is now used by one thing only: the
+  frequency–magnitude chart's per-bin squares, which must sit *below* the blue
+  cumulative curve in emphasis. Do not merge the two back together.
+- **Check a new chart colour against three pairs, under simulated colour blindness**,
+  not just against the card. The deep cluster meets the shallow blue (they touch in
+  the stacked bars), the mainshock orange (same scatter chart) and `--chart-3`. Measured
+  as OKLab ΔE after a Viénot simulation, a pair below **0.10** reads as one colour, and
+  the WCAG ratio will not tell you — it only sees lightness, so two hues at equal
+  lightness score 1.0 whatever they look like. Today's worst case is 0.130 (light) and
+  0.144 (dark). Candidates that failed, and are not worth retrying as they stand:
+  teal, green and purple *at the blue's lightness* (0.02–0.08 against the blue), and
+  plum, which is fine against the blue but lands on **0.006 against the mainshock star
+  in dark mode for a tritanope** — the pair that is easiest to forget, since the two
+  share the scatter chart. A throwaway prototype that shows all of this live is on the
+  `prototype/cluster-colour` branch.
+- `--chart-2` is `oklch(0.62 … 49.7)` in light and `oklch(0.719 … 49.9)` in dark —
+  lighter in dark mode, as an accent on a dark ground should be. It was the other way
+  round, and in dark mode it had exactly the blue's lightness. Its hue also sits 21°
+  (light) and 28° (dark) from `--destructive`; it was 12° in light, close enough to
+  read as red on a page whose rule is "red means something failed".
+- `--chart-5` and the eight `--sidebar-*` tokens were deleted: nothing imported them,
+  `--chart-4`/`--chart-5` had identical light and dark values, and `--sidebar-primary`
+  was a vivid blue in dark against a neutral in light — a stock shadcn default that
+  would have rendered wrong the day a sidebar was added.
+- Numeric table columns align to the trailing edge, use `tabular-nums` (set once on
+  the page root) and a true minus sign (`fmtNum`).
+- Every control has an accessible name; sliders get theirs through
+  `aria-labelledby` on the thumb, which is the element with `role="slider"`.
+
+Not yet verified by anyone: real screen-reader output, a physical touch device, and
+Safari. The back-fill and ingest-failure alerts have now been seen rendered, in both
+themes, but against a **stubbed** `/api/status` (see [Tooling gotchas](development.md#tooling-gotchas))
+— not yet in a live state driven by SGC itself.

@@ -133,16 +133,16 @@ describe("cron lanes", () => {
     });
 
     /**
-     * The budget, as a number rather than a paragraph in the README. Three constants decide
+     * The budget, as a number rather than a paragraph in docs/sgc-data-source.md. Three constants decide
      * it — the cron in wrangler.jsonc, TICK_MS, and WIDE_TICK_EVERY_MIN — and when they
      * disagreed the hour quietly became twelve requests with no removals and no sweep for a
      * day. This counts what an hour of ticks actually sends: 4 trailing + 1 sweep = 120/day,
-     * which is the figure the README's budget is derived from.
+     * which is the figure the documented budget is derived from.
      *
      * Split by lane rather than counting "not the sweep": the day that went wrong had the
      * right *number* of requests and the wrong lanes, so a total alone would have passed.
      */
-    it("sends five requests an hour, which is the budget the README quotes", () => {
+    it("sends five requests an hour, which is the budget the docs quote", () => {
       const sent = plansFor(history()).flatMap((p) => p.steps);
       expect(sent).toHaveLength(5);
       expect(sent.filter((s) => s.lane === "sweep")).toHaveLength(1);

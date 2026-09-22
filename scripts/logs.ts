@@ -211,7 +211,7 @@ async function main(argv: string[]): Promise<void> {
       ? {
           queryId: "sgc-cpu",
           timeframe: { from, to },
-          // The README's standing open item: the free plan allows 10 ms of CPU per
+          // The standing open item in docs/ingest.md, "The CPU budget": the free plan allows 10 ms of CPU per
           // invocation and this has never been measured. The runtime is the only thing
           // that can see it, and it publishes it on the invocation log.
           //
