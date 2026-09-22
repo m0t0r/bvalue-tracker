@@ -3,7 +3,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 const es = {
   docTitle: "Secuencia sísmica del Chocó · valor b",
   title: "Secuencia sísmica del Chocó",
-  subtitle: "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del Servicio Geológico Colombiano.",
+  subtitle:
+    "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del Servicio Geológico Colombiano.",
   events: "Eventos",
   newestEvent: "Evento más reciente",
   lastUpdate: "Última consulta al SGC",
@@ -15,12 +16,14 @@ const es = {
   refreshFailed: "No se pudo consultar al SGC. Inténtalo de nuevo en unos minutos.",
   refreshStillFailing: "No se envió: ya hay un reintento en camino.",
   ingestFailed: "La última consulta al SGC falló",
-  ingestFailedBody: "Se muestran los últimos datos guardados. Se reintenta solo hasta que el SGC vuelva a responder; no hace falta recargar.",
+  ingestFailedBody:
+    "Se muestran los últimos datos guardados. Se reintenta solo hasta que el SGC vuelva a responder; no hace falta recargar.",
   technicalDetail: "Detalle técnico",
   loadFailed: "No se pudieron cargar los datos",
   loadFailedBody: "Revisa tu conexión y recarga la página.",
   backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} semanas`,
-  backfillBody: "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
+  backfillBody:
+    "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
   backfillAction: "Cargar ahora",
   backfillShort: "Historial incompleto",
   scopeTitle: (shown: string, total: string) => `Mostrando ${shown} de ${total} eventos`,
@@ -45,7 +48,8 @@ const es = {
   mcLabel: "Magnitud de completitud (Mc)",
   mcAuto: "Automática (curvatura máxima)",
   mcManual: "Manual",
-  mcHelp: "Se usa la curvatura máxima porque el SGC no publica eventos por debajo de M2.0: ese corte engaña al método de bondad de ajuste, que elige Mc = 2.0 y subestima b.",
+  mcHelp:
+    "Se usa la curvatura máxima porque el SGC no publica eventos por debajo de M2.0: ese corte engaña al método de bondad de ajuste, que elige Mc = 2.0 y subestima b.",
   mcBackToAuto: "Volver a Mc automática (curvatura máxima)",
   reset: "Restablecer",
   bTitle: "Valor b",
@@ -65,12 +69,16 @@ const es = {
   bScopeLabel: "Magnitudes usadas para calcular b",
   bScopeAll: "Todos los tipos",
   bScopeOne: (type: string) => `Solo ${type}`,
-  bScopeAllHelp: (type: string) => `Usa todos los eventos ≥ Mc. El SGC mide casi todos los eventos pequeños con ${type} y la mayoría de los grandes con otra escala (MLv, Mw). Si las escalas no coinciden del todo, este valor sale más bajo que el real.`,
-  bScopeOneHelp: (type: string, n: string, total: string) => `Usa solo los eventos medidos con ${type}, el tipo más común (${n} de ${total}). Es una sola escala, pero deja fuera la mayoría de los eventos grandes, y eso empuja el valor hacia arriba.`,
-  bScopeBoth: "El valor real probablemente está entre los dos. Ninguno es un pronóstico: b describe lo que ya ocurrió, no anuncia el próximo evento grande.",
+  bScopeAllHelp: (type: string) =>
+    `Usa todos los eventos ≥ Mc. El SGC mide casi todos los eventos pequeños con ${type} y la mayoría de los grandes con otra escala (MLv, Mw). Si las escalas no coinciden del todo, este valor sale más bajo que el real.`,
+  bScopeOneHelp: (type: string, n: string, total: string) =>
+    `Usa solo los eventos medidos con ${type}, el tipo más común (${n} de ${total}). Es una sola escala, pero deja fuera la mayoría de los eventos grandes, y eso empuja el valor hacia arriba.`,
+  bScopeBoth:
+    "El valor real probablemente está entre los dos. Ninguno es un pronóstico: b describe lo que ya ocurrió, no anuncia el próximo evento grande.",
   bScopeNote: (type: string) => `Solo eventos con magnitud ${type}.`,
   clustersTitle: "Dos grupos de eventos",
-  clustersDesc: (km: number) => `La secuencia son dos grupos separados por su profundidad: entre 55 y 75 km casi no hay eventos. El corte está en ${km} km.`,
+  clustersDesc: (km: number) =>
+    `La secuencia son dos grupos separados por su profundidad: entre 55 y 75 km casi no hay eventos. El corte está en ${km} km.`,
   clusterShort: { shallow: "Superficial", deep: "Profundo" },
   clusterName: { shallow: "Grupo superficial", deep: "Grupo profundo" },
   clusterWhere: {
@@ -87,10 +95,12 @@ const es = {
   clusterOwnMc: (mc: string) => `Puede estar incompleto por debajo de M${mc}`,
   clusterSame: "Los valores b de los dos grupos no se distinguen: su diferencia es menor que su incertidumbre.",
   clusterDiffer: "La diferencia entre los valores b de los dos grupos es mayor que lo esperable por azar.",
-  clusterTest: (p: string) => `Prueba de Utsu (1992): p = ${p}. Los dos grupos usan la misma Mc, la de todo el catálogo.`,
+  clusterTest: (p: string) =>
+    `Prueba de Utsu (1992): p = ${p}. Los dos grupos usan la misma Mc, la de todo el catálogo.`,
   clusterClear: "Ver todos",
   clusterNote: (name: string) => `${name}.`,
-  bTimeEmptyCluster: (have: string, need: number) => `Este grupo tiene ${have} eventos ≥ Mc y cada ventana necesita ${need}, así que su valor b es una sola cifra, sin evolución en el tiempo.`,
+  bTimeEmptyCluster: (have: string, need: number) =>
+    `Este grupo tiene ${have} eventos ≥ Mc y cada ventana necesita ${need}, así que su valor b es una sola cifra, sin evolución en el tiempo.`,
   mapTitle: "Mapa",
   mapDesc: "Tamaño por magnitud, color por profundidad. El sismo principal va con anillo naranja.",
   depth: "Profundidad (km)",
@@ -105,8 +115,10 @@ const es = {
   perBin: "Por intervalo de 0.1",
   grFit: "Ajuste G–R",
   bTimeTitle: "Valor b en el tiempo",
-  bTimeDesc: (n: number, mc: string) => `Ventanas móviles de ${n} eventos con Mc fija = ${mc}. Banda: ±1σ. Cada punto se ubica en el último evento de su ventana.`,
-  bTimeEmpty: (n: number) => `Cada ventana necesita ${n} eventos ≥ Mc y aún no hay suficientes. Amplía el rango de fechas o baja Mc.`,
+  bTimeDesc: (n: number, mc: string) =>
+    `Ventanas móviles de ${n} eventos con Mc fija = ${mc}. Banda: ±1σ. Cada punto se ubica en el último evento de su ventana.`,
+  bTimeEmpty: (n: number) =>
+    `Cada ventana necesita ${n} eventos ≥ Mc y aún no hay suficientes. Amplía el rango de fechas o baja Mc.`,
   bTimeAlt: (a: string, b: string) => `El valor b pasa de ${a} en la primera ventana a ${b} en la más reciente.`,
   band: "±1σ",
   tableTitle: "Catálogo",
@@ -151,7 +163,8 @@ const es = {
     "La secuencia son dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
   ],
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: "El catálogo se consulta al SGC cada 15 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
+  autoUpdateLong:
+    "El catálogo se consulta al SGC cada 15 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
   timeNote: "Las fechas y horas son de Colombia (UTC−5). Los CSV descargados usan UTC.",
 };
 
@@ -160,7 +173,8 @@ export type Dict = typeof es;
 const en: Dict = {
   docTitle: "Chocó earthquake sequence · b-value",
   title: "Chocó earthquake sequence",
-  subtitle: "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the Colombian Geological Survey (SGC).",
+  subtitle:
+    "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the Colombian Geological Survey (SGC).",
   events: "Events",
   newestEvent: "Newest event",
   lastUpdate: "Last SGC query",
@@ -172,12 +186,14 @@ const en: Dict = {
   refreshFailed: "Unable to query SGC. Try again in a few minutes.",
   refreshStillFailing: "Not sent: a retry is already on the way.",
   ingestFailed: "The last SGC query failed",
-  ingestFailedBody: "Showing the most recent stored data. It retries by itself until SGC answers again; there is no need to reload.",
+  ingestFailedBody:
+    "Showing the most recent stored data. It retries by itself until SGC answers again; there is no need to reload.",
   technicalDetail: "Technical detail",
   loadFailed: "Could not load data",
   loadFailedBody: "Check your connection and reload the page.",
   backfillTitle: (a, b) => `Loading history: ${a} of ${b} weeks`,
-  backfillBody: "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
+  backfillBody:
+    "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
   backfillAction: "Load now",
   backfillShort: "History incomplete",
   scopeTitle: (shown, total) => `Showing ${shown} of ${total} events`,
@@ -202,7 +218,8 @@ const en: Dict = {
   mcLabel: "Magnitude of completeness (Mc)",
   mcAuto: "Automatic (maximum curvature)",
   mcManual: "Manual",
-  mcHelp: "Maximum curvature is used because SGC publishes nothing below M2.0: that cut-off fools the goodness-of-fit method, which picks Mc = 2.0 and underestimates b.",
+  mcHelp:
+    "Maximum curvature is used because SGC publishes nothing below M2.0: that cut-off fools the goodness-of-fit method, which picks Mc = 2.0 and underestimates b.",
   mcBackToAuto: "Switch back to automatic Mc (maximum curvature)",
   reset: "Reset",
   bTitle: "b-value",
@@ -222,12 +239,16 @@ const en: Dict = {
   bScopeLabel: "Magnitudes used to calculate b",
   bScopeAll: "All types",
   bScopeOne: (type) => `${type} only`,
-  bScopeAllHelp: (type) => `Uses every event ≥ Mc. SGC measures nearly all small events with ${type} and most large ones on another scale (MLv, Mw). If the scales do not line up exactly, this value comes out lower than the true one.`,
-  bScopeOneHelp: (type, n, total) => `Uses only events measured with ${type}, the most common type (${n} of ${total}). It is a single scale, but it leaves out most of the large events, which pushes the value up.`,
-  bScopeBoth: "The true value is probably between the two. Neither is a forecast: b describes what has already happened, it does not announce the next large event.",
+  bScopeAllHelp: (type) =>
+    `Uses every event ≥ Mc. SGC measures nearly all small events with ${type} and most large ones on another scale (MLv, Mw). If the scales do not line up exactly, this value comes out lower than the true one.`,
+  bScopeOneHelp: (type, n, total) =>
+    `Uses only events measured with ${type}, the most common type (${n} of ${total}). It is a single scale, but it leaves out most of the large events, which pushes the value up.`,
+  bScopeBoth:
+    "The true value is probably between the two. Neither is a forecast: b describes what has already happened, it does not announce the next large event.",
   bScopeNote: (type) => `Only events with ${type} magnitude.`,
   clustersTitle: "Two groups of events",
-  clustersDesc: (km) => `The sequence is two groups separated by depth: there are almost no events between 55 and 75 km. The cut is at ${km} km.`,
+  clustersDesc: (km) =>
+    `The sequence is two groups separated by depth: there are almost no events between 55 and 75 km. The cut is at ${km} km.`,
   clusterShort: { shallow: "Shallow", deep: "Deep" },
   clusterName: { shallow: "Shallow group", deep: "Deep group" },
   clusterWhere: {
@@ -247,7 +268,8 @@ const en: Dict = {
   clusterTest: (p) => `Utsu's test (1992): p = ${p}. Both groups use the same Mc, that of the whole catalogue.`,
   clusterClear: "Show all",
   clusterNote: (name) => `${name}.`,
-  bTimeEmptyCluster: (have, need) => `This group has ${have} events ≥ Mc and each window needs ${need}, so its b-value is a single figure with no change over time.`,
+  bTimeEmptyCluster: (have, need) =>
+    `This group has ${have} events ≥ Mc and each window needs ${need}, so its b-value is a single figure with no change over time.`,
   mapTitle: "Map",
   mapDesc: "Size by magnitude, colour by depth. The mainshock has an orange ring.",
   depth: "Depth (km)",
@@ -262,8 +284,10 @@ const en: Dict = {
   perBin: "Per 0.1 bin",
   grFit: "G–R fit",
   bTimeTitle: "b-value over time",
-  bTimeDesc: (n, mc) => `Sliding windows of ${n} events at a fixed Mc = ${mc}. Band: ±1σ. Each point sits at the last event of its window.`,
-  bTimeEmpty: (n) => `Each window needs ${n} events ≥ Mc and there are not enough yet. Widen the date range or lower Mc.`,
+  bTimeDesc: (n, mc) =>
+    `Sliding windows of ${n} events at a fixed Mc = ${mc}. Band: ±1σ. Each point sits at the last event of its window.`,
+  bTimeEmpty: (n) =>
+    `Each window needs ${n} events ≥ Mc and there are not enough yet. Widen the date range or lower Mc.`,
   bTimeAlt: (a, b) => `b goes from ${a} in the first window to ${b} in the latest.`,
   band: "±1σ",
   tableTitle: "Catalogue",
@@ -308,7 +332,8 @@ const en: Dict = {
     "The sequence is two groups of events at different depths. As of 19 September 2026 the deep group, the mainshock's own, had nearly all of its activity in the first week; almost everything since belongs to the shallow group, and that is where the b-value falls. The deep group's b-value comes from few events, so its margin of error is wide.",
   ],
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: "The catalogue is read from SGC every 15 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
+  autoUpdateLong:
+    "The catalogue is read from SGC every 15 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
   timeNote: "Dates and times are Colombia time (UTC−5). Downloaded CSVs use UTC.",
 };
 
@@ -317,12 +342,20 @@ export type Lang = "es" | "en";
 export const dicts: Record<Lang, Dict> = { es, en };
 const STORAGE_KEY = "sgc-swarm:lang";
 
-const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({ lang: "es", t: es, setLang: () => {} });
+const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({
+  lang: "es",
+  t: es,
+  setLang: () => {},
+});
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   // Spanish unless the visitor has explicitly chosen English before.
   const [lang, setLangState] = useState<Lang>(() => {
-    try { return localStorage.getItem(STORAGE_KEY) === "en" ? "en" : "es"; } catch { return "es"; }
+    try {
+      return localStorage.getItem(STORAGE_KEY) === "en" ? "en" : "es";
+    } catch {
+      return "es";
+    }
   });
   // Also on first load, so a restored English choice is announced as English.
   useEffect(() => {
@@ -332,7 +365,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => {
     const setLang = (l: Lang) => {
       setLangState(l);
-      try { localStorage.setItem(STORAGE_KEY, l); } catch { /* private mode: keep the choice for this visit only */ }
+      try {
+        localStorage.setItem(STORAGE_KEY, l);
+      } catch {
+        /* private mode: keep the choice for this visit only */
+      }
     };
     return { lang, t: dicts[lang], setLang };
   }, [lang]);

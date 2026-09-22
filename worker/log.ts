@@ -87,7 +87,10 @@ function clean(fields: LogFields): LogFields {
 }
 
 const METHOD: Record<LogLevel, "debug" | "info" | "warn" | "error"> = {
-  debug: "debug", info: "info", warn: "warn", error: "error",
+  debug: "debug",
+  info: "info",
+  warn: "warn",
+  error: "error",
 };
 
 /** Anything that is not a level we know is treated as `info`, never as "log nothing". */
@@ -125,6 +128,9 @@ export const logger = (bindings: LogFields = {}, min: LogLevel = "info"): Logger
 
 /** A logger that writes nothing. For callers that have no invocation to hang a log off. */
 export const silentLogger: Logger = {
-  debug: () => {}, info: () => {}, warn: () => {}, error: () => {},
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
   child: () => silentLogger,
 };

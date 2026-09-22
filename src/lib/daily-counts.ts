@@ -22,7 +22,8 @@ export interface DailyCounts {
 
 /** Events per Colombian calendar day, split by depth cluster. Input order does not matter. */
 export function dailyCounts(events: readonly { time: string; depthKm: number }[]): DailyCounts {
-  let lo = Infinity, hi = -Infinity;
+  let lo = Infinity,
+    hi = -Infinity;
   for (const e of events) {
     const d = dayStart(e.time);
     if (d < lo) lo = d;
@@ -42,7 +43,8 @@ export function dailyCounts(events: readonly { time: string; depthKm: number }[]
     day.total++;
   }
 
-  let maxTotal = 0, maxCluster = 0;
+  let maxTotal = 0,
+    maxCluster = 0;
   for (const d of days) {
     if (d.total > maxTotal) maxTotal = d.total;
     if (d.shallow > maxCluster) maxCluster = d.shallow;

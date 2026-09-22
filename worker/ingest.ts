@@ -1,7 +1,28 @@
-import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, fetchCatalog, sgcHttpError, type FetchOptions, type RefusalEvidence } from "../core/seiscomp.ts";
+import {
+  CHOCO_SWARM_BBOX,
+  MAINSHOCK_DATE,
+  fetchCatalog,
+  sgcHttpError,
+  type FetchOptions,
+  type RefusalEvidence,
+} from "../core/seiscomp.ts";
 import { recordRun } from "./analytics.ts";
 import type { IngestRun } from "./api-types.ts";
-import { claimIngestRun, eventsBetween, existingIds, insertStmt, lastRun, reapAbandonedRuns, runBatched, runInFlight, sameData, sgcHealth, toRun, updateStmt, type RunRow } from "./db.ts";
+import {
+  claimIngestRun,
+  eventsBetween,
+  existingIds,
+  insertStmt,
+  lastRun,
+  reapAbandonedRuns,
+  runBatched,
+  runInFlight,
+  sameData,
+  sgcHealth,
+  toRun,
+  updateStmt,
+  type RunRow,
+} from "./db.ts";
 import { silentLogger, type Logger } from "./log.ts";
 import { IN_FLIGHT_MS, TRAILING_DAYS, type IngestHistory, type IngestLane, type IngestPlan } from "./plan.ts";
 
@@ -53,7 +74,11 @@ const WORKER_FETCH: FetchOptions = { timeoutMs: 45_000, retries: 1 };
  * Returns null when another run already holds the claim, so nothing was attempted.
  */
 export async function ingest(
-  deps: IngestDeps, windowStart: Date, windowEnd: Date, trigger: IngestRun["trigger"], opts: IngestOptions = {},
+  deps: IngestDeps,
+  windowStart: Date,
+  windowEnd: Date,
+  trigger: IngestRun["trigger"],
+  opts: IngestOptions = {},
 ): Promise<IngestRun | null> {
   const { db, fetchOptions } = deps;
   const nowIso = (deps.now ?? new Date()).toISOString();
@@ -135,7 +160,11 @@ export async function ingest(
   try {
     // The form filters by date only and its timezone is unverified, so ask for a day more on each side.
     const page = await fetchCatalog(
-      { start: new Date(windowStart.getTime() - DAY_MS), end: new Date(windowEnd.getTime() + DAY_MS), bbox: CHOCO_SWARM_BBOX },
+      {
+        start: new Date(windowStart.getTime() - DAY_MS),
+        end: new Date(windowEnd.getTime() + DAY_MS),
+        bbox: CHOCO_SWARM_BBOX,
+      },
       { ...WORKER_FETCH, ...fetchOptions },
     );
 
@@ -144,21 +173,31 @@ export async function ingest(
     const known = new Map((await eventsBetween(db, widenedFrom, widenedTo)).map((e) => [e.id, e]));
 
     // Origin time can move on revision, so an id may already exist outside the window we loaded.
-    const elsewhere = await existingIds(db, page.events.filter((e) => !known.has(e.id)).map((e) => e.id));
+    const elsewhere = await existingIds(
+      db,
+      page.events.filter((e) => !known.has(e.id)).map((e) => e.id),
+    );
 
     const stmts: D1PreparedStatement[] = [];
-    let inserted = 0, updated = 0;
+    let inserted = 0,
+      updated = 0;
     const seen = new Set<string>();
     for (const e of page.events) {
       seen.add(e.id);
       const prev = known.get(e.id);
-      if (!prev && !elsewhere.has(e.id)) { stmts.push(insertStmt(db, e, nowIso)); inserted++; }
-      else if (!prev || prev.removedAt !== null || !sameData(prev, e)) { stmts.push(updateStmt(db, e, nowIso)); updated++; }
+      if (!prev && !elsewhere.has(e.id)) {
+        stmts.push(insertStmt(db, e, nowIso));
+        inserted++;
+      } else if (!prev || prev.removedAt !== null || !sameData(prev, e)) {
+        stmts.push(updateStmt(db, e, nowIso));
+        updated++;
+      }
     }
 
-    const inWindow = opts.allowRemovals === false
-      ? []
-      : [...known.values()].filter((e) => e.time >= from && e.time < to && e.removedAt === null);
+    const inWindow =
+      opts.allowRemovals === false
+        ? []
+        : [...known.values()].filter((e) => e.time >= from && e.time < to && e.removedAt === null);
     const gone = inWindow.filter((e) => !seen.has(e.id));
     let removed = 0;
     let note: string | null = null;
@@ -187,12 +226,15 @@ export async function ingest(
     // by the page, and a visitor is never shown a stack (docs/ingest.md, "Concurrency and failure
     // lessons"). The two are deliberately different widths of the same fact.
     log.debug({ err: e, attempt: "ingest" }, "ingest threw");
-    return await finish({
-      ok: 0,
-      error: `${e.message}${cause}`.slice(0, 500),
-      http_status: http?.status ?? null,
-      retry_after_s: http?.retryAfterS ?? null,
-    }, { ms: null, chars: null, refusal: http?.evidence ?? null });
+    return await finish(
+      {
+        ok: 0,
+        error: `${e.message}${cause}`.slice(0, 500),
+        http_status: http?.status ?? null,
+        retry_after_s: http?.retryAfterS ?? null,
+      },
+      { ms: null, chars: null, refusal: http?.evidence ?? null },
+    );
   }
 }
 
@@ -202,11 +244,19 @@ export interface TrailingOptions extends IngestOptions {
 }
 
 export function ingestTrailing(
-  deps: IngestDeps, trigger: IngestRun["trigger"], opts: TrailingOptions = {},
+  deps: IngestDeps,
+  trigger: IngestRun["trigger"],
+  opts: TrailingOptions = {},
 ): Promise<IngestRun | null> {
   const now = deps.now ?? new Date();
   const days = opts.days ?? TRAILING_DAYS;
-  return ingest(deps, new Date(startOfUtcDay(now).getTime() - days * DAY_MS), new Date(now.getTime() + DAY_MS), trigger, opts);
+  return ingest(
+    deps,
+    new Date(startOfUtcDay(now).getTime() - days * DAY_MS),
+    new Date(now.getTime() + DAY_MS),
+    trigger,
+    opts,
+  );
 }
 
 /** 7-day windows covering mainshock day → now. */
@@ -227,7 +277,9 @@ export async function ingestSweep(deps: IngestDeps): Promise<IngestRun | null> {
   const { results } = await deps.db
     // Ordered by last ATTEMPT, not last success: a chunk that keeps failing goes to the back
     // of the queue instead of being retried forever while every other chunk starves.
-    .prepare("SELECT window_start AS s, MAX(started_at) AS last FROM ingest_runs WHERE trigger = 'sweep' GROUP BY window_start")
+    .prepare(
+      "SELECT window_start AS s, MAX(started_at) AS last FROM ingest_runs WHERE trigger = 'sweep' GROUP BY window_start",
+    )
     .all<{ s: string; last: string }>();
   const last = new Map(results.map((r) => [r.s, r.last]));
   const chunks = sweepChunks(now);
@@ -279,9 +331,14 @@ export async function runPlan(deps: IngestDeps, plan: IngestPlan): Promise<Inges
     // The throttle guards the opening step only: a plan's own first run must not be what
     // refuses its second (the wide tick's sweep).
     const d: IngestDeps = { ...deps, guard: { ...deps.guard, minIntervalS: i === 0 ? plan.minIntervalS : null } };
-    const run = step.lane === "sweep"
-      ? await ingestSweep(d)
-      : await ingestTrailing(d, step.trigger, { days: step.days, allowRemovals: step.allowRemovals, lane: step.lane });
+    const run =
+      step.lane === "sweep"
+        ? await ingestSweep(d)
+        : await ingestTrailing(d, step.trigger, {
+            days: step.days,
+            allowRemovals: step.allowRemovals,
+            lane: step.lane,
+          });
     if (i === 0) first = run;
   }
   return first;

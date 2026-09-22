@@ -22,9 +22,13 @@ import { toggleTheme, useIsDark } from "@/lib/theme";
 // The three Recharts cards and the map are the page's heavy chunks; `Deferred` says why they
 // are only fetched once the reader is near them. Everything above the b-value — the number
 // itself, the status bar, the groups card and the filters — stays in the first chunk.
-const BOverTimeChart = lazy(() => import("@/components/charts/b-over-time").then((m) => ({ default: m.BOverTimeChart })));
+const BOverTimeChart = lazy(() =>
+  import("@/components/charts/b-over-time").then((m) => ({ default: m.BOverTimeChart })),
+);
 const FmdChart = lazy(() => import("@/components/charts/fmd").then((m) => ({ default: m.FmdChart })));
-const MagnitudeTimeChart = lazy(() => import("@/components/charts/magnitude-time").then((m) => ({ default: m.MagnitudeTimeChart })));
+const MagnitudeTimeChart = lazy(() =>
+  import("@/components/charts/magnitude-time").then((m) => ({ default: m.MagnitudeTimeChart })),
+);
 const EventMap = lazy(() => import("@/components/event-map"));
 
 export function App() {
@@ -37,12 +41,18 @@ export function App() {
   // the reader returns after more than the one-minute stale time.
   const qc = useQueryClient();
   const events = useQuery({ queryKey: ["events"], queryFn: getEvents });
-  const status = useQuery({ queryKey: ["status"], queryFn: getStatus, refetchInterval: 60_000, refetchOnWindowFocus: "always" });
+  const status = useQuery({
+    queryKey: ["status"],
+    queryFn: getStatus,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: "always",
+  });
   const lastIngest = status.data?.lastSuccessfulRun?.finishedAt ?? null;
   const seenIngest = useRef<string | null>(null);
   useEffect(() => {
     if (lastIngest === null) return;
-    if (seenIngest.current !== null && seenIngest.current !== lastIngest) void qc.invalidateQueries({ queryKey: ["events"] });
+    if (seenIngest.current !== null && seenIngest.current !== lastIngest)
+      void qc.invalidateQueries({ queryKey: ["events"] });
     seenIngest.current = lastIngest;
   }, [lastIngest, qc]);
 
@@ -65,8 +75,17 @@ export function App() {
             <Button variant="outline" size="sm-touch" lang={other} onClick={() => setLang(other)}>
               {lang === "es" ? "English" : "Español"}
             </Button>
-            <Button variant="outline" size="icon-sm-touch" aria-label={dark ? t.themeToLight : t.themeToDark} onClick={toggleTheme}>
-              {dark ? <SunIcon className="size-4 pointer-coarse:size-5" /> : <MoonIcon className="size-4 pointer-coarse:size-5" />}
+            <Button
+              variant="outline"
+              size="icon-sm-touch"
+              aria-label={dark ? t.themeToLight : t.themeToDark}
+              onClick={toggleTheme}
+            >
+              {dark ? (
+                <SunIcon className="size-4 pointer-coarse:size-5" />
+              ) : (
+                <MoonIcon className="size-4 pointer-coarse:size-5" />
+              )}
             </Button>
           </div>
         </div>
@@ -76,7 +95,13 @@ export function App() {
       <main className="contents">
         <StatusBar status={status.data} shown={events.data ? view.shown.length : null} />
         {events.data ? (
-          <FilterScope chips={chips} cluster={scope.cluster} shown={view.shown.length} total={events.data.length} onClear={clear} />
+          <FilterScope
+            chips={chips}
+            cluster={scope.cluster}
+            shown={view.shown.length}
+            total={events.data.length}
+            onClear={clear}
+          />
         ) : null}
 
         {events.isError ? (
@@ -97,8 +122,12 @@ export function App() {
             {/* The number the reader came for leads; the controls that shape it follow. */}
             {view.shown.length > 0 ? (
               <div className="enter grid gap-6 lg:grid-cols-3">
-                <BSummary stats={view.stats} incomplete={incomplete}
-                  cluster={scope.cluster === "all" ? null : scope.cluster} tabs={magTabs} />
+                <BSummary
+                  stats={view.stats}
+                  incomplete={incomplete}
+                  cluster={scope.cluster === "all" ? null : scope.cluster}
+                  tabs={magTabs}
+                />
                 <div className="lg:col-span-2">
                   <Deferred title={t.bTimeTitle}>
                     <BOverTimeChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
@@ -107,7 +136,9 @@ export function App() {
               </div>
             ) : null}
 
-            {view.base.length > 0 ? <ClustersCard events={deferred.base} stats={view.clusters} selection={selectCluster} /> : null}
+            {view.base.length > 0 ? (
+              <ClustersCard events={deferred.base} stats={view.clusters} selection={selectCluster} />
+            ) : null}
             <FiltersCard mcAuto={view.clusters.all.mcMaxc} value={scope.filters} onChange={setFilters} />
 
             {view.shown.length === 0 ? (
@@ -136,7 +167,9 @@ export function App() {
                     <MagnitudeTimeChart events={deferred.shown} />
                   </Deferred>
                 </div>
-                <div className="enter" style={{ "--i": 3 } as CSSProperties}><EventsTable events={deferred.shown} /></div>
+                <div className="enter" style={{ "--i": 3 } as CSSProperties}>
+                  <EventsTable events={deferred.shown} />
+                </div>
               </>
             )}
           </>
@@ -150,7 +183,9 @@ export function App() {
           <AlertTitle>{t.caveatsTitle}</AlertTitle>
           <AlertDescription>
             <ul className="flex max-w-[75ch] list-disc flex-col gap-1 ps-4">
-              {t.caveats.map((c) => <li key={c}>{c}</li>)}
+              {t.caveats.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
             </ul>
           </AlertDescription>
         </Alert>
@@ -158,8 +193,12 @@ export function App() {
 
       <footer className="pb-8 text-sm text-muted-foreground">
         {t.source}{" "}
-        <a className="underline underline-offset-4" target="_blank" rel="noreferrer"
-          href="https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php">
+        <a
+          className="underline underline-offset-4"
+          target="_blank"
+          rel="noreferrer"
+          href="https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php"
+        >
           bdrsnc.sgc.gov.co
         </a>
         <p className="mt-1 max-w-[75ch] text-pretty">{t.autoUpdateLong}</p>

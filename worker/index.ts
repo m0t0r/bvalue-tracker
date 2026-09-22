@@ -21,8 +21,7 @@ const app = new Hono<{ Bindings: Env }>();
  * are already in the invocation log Cloudflare writes for every request, and a second line
  * per request would spend the free plan's 200,000/day on something we already have.
  */
-const log = (env: Env, bindings: Record<string, unknown> = {}): Logger =>
-  logger(bindings, asLevel(env.LOG_LEVEL));
+const log = (env: Env, bindings: Record<string, unknown> = {}): Logger => logger(bindings, asLevel(env.LOG_LEVEL));
 
 /**
  * The page's own fetches carry Sec-Fetch-Site: same-origin; a cross-site page's do not.
@@ -133,12 +132,27 @@ async function queryEvents(db: D1Database, f: EventFilter): Promise<StoredEvent[
   const where: string[] = [];
   const args: (string | number)[] = [];
   if (!f.includeRemoved) where.push("removed_at IS NULL");
-  if (f.from) { where.push("time >= ?"); args.push(f.from); }
-  if (f.to) { where.push("time < ?"); args.push(f.to); }
-  if (f.minMag !== undefined) { where.push("mag >= ?"); args.push(f.minMag); }
-  if (f.status) { where.push("status = ?"); args.push(f.status); }
+  if (f.from) {
+    where.push("time >= ?");
+    args.push(f.from);
+  }
+  if (f.to) {
+    where.push("time < ?");
+    args.push(f.to);
+  }
+  if (f.minMag !== undefined) {
+    where.push("mag >= ?");
+    args.push(f.minMag);
+  }
+  if (f.status) {
+    where.push("status = ?");
+    args.push(f.status);
+  }
   const sql = `SELECT * FROM events ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY time`;
-  const { results } = await db.prepare(sql).bind(...args).all<EventRow>();
+  const { results } = await db
+    .prepare(sql)
+    .bind(...args)
+    .all<EventRow>();
   const events = results.map(toStored);
   return f.excludeMainshock ? events.filter((e) => e.id !== MAINSHOCK_ID) : events;
 }
@@ -282,7 +296,11 @@ app.post("/api/client-error", clientErrorLimit, async (c) => {
   c.header("cache-control", "no-store");
 
   let sent: unknown;
-  try { sent = await c.req.json(); } catch { return c.json({ error: "bad report" }, 400); }
+  try {
+    sent = await c.req.json();
+  } catch {
+    return c.json({ error: "bad report" }, 400);
+  }
   if (typeof sent !== "object" || sent === null) return c.json({ error: "bad report" }, 400);
 
   // Only these four fields are read, and each only if it is a string: whatever else the
@@ -366,13 +384,16 @@ export default {
        * single time and nothing said so. `scheduledAt` is on the line too, because the
        * dispatch is at :45 past and that offset is the whole reason the snap exists.
        */
-      l.info({
-        scheduledAt: new Date(controller.scheduledTime).toISOString(),
-        lanes: plan.steps.map((s) => s.lane),
-        sgcUnwell: sgcUnwell(history.health, now),
-        backfill: `${history.backfill.done}/${history.backfill.total}`,
-        inFlight: history.inFlight,
-      }, plan.steps.length === 0 ? "tick stood down" : "tick planned");
+      l.info(
+        {
+          scheduledAt: new Date(controller.scheduledTime).toISOString(),
+          lanes: plan.steps.map((s) => s.lane),
+          sgcUnwell: sgcUnwell(history.health, now),
+          backfill: `${history.backfill.done}/${history.backfill.total}`,
+          inFlight: history.inFlight,
+        },
+        plan.steps.length === 0 ? "tick stood down" : "tick planned",
+      );
 
       await runPlan({ db: env.DB, log: l, analytics: env.INGEST_ANALYTICS }, plan);
     } catch (err) {

@@ -20,8 +20,12 @@ export interface FmdBin {
 export function fmd(mags: readonly number[], dm = DEFAULT_DM): FmdBin[] {
   if (mags.length === 0) return [];
   const ks = mags.map((m) => bin(m, dm));
-  let lo = Infinity, hi = -Infinity;
-  for (const k of ks) { if (k < lo) lo = k; if (k > hi) hi = k; }
+  let lo = Infinity,
+    hi = -Infinity;
+  for (const k of ks) {
+    if (k < lo) lo = k;
+    if (k > hi) hi = k;
+  }
   const counts = Array.from({ length: hi - lo + 1 }, () => 0);
   for (const k of ks) counts[k - lo]!++;
   const out: FmdBin[] = [];
@@ -76,15 +80,18 @@ export function bValue(mags: readonly number[], mc: number, dm = DEFAULT_DM): BV
  * Mc for which a G-R law fitted above it reproduces at least `target` percent
  * of the observed cumulative FMD. Returns null if no candidate qualifies.
  */
-export function mcGoodnessOfFit(
-  mags: readonly number[], dm = DEFAULT_DM, target = 90, minEvents = 50,
-): number | null {
+export function mcGoodnessOfFit(mags: readonly number[], dm = DEFAULT_DM, target = 90, minEvents = 50): number | null {
   for (const candidate of fmd(mags, dm)) {
     if (candidate.cumulative < minEvents) break;
     let fit: BValue;
-    try { fit = bValue(mags, candidate.mag, dm); } catch { continue; }
+    try {
+      fit = bValue(mags, candidate.mag, dm);
+    } catch {
+      continue;
+    }
     const above = fmd(mags, dm).filter((x) => bin(x.mag, dm) >= bin(candidate.mag, dm));
-    let absDiff = 0, total = 0;
+    let absDiff = 0,
+      total = 0;
     for (const x of above) {
       absDiff += Math.abs(x.cumulative - 10 ** (fit.a - fit.b * x.mag));
       total += x.cumulative;
@@ -104,7 +111,11 @@ export interface BDifference {
 /** Utsu's (1992) test for whether two b-values differ, from each sample's size and b. */
 export function bDifference(x: { n: number; b: number }, y: { n: number; b: number }): BDifference {
   const n = x.n + y.n;
-  const dAic = -2 * n * Math.log(n) + 2 * x.n * Math.log(x.n + (y.n * x.b) / y.b) + 2 * y.n * Math.log((x.n * y.b) / x.b + y.n) - 2;
+  const dAic =
+    -2 * n * Math.log(n) +
+    2 * x.n * Math.log(x.n + (y.n * x.b) / y.b) +
+    2 * y.n * Math.log((x.n * y.b) / x.b + y.n) -
+    2;
   return { dAic, p: Math.min(1, Math.exp(-dAic / 2 - 2)) };
 }
 
@@ -123,14 +134,26 @@ export const WINDOW_STEP = 10;
  * measures changes in network detection, not in the earthquakes.
  */
 export function bValueWindows(
-  events: readonly { time: string; mag: number }[], mc: number, size = WINDOW_SIZE, step = WINDOW_STEP, dm = DEFAULT_DM,
+  events: readonly { time: string; mag: number }[],
+  mc: number,
+  size = WINDOW_SIZE,
+  step = WINDOW_STEP,
+  dm = DEFAULT_DM,
 ): BWindow[] {
   const kc = bin(mc, dm);
   const complete = events.filter((e) => bin(e.mag, dm) >= kc).sort((x, y) => x.time.localeCompare(y.time));
   const out: BWindow[] = [];
   for (let i = 0; i + size <= complete.length; i += step) {
     const w = complete.slice(i, i + size);
-    out.push({ ...bValue(w.map((e) => e.mag), mc, dm), from: w[0]!.time, to: w[w.length - 1]!.time });
+    out.push({
+      ...bValue(
+        w.map((e) => e.mag),
+        mc,
+        dm,
+      ),
+      from: w[0]!.time,
+      to: w[w.length - 1]!.time,
+    });
   }
   return out;
 }
@@ -145,8 +168,13 @@ export function dominantMagType(events: readonly { magType: string }[]): string 
   const counts = new Map<string, number>();
   for (const e of events) counts.set(e.magType, (counts.get(e.magType) ?? 0) + 1);
   if (counts.size < 2) return null;
-  let best: string | null = null, n = 0;
-  for (const [type, c] of counts) if (c > n) { best = type; n = c; }
+  let best: string | null = null,
+    n = 0;
+  for (const [type, c] of counts)
+    if (c > n) {
+      best = type;
+      n = c;
+    }
   return best;
 }
 
@@ -163,21 +191,33 @@ export interface CatalogStats {
 }
 
 /** The one statistics pipeline, shared by the page, the API and the CLI so they cannot disagree. */
-export function computeStats(events: readonly { time: string; mag: number }[], mcOverride: number | null = null): CatalogStats {
+export function computeStats(
+  events: readonly { time: string; mag: number }[],
+  mcOverride: number | null = null,
+): CatalogStats {
   const mags = events.map((e) => e.mag);
   if (mags.length < 2) {
     return { count: mags.length, bins: [], mcMaxc: null, mcGft: null, mc: null, fit: null, fitGft: null, windows: [] };
   }
   const tryFit = (mc: number | null): BValue | null => {
     if (mc === null) return null;
-    try { return bValue(mags, mc); } catch { return null; }
+    try {
+      return bValue(mags, mc);
+    } catch {
+      return null;
+    }
   };
   const mcMaxc = mcMaxCurvature(mags);
   const mcGft = mcGoodnessOfFit(mags);
   const mc = mcOverride ?? mcMaxc;
   return {
-    count: mags.length, bins: fmd(mags), mcMaxc, mcGft, mc,
-    fit: tryFit(mc), fitGft: tryFit(mcGft),
+    count: mags.length,
+    bins: fmd(mags),
+    mcMaxc,
+    mcGft,
+    mc,
+    fit: tryFit(mc),
+    fitGft: tryFit(mcGft),
     windows: bValueWindows(events, mc, WINDOW_SIZE, WINDOW_STEP),
   };
 }

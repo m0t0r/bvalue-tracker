@@ -12,8 +12,23 @@ export const MAINSHOCK_DATE = new Date(Date.UTC(2026, 7, 10));
 export const MAINSHOCK_ID = "SGC2026pqqmro";
 
 const EXPECTED_HEADERS = [
-  "fecha-hora", "lat", "long", "prof", "mag", "tipo", "fases", "rms", "gap",
-  "error lat", "error long", "error prof", "region", "quakeml", "fases", "mapa", "estado",
+  "fecha-hora",
+  "lat",
+  "long",
+  "prof",
+  "mag",
+  "tipo",
+  "fases",
+  "rms",
+  "gap",
+  "error lat",
+  "error long",
+  "error prof",
+  "region",
+  "quakeml",
+  "fases",
+  "mapa",
+  "estado",
 ];
 
 /** The form only accepts dd/mm/yyyy; any other shape silently yields zero rows. */
@@ -93,30 +108,43 @@ function readResultTable(html: string): RawTable {
     header = null;
   };
 
-  const parser = new Parser({
-    onopentag(name, attrs) {
-      if (name === "table" && attrs.id === "example") { inTable = true; out.found = true; return; }
-      if (!inTable) return;
-      if (name === "thead" || name === "tbody") section = name;
-      else if (name === "tfoot") section = "other";
-      else if (name === "th" && section === "thead") { flushHeader(); header = ""; }
-      else if (name === "tr" && section === "tbody") { out.rows.push([]); cell = null; }
-      else if (name === "td" && section === "tbody") {
-        cell = { text: "", hrefs: [] };
-        out.rows[out.rows.length - 1]?.push(cell);
-      } else if (name === "a" && cell && attrs.href) cell.hrefs.push(attrs.href);
+  const parser = new Parser(
+    {
+      onopentag(name, attrs) {
+        if (name === "table" && attrs.id === "example") {
+          inTable = true;
+          out.found = true;
+          return;
+        }
+        if (!inTable) return;
+        if (name === "thead" || name === "tbody") section = name;
+        else if (name === "tfoot") section = "other";
+        else if (name === "th" && section === "thead") {
+          flushHeader();
+          header = "";
+        } else if (name === "tr" && section === "tbody") {
+          out.rows.push([]);
+          cell = null;
+        } else if (name === "td" && section === "tbody") {
+          cell = { text: "", hrefs: [] };
+          out.rows[out.rows.length - 1]?.push(cell);
+        } else if (name === "a" && cell && attrs.href) cell.hrefs.push(attrs.href);
+      },
+      ontext(text) {
+        if (!inTable) return;
+        if (section === "thead" && header !== null) header += text;
+        else if (cell) cell.text += text;
+      },
+      onclosetag(name) {
+        if (!inTable) return;
+        if (name === "thead") {
+          flushHeader();
+          section = "other";
+        } else if (name === "table") inTable = false;
+      },
     },
-    ontext(text) {
-      if (!inTable) return;
-      if (section === "thead" && header !== null) header += text;
-      else if (cell) cell.text += text;
-    },
-    onclosetag(name) {
-      if (!inTable) return;
-      if (name === "thead") { flushHeader(); section = "other"; }
-      else if (name === "table") inTable = false;
-    },
-  }, { decodeEntities: true });
+    { decodeEntities: true },
+  );
   parser.write(html);
   parser.end();
   return out;
@@ -170,24 +198,26 @@ export function parseCatalogHtml(html: string): CatalogPage {
 
       // Whether the values are plausible is not this module's question: admitEvent bounds
       // them, for this door and the CSV one alike. Here we only read the page's shape.
-      events.push(admitEvent({
-        id,
-        time: toIso(text[0]!),
-        lat: hiLat ?? text[1],
-        lon: hiLon ?? text[2],
-        depthKm: hiDepth ?? text[3],
-        mag: text[4],
-        magType: text[5],
-        phases: text[6],
-        rmsS: text[7],
-        gapDeg: text[8],
-        errLatKm: text[9],
-        errLonKm: text[10],
-        errDepthKm: text[11],
-        region: text[12],
-        status: text[16],
-        solutionStamp: stamp ? toIso(stamp) : null,
-      }));
+      events.push(
+        admitEvent({
+          id,
+          time: toIso(text[0]!),
+          lat: hiLat ?? text[1],
+          lon: hiLon ?? text[2],
+          depthKm: hiDepth ?? text[3],
+          mag: text[4],
+          magType: text[5],
+          phases: text[6],
+          rmsS: text[7],
+          gapDeg: text[8],
+          errLatKm: text[9],
+          errLonKm: text[10],
+          errDepthKm: text[11],
+          region: text[12],
+          status: text[16],
+          solutionStamp: stamp ? toIso(stamp) : null,
+        }),
+      );
     } catch (err) {
       skippedRows.push({ row: i, reason: `row ${i}: ${(err as Error).message}` });
     }
@@ -201,7 +231,9 @@ export function parseCatalogHtml(html: string): CatalogPage {
   }
 
   if (events.length + skippedRows.length !== reportedTotal) {
-    throw new Error(`parsed ${events.length} rows (+${skippedRows.length} skipped) but server reported ${reportedTotal}`);
+    throw new Error(
+      `parsed ${events.length} rows (+${skippedRows.length} skipped) but server reported ${reportedTotal}`,
+    );
   }
 
   // SGC occasionally emits one event twice (seen on large queries). Keep one row
@@ -254,7 +286,10 @@ async function refusalEvidence(res: Response): Promise<RefusalEvidence> {
     if (k !== "set-cookie") headers[k] = v.slice(0, EVIDENCE_HEADER_CHARS);
   }
   // The body is a courtesy: a refusal whose body cannot be read is still a refusal.
-  const body = await res.text().then((t) => t.replace(/\s+/g, " ").trim().slice(0, EVIDENCE_BODY_CHARS), () => "");
+  const body = await res.text().then(
+    (t) => t.replace(/\s+/g, " ").trim().slice(0, EVIDENCE_BODY_CHARS),
+    () => "",
+  );
   return { headers, body };
 }
 

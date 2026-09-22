@@ -3,21 +3,43 @@ import { EventRejected, admitEvent } from "../core/admit.ts";
 
 /** Every cell as a string, which is what both doors actually hand over. */
 const raw = (over: Record<string, unknown> = {}) => ({
-  id: "SGC2026pqqmro", time: "2026-08-10T12:34:27Z", lat: "4.99093472", lon: "-76.29174107",
-  depthKm: "103.4093192", mag: "7.4", magType: "Mw", phases: "119", rmsS: "1.2", gapDeg: "79",
-  errLatKm: "1.603", errLonKm: "1.916", errDepthKm: "3.49",
-  region: "San Jose del Palmar - Choco, Colombia", status: "manual",
-  solutionStamp: "2026-08-10T19:08:37Z", ...over,
+  id: "SGC2026pqqmro",
+  time: "2026-08-10T12:34:27Z",
+  lat: "4.99093472",
+  lon: "-76.29174107",
+  depthKm: "103.4093192",
+  mag: "7.4",
+  magType: "Mw",
+  phases: "119",
+  rmsS: "1.2",
+  gapDeg: "79",
+  errLatKm: "1.603",
+  errLonKm: "1.916",
+  errDepthKm: "3.49",
+  region: "San Jose del Palmar - Choco, Colombia",
+  status: "manual",
+  solutionStamp: "2026-08-10T19:08:37Z",
+  ...over,
 });
 
 describe("admitEvent", () => {
   it("turns a record of cells into an event, numbers as numbers", () => {
     expect(admitEvent(raw())).toEqual({
-      id: "SGC2026pqqmro", time: "2026-08-10T12:34:27Z",
-      lat: 4.99093472, lon: -76.29174107, depthKm: 103.4093192,
-      mag: 7.4, magType: "Mw", phases: 119, rmsS: 1.2, gapDeg: 79,
-      errLatKm: 1.603, errLonKm: 1.916, errDepthKm: 3.49,
-      region: "San Jose del Palmar - Choco, Colombia", status: "manual",
+      id: "SGC2026pqqmro",
+      time: "2026-08-10T12:34:27Z",
+      lat: 4.99093472,
+      lon: -76.29174107,
+      depthKm: 103.4093192,
+      mag: 7.4,
+      magType: "Mw",
+      phases: 119,
+      rmsS: 1.2,
+      gapDeg: 79,
+      errLatKm: 1.603,
+      errLonKm: 1.916,
+      errDepthKm: 3.49,
+      region: "San Jose del Palmar - Choco, Colombia",
+      status: "manual",
       solutionStamp: "2026-08-10T19:08:37Z",
     });
   });

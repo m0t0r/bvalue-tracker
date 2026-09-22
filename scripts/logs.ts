@@ -44,7 +44,11 @@ function sinceMs(v: string): number {
   return Number(m[1]) * { m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as "m" | "h" | "d"];
 }
 
-interface Creds { token: string; accountId: string; how: string }
+interface Creds {
+  token: string;
+  accountId: string;
+  how: string;
+}
 
 /**
  * The OAuth token `wrangler login` stored on this machine. Two places, because wrangler puts
@@ -98,10 +102,13 @@ function loadDotEnv(): void {
  */
 function credentials(): Creds {
   loadDotEnv();
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-    ?? /"account_id"\s*:\s*"([^"]+)"/.exec(readFileSync("wrangler.jsonc", "utf8"))?.[1];
+  const accountId =
+    process.env.CLOUDFLARE_ACCOUNT_ID ??
+    /"account_id"\s*:\s*"([^"]+)"/.exec(readFileSync("wrangler.jsonc", "utf8"))?.[1];
   if (accountId === undefined) {
-    throw new Error("No account: set CLOUDFLARE_ACCOUNT_ID, or run this from a checkout with account_id in wrangler.jsonc.");
+    throw new Error(
+      "No account: set CLOUDFLARE_ACCOUNT_ID, or run this from a checkout with account_id in wrangler.jsonc.",
+    );
   }
 
   const fromEnv = process.env.CLOUDFLARE_API_TOKEN;
@@ -111,8 +118,8 @@ function credentials(): Creds {
   if (oauth === undefined) {
     throw new Error(
       "No credentials. Either set CLOUDFLARE_API_TOKEN (it needs Account · Workers\n" +
-      "Observability · Read), or run `pnpm exec wrangler login` — though a login is not\n" +
-      "enough for this endpoint; its scopes stop at the live tail.",
+        "Observability · Read), or run `pnpm exec wrangler login` — though a login is not\n" +
+        "enough for this endpoint; its scopes stop at the live tail.",
     );
   }
   return { token: oauth, accountId, how: "your wrangler login" };
@@ -132,14 +139,15 @@ async function query(creds: Creds, body: Record<string, unknown>): Promise<Recor
     // Verified on 2026-09-20: a `wrangler login` OAuth token is refused here with 403
     // "Authentication error". Its scopes stop at workers_tail:read, which is the live tail,
     // not the stored logs. So say what to do rather than leaving a bare 403.
-    const scopes = res.status === 401 || res.status === 403
-      ? `\n\n${creds.how} is not allowed to read Workers Logs. Create an API token with` +
-        "\n  Account · Workers Observability · Read" +
-        "\n(https://dash.cloudflare.com/profile/api-tokens), then:" +
-        "\n  export CLOUDFLARE_API_TOKEN=…" +
-        `\n(the account, ${creds.accountId}, comes from wrangler.jsonc; CLOUDFLARE_ACCOUNT_ID` +
-        "\noverrides it only if you need to point somewhere else.)"
-      : "";
+    const scopes =
+      res.status === 401 || res.status === 403
+        ? `\n\n${creds.how} is not allowed to read Workers Logs. Create an API token with` +
+          "\n  Account · Workers Observability · Read" +
+          "\n(https://dash.cloudflare.com/profile/api-tokens), then:" +
+          "\n  export CLOUDFLARE_API_TOKEN=…" +
+          `\n(the account, ${creds.accountId}, comes from wrangler.jsonc; CLOUDFLARE_ACCOUNT_ID` +
+          "\noverrides it only if you need to point somewhere else.)"
+        : "";
     throw new Error(`telemetry query failed (HTTP ${res.status}): ${why}${scopes}`);
   }
   return json.result ?? {};
@@ -156,13 +164,20 @@ function printEvents(result: Record<string, any>): void {
   for (const e of [...events].reverse()) {
     const f = { ...(e.source ?? e.$workers?.source), ...e };
     const when = f.time ?? (e.timestamp ? new Date(e.timestamp).toISOString() : "?");
-    const level = String(f.level ?? "?").toUpperCase().padEnd(5);
+    const level = String(f.level ?? "?")
+      .toUpperCase()
+      .padEnd(5);
     const msg = f.msg ?? f.message ?? "";
     // Everything that is not the four we just printed, so nothing is silently hidden.
     const rest = Object.fromEntries(
-      Object.entries(f).filter(([k, v]) =>
-        !["time", "level", "msg", "message", "timestamp", "source", "$workers", "$metadata", "$cloudflare"].includes(k) &&
-        v !== null && v !== undefined),
+      Object.entries(f).filter(
+        ([k, v]) =>
+          !["time", "level", "msg", "message", "timestamp", "source", "$workers", "$metadata", "$cloudflare"].includes(
+            k,
+          ) &&
+          v !== null &&
+          v !== undefined,
+      ),
     );
     console.log(`${when}  ${level} ${msg}  ${Object.keys(rest).length ? JSON.stringify(rest) : ""}`.trimEnd());
   }
@@ -184,10 +199,16 @@ function printCalculations(result: Record<string, any>): void {
 }
 
 async function main(argv: string[]): Promise<void> {
-  if (argv.includes("--help") || argv.includes("-h")) { console.log(USAGE); return; }
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(USAGE);
+    return;
+  }
 
   const mode = argv[0] && !argv[0].startsWith("--") ? argv[0] : "events";
-  if (!["events", "cpu", "lanes"].includes(mode)) { console.error(USAGE); process.exit(2); }
+  if (!["events", "cpu", "lanes"].includes(mode)) {
+    console.error(USAGE);
+    process.exit(2);
+  }
   const flag = (name: string) => {
     const at = argv.indexOf(`--${name}`);
     return at === -1 ? undefined : argv[at + 1];
@@ -224,7 +245,10 @@ async function main(argv: string[]): Promise<void> {
           parameters: {
             filters,
             calculations: (["p50", "p90", "p99", "max"] as const).map((op) => ({
-              operator: op, key: "$workers.cpuTimeMs", keyType: "number", alias: `cpuMs ${op}`,
+              operator: op,
+              key: "$workers.cpuTimeMs",
+              keyType: "number",
+              alias: `cpuMs ${op}`,
             })),
             groupBys: [{ value: "$metadata.trigger", type: "string" }],
           },
@@ -240,7 +264,10 @@ async function main(argv: string[]): Promise<void> {
             parameters: {
               filters: [...filters, { key: "lane", operation: "exists", type: "string", value: "" }],
               calculations: [{ operator: "count", alias: "runs" }],
-              groupBys: [{ value: "lane", type: "string" }, { value: "msg", type: "string" }],
+              groupBys: [
+                { value: "lane", type: "string" },
+                { value: "msg", type: "string" },
+              ],
             },
             view: "calculations",
             limit,
@@ -248,7 +275,10 @@ async function main(argv: string[]): Promise<void> {
         : { queryId: "sgc-events", timeframe: { from, to }, parameters: { filters }, view: "events", limit };
 
   const result = await query(creds, body);
-  if (argv.includes("--json")) { console.log(JSON.stringify(result, null, 2)); return; }
+  if (argv.includes("--json")) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
 
   console.error(`# ${WORKER}, ${new Date(from).toISOString()} .. ${new Date(to).toISOString()} (via ${creds.how})`);
   if (mode === "events") printEvents(result);

@@ -15,11 +15,16 @@ export function TechnicalDetail({ children, size = "xs" }: { children: ReactNode
     <Collapsible className="flex flex-col items-start gap-1">
       <CollapsibleTrigger asChild>
         <Button variant="link-muted" size="inline-touch" className="group">
-          <ChevronRightIcon data-icon="inline-start" className="transition-transform duration-150 ease-out group-data-[state=open]:rotate-90" />
+          <ChevronRightIcon
+            data-icon="inline-start"
+            className="transition-transform duration-150 ease-out group-data-[state=open]:rotate-90"
+          />
           {t.technicalDetail}
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className={size === "sm" ? "text-sm break-words" : "text-xs break-words"}>{children}</CollapsibleContent>
+      <CollapsibleContent className={size === "sm" ? "text-sm break-words" : "text-xs break-words"}>
+        {children}
+      </CollapsibleContent>
     </Collapsible>
   );
 }

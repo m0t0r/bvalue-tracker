@@ -3,41 +3,101 @@ import type { IngestRun, StoredEvent } from "./api-types.ts";
 import { IN_FLIGHT_MS, type SgcHealth } from "./plan.ts";
 
 export interface EventRow {
-  id: string; time: string; lat: number; lon: number; depth_km: number; mag: number; mag_type: string;
-  phases: number | null; rms_s: number | null; gap_deg: number | null;
-  err_lat_km: number | null; err_lon_km: number | null; err_depth_km: number | null;
-  region: string; status: string; solution_stamp: string | null;
-  first_seen_at: string; updated_at: string; removed_at: string | null;
+  id: string;
+  time: string;
+  lat: number;
+  lon: number;
+  depth_km: number;
+  mag: number;
+  mag_type: string;
+  phases: number | null;
+  rms_s: number | null;
+  gap_deg: number | null;
+  err_lat_km: number | null;
+  err_lon_km: number | null;
+  err_depth_km: number | null;
+  region: string;
+  status: string;
+  solution_stamp: string | null;
+  first_seen_at: string;
+  updated_at: string;
+  removed_at: string | null;
 }
 
 export interface RunRow {
-  id: number; started_at: string; finished_at: string | null; trigger: string;
-  window_start: string; window_end: string; ok: number;
-  fetched: number | null; inserted: number | null; updated: number | null; removed: number | null; error: string | null;
-  http_status: number | null; retry_after_s: number | null;
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  trigger: string;
+  window_start: string;
+  window_end: string;
+  ok: number;
+  fetched: number | null;
+  inserted: number | null;
+  updated: number | null;
+  removed: number | null;
+  error: string | null;
+  http_status: number | null;
+  retry_after_s: number | null;
 }
 
 export function toStored(r: EventRow): StoredEvent {
   return {
-    id: r.id, time: r.time, lat: r.lat, lon: r.lon, depthKm: r.depth_km, mag: r.mag, magType: r.mag_type,
-    phases: r.phases, rmsS: r.rms_s, gapDeg: r.gap_deg,
-    errLatKm: r.err_lat_km, errLonKm: r.err_lon_km, errDepthKm: r.err_depth_km,
-    region: r.region, status: r.status, solutionStamp: r.solution_stamp,
-    firstSeenAt: r.first_seen_at, updatedAt: r.updated_at, removedAt: r.removed_at,
+    id: r.id,
+    time: r.time,
+    lat: r.lat,
+    lon: r.lon,
+    depthKm: r.depth_km,
+    mag: r.mag,
+    magType: r.mag_type,
+    phases: r.phases,
+    rmsS: r.rms_s,
+    gapDeg: r.gap_deg,
+    errLatKm: r.err_lat_km,
+    errLonKm: r.err_lon_km,
+    errDepthKm: r.err_depth_km,
+    region: r.region,
+    status: r.status,
+    solutionStamp: r.solution_stamp,
+    firstSeenAt: r.first_seen_at,
+    updatedAt: r.updated_at,
+    removedAt: r.removed_at,
   };
 }
 
 export function toRun(r: RunRow): IngestRun {
   return {
-    id: r.id, startedAt: r.started_at, finishedAt: r.finished_at, trigger: r.trigger as IngestRun["trigger"],
-    windowStart: r.window_start, windowEnd: r.window_end, ok: r.ok === 1,
-    fetched: r.fetched, inserted: r.inserted, updated: r.updated, removed: r.removed, error: r.error,
+    id: r.id,
+    startedAt: r.started_at,
+    finishedAt: r.finished_at,
+    trigger: r.trigger as IngestRun["trigger"],
+    windowStart: r.window_start,
+    windowEnd: r.window_end,
+    ok: r.ok === 1,
+    fetched: r.fetched,
+    inserted: r.inserted,
+    updated: r.updated,
+    removed: r.removed,
+    error: r.error,
   };
 }
 
 const DATA_FIELDS = [
-  "time", "lat", "lon", "depthKm", "mag", "magType", "phases", "rmsS", "gapDeg",
-  "errLatKm", "errLonKm", "errDepthKm", "region", "status", "solutionStamp",
+  "time",
+  "lat",
+  "lon",
+  "depthKm",
+  "mag",
+  "magType",
+  "phases",
+  "rmsS",
+  "gapDeg",
+  "errLatKm",
+  "errLonKm",
+  "errDepthKm",
+  "region",
+  "status",
+  "solutionStamp",
 ] as const satisfies readonly (keyof SeismicEvent)[];
 
 export function sameData(a: SeismicEvent, b: SeismicEvent): boolean {
@@ -66,8 +126,26 @@ export function insertStmt(db: D1Database, e: SeismicEvent, now: string): D1Prep
          err_depth_km = excluded.err_depth_km, region = excluded.region, status = excluded.status,
          solution_stamp = excluded.solution_stamp, updated_at = excluded.updated_at, removed_at = NULL`,
     )
-    .bind(e.id, e.time, e.lat, e.lon, e.depthKm, e.mag, e.magType, e.phases, e.rmsS, e.gapDeg,
-      e.errLatKm, e.errLonKm, e.errDepthKm, e.region, e.status, e.solutionStamp, now, now);
+    .bind(
+      e.id,
+      e.time,
+      e.lat,
+      e.lon,
+      e.depthKm,
+      e.mag,
+      e.magType,
+      e.phases,
+      e.rmsS,
+      e.gapDeg,
+      e.errLatKm,
+      e.errLonKm,
+      e.errDepthKm,
+      e.region,
+      e.status,
+      e.solutionStamp,
+      now,
+      now,
+    );
 }
 
 export function updateStmt(db: D1Database, e: SeismicEvent, now: string): D1PreparedStatement {
@@ -78,8 +156,25 @@ export function updateStmt(db: D1Database, e: SeismicEvent, now: string): D1Prep
          updated_at = ?, removed_at = NULL
        WHERE id = ?`,
     )
-    .bind(e.time, e.lat, e.lon, e.depthKm, e.mag, e.magType, e.phases, e.rmsS, e.gapDeg,
-      e.errLatKm, e.errLonKm, e.errDepthKm, e.region, e.status, e.solutionStamp, now, e.id);
+    .bind(
+      e.time,
+      e.lat,
+      e.lon,
+      e.depthKm,
+      e.mag,
+      e.magType,
+      e.phases,
+      e.rmsS,
+      e.gapDeg,
+      e.errLatKm,
+      e.errLonKm,
+      e.errDepthKm,
+      e.region,
+      e.status,
+      e.solutionStamp,
+      now,
+      e.id,
+    );
 }
 
 /** Which of these ids already exist, in as few queries as D1's bound-parameter limit allows. */
@@ -169,7 +264,9 @@ export const ABANDONED_ERROR = "run abandoned: the Worker recorded no result";
 export async function reapAbandonedRuns(db: D1Database, now: Date, withinMs = IN_FLIGHT_MS): Promise<number> {
   const cutoff = new Date(now.getTime() - withinMs).toISOString();
   const { meta } = await db
-    .prepare("UPDATE ingest_runs SET finished_at = ?1, ok = 0, error = ?2 WHERE finished_at IS NULL AND started_at <= ?1")
+    .prepare(
+      "UPDATE ingest_runs SET finished_at = ?1, ok = 0, error = ?2 WHERE finished_at IS NULL AND started_at <= ?1",
+    )
     .bind(cutoff, ABANDONED_ERROR)
     .run();
   return meta.changes ?? 0;
@@ -214,9 +311,8 @@ export async function sgcHealth(db: D1Database): Promise<SgcHealth> {
     lastOk: last === null ? null : last.ok === 1,
     // The status is the newest failure's; `since` is the oldest failure still unbroken by a
     // success, which is how long SGC has been answering us this way.
-    failing: streak.length === 0
-      ? null
-      : { since: streak[streak.length - 1]!.started_at, status: streak[0]!.http_status },
+    failing:
+      streak.length === 0 ? null : { since: streak[streak.length - 1]!.started_at, status: streak[0]!.http_status },
     rateLimit: limited === null ? null : { finishedAt: limited.finished_at, retryAfterS: limited.retry_after_s },
   };
 }
@@ -224,7 +320,9 @@ export async function sgcHealth(db: D1Database): Promise<SgcHealth> {
 export async function lastRun(db: D1Database, onlyOk: boolean): Promise<IngestRun | null> {
   const row = await db
     // Unfinished runs are in progress, not failed; they never count as the "last run".
-    .prepare(`SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ${onlyOk ? "AND ok = 1" : ""} ORDER BY id DESC LIMIT 1`)
+    .prepare(
+      `SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ${onlyOk ? "AND ok = 1" : ""} ORDER BY id DESC LIMIT 1`,
+    )
     .first<RunRow>();
   return row ? toRun(row) : null;
 }

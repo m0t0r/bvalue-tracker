@@ -41,7 +41,9 @@ export interface ClusterStats {
  * one place that rule lives: the page, the API and the CLI all come through here.
  */
 export function computeClusterStats(
-  events: readonly { time: string; mag: number; depthKm: number }[], mcOverride: number | null = null, now = Date.now(),
+  events: readonly { time: string; mag: number; depthKm: number }[],
+  mcOverride: number | null = null,
+  now = Date.now(),
 ): ClusterStats {
   const all = computeStats(events, mcOverride);
   const since = now - RECENT_DAYS * 86_400_000;
@@ -53,13 +55,15 @@ export function computeClusterStats(
     for (const e of own) if (lastTime === null || e.time > lastTime) lastTime = e.time;
     const recent = own.filter((e) => Date.parse(e.time) > since);
     return {
-      stats, lastTime,
+      stats,
+      lastTime,
       ownMcHigher: own.length >= MIN_FOR_OWN_MC && stats.mcMaxc !== null && all.mc !== null && stats.mcMaxc > all.mc,
       recent: recent.length,
       recentMaxMag: recent.length > 0 ? Math.max(...recent.map((e) => e.mag)) : null,
     };
   };
-  const shallow = part("shallow"), deep = part("deep");
+  const shallow = part("shallow"),
+    deep = part("deep");
   const difference = shallow.stats.fit && deep.stats.fit ? bDifference(shallow.stats.fit, deep.stats.fit) : null;
   return { all, shallow, deep, difference };
 }

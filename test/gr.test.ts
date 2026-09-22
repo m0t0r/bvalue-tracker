@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { bDifference, bValue, bValueWindows, dominantMagType, fmd, mcGoodnessOfFit, mcMaxCurvature } from "../core/gr.ts";
+import {
+  bDifference,
+  bValue,
+  bValueWindows,
+  dominantMagType,
+  fmd,
+  mcGoodnessOfFit,
+  mcMaxCurvature,
+} from "../core/gr.ts";
 
 function mulberry32(seed: number): () => number {
   let a = seed;
@@ -136,7 +144,8 @@ describe("bDifference", () => {
   });
 
   it("does not care which sample comes first", () => {
-    const x = { n: 447, b: 0.732 }, y = { n: 90, b: 0.816 };
+    const x = { n: 447, b: 0.732 },
+      y = { n: 90, b: 0.816 };
     expect(bDifference(x, y).dAic).toBeCloseTo(bDifference(y, x).dAic, 10);
   });
 
@@ -151,7 +160,8 @@ describe("bDifference", () => {
     const fit = (b: number, seed: number) => bValue(synthetic(500, b, 2.0, seed), 2.0);
     expect(bDifference(fit(0.7, 1), fit(1.1, 2)).p).toBeLessThan(0.001);
     let falseAlarms = 0;
-    for (let seed = 0; seed < 200; seed++) if (bDifference(fit(0.9, 1000 + seed), fit(0.9, 5000 + seed)).p < 0.05) falseAlarms++;
+    for (let seed = 0; seed < 200; seed++)
+      if (bDifference(fit(0.9, 1000 + seed), fit(0.9, 5000 + seed)).p < 0.05) falseAlarms++;
     expect(falseAlarms / 200).toBeLessThan(0.08);
   });
 });
