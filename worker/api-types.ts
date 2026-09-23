@@ -1,4 +1,5 @@
 import type { SeismicEvent } from "../core/types.ts";
+import type { ZoneId } from "../core/zones.ts";
 
 export interface StoredEvent extends SeismicEvent {
   firstSeenAt: string;
@@ -34,4 +35,23 @@ export interface StatusResponse {
   refreshed?: boolean;
   /** Seconds until a manual refresh will query SGC again. */
   retryAfterS?: number;
+}
+
+/** One zone's line in `GET /api/health`. */
+export interface ZoneHealth {
+  totalEvents: number;
+  /** Seconds since this zone's ingest last succeeded. null when it never has. */
+  ingestAgeS: number | null;
+  /** Whether this zone's most recent finished run succeeded. null when none has. */
+  lastRunOk: boolean | null;
+}
+
+/** `GET /api/health`: open to anyone, and carrying no catalogue data. */
+export interface HealthResponse {
+  ok: true;
+  totalEvents: number;
+  /** The stalest zone's `ingestAgeS`, and null while any zone has never succeeded. */
+  ingestAgeS: number | null;
+  lastRunOk: boolean | null;
+  zones: Record<ZoneId, ZoneHealth>;
 }

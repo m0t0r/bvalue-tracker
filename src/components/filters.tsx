@@ -7,8 +7,9 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { DEFAULT_FILTERS, type Filters } from "@/lib/filters";
+import { defaultFilters, type Filters } from "@/lib/filters";
 import { useI18n } from "@/lib/i18n";
+import { useZone } from "@/lib/zone";
 
 interface Props {
   mcAuto: number | null;
@@ -19,6 +20,7 @@ interface Props {
 
 export function FiltersCard({ mcAuto, value, onChange }: Props) {
   const { t } = useI18n();
+  const zone = useZone();
   const form = useForm({
     defaultValues: value,
     validators: {
@@ -59,7 +61,7 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
         <CardAction>
           {/* Asked of the page, like every other change here, so that clearing from the card and
               clearing from the scope bar are the same event and cannot drift apart. */}
-          <Button variant="ghost" size="sm" onClick={() => onChange(DEFAULT_FILTERS)}>
+          <Button variant="ghost" size="sm" onClick={() => onChange(defaultFilters(zone.id))}>
             <RotateCcwIcon data-icon="inline-start" />
             {t.reset}
           </Button>
@@ -160,14 +162,17 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
                 </Field>
               )}
             </form.Field>
-            <form.Field name="excludeMainshock">
-              {(field) => (
-                <Field orientation="horizontal">
-                  <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
-                  <FieldLabel htmlFor={field.name}>{t.excludeMainshock}</FieldLabel>
-                </Field>
-              )}
-            </form.Field>
+            {/* A swarm has no mainshock, so there is nothing for this switch to exclude. */}
+            {zone.mainshockId === null ? null : (
+              <form.Field name="excludeMainshock">
+                {(field) => (
+                  <Field orientation="horizontal">
+                    <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
+                    <FieldLabel htmlFor={field.name}>{t.excludeMainshock}</FieldLabel>
+                  </Field>
+                )}
+              </form.Field>
+            )}
           </FieldGroup>
         </form>
       </CardContent>

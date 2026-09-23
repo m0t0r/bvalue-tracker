@@ -62,6 +62,35 @@ should only ever reach `format.ts` and this module.
   the same reason, as `src/lib/format.ts`. Its tests are mutation-checked; the figures in them were
   counted independently in Python from the same 786 events.
 
+## Zones
+
+**One tab per zone, and only the chosen zone's page exists** (`App.tsx`, `src/lib/zone.tsx`).
+Each panel is a `ZonePage` with its own queries (`["events", zone]`, `["status", zone]`), its own
+scope and its own status bar; Radix mounts only the active panel, so switching throws the other
+zone's filters away rather than carrying Chocó's "desde el 10 de agosto" into a swarm that began on
+the 20th of September. Each zone starts from `defaultFilters(zone)`, and the scope bar compares against
+those, so an untouched tab shows no chips on either side.
+
+- **The zone is in the URL as `?zona=`**, in Spanish because a reader sees it in every link they
+  share. Chocó keeps the bare URL, so every link from before there were two zones lands where it
+  did; the back button undoes a switch (`pushState`, `popstate`).
+- **The tabs are named by department, "Chocó | Tolima"**, as SGC's daily bulletin names the pair.
+  The Tolima tab's heading names the locality, "Enjambre sísmico de Chaparral (Tolima)", because
+  its box covers only the swarm and "Tolima" alone would claim the whole department.
+- **The tabs sit in the header's top row with the language and theme buttons**, and the title and
+  subtitle underneath are the zone's own. On a phone the controls wrap under the tabs rather than
+  squeezing them; at 375 px they share one row.
+- **What is a Chocó finding stays on Chocó's tab**: the depth-groups card, the magnitude chart's
+  group legend and tooltip line, the mainshock ring and star, and "excluir sismo principal"
+  (`depthClusters` and `mainshockId` in `core/zones.ts`). The copy that differs lives in
+  `t.zones[zone]` — title, subtitle, back-fill text, map legend and the caveats — and the update
+  interval is a number from `worker/plan.ts` (`updateEveryMin`), never written into a string.
+- **A young catalogue changes the charts' time axes.** The magnitude chart labels every day when
+  the whole range is two weeks or less (weekly, the swarm had one label), and "Valor b en el
+  tiempo" adds the hour when its windows span under four days (a date alone repeated).
+  Its magnitude axis tops out per zone, M8 for Chocó and M6 for Chaparral, and grows past that
+  only for an event that needs it.
+
 ## Interface conventions
 
 Settled in a six-domain interface review (accessibility, layout, copy, typography,

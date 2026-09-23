@@ -9,18 +9,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse } from "@/lib/api";
-import { REFRESH_MIN_INTERVAL_S } from "../../worker/plan.ts";
+import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
 import { fmtDateTime, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
-
-/**
- * The Worker refuses a refresh sooner than this after the last SGC query, so asking earlier
- * is a request that can only be turned away. Read from the Worker's own constant rather than
- * copied: as a copy it was left at five minutes when the throttle moved to fifteen, which
- * made two thirds of every cron period a refresh the page sent and the Worker refused.
- */
-const AUTO_REFRESH_AFTER_MS = REFRESH_MIN_INTERVAL_S * 1000;
+import { useZone } from "@/lib/zone";
 
 /** A wait the reader should not sit through: the cron will do the work instead. */
 const LONG_WAIT_S = 60;
@@ -38,8 +31,17 @@ function Stat({ label, value, hint }: { label: string; value: ReactNode | null; 
 
 export function StatusBar({ status, shown }: { status: StatusResponse | undefined; shown: number | null }) {
   const { t, lang } = useI18n();
+  const zone = useZone().id;
   const qc = useQueryClient();
   const now = useNow();
+  /**
+   * The Worker refuses a refresh sooner than this after the zone's last SGC query, so asking
+   * earlier is a request that can only be turned away. Read from the Worker's own constant rather
+   * than copied: as a copy it was left at five minutes when the throttle moved to fifteen, which
+   * made two thirds of every cron period a refresh the page sent and the Worker refused.
+   */
+  const autoRefreshAfterMs = CADENCE[zone].refreshMinIntervalS * 1000;
+  const everyMin = updateEveryMin(zone);
   // The server stands down whenever SGC was queried in the last five minutes, which with a
   // five-minute cron is most of the time. That is good news, not a countdown, so the message
   // says the reader already has the newest data rather than asking them to wait.
@@ -48,19 +50,19 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   // `auto` is a refresh the page started by itself on return to the tab. If the server stands down
   // because SGC was queried recently, that is the expected outcome and is not reported to the reader.
   const refresh = useMutation({
-    mutationFn: (_vars: { auto: boolean }) => postRefresh(),
+    mutationFn: (_vars: { auto: boolean }) => postRefresh(zone),
     onSuccess: (res, { auto }) => {
       setStoodDown(!res.refreshed && !auto);
       // Events follow by themselves: App refetches them when status reports a newer successful ingest.
-      qc.setQueryData(["status"], res);
+      qc.setQueryData(["status", zone], res);
     },
   });
 
   // A fresh database fills itself one week per request; keep going until history is whole.
   const backfill = useMutation({
     mutationFn: async () => {
-      let res = await postRefresh();
-      qc.setQueryData(["status"], res);
+      let res = await postRefresh(zone);
+      qc.setQueryData(["status", zone], res);
       for (let i = 0; i < 40 && res.backfill.done < res.backfill.total; i++) {
         // Another run is in flight (cron, or someone else's page): wait for it rather than race it.
         // A wait longer than a tick is not a wait, it is a stand-down: the cron carries the
@@ -68,14 +70,14 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
         // `busy`, which disables the focus refresh — for hours.
         if ((res.retryAfterS ?? 0) > LONG_WAIT_S) break;
         if (!res.refreshed) await new Promise((r) => setTimeout(r, (res.retryAfterS ?? 5) * 1000));
-        res = await postRefresh();
-        qc.setQueryData(["status"], res);
+        res = await postRefresh(zone);
+        qc.setQueryData(["status", zone], res);
         // SGC is failing: stop asking. The cron will resume the back-fill later.
         if (res.refreshed && res.lastRun && !res.lastRun.ok) break;
       }
       return res;
     },
-    onSettled: () => void qc.invalidateQueries({ queryKey: ["events"] }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ["events", zone] }),
   });
   const incomplete = !!status && status.backfill.done < status.backfill.total;
   const started = useRef(false);
@@ -98,10 +100,10 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
   useEffect(
     () =>
       focusManager.subscribe((focused) => {
-        if (focused && !busy && lastQueryMs !== null && Date.now() - lastQueryMs > AUTO_REFRESH_AFTER_MS)
+        if (focused && !busy && lastQueryMs !== null && Date.now() - lastQueryMs > autoRefreshAfterMs)
           autoRefresh({ auto: true });
       }),
-    [busy, lastQueryMs, autoRefresh],
+    [busy, lastQueryMs, autoRefresh, autoRefreshAfterMs],
   );
 
   const failed = status?.lastRun && !status.lastRun.ok ? status.lastRun : null;
@@ -120,7 +122,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
       : stoodDown && failed
         ? t.refreshStillFailing
         : stoodDown
-          ? t.refreshWait
+          ? t.refreshWait(CADENCE[zone].refreshMinIntervalS / 60)
           : "";
 
   // The newest event's time reaches SGC's own page for it, the same link the table's time column
@@ -186,7 +188,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
             </span>
             {message === "" ? (
               <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">
-                {failed ? null : t.autoUpdate}
+                {failed ? null : t.autoUpdate(everyMin)}
               </span>
             ) : null}
           </div>
@@ -195,9 +197,9 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
       {incomplete ? (
         <Alert variant="caution" role="status">
           {backfill.isPending ? <Spinner aria-label={t.backfillShort} /> : <AlertTriangleIcon />}
-          <AlertTitle>{t.backfillTitle(status.backfill.done, status.backfill.total)}</AlertTitle>
+          <AlertTitle>{t.zones[zone].backfillTitle(status.backfill.done, status.backfill.total)}</AlertTitle>
           <AlertDescription>
-            {t.backfillBody}
+            {t.zones[zone].backfillBody}
             {backfill.isPending ? null : (
               <Button variant="outline" size="sm" onClick={() => backfill.mutate()}>
                 {t.backfillAction}

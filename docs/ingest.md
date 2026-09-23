@@ -1,5 +1,31 @@
 # Ingest: how the catalogue stays current
 
+There are two zones (`core/zones.ts`), each its own bounding box, start date and catalogue: the
+**Chocó** sequence since the M7.4 of 2026-08-10, and the **Tolima** zone — the Chaparral swarm —
+since 2026-09-20. Zones are named by department, as SGC's daily bulletin names the pair; the Tolima
+box covers only the swarm near Chaparral, which is why its heading names the town. Below,
+"Chaparral" is the swarm and `tolima` the zone id. Every event and every run carries its zone. The table below is Chocó's; Chaparral
+differs as follows (`CADENCE` in `worker/plan.ts`, `SWEEP_CHUNK_DAYS` in `worker/ingest.ts`):
+
+- **No fast lane.** It runs on the wide ticks only, :00 and :30, re-reading the trailing **1**
+  day *with* removals — the fast lane forbids removals only because a quiet day holds too few
+  events for `MAX_REMOVAL_SHARE`, and the swarm has run ~130 a day. It sweeps on the hour like
+  Chocó, in **1-day** chunks from 2026-09-20.
+- **Its button throttle is 30 minutes**, its own period, for the same reason Chocó's is 15.
+- **Both zones run in the same cron invocation, one after the other** (Chocó first), each reading
+  the history afresh. Still one cron pattern, never two requests to SGC at once.
+- **What is shared and what is not** (`IngestHistory` in `worker/plan.ts`): a refusal streak, a
+  429/503 cooldown, the in-flight guard and the refusal probe's hour are across zones, because SGC
+  is one server answering one address — a 410 to Chocó's request is a 410 to Chaparral's, and once
+  one zone has probed a refusing SGC this hour the other stands down. The probe allows five minutes
+  of slack (`PROBE_SLACK_S`), because the second zone's request leaves seconds after the tick and
+  an exact hour then lands just short. Whether the **last run failed** is per zone, as are the
+  back-fill and the button's ordinary throttle: a timeout on Chaparral's larger response must not
+  shut Chocó's fast lane.
+- **Removal only ever considers the zone's own events** (`eventsBetween` takes the zone). A
+  Chaparral response lacks every Chocó event; without that, the 20% guard would be the only thing
+  standing between it and retiring the whole of Chocó, and the guard would only log a note.
+
 | Trigger | What it does |
 |---|---|
 | Cron `*/15 * * * *`, tick minute not divisible by 30 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](sgc-data-source.md#sgc-rate-limits-and-the-request-budget). |
@@ -193,6 +219,15 @@ the ticks that were killed, with **zero** `exceededCpu`. So: **never go below `*
 tick costs more than 10 ms.** That is observed safe, not guaranteed. The tolerance is
 unpublished, so cutting per-tick CPU is still the real fix. Full measurements are in the
 [2026-09-20 postmortem](incidents/2026-09-20-ingest-outage-and-sgc-refusal.md).
+
+**The Tolima zone adds to every wide tick's work, and most to the hourly one** (2026-09-23,
+not yet measured). At the swarm's ~130 events a day the tick on the hour now parses Chocó's wide
+window and sweep chunk (~280 rows) *plus* Chaparral's (~330 + ~520), ~1,100 rows where it used to
+be ~280; the :30 tick ~440 where it was ~110. How often a tick goes over the limit is unchanged —
+every tick already does — and frequency is what the only kills tracked. The size of one tick is
+not what was measured: 170 ms was tolerated, and nothing says where the ceiling is. **Read
+`pnpm logs cpu --since 24h` a day after this ships.** The knobs, in the order to reach for them:
+Chaparral's sweep off the hour or less often, then its padding, then the swarm cooling down.
 
 The fetch side is fine: `/api/status`, the route the open page polls every minute, is 3 ms
 median and 16 ms max, and `/api/refresh` is 6 ms median.

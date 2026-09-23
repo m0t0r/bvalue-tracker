@@ -2,6 +2,10 @@
 
 `GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/b-windows.csv` (b over time, one
 row per window), `/api/status`, `POST /api/refresh`, `POST /api/client-error`.
+Every route but `/api/health` takes `zone=choco|tolima` (`core/zones.ts`). No `zone` is
+Chocó, so every URL and script from before there were two zones keeps its meaning; any other value
+is a 400. The downloaded CSVs are named after the zone (`sgc-tolima-events.csv`).
+
 Filters: `from`, `to` (a bare date is inclusive of that day), `minMag`, `status`,
 `includeRemoved=1`, `excludeMainshock=1`, `cluster=shallow|deep` (anything else is a 400), and `mc`
 on `/api/stats` and `/api/b-windows.csv`. With `cluster`, the statistics keep the Mc of the whole
@@ -18,8 +22,11 @@ directly and is unaffected.
 
 Two exceptions:
 
-- `GET /api/health` is open to anyone: `{ ok, totalEvents, ingestAgeS, lastRunOk }`, no
-  catalogue data. It is what the deploy smoke test and any uptime check should call.
+- `GET /api/health` is open to anyone: `{ ok, totalEvents, ingestAgeS, lastRunOk, zones }`, no
+  catalogue data. It is what the deploy smoke test and any uptime check should call. `zones`
+  carries `{ totalEvents, ingestAgeS, lastRunOk }` for each zone, and the top-level `ingestAgeS` is
+  the **stalest** zone's — `null` while any zone has never succeeded — so an alarm that reads only
+  that one field still fires when either zone goes stale.
   **`ingestAgeS` — seconds since ingest last succeeded, `null` if it never has — is the
   field an external alarm reads**, and it is the only thing about this system that an
   outside caller can ask. Both real outages looked identical from outside without it: the

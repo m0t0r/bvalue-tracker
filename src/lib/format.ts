@@ -23,6 +23,13 @@ const DATE_TIME = formatters({
 });
 const DATE = formatters({ day: "numeric", month: "short", year: "numeric" });
 const DAY_MONTH = formatters({ day: "numeric", month: "short" });
+const DAY_MONTH_TIME = formatters({
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 
 /** SGC's own page for one event. Event ids are regex-constrained at the parser, so this cannot become a scheme. */
 export const sgcEventUrl = (id: string) => `https://www.sgc.gov.co/detallesismo/${id}/resumen`;
@@ -36,6 +43,8 @@ export const fmtDateTime = (iso: string, lang: Lang) => DATE_TIME[lang].format(n
 export const fmtDate = (ms: number, lang: Lang) => DATE[lang].format(ms);
 /** Axis tick: "18 sept" */
 export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms);
+/** Axis tick on a range of a few days, where a date alone repeats: "18 sept, 14:00" */
+export const fmtDayTime = (ms: number, lang: Lang) => DAY_MONTH_TIME[lang].format(ms);
 /** Sortable "2026-09-18 17:43" for the table, in Colombian time. */
 export const fmtIsoDateTime = (iso: string) =>
   new Date(Date.parse(iso) + TZ_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");

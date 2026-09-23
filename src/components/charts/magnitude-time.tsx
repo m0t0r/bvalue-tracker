@@ -13,12 +13,13 @@ import { useResizeObserver } from "usehooks-ts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import type { StoredEvent } from "@/lib/api";
-import { MAINSHOCK_ID } from "@/lib/filters";
 import { dailyCounts } from "@/lib/daily-counts";
 import { fmtDate, fmtDateTime, fmtDay, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useZone } from "@/lib/zone";
 import { CLUSTER_DEPTH_KM, clusterOf } from "../../../core/clusters";
+import type { ZoneId } from "../../../core/zones";
 
 // The shallow cluster keeps the page's blue; the deep one, which went quiet after the first week, is
 // a teal set well away from the blue in lightness as well as hue. Orange stays the mainshock's alone.
@@ -49,6 +50,13 @@ const BAR_MARGIN = { left: 10, right: 12, top: 8 };
 const PINNED_SCATTER_MARGIN = { left: 0, right: 0, top: 8 };
 const PINNED_BAR_MARGIN = { left: 0, right: 0, top: 8 };
 
+/**
+ * The top of the magnitude axis, fixed per zone so it does not jump with the filters: Chocó's has
+ * room for the M7.4, and the Chaparral swarm's, whose largest is M4.5, would otherwise spend half
+ * the chart on empty space. A larger event than the zone's scale allows still extends it.
+ */
+const MAG_TOP: Record<ZoneId, number> = { choco: 8, tolima: 6 };
+
 // The daily counts need one explicit scale, because the pinned axis is drawn by a second chart that
 // holds no data: left to infer a domain the two would disagree.
 function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
@@ -61,7 +69,9 @@ function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
 
 export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] }) {
   const { t, lang } = useI18n();
-  const { points, deepPoints, main, daily, domain, days, count } = useMemo(() => {
+  const zone = useZone();
+  const mainshockId = zone.mainshockId;
+  const { points, deepPoints, main, daily, domain, days, count, magTop } = useMemo(() => {
     const pts = events.map((e) => ({
       t: Date.parse(e.time),
       mag: e.mag,
@@ -77,15 +87,16 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
     const lo = byDay.days[0]?.start ?? 0;
     const hi = byDay.days.length > 0 ? byDay.days.at(-1)!.start + DAY : 1;
     return {
-      points: pts.filter((p) => p.id !== MAINSHOCK_ID && p.cluster === "shallow"),
-      deepPoints: pts.filter((p) => p.id !== MAINSHOCK_ID && p.cluster === "deep"),
-      main: pts.filter((p) => p.id === MAINSHOCK_ID),
+      points: pts.filter((p) => p.id !== mainshockId && p.cluster === "shallow"),
+      deepPoints: pts.filter((p) => p.id !== mainshockId && p.cluster === "deep"),
+      main: pts.filter((p) => p.id === mainshockId),
       daily: byDay.days.map((d) => ({ t: d.start + DAY / 2, total: d.total, shallow: d.shallow, deep: d.deep })),
       domain: [lo, hi] as [number, number],
       days: Math.max(1, byDay.days.length),
       count: countAxis(byDay.maxTotal),
+      magTop: Math.max(MAG_TOP[zone.id], Math.ceil(Math.max(0, ...events.map((e) => e.mag)) + 0.5)),
     };
-  }, [events]);
+  }, [events, mainshockId, zone.id]);
 
   const scroller = useRef<HTMLDivElement>(null);
   const { width: viewW = 0 } = useResizeObserver({ ref: scroller as RefObject<HTMLDivElement> });
@@ -94,8 +105,9 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
   const plotW = viewW > 0 && viewW < DENSE_BELOW ? Math.max(roomW, days * PX_PER_DAY) : roomW;
   const scrolls = plotW > roomW + 1;
   // Weekly ticks are right when the whole range is on screen. Once it scrolls there is room for more,
-  // and a week of empty axis between labels reads as a gap in the data.
-  const tickDays = scrolls ? Math.max(1, Math.ceil(TICK_GAP / (plotW / days))) : 7;
+  // and a week of empty axis between labels reads as a gap in the data. A range of two weeks or less
+  // (a young swarm) gets a label every day: weekly, it had one label for the whole chart.
+  const tickDays = scrolls ? Math.max(1, Math.ceil(TICK_GAP / (plotW / days))) : days <= 14 ? 1 : 7;
   const ticks = useMemo(() => {
     const out: number[] = [];
     for (let d = domain[0]; d <= domain[1]; d += tickDays * DAY) out.push(d);
@@ -141,8 +153,8 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
     <YAxis
       dataKey="mag"
       type="number"
-      domain={[1, 8]}
-      ticks={[2, 3, 4, 5, 6, 7]}
+      domain={[1, magTop]}
+      ticks={Array.from({ length: magTop - 2 }, (_, i) => i + 2)}
       tickLine={false}
       interval={0}
       axisLine={false}
@@ -177,14 +189,17 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
         <CardDescription>{t.magTimeDesc}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {(["shallow", "deep"] as const).map((c) => (
-            <li key={c} className="flex items-center gap-1.5">
-              <span className={cn("size-2.5 rounded-full", c === "shallow" ? "bg-(--chart-1)" : "bg-(--chart-4)")} />
-              {t.clusterName[c]} <span>({t.clusterWhere[c](CLUSTER_DEPTH_KM)})</span>
-            </li>
-          ))}
-        </ul>
+        {/* The two depth groups are Chocó's (docs/science.md); elsewhere every dot is one colour and needs no key. */}
+        {zone.depthClusters ? (
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {(["shallow", "deep"] as const).map((c) => (
+              <li key={c} className="flex items-center gap-1.5">
+                <span className={cn("size-2.5 rounded-full", c === "shallow" ? "bg-(--chart-1)" : "bg-(--chart-4)")} />
+                {t.clusterName[c]} <span>({t.clusterWhere[c](CLUSTER_DEPTH_KM)})</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div
           ref={scroller}
           onScroll={onScroll}
@@ -224,7 +239,8 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: {
                             M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)}
                           </div>
                           <div className="text-muted-foreground">
-                            {t.clusterName[p.cluster]} · {p.depthKm.toFixed(0)} km · {fmtRegion(p.region)}
+                            {zone.depthClusters ? `${t.clusterName[p.cluster]} · ` : null}
+                            {p.depthKm.toFixed(0)} km · {fmtRegion(p.region)}
                           </div>
                         </div>
                       );

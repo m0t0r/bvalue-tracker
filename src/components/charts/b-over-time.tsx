@@ -6,11 +6,15 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { downloadCsv } from "@/lib/download";
-import { fmtDateTime, fmtDay } from "@/lib/format";
+import { fmtDateTime, fmtDay, fmtDayTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { useZone } from "@/lib/zone";
 import { WINDOW_SIZE, type Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
 import { windowsToCsv } from "../../../core/csv";
+
+/** Below this span the axis labels carry the hour as well as the date. */
+const SHORT_SPAN_MS = 4 * 86_400_000;
 
 /** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
 export const BOverTimeChart = memo(function BOverTimeChart({
@@ -23,6 +27,7 @@ export const BOverTimeChart = memo(function BOverTimeChart({
   cluster: Cluster | null;
 }) {
   const { t, lang } = useI18n();
+  const zone = useZone();
   const config = {
     b: { label: t.bTitle, color: "var(--chart-1)" },
     band: { label: t.band, color: "var(--chart-1)" },
@@ -60,7 +65,7 @@ export const BOverTimeChart = memo(function BOverTimeChart({
             disabled={stats.windows.length === 0}
             onClick={() =>
               downloadCsv(
-                `sgc-choco-b-windows${cluster !== null ? `-${cluster}` : ""}${magType !== null ? `-${magType}` : ""}.csv`,
+                `sgc-${zone.id}-b-windows${cluster !== null ? `-${cluster}` : ""}${magType !== null ? `-${magType}` : ""}.csv`,
                 windowsToCsv(stats.windows, lang),
               )
             }
@@ -98,7 +103,11 @@ export const BOverTimeChart = memo(function BOverTimeChart({
                 type="number"
                 scale="time"
                 domain={["dataMin", "dataMax"]}
-                tickFormatter={(ms: number) => fmtDay(ms, lang)}
+                // Over a few days a date alone repeats on every tick ("22 sept, 22 sept, 23 sept"),
+                // which a young swarm's windows always span; the hour tells the ticks apart.
+                tickFormatter={(ms: number) =>
+                  data.at(-1)!.t - data[0]!.t < SHORT_SPAN_MS ? fmtDayTime(ms, lang) : fmtDay(ms, lang)
+                }
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}

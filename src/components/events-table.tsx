@@ -29,6 +29,7 @@ import type { StoredEvent } from "@/lib/api";
 import { downloadCsv } from "@/lib/download";
 import { fmtIsoDateTime, fmtNum, fmtRegion, fmtUtc, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { useZone } from "@/lib/zone";
 
 const features = tableFeatures({
   rowSortingFeature,
@@ -44,6 +45,7 @@ const NUMERIC = new Set(["mag", "depthKm", "lat", "lon", "phases", "rmsS", "gapD
 
 export const EventsTable = memo(function EventsTable({ events }: { events: StoredEvent[] }) {
   const { t, lang } = useI18n();
+  const zone = useZone();
   const columns = useMemo(
     () =>
       helper.columns([
@@ -118,7 +120,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
           <Button
             variant="outline"
             size="sm"
-            onClick={() => downloadCsv("sgc-choco-events.csv", toCsv(events, lang))}
+            onClick={() => downloadCsv(`sgc-${zone.id}-events.csv`, toCsv(events, lang))}
             disabled={events.length === 0}
           >
             <DownloadIcon data-icon="inline-start" />

@@ -30,6 +30,7 @@ import type { Logger } from "./log.ts";
  * | 4    | error message, empty when ok                   |
  * | 5    | window start, ISO                              |
  * | 6    | window end, ISO                                |
+ * | 7    | zone: choco \| tolima (empty before 2026-09-23, which was all choco) |
  *
  * | double | meaning                                      |
  * |--------|----------------------------------------------|
@@ -51,6 +52,7 @@ const blob = (s: string | null | undefined) => (s ?? "").slice(0, MAX_BLOB);
 
 export interface RunMetrics {
   lane: string;
+  zone: string;
   /** Wall time for the whole run, including D1. */
   durationMs: number;
   /** Wall time for the SGC request alone — the number that identifies a hanging fetch. */
@@ -86,6 +88,7 @@ export function recordRun(
         blob(run.error),
         blob(run.windowStart),
         blob(run.windowEnd),
+        blob(m.zone),
       ],
       doubles: [
         run.ok ? 1 : 0,

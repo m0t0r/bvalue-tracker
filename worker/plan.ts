@@ -1,3 +1,4 @@
+import { DEFAULT_ZONE, type ZoneId } from "../core/zones.ts";
 import type { IngestRun } from "./api-types.ts";
 
 /**
@@ -57,12 +58,43 @@ const TRAILING_FAST_DAYS = 1;
  * This number, not how many people have the page open, is what bounds our load on SGC.
  */
 export const REFRESH_MIN_INTERVAL_S = 900;
+
+/**
+ * How often each zone is asked, and how much. The Chocó sequence has every lane. Chaparral runs
+ * on the wide ticks only — two requests an hour plus the hourly sweep, rather than four — because
+ * SGC's refusal on 2026-09-20 came after ~20 h at 12 requests an hour, and two zones on the fast
+ * lane would put us back near that (docs/sgc-data-source.md). Its window is one day, with
+ * removals: the fast lane forbids them only because a quiet day holds too few events for
+ * `MAX_REMOVAL_SHARE` to engage, and the swarm has had ~130 a day. Older days are the sweep's.
+ * The page's throttle is each zone's own period, for the same reason `REFRESH_MIN_INTERVAL_S`
+ * is the cron's: a press then almost always lands on a run that was happening anyway.
+ */
+export interface Cadence {
+  /** Whether the zone runs on the ticks between the wide ones. */
+  fastLane: boolean;
+  /** The trailing window of its wide tick and of a visitor's press. */
+  trailingDays: number;
+  refreshMinIntervalS: number;
+}
+
+export const CADENCE: Record<ZoneId, Cadence> = {
+  choco: { fastLane: true, trailingDays: TRAILING_DAYS, refreshMinIntervalS: REFRESH_MIN_INTERVAL_S },
+  tolima: { fastLane: false, trailingDays: 1, refreshMinIntervalS: WIDE_TICK_EVERY_MIN * 60 },
+};
+
+/** How often a zone's catalogue is re-read, in minutes: the number the page quotes to its reader. */
+export const updateEveryMin = (zone: ZoneId): number =>
+  CADENCE[zone].fastLane ? TICK_MS / 60_000 : WIDE_TICK_EVERY_MIN;
 /** How long a visitor is asked to wait when another run is already in flight. */
 const IN_FLIGHT_RETRY_S = 5;
 
 /** What the finished runs say about SGC's health. Drives the fast lane's back-off. */
 export interface SgcHealth {
-  /** Whether the most recent finished run succeeded; null when none has finished yet. */
+  /**
+   * Whether this zone's most recent finished run succeeded; null when none has finished yet. The
+   * zone's own, unlike the two fields below: a failure only Chaparral meets — a timeout on its
+   * larger response, a row the parser refuses — must not shut Chocó's fast lane.
+   */
   lastOk: boolean | null;
   /**
    * The unbroken run of failures at the end of the history, if the newest finished run
@@ -73,11 +105,22 @@ export interface SgcHealth {
   rateLimit: { finishedAt: string; retryAfterS: number | null } | null;
 }
 
-/** Everything the recorded runs say, read once so one decision is made from one snapshot. */
+/**
+ * Everything the recorded runs say, read once so one decision is made from one snapshot.
+ *
+ * Two halves, and which half a field is in is a claim. SGC is one server answering one address,
+ * so its **health**, whether anything is **in flight**, and when a request last **left** are
+ * about every zone at once: a refusal of Chocó's request is a refusal of Chaparral's, and two
+ * zones must never talk to SGC at the same moment. The **last run** and the **back-fill** are
+ * one zone's, because they answer "how fresh is this catalogue".
+ */
 export interface IngestHistory {
   health: SgcHealth;
   /** A run started recently and not yet finished: someone else is already talking to SGC. */
   inFlight: boolean;
+  /** When the newest finished run of any zone started: the last time a request left for SGC. */
+  lastSent: string | null;
+  /** This zone's newest finished run. */
   lastRun: IngestRun | null;
   backfill: { done: number; total: number };
 }
@@ -163,6 +206,15 @@ const REFUSAL_STATUSES = new Set([401, 403, 410, 451]);
 const REFUSAL_GRACE_S = 2 * WIDE_TICK_EVERY_MIN * 60;
 /** What the probe drops to once we believe it: one an hour instead of two. */
 const REFUSED_PROBE_INTERVAL_S = 3600;
+/**
+ * How early the hourly probe may go. The hour is counted from the newest request of any zone, and
+ * the zones run one after another in the same invocation: when both probed on one tick, the newest
+ * start is the second zone's, a few seconds after the tick. Measured exactly, the probe an hour
+ * later then landed seconds short of 3600 and stood down, and the next chance was 30 minutes on —
+ * the 90-minute freeze again, by another road. Five minutes is well under the 30 between wide
+ * ticks, so it can let the hour's probe through early but never an extra one.
+ */
+const PROBE_SLACK_S = 300;
 
 /**
  * Whether SGC has been refusing us long enough that we should stop asking at full rate.
@@ -187,10 +239,9 @@ export function sgcRefusing(health: SgcHealth, now: Date): boolean {
  * its interval, so the tick an hour later missed the hourly probe by three seconds and the
  * wait silently became an hour and a half.
  */
-function sinceLastRunS(history: IngestHistory, now: Date): number {
-  const last = history.lastRun;
-  if (last === null) return Infinity;
-  return (now.getTime() - Date.parse(last.startedAt)) / 1000;
+function sinceS(startedAt: string | null | undefined, now: Date): number {
+  if (startedAt == null) return Infinity;
+  return (now.getTime() - Date.parse(startedAt)) / 1000;
 }
 
 /**
@@ -198,12 +249,14 @@ function sinceLastRunS(history: IngestHistory, now: Date): number {
  * every lane rule can be checked without a database. Both callers ask once and then execute
  * the plan with `runPlan`; neither restates a rule that lives here.
  */
-export function dueNow(caller: Caller, now: Date, history: IngestHistory): IngestPlan {
-  if (caller.kind === "manual") return refreshPlan(now, history);
+export function dueNow(caller: Caller, now: Date, history: IngestHistory, zone: ZoneId = DEFAULT_ZONE): IngestPlan {
+  const cadence = CADENCE[zone];
+  if (caller.kind === "manual") return refreshPlan(now, history, cadence);
 
   const minute = tickMinute(caller.scheduledTime);
 
   if (minute % WIDE_TICK_EVERY_MIN !== 0) {
+    if (!cadence.fastLane) return { steps: [], retryAfterS: null, minIntervalS: null };
     // The fast lane: a narrow window, no removals, and nothing at all while SGC is unwell.
     // The real clock, not the scheduled minute: a failure recorded seconds ago still counts.
     if (sgcUnwell(history.health, now)) return { steps: [], retryAfterS: null, minIntervalS: null };
@@ -216,19 +269,21 @@ export function dueNow(caller: Caller, now: Date, history: IngestHistory): Inges
 
   // The wide tick never stands down for a failure: it is what probes SGC while the fast lane
   // waits, and so what lets the fast lane back in. A refusal is the one thing that slows it,
-  // and even then only to hourly — a probe that stopped could never see SGC come back.
-  if (sgcRefusing(history.health, now) && sinceLastRunS(history, now) < REFUSED_PROBE_INTERVAL_S) {
+  // and even then only to hourly — a probe that stopped could never see SGC come back. The hour
+  // is counted from the last request of *any* zone: it is one door, and once a zone has
+  // knocked this hour the others need not.
+  if (sgcRefusing(history.health, now) && sinceS(history.lastSent, now) < REFUSED_PROBE_INTERVAL_S - PROBE_SLACK_S) {
     return { steps: [], retryAfterS: null, minIntervalS: null };
   }
 
-  const steps: IngestStep[] = [{ lane: "wide", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }];
+  const steps: IngestStep[] = [{ lane: "wide", trigger: "cron", days: cadence.trailingDays, allowRemovals: true }];
   // One older 7-day chunk on the hour, to catch late revisions — and on every wide tick
   // while history is still incomplete, rather than waiting an hour per week of back-fill.
   if (history.backfill.done < history.backfill.total || minute === 0) steps.push({ lane: "sweep" });
   return { steps, retryAfterS: null, minIntervalS: null };
 }
 
-function refreshPlan(now: Date, history: IngestHistory): IngestPlan {
+function refreshPlan(now: Date, history: IngestHistory, cadence: Cadence): IngestPlan {
   if (history.inFlight) return { steps: [], retryAfterS: IN_FLIGHT_RETRY_S, minIntervalS: null };
 
   const incomplete = history.backfill.done < history.backfill.total;
@@ -236,11 +291,14 @@ function refreshPlan(now: Date, history: IngestHistory): IngestPlan {
   // rule the cron's fast lane reads, so a cooldown cannot hold one lane down and not the other.
   const fastLane = incomplete && !sgcUnwell(history.health, now);
 
-  const sinceLastS = sinceLastRunS(history, now);
   // While SGC is refusing us the button waits as long as the cron does. A press is the same
   // request from the same address, so letting it through on the ordinary throttle would undo
-  // the back-off above — and this rule belongs here, once, not restated at a caller.
-  const waitS = sgcRefusing(history.health, now) ? REFUSED_PROBE_INTERVAL_S : REFRESH_MIN_INTERVAL_S;
+  // the back-off above — and this rule belongs here, once, not restated at a caller. That wait
+  // is counted from the last request of any zone, like the probe's; the ordinary throttle is
+  // counted from this zone's own last run, because it is about this catalogue's freshness.
+  const refusing = sgcRefusing(history.health, now);
+  const sinceLastS = refusing ? sinceS(history.lastSent, now) : sinceS(history.lastRun?.startedAt, now);
+  const waitS = refusing ? REFUSED_PROBE_INTERVAL_S : cadence.refreshMinIntervalS;
   if (!fastLane && sinceLastS < waitS) {
     return { steps: [], retryAfterS: Math.ceil(waitS - sinceLastS), minIntervalS: null };
   }
@@ -249,6 +307,6 @@ function refreshPlan(now: Date, history: IngestHistory): IngestPlan {
   // the lane is shut, and so what lets it open again.
   const step: IngestStep = incomplete
     ? { lane: "sweep" }
-    : { lane: "wide", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true };
+    : { lane: "wide", trigger: "manual", days: cadence.trailingDays, allowRemovals: true };
   return { steps: [step], retryAfterS: null, minIntervalS: fastLane ? null : waitS };
 }

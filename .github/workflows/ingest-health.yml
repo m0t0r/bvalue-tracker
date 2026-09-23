@@ -36,10 +36,11 @@ jobs:
         if: vars.PRODUCTION_URL != ''
         env:
           PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
-          # Four wide ticks. One failed run only stands the fast lane down — the wide tick
-          # keeps probing SGC every 15 minutes and is what lets the fast lane back in — so
+          # Two wide ticks. One failed run only stands the fast lane down — the wide tick
+          # keeps probing SGC every 30 minutes and is what lets the fast lane back in — so
           # a single failure must not page anyone. An hour of no success is a real fault,
-          # whether that is SGC refusing us or this Worker being killed mid-run.
+          # whether that is SGC refusing us or this Worker being killed mid-run. Chaparral
+          # runs on the wide ticks only, so the same hour is two of its runs as well.
           STALE_AFTER_S: "3600"
         # Through env rather than interpolated into the script: a repository variable
         # should not be able to become shell. Same rule as the deploy smoke test.
@@ -52,6 +53,31 @@ jobs:
             const h = JSON.parse(readFileSync("health.json", "utf8"));
             const stale = Number(process.env.STALE_AFTER_S);
             if (h.ok !== true) { console.error("health says not ok"); process.exit(1); }
+            // Each zone is its own catalogue, and one can go stale while the other is fine.
+            // The top-level age is already the stalest zone's; the zones are read by name so
+            // the failure says which, and so a Worker that stopped reporting them fails too.
+            const zones = h.zones && typeof h.zones === "object" ? Object.entries(h.zones) : [];
+            if (zones.length === 0) {
+              console.error(`no per-zone health in response: ${JSON.stringify(h)}`);
+              process.exit(1);
+            }
+            let failed = false;
+            for (const [zone, z] of zones) {
+              if (typeof z.ingestAgeS !== "number" || z.ingestAgeS > stale) {
+                // The first thing to read is worker/log.ts output: a "reaped abandoned runs"
+                // warning means an invocation was killed, an "ingest failed" line carries
+                // SGC HTTP status. docs/operations.md, "Debugging production", has the queries.
+                console.error(
+                  typeof z.ingestAgeS === "number"
+                    ? `${zone} is stale: last successful ingest ${z.ingestAgeS}s ago (limit ${stale}s)`
+                    : `${zone} has no successful ingest at all`,
+                );
+                failed = true;
+              } else {
+                console.log(`${zone} ok: last successful ingest ${z.ingestAgeS}s ago, ${z.totalEvents} events`);
+              }
+            }
+            if (failed) process.exit(1);
             // Not `=== null`: a *missing* field must fail too. A rollback to a Worker
             // version from before ingestAgeS existed, or an edge still serving the old
             // version mid-deploy, answers without it — and `undefined === null` is false
@@ -61,12 +87,9 @@ jobs:
               console.error(`no usable ingestAgeS in health response: ${JSON.stringify(h)}`);
               process.exit(1);
             }
+            // The per-zone loop above already covers this unless a zone is missing from `zones`.
             if (h.ingestAgeS > stale) {
-              // The first thing to read is worker/log.ts output: a "reaped abandoned runs"
-              // warning means an invocation was killed, an "ingest failed" line carries
-              // SGC HTTP status. docs/operations.md, "Debugging production", has the queries.
-              console.error(`catalogue is stale: last successful ingest ${h.ingestAgeS}s ago (limit ${stale}s)`);
+              console.error(`catalogue is stale: stalest zone last succeeded ${h.ingestAgeS}s ago (limit ${stale}s)`);
               process.exit(1);
             }
-            console.log(`ok: last successful ingest ${h.ingestAgeS}s ago, ${h.totalEvents} events`);
           '

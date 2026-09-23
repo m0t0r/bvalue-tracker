@@ -1,18 +1,75 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
+/** Said the same way about both zones. */
+const esCommon = {
+  notForecast:
+    "Un valor b menor que 1 describe la secuencia: los eventos grandes pesan más de lo habitual. No es un pronóstico ni una alerta.",
+  floor: "El SGC no publica eventos por debajo de M2.0 en este catálogo, así que el rango M0–M2 no existe aquí.",
+  magTypes:
+    "Las magnitudes mezclan tipos (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite compararlo con todos los tipos y con uno solo.",
+  revisions:
+    "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar todo el historial a lo largo del día para recoger esos cambios.",
+};
+
 const es = {
-  docTitle: "Secuencia sísmica del Chocó · valor b",
-  title: "Secuencia sísmica del Chocó",
-  subtitle:
-    "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del Servicio Geológico Colombiano.",
+  zoneLabel: "Zona",
+  /**
+   * What differs between the two places the page follows. The tabs are named by department, as
+   * SGC's daily bulletin names the pair ("Chocó y Tolima"); the Tolima tab's title names the
+   * locality, because its box covers only the swarm near Chaparral. Chocó is a mainshock–aftershock
+   * sequence ("secuencia"); Chaparral is a swarm ("enjambre"), which is SGC's own word for it and
+   * the technically right one — the reverse of the rule docs/science.md gives for Chocó.
+   */
+  zones: {
+    choco: {
+      tab: "Chocó",
+      docTitle: "Secuencia sísmica del Chocó · valor b",
+      title: "Secuencia sísmica del Chocó",
+      subtitle:
+        "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del Servicio Geológico Colombiano.",
+      backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} semanas`,
+      backfillBody:
+        "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
+      mapDesc: "Tamaño por magnitud, color por profundidad. El sismo principal va con anillo naranja.",
+      caveats: [
+        esCommon.notForecast,
+        esCommon.floor,
+        esCommon.magTypes,
+        "Justo después del sismo principal se pierden eventos pequeños; las primeras ventanas son las menos fiables.",
+        esCommon.revisions,
+        "La secuencia son dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
+      ],
+    },
+    tolima: {
+      tab: "Tolima",
+      docTitle: "Enjambre sísmico de Chaparral (Tolima) · valor b",
+      title: "Enjambre sísmico de Chaparral (Tolima)",
+      subtitle:
+        "Enjambre de eventos en Chaparral, Tolima, desde el 20 de septiembre de 2026. Datos del Servicio Geológico Colombiano.",
+      backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} días`,
+      backfillBody:
+        "Todavía faltan días desde el 20 de septiembre. El valor b y los gráficos no son representativos hasta que termine.",
+      mapDesc: "Tamaño por magnitud, color por profundidad.",
+      caveats: [
+        "El valor b describe el enjambre: cuánto pesan los eventos grandes frente a los pequeños. No es un pronóstico ni una alerta.",
+        esCommon.floor,
+        esCommon.magTypes,
+        "Es un enjambre: muchos eventos de tamaño parecido y ningún sismo principal. Unos enjambres se apagan sin un evento mayor y otros no, y estas cifras no permiten saber cuál será el caso. La información oficial está en los boletines diarios del SGC.",
+        "El SGC plantea como hipótesis preliminar que el sismo M7.4 del 10 de agosto en el Chocó cambió los esfuerzos en la corteza y favoreció que se reactivaran fallas de la zona de Chaparral. Es una hipótesis, no una conclusión.",
+        // Not `esCommon.revisions`: with one-day chunks and one sweep an hour, "todo el historial a lo
+        // largo del día" stops being true once the swarm is 24 days old.
+        "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar el historial por partes, un día de eventos cada hora, para recoger esos cambios.",
+      ],
+    },
+  },
   events: "Eventos",
   newestEvent: "Evento más reciente",
   lastUpdate: "Última consulta al SGC",
   never: "nunca",
   refresh: "Actualizar ahora",
-  autoUpdate: "Se actualiza sola cada 15 minutos",
+  autoUpdate: (min: number) => `Se actualiza sola cada ${min} minutos`,
   refreshing: "Consultando al SGC…",
-  refreshWait: "Ya tienes los datos más recientes: el SGC se consultó hace menos de 15 minutos.",
+  refreshWait: (min: number) => `Ya tienes los datos más recientes: el SGC se consultó hace menos de ${min} minutos.`,
   refreshFailed: "No se pudo consultar al SGC. Inténtalo de nuevo en unos minutos.",
   refreshStillFailing: "No se envió: ya hay un reintento en camino.",
   ingestFailed: "La última consulta al SGC falló",
@@ -21,9 +78,6 @@ const es = {
   technicalDetail: "Detalle técnico",
   loadFailed: "No se pudieron cargar los datos",
   loadFailedBody: "Revisa tu conexión y recarga la página.",
-  backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} semanas`,
-  backfillBody:
-    "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
   backfillAction: "Cargar ahora",
   backfillShort: "Historial incompleto",
   scopeTitle: (shown: string, total: string) => `Mostrando ${shown} de ${total} eventos`,
@@ -70,7 +124,7 @@ const es = {
   bScopeAll: "Todos los tipos",
   bScopeOne: (type: string) => `Solo ${type}`,
   bScopeAllHelp: (type: string) =>
-    `Usa todos los eventos ≥ Mc. El SGC mide casi todos los eventos pequeños con ${type} y la mayoría de los grandes con otra escala (MLv, Mw). Si las escalas no coinciden del todo, este valor sale más bajo que el real.`,
+    `Usa todos los eventos ≥ Mc. El SGC mide casi todos los eventos pequeños con ${type} y la mayoría de los grandes con otras escalas. Si las escalas no coinciden del todo, este valor sale más bajo que el real.`,
   bScopeOneHelp: (type: string, n: string, total: string) =>
     `Usa solo los eventos medidos con ${type}, el tipo más común (${n} de ${total}). Es una sola escala, pero deja fuera la mayoría de los eventos grandes, y eso empuja el valor hacia arriba.`,
   bScopeBoth:
@@ -102,7 +156,6 @@ const es = {
   bTimeEmptyCluster: (have: string, need: number) =>
     `Este grupo tiene ${have} eventos ≥ Mc y cada ventana necesita ${need}, así que su valor b es una sola cifra, sin evolución en el tiempo.`,
   mapTitle: "Mapa",
-  mapDesc: "Tamaño por magnitud, color por profundidad. El sismo principal va con anillo naranja.",
   depth: "Profundidad (km)",
   magTimeTitle: "Magnitud en el tiempo",
   magTimeDesc: "Cada punto es un evento.",
@@ -154,35 +207,74 @@ const es = {
   noEvents: "Ningún evento coincide con los filtros",
   noEventsBody: "Amplía el rango de fechas o baja la magnitud mínima.",
   caveatsTitle: "Cómo leer estas cifras",
-  caveats: [
-    "Un valor b menor que 1 describe la secuencia: los eventos grandes pesan más de lo habitual. No es un pronóstico ni una alerta.",
-    "El SGC no publica eventos por debajo de M2.0 en este catálogo, así que el rango M0–M2 no existe aquí.",
-    "Las magnitudes mezclan tipos (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite compararlo con todos los tipos y con uno solo.",
-    "Justo después del sismo principal se pierden eventos pequeños; las primeras ventanas son las menos fiables.",
-    "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar todo el historial a lo largo del día para recoger esos cambios.",
-    "La secuencia son dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
-  ],
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong:
-    "El catálogo se consulta al SGC cada 15 minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.",
+  autoUpdateLong: (min: number) =>
+    `El catálogo se consulta al SGC cada ${min} minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.`,
   timeNote: "Las fechas y horas son de Colombia (UTC−5). Los CSV descargados usan UTC.",
 };
 
 export type Dict = typeof es;
 
+const enCommon = {
+  notForecast:
+    "A b-value below 1 describes the sequence: large events weigh more than usual. It is not a forecast or an alert.",
+  floor: "SGC publishes no events below M2.0 in this catalogue, so the M0–M2 range does not exist here.",
+  magTypes:
+    "Magnitudes mix several types (MLr, MLv, Mw, M), and that moves b by more than its margin of error. The b-value card lets you compare all types against a single one.",
+  revisions:
+    "Recent events may be automatic and can change after analyst review. The page re-reads the whole history over the course of each day to pick up those changes.",
+};
+
 const en: Dict = {
-  docTitle: "Chocó earthquake sequence · b-value",
-  title: "Chocó earthquake sequence",
-  subtitle:
-    "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the Colombian Geological Survey (SGC).",
+  zoneLabel: "Area",
+  zones: {
+    choco: {
+      tab: "Chocó",
+      docTitle: "Chocó earthquake sequence · b-value",
+      title: "Chocó earthquake sequence",
+      subtitle:
+        "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the Colombian Geological Survey (SGC).",
+      backfillTitle: (a, b) => `Loading history: ${a} of ${b} weeks`,
+      backfillBody:
+        "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
+      mapDesc: "Size by magnitude, colour by depth. The mainshock has an orange ring.",
+      caveats: [
+        enCommon.notForecast,
+        enCommon.floor,
+        enCommon.magTypes,
+        "Right after the mainshock small events are missed; the earliest windows are the least reliable.",
+        enCommon.revisions,
+        "The sequence is two groups of events at different depths. As of 19 September 2026 the deep group, the mainshock's own, had nearly all of its activity in the first week; almost everything since belongs to the shallow group, and that is where the b-value falls. The deep group's b-value comes from few events, so its margin of error is wide.",
+      ],
+    },
+    tolima: {
+      tab: "Tolima",
+      docTitle: "Chaparral earthquake swarm (Tolima) · b-value",
+      title: "Chaparral earthquake swarm (Tolima)",
+      subtitle:
+        "Swarm of events at Chaparral, Tolima, since 20 September 2026. Data from the Colombian Geological Survey (SGC).",
+      backfillTitle: (a, b) => `Loading history: ${a} of ${b} days`,
+      backfillBody:
+        "Days since 20 September are still missing. The b-value and charts are not representative until this finishes.",
+      mapDesc: "Size by magnitude, colour by depth.",
+      caveats: [
+        "The b-value describes the swarm: how much the large events weigh against the small ones. It is not a forecast or an alert.",
+        enCommon.floor,
+        enCommon.magTypes,
+        "This is a swarm: many events of similar size and no mainshock. Some swarms die out without a larger event and some do not, and these figures cannot tell which this will be. The official information is in SGC's daily bulletins.",
+        "SGC's preliminary hypothesis is that the M7.4 of 10 August in Chocó changed the stresses in the crust and helped reactivate faults around Chaparral. It is a hypothesis, not a conclusion.",
+        "Recent events may be automatic and can change after analyst review. The page re-reads the history in parts, one day of events each hour, to pick up those changes.",
+      ],
+    },
+  },
   events: "Events",
   newestEvent: "Newest event",
   lastUpdate: "Last SGC query",
   never: "never",
   refresh: "Refresh now",
-  autoUpdate: "Updates itself every 15 minutes",
+  autoUpdate: (min) => `Updates itself every ${min} minutes`,
   refreshing: "Querying SGC…",
-  refreshWait: "You already have the latest data: SGC was queried less than 15 minutes ago.",
+  refreshWait: (min) => `You already have the latest data: SGC was queried less than ${min} minutes ago.`,
   refreshFailed: "Unable to query SGC. Try again in a few minutes.",
   refreshStillFailing: "Not sent: a retry is already on the way.",
   ingestFailed: "The last SGC query failed",
@@ -191,9 +283,6 @@ const en: Dict = {
   technicalDetail: "Technical detail",
   loadFailed: "Could not load data",
   loadFailedBody: "Check your connection and reload the page.",
-  backfillTitle: (a, b) => `Loading history: ${a} of ${b} weeks`,
-  backfillBody:
-    "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
   backfillAction: "Load now",
   backfillShort: "History incomplete",
   scopeTitle: (shown, total) => `Showing ${shown} of ${total} events`,
@@ -240,7 +329,7 @@ const en: Dict = {
   bScopeAll: "All types",
   bScopeOne: (type) => `${type} only`,
   bScopeAllHelp: (type) =>
-    `Uses every event ≥ Mc. SGC measures nearly all small events with ${type} and most large ones on another scale (MLv, Mw). If the scales do not line up exactly, this value comes out lower than the true one.`,
+    `Uses every event ≥ Mc. SGC measures nearly all small events with ${type} and most large ones on other scales. If the scales do not line up exactly, this value comes out lower than the true one.`,
   bScopeOneHelp: (type, n, total) =>
     `Uses only events measured with ${type}, the most common type (${n} of ${total}). It is a single scale, but it leaves out most of the large events, which pushes the value up.`,
   bScopeBoth:
@@ -271,7 +360,6 @@ const en: Dict = {
   bTimeEmptyCluster: (have, need) =>
     `This group has ${have} events ≥ Mc and each window needs ${need}, so its b-value is a single figure with no change over time.`,
   mapTitle: "Map",
-  mapDesc: "Size by magnitude, colour by depth. The mainshock has an orange ring.",
   depth: "Depth (km)",
   magTimeTitle: "Magnitude over time",
   magTimeDesc: "Each dot is one event.",
@@ -323,17 +411,9 @@ const en: Dict = {
   noEvents: "No events match the filters",
   noEventsBody: "Widen the date range or lower the minimum magnitude.",
   caveatsTitle: "How to read these numbers",
-  caveats: [
-    "A b-value below 1 describes the sequence: large events weigh more than usual. It is not a forecast or an alert.",
-    "SGC publishes no events below M2.0 in this catalogue, so the M0–M2 range does not exist here.",
-    "Magnitudes mix several types (MLr, MLv, Mw, M), and that moves b by more than its margin of error. The b-value card lets you compare all types against a single one.",
-    "Right after the mainshock small events are missed; the earliest windows are the least reliable.",
-    "Recent events may be automatic and can change after analyst review. The page re-reads the whole history over the course of each day to pick up those changes.",
-    "The sequence is two groups of events at different depths. As of 19 September 2026 the deep group, the mainshock's own, had nearly all of its activity in the first week; almost everything since belongs to the shallow group, and that is where the b-value falls. The deep group's b-value comes from few events, so its margin of error is wide.",
-  ],
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong:
-    "The catalogue is read from SGC every 15 minutes. While this page is open, the figures, charts and map update by themselves, with no reload.",
+  autoUpdateLong: (min) =>
+    `The catalogue is read from SGC every ${min} minutes. While this page is open, the figures, charts and map update by themselves, with no reload.`,
   timeNote: "Dates and times are Colombia time (UTC−5). Downloaded CSVs use UTC.",
 };
 
@@ -357,10 +437,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       return "es";
     }
   });
-  // Also on first load, so a restored English choice is announced as English.
+  // Also on first load, so a restored English choice is announced as English. The document's
+  // title names the zone, so the page sets that itself.
   useEffect(() => {
     document.documentElement.lang = lang;
-    document.title = dicts[lang].docTitle;
   }, [lang]);
   const value = useMemo(() => {
     const setLang = (l: Lang) => {

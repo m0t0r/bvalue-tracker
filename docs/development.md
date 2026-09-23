@@ -41,6 +41,7 @@ pnpm cli bvalue --input data/events.csv --windows-out data/b-windows.csv
 pnpm cli bvalue --input data/events.csv --mc 2.5 --manual-only --exclude-mainshock
 pnpm cli bvalue --input data/events.csv --cluster shallow --windows   # always prints both clusters; --cluster narrows the windows
 pnpm cli fetch --start 2026-09-01 --bbox=-77.4,4.1,-76.1,5.6 --out data/sep.csv
+pnpm cli fetch --zone tolima --out data/tolima.csv                # the zone's own box and start date
 ```
 
 `--bbox` is `lonMin,latMin,lonMax,latMax`; use the `=` form because the value starts with a minus.

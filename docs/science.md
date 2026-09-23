@@ -66,6 +66,31 @@
 - It is a mainshock–aftershock **sequence**, not a swarm. The UI says "secuencia
   sísmica"; "enjambre" would read as technically wrong to a seismologist. The repo
   name predates that.
+
+## The Chaparral swarm (second zone, from 2026-09-23)
+
+- **It is a swarm, and the page calls it one** ("enjambre sísmico"), which is also SGC's word: the
+  reverse of the Chocó rule above. Measured from SGC's catalogue on 2026-09-23 (446 events in the
+  zone's box): it began **2026-09-20 08:27 UTC**; the box held 25 events in the eight and a half
+  months before. 3.78–3.91 N, 75.68–75.57 W, **12–25 km deep** (crustal); daily counts 32, 116,
+  152, then 147 by 20:09 UTC on the 23rd. Dozens of M3.5–4.2 events and **no dominant event** —
+  the largest, M4.5 (SGC2026stzmyx), came on day four. SGC's own page gives its depth only as
+  "superficial (< 30 km)"; the catalogue's 3.96 km sits outside the swarm's 12–25 km and may move.
+- **b is already measurable**: MAXC **Mc = 2.7, b = 0.96 ± 0.05, n = 269**, 150-event windows
+  0.91–0.99 (`pnpm cli bvalue` on that catalogue). An ordinary value; it says nothing either way
+  about what the swarm will do, and the page says so.
+- **The depth groups are Chocó's and do not apply here.** The swarm is one crustal population, so
+  the groups card, its legend and its tooltip text are Chocó-only (`depthClusters` in
+  `core/zones.ts`). There is no mainshock, so no ring, no star and no "excluir sismo principal".
+- The commonest magnitude type is **MLr_2** (387 of 447), not Chocó's MLr_1; the b card's tab picks
+  it from the data (`dominantMagType`). The mixed-types caveat applies here too.
+- **Connection to Chocó: SGC's preliminary hypothesis, not a finding.** SGC has said the M7.4 may
+  have changed the stress field in the crust and helped reactivate faults near Chaparral, ~150 km
+  away, six weeks later. The page states it as SGC's hypothesis. Nothing here tests it, and no
+  chart may imply it does: two zones on one timeline show timing, not cause.
+- **Do not put a probability of a larger event on this tab.** SGC's public position is that many
+  events do not mean a large one is coming. The copy says swarms go either way and points to
+  SGC's daily bulletins for official information.
 - **A half-filled database produces a confident, wrong number.** Production once
   showed b = 0.49 because it held only the trailing 3 days. `/api/status` now
   reports `backfill: {done, total}`, and the page warns and demotes b until history

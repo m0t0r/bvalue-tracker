@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FILTERS, activeFilterChips, type Filters } from "@/lib/filters";
+import { DEFAULT_FILTERS, activeFilterChips, applyFilters, defaultFilters, type Filters } from "@/lib/filters";
+import { scopeChips, DEFAULT_SCOPE } from "@/lib/scope";
 import { dicts } from "@/lib/i18n";
 
 const es = dicts.es;
@@ -36,5 +37,34 @@ describe("the filters a page is narrowed by", () => {
 
   it("keeps the default start date silent, since it is where the sequence begins", () => {
     expect(labels({ from: DEFAULT_FILTERS.from })).toEqual([]);
+  });
+});
+
+/**
+ * Each zone starts from the day its own sequence began. Chaparral read against Chocó's defaults
+ * would show a date chip on a page nobody had touched, and "Restablecer" would reset it to a
+ * start date five weeks before its first event.
+ */
+describe("a zone's own defaults", () => {
+  it("starts Chaparral on 20 September and Chocó on 10 August", () => {
+    expect(defaultFilters("tolima").from).toBe("2026-09-20");
+    expect(defaultFilters("choco")).toEqual(DEFAULT_FILTERS);
+    expect(DEFAULT_FILTERS.from).toBe("2026-08-10");
+  });
+
+  it("names no filter on an untouched Chaparral page", () => {
+    expect(scopeChips({ ...DEFAULT_SCOPE, filters: defaultFilters("tolima") }, es, "es", "tolima")).toEqual([]);
+  });
+
+  it("names the dates once they differ from the zone's own start", () => {
+    const moved = { ...DEFAULT_SCOPE, filters: { ...defaultFilters("tolima"), from: "2026-09-22" } };
+    expect(scopeChips(moved, es, "es", "tolima").map((c) => c.key)).toEqual(["dates"]);
+  });
+
+  // An event from the day before, which the one-day padding on every SGC request brings in.
+  it("leaves out what came before the zone's start", () => {
+    const e = (time: string) => ({ time, mag: 2.5, status: "manual", id: "SGC2026aaaaaa" }) as never;
+    const kept = applyFilters([e("2026-09-19T20:00:00Z"), e("2026-09-20T08:27:00Z")], defaultFilters("tolima"));
+    expect(kept).toHaveLength(1);
   });
 });

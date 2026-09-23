@@ -11,10 +11,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, type CSSProperties } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
-import { MAINSHOCK_ID } from "@/lib/filters";
 import { fmtDateTime, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useIsDark } from "@/lib/theme";
+import { useZone } from "@/lib/zone";
+import type { ZoneId } from "../../core/zones";
 
 // MapLibre 6 ships its worker as a separate module that imports a shared chunk,
 // so it must go through the bundler (`?worker&url`), not be copied as a plain asset.
@@ -28,18 +29,28 @@ const DEPTH_STOPS: [number, string][] = [
   [120, "#0d366b"],
 ];
 
-const toGeoJson = (events: readonly StoredEvent[]) => ({
+/**
+ * Where each zone's map opens. Chocó's two groups sit ~50 km apart and need the wider view;
+ * Chaparral's swarm fits in ~20 km, and at Chocó's zoom it would be one blot.
+ */
+const VIEW: Record<ZoneId, { center: [number, number]; zoom: number }> = {
+  choco: { center: [-76.6, 4.75], zoom: 7.6 },
+  tolima: { center: [-75.63, 3.85], zoom: 10 },
+};
+
+const toGeoJson = (events: readonly StoredEvent[], mainshockId: string | null) => ({
   type: "FeatureCollection" as const,
   features: events.map((e) => ({
     type: "Feature" as const,
     geometry: { type: "Point" as const, coordinates: [e.lon, e.lat] },
-    properties: { id: e.id, mag: e.mag, depth: e.depthKm, time: e.time, region: e.region, main: e.id === MAINSHOCK_ID },
+    properties: { id: e.id, mag: e.mag, depth: e.depthKm, time: e.time, region: e.region, main: e.id === mainshockId },
   })),
 });
 
 export default function EventMap({ events }: { events: readonly StoredEvent[] }) {
   const { t, lang } = useI18n();
   const dark = useIsDark();
+  const zone = useZone();
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const latest = useRef(events);
@@ -51,8 +62,7 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
     const m = new MapLibreMap({
       container: el.current!,
       style: `https://tiles.openfreemap.org/styles/${dark ? "dark" : "positron"}`,
-      center: [-76.6, 4.75],
-      zoom: 7.6,
+      ...VIEW[zone.id],
       attributionControl: { compact: true },
       cooperativeGestures: true,
       locale: {
@@ -78,7 +88,7 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
     m.on("error", (e) => console.error("map:", e.error?.message ?? e));
 
     m.on("load", () => {
-      m.addSource("events", { type: "geojson", data: toGeoJson(latest.current) });
+      m.addSource("events", { type: "geojson", data: toGeoJson(latest.current, zone.mainshockId) });
       m.addLayer({
         id: "events",
         type: "circle",
@@ -127,18 +137,18 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
       m.remove();
       map.current = null;
     };
-  }, [dark, t, lang]);
+  }, [dark, t, lang, zone]);
 
   useEffect(() => {
     const src = map.current?.getSource("events") as GeoJSONSource | undefined;
-    src?.setData(toGeoJson(events));
-  }, [events]);
+    src?.setData(toGeoJson(events, zone.mainshockId));
+  }, [events, zone]);
 
   return (
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.mapTitle}</CardTitle>
-        <CardDescription>{t.mapDesc}</CardDescription>
+        <CardDescription>{t.zones[zone.id].mapDesc}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* The canvas is a keyboard stop (arrows pan, +/- zoom); its own outline is clipped, so the frame shows focus. */}

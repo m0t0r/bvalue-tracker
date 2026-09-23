@@ -23,6 +23,7 @@ import type { StoredEvent } from "@/lib/api";
 import {
   DEFAULT_FILTERS,
   activeFilterChips,
+  defaultFilters,
   applyFilters,
   type ClusterChoice,
   type EventFilters,
@@ -33,6 +34,7 @@ import type { Dict, Lang } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
 import { clusterOf, computeClusterStats, type ClusterStats } from "../../core/clusters";
 import { computeStats, dominantMagType, type CatalogStats } from "../../core/gr";
+import { DEFAULT_ZONE, type ZoneId } from "../../core/zones";
 
 /** Which magnitudes feed the b card and the two b charts: every type, or only the commonest one. */
 export type MagScope = "all" | "type";
@@ -44,6 +46,7 @@ export interface Scope {
 }
 
 export const DEFAULT_SCOPE: Scope = { filters: DEFAULT_FILTERS, cluster: "all", magScope: "all" };
+const defaultScope = (zone: ZoneId): Scope => ({ ...DEFAULT_SCOPE, filters: defaultFilters(zone) });
 
 /** The part of a scope that picks events. It has no `mc`, so `selectEvents` cannot read one. */
 export interface EventScope extends EventFilters {
@@ -120,8 +123,8 @@ export function pageView(events: readonly StoredEvent[], scope: Scope, now: numb
 }
 
 /** Everything the page is narrowed by, named for the reader. Both halves of the scope bar show these. */
-export const scopeChips = (scope: Scope, t: Dict, lang: Lang): FilterChip[] =>
-  activeFilterChips(scope.filters, scope.cluster, t, lang);
+export const scopeChips = (scope: Scope, t: Dict, lang: Lang, zone: ZoneId = DEFAULT_ZONE): FilterChip[] =>
+  activeFilterChips(scope.filters, scope.cluster, t, lang, defaultFilters(zone));
 
 /** The groups card's control: which group the page is narrowed to, and the one way to change it. */
 export interface ClusterSelection {
@@ -165,8 +168,12 @@ export interface PageScope {
 
 const NO_EVENTS: StoredEvent[] = [];
 
-export function useScope(events: readonly StoredEvent[] | undefined): PageScope {
-  const [scope, setScope] = useState<Scope>(DEFAULT_SCOPE);
+/**
+ * `zone` is read once, for the first scope. The page mounts one of these per zone and throws it
+ * away on a switch, so one zone's filters never carry over to the other's catalogue.
+ */
+export function useScope(events: readonly StoredEvent[] | undefined, zone: ZoneId = DEFAULT_ZONE): PageScope {
+  const [scope, setScope] = useState<Scope>(() => defaultScope(zone));
   const { from, to, minMag, manualOnly, excludeMainshock, mc } = scope.filters;
   const { cluster, magScope } = scope;
 
@@ -200,7 +207,7 @@ export function useScope(events: readonly StoredEvent[] | undefined): PageScope 
   const setMagScope = useCallback((m: MagScope) => setScope((s) => ({ ...s, magScope: m })), []);
   // The magnitude tab is not a narrowing of the catalogue — it is which magnitudes the b-value
   // counts — so it is not in the scope bar's list and "Quitar filtros" leaves it where it is.
-  const clear = useCallback(() => setScope((s) => ({ ...s, filters: DEFAULT_FILTERS, cluster: "all" })), []);
+  const clear = useCallback(() => setScope((s) => ({ ...s, filters: defaultFilters(zone), cluster: "all" })), [zone]);
 
   const selectCluster = useMemo(() => ({ cluster, onChange: setCluster }), [cluster, setCluster]);
   const magTabs = useMemo(

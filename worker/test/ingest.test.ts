@@ -3,7 +3,9 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
+import { CHAPARRAL_BBOX, ZONE_IDS } from "../../core/zones.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
+import EMPTY from "../../test/fixtures/seiscomp-empty.html?raw";
 import { ABANDONED_ERROR, sgcHealth } from "../db.ts";
 import worker from "../index.ts";
 import { ingest, ingestSweep, sweepChunks } from "../ingest.ts";
@@ -22,16 +24,38 @@ const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterAll(() => server.close());
 
-/** Makes SGC answer this way, and hands back how many requests it has taken so far. */
-function serves(respond: () => Response): () => number {
+/** SGC's form fields, as the request sent them. */
+const formOf = async (req: { formData(): Promise<FormData> }) => await req.formData();
+/** Which zone a request to SGC is for, read off the box it asks for. */
+const zoneOf = async (req: { formData(): Promise<FormData> }) =>
+  (await formOf(req)).get("latitudStart") === String(CHAPARRAL_BBOX.latMin) ? "tolima" : "choco";
+
+/**
+ * Makes SGC answer this way, and hands back how many requests it has taken so far.
+ *
+ * The count is Chocó's, which is what every test written before the second zone counts; the
+ * cron now asks for Chaparral in the same invocation, and those requests are answered by
+ * `tolima` (an empty catalogue unless a test says otherwise) and counted by `.tolima()`.
+ * Answering Chaparral with the Chocó fixture would not be a catalogue at all: every one of its
+ * ids already belongs to the other zone.
+ */
+function serves(
+  respond: () => Response,
+  tolima: () => Response = () => HttpResponse.html(EMPTY),
+): (() => number) & { tolima: () => number } {
   let calls = 0;
+  let tolimaCalls = 0;
   server.use(
-    http.post(SEISCOMP_ENDPOINT, () => {
+    http.post(SEISCOMP_ENDPOINT, async ({ request }) => {
+      if ((await zoneOf(request)) === "tolima") {
+        tolimaCalls++;
+        return tolima();
+      }
       calls++;
       return respond();
     }),
   );
-  return () => calls;
+  return Object.assign(() => calls, { tolima: () => tolimaCalls });
 }
 const serving = (html: string) => serves(() => HttpResponse.html(html));
 
@@ -84,14 +108,16 @@ beforeEach(async () => {
 });
 afterEach(() => server.resetHandlers());
 
-/** Marks every history chunk as swept, as a finished back-fill would. */
+/** Marks every history chunk of every zone as swept, as a finished back-fill would. */
 async function completeBackfill() {
   const old = "2026-01-01T00:00:00.000Z";
   await env.DB.batch(
-    sweepChunks(new Date()).map((c) =>
-      env.DB.prepare(
-        "INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok) VALUES (?, ?, 'sweep', ?, ?, 1)",
-      ).bind(old, old, c.start.toISOString(), c.end.toISOString()),
+    ZONE_IDS.flatMap((zone) =>
+      sweepChunks(new Date(), zone).map((c) =>
+        env.DB.prepare(
+          "INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, zone) VALUES (?, ?, 'sweep', ?, ?, 1, ?)",
+        ).bind(old, old, c.start.toISOString(), c.end.toISOString(), zone),
+      ),
     ),
   );
 }
@@ -467,20 +493,50 @@ describe("API", () => {
     expect(res.status).toBe(200);
     // ingestAgeS is what an external alarm reads: it is the only way anything outside can
     // tell a live Worker serving a nine-hour-old catalogue from a healthy one.
-    expect(await res.json()).toEqual({ ok: true, totalEvents: 786, ingestAgeS: 0, lastRunOk: true });
+    // Chaparral has never run here, so the stalest zone has no age at all: the alarm reads that
+    // as a failure, which is right — a zone that has never been ingested is not fresh.
+    expect(await res.json()).toEqual({
+      ok: true,
+      totalEvents: 786,
+      ingestAgeS: null,
+      lastRunOk: true,
+      zones: {
+        choco: { totalEvents: 786, ingestAgeS: 0, lastRunOk: true },
+        tolima: { totalEvents: 0, ingestAgeS: null, lastRunOk: null },
+      },
+    });
   });
 
   it("reports a stale catalogue on /api/health even though the Worker is fine", async () => {
     // A successful run, long ago, and nothing since: exactly the shape of both real outages.
-    await env.DB.prepare(
-      `INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok)
-       VALUES (?1, ?1, 'cron', ?1, ?1, 1)`,
-    )
-      .bind(new Date(Date.now() - 9 * 3600_000).toISOString())
-      .run();
+    for (const zone of ZONE_IDS) {
+      await env.DB.prepare(
+        `INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, zone)
+         VALUES (?1, ?1, 'cron', ?1, ?1, 1, ?2)`,
+      )
+        .bind(new Date(Date.now() - 9 * 3600_000).toISOString(), zone)
+        .run();
+    }
     const body = (await (await callRaw("/api/health")).json()) as { ok: boolean; ingestAgeS: number };
     expect(body.ok).toBe(true);
     expect(body.ingestAgeS).toBeGreaterThan(8 * 3600);
+  });
+
+  // One zone can go stale while the other is fine, and the alarm reads one number.
+  it("reports the stalest zone at the top level, and each zone's own age beneath it", async () => {
+    const at = (h: number, zone: string) =>
+      env.DB.prepare(
+        `INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, zone)
+         VALUES (?1, ?1, 'cron', ?1, ?1, 1, ?2)`,
+      )
+        .bind(new Date(Date.now() - h * 3600_000).toISOString(), zone)
+        .run();
+    await at(9, "tolima");
+    await at(0, "choco");
+    const body = (await (await callRaw("/api/health")).json()) as any;
+    expect(body.zones.choco.ingestAgeS).toBeLessThan(60);
+    expect(body.zones.tolima.ingestAgeS).toBeGreaterThan(8 * 3600);
+    expect(body.ingestAgeS).toBe(body.zones.tolima.ingestAgeS);
   });
 
   it("says so when ingest has never succeeded", async () => {
@@ -513,8 +569,11 @@ async function tick(minute: number, { hour = 12, offsetS = 45 } = {}) {
   await worker.scheduled!({ cron: "*/15 * * * *", scheduledTime: at.getTime(), noRetry() {} }, env);
 }
 
+/** Chocó's newest run. The same tick runs Chaparral after it, so "the newest run" alone would be that one. */
 const latestRun = async () =>
-  (await env.DB.prepare("SELECT * FROM ingest_runs ORDER BY id DESC LIMIT 1").first<Record<string, unknown>>())!;
+  (await env.DB.prepare("SELECT * FROM ingest_runs WHERE zone = 'choco' ORDER BY id DESC LIMIT 1").first<
+    Record<string, unknown>
+  >())!;
 
 /** The window a trailing run of `days` opened, derived from when it actually started. */
 function expectedWindowStart(startedAt: string, days: number): string {
@@ -561,7 +620,9 @@ describe("cron lanes", () => {
     serving(FULL);
 
     await tick(0);
-    const triggers = await env.DB.prepare("SELECT trigger FROM ingest_runs WHERE started_at > ? ORDER BY id")
+    const triggers = await env.DB.prepare(
+      "SELECT trigger FROM ingest_runs WHERE zone = 'choco' AND started_at > ? ORDER BY id",
+    )
       .bind("2026-09-19T00:00:00.000Z")
       .all<{ trigger: string }>();
     expect(triggers.results.map((r) => r.trigger)).toEqual(["cron", "sweep"]);
@@ -767,25 +828,43 @@ describe("the refusal back-off, through the cron", () => {
  * before adding a fifth; adding one to /api/health is what prompted the check.
  */
 describe("the last run is answered from an index", () => {
-  const plan = async (sql: string) =>
-    (await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>()).results
+  const plan = async (sql: string, ...args: string[]) =>
+    (
+      await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .bind(...args)
+        .all<{ detail: string }>()
+    ).results
       .map((r) => r.detail)
       .join("\n");
 
+  // The newest run of any zone: the refusal probe's "when did a request last leave".
   it("walks the index instead of scanning the table", async () => {
     const detail = await plan("SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
     expect(detail).toContain("ingest_runs_finished");
+    expect(detail).not.toContain("TEMP B-TREE");
   });
 
-  // This half used ingest_runs_ok and then materialised every matching row into a temporary
-  // b-tree to sort it — ~312 rows a day, so ~28,000 at three months, to answer "what
-  // happened last?". It needs its own index rather than sharing the other one: with
-  // ingest_runs_ok also present the planner prefers that equality seek and keeps the sort.
-  it("sorts nothing to find the last successful run", async () => {
+  // One zone's newest run is what /api/status asks on every poll. Walking the any-zone index
+  // and skipping the other zone's rows would still be cheap while both run all the time, and
+  // a full scan the day one of them stops — so each has an index that leads with the zone.
+  it("finds one zone's last run with a seek, not by walking the other zone's", async () => {
     const detail = await plan(
-      "SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND ok = 1 ORDER BY id DESC LIMIT 1",
+      "SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND zone = ?1 ORDER BY id DESC LIMIT 1",
+      "tolima",
     );
-    expect(detail).toContain("ingest_runs_finished_ok");
+    expect(detail).toContain("ingest_runs_zone_finished");
+    expect(detail).not.toContain("TEMP B-TREE");
+  });
+
+  // This half once used ingest_runs_ok and then materialised every matching row into a
+  // temporary b-tree to sort it — ~28,000 rows at three months, to answer "what happened
+  // last?". Checked against the whole index set, which still holds ingest_runs_ok.
+  it("sorts nothing to find a zone's last successful run", async () => {
+    const detail = await plan(
+      "SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND zone = ?1 AND ok = 1 ORDER BY id DESC LIMIT 1",
+      "tolima",
+    );
+    expect(detail).toContain("ingest_runs_zone_finished_ok");
     expect(detail).not.toContain("TEMP B-TREE");
   });
 
@@ -829,15 +908,19 @@ describe("what a tick writes to the log", () => {
     serving(FULL);
     const got = lines();
 
-    // The hour's four ticks, each of which should say something different about itself.
+    // The hour's four ticks, each of which should say something different about itself. Each
+    // zone says so on its own line.
+    const planned = () => withMsg(got(), "tick planned").filter((l) => l.zone === "choco");
     await tick(15);
-    expect(withMsg(got(), "tick planned")[0]).toMatchObject({ level: "info", tickMinute: 15, lanes: ["fast"] });
+    expect(planned()[0]).toMatchObject({ level: "info", tickMinute: 15, lanes: ["fast"] });
+    expect(withMsg(got(), "tick stood down")[0]).toMatchObject({ zone: "tolima", tickMinute: 15, lanes: [] });
 
     await tick(30);
-    expect(withMsg(got(), "tick planned")[1]).toMatchObject({ tickMinute: 30, lanes: ["wide"] });
+    expect(planned()[1]).toMatchObject({ tickMinute: 30, lanes: ["wide"] });
 
     await tick(0);
-    expect(withMsg(got(), "tick planned")[2]).toMatchObject({ tickMinute: 0, lanes: ["wide", "sweep"] });
+    expect(planned()[2]).toMatchObject({ tickMinute: 0, lanes: ["wide", "sweep"] });
+    expect(withMsg(got(), "tick planned").at(-1)).toMatchObject({ zone: "tolima", lanes: ["wide", "sweep"] });
   });
 
   it("records what the run cost and what it changed", async () => {
@@ -949,5 +1032,146 @@ describe("POST /api/client-error", () => {
       stack: undefined,
       userAgent: undefined,
     });
+  });
+});
+
+/**
+ * The second zone. Its events and runs live in the same two tables as Chocó's, so everything
+ * that reads them has to ask for one zone — and the one that matters most is removal: a
+ * Chaparral response lacks every Chocó event, and must retire none of them.
+ */
+describe("two zones", () => {
+  /** SGC's form body for each request, so a test can see which box was asked for. */
+  function recordBodies(html: { choco: string; tolima: string }): FormData[] {
+    const bodies: FormData[] = [];
+    server.use(
+      http.post(SEISCOMP_ENDPOINT, async ({ request }) => {
+        const body = await formOf(request);
+        bodies.push(body);
+        return HttpResponse.html(body.get("latitudStart") === String(CHAPARRAL_BBOX.latMin) ? html.tolima : html.choco);
+      }),
+    );
+    return bodies;
+  }
+
+  it("asks SGC for the zone's own box, and files what comes back under that zone", async () => {
+    const bodies = recordBodies({ choco: EMPTY, tolima: FULL });
+    // The fixture stands in for a Chaparral answer here; only the zone it is filed under matters.
+    const run = (await ingest({ db: env.DB, now: NOW, fetchOptions: FETCH_FAST }, FROM, TO, "manual", {
+      zone: "tolima",
+    }))!;
+    expect(run).toMatchObject({ ok: true, inserted: 786 });
+    expect(bodies[0]!.get("longitudStart")).toBe(String(CHAPARRAL_BBOX.lonMin));
+    expect(bodies[0]!.get("latitudEnd")).toBe(String(CHAPARRAL_BBOX.latMax));
+    expect(await count("zone = 'tolima'")).toBe(786);
+    expect((await env.DB.prepare("SELECT zone FROM ingest_runs").first<{ zone: string }>())!.zone).toBe("tolima");
+  });
+
+  // Without the zone on `eventsBetween`, all 786 Chocó events would be "missing" from this
+  // response. The 20% guard would then refuse the removal with a note — which hides the bug
+  // rather than preventing it, so the test asserts there was nothing to refuse.
+  it("never retires another zone's events", async () => {
+    await ingest(deps(FULL), FROM, TO, "manual");
+    recordBodies({ choco: FULL, tolima: EMPTY });
+    const run = (await ingest({ db: env.DB, now: NOW, fetchOptions: FETCH_FAST }, FROM, TO, "manual", {
+      zone: "tolima",
+    }))!;
+    expect(run).toMatchObject({ ok: true, fetched: 0, removed: 0, error: null });
+    expect(await count("removed_at IS NULL")).toBe(786);
+  });
+
+  it("serves each zone its own catalogue and status, and refuses a zone it does not know", async () => {
+    await ingest(deps(FULL), FROM, TO, "manual");
+    expect(await (await call("/api/events?zone=tolima")).json()).toEqual([]);
+    expect(await (await call("/api/events?zone=choco")).json()).toHaveLength(786);
+    expect(await (await call("/api/events")).json()).toHaveLength(786); // no zone is Chocó, as every old link assumes
+    const status = (await (await call("/api/status?zone=tolima")).json()) as any;
+    expect(status).toMatchObject({ totalEvents: 0, newestEventTime: null, lastRun: null });
+    expect(status.backfill.done).toBe(0);
+
+    const bad = await call("/api/events?zone=cali");
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: "zone must be one of choco, tolima" });
+    expect((await call("/api/events.csv?zone=tolima")).headers.get("content-disposition")).toContain(
+      "sgc-tolima-events.csv",
+    );
+  });
+
+  // Chaparral's history is one-day chunks from 2026-09-20; Chocó's are weeks from 2026-08-10.
+  // Chunk starts collide (2026-09-21, 2026-09-28), which is why `zone` is in the sweep index's key.
+  it("keeps each zone's back-fill to itself", async () => {
+    const now = new Date("2026-09-29T12:00:00Z");
+    const tolima = sweepChunks(now, "tolima").map((c) => c.start.toISOString().slice(0, 10));
+    expect(tolima).toHaveLength(10);
+    expect([tolima[0], tolima.at(-1)]).toEqual(["2026-09-20", "2026-09-29"]);
+    expect(sweepChunks(now, "choco").some((c) => c.start.toISOString().startsWith("2026-09-28"))).toBe(true);
+
+    recordBodies({ choco: FULL, tolima: EMPTY });
+    const run = (await ingestSweep({ db: env.DB, now, fetchOptions: FETCH_FAST }, "tolima"))!;
+    expect(run.windowStart).toBe("2026-09-20T00:00:00.000Z");
+    const progress = async (zone: string) =>
+      (await (await call(`/api/status?zone=${zone}`)).json()) as { backfill: { done: number } };
+    expect((await progress("tolima")).backfill.done).toBe(1);
+    expect((await progress("choco")).backfill.done).toBe(0);
+  });
+
+  it("asks for Chaparral on the wide ticks only, after Chocó, in the same invocation", async () => {
+    await completeBackfill();
+    const calls = serving(FULL);
+
+    await tick(15);
+    expect([calls(), calls.tolima()]).toEqual([1, 0]);
+
+    await tick(30);
+    expect([calls(), calls.tolima()]).toEqual([2, 1]);
+    const last = (await env.DB.prepare(
+      "SELECT zone, window_start, started_at FROM ingest_runs ORDER BY id DESC LIMIT 1",
+    ).first<Record<string, string>>())!;
+    expect(last.zone).toBe("tolima");
+    expect(last.window_start).toBe(expectedWindowStart(last.started_at!, 1));
+  });
+
+  // The throttle is about one catalogue's freshness: Chocó's tick a minute ago does not make
+  // Chaparral's data any newer.
+  it("lets the button refresh one zone right after the other zone has run", async () => {
+    await completeBackfill();
+    const calls = serving(FULL);
+    expect(((await (await call("/api/refresh", { method: "POST" })).json()) as any).refreshed).toBe(true);
+    const res = (await (await call("/api/refresh?zone=tolima", { method: "POST" })).json()) as any;
+    expect(res.refreshed).toBe(true);
+    expect(res.lastSuccessfulRun.windowStart).toBe(expectedWindowStart(res.lastSuccessfulRun.startedAt, 1));
+    expect([calls(), calls.tolima()]).toEqual([1, 1]);
+  });
+
+  // Chaparral's own failure — a timeout on its larger response, say — is not SGC being unwell for
+  // Chocó. Refusals and rate limits are still read across zones; a plain failure is the zone's.
+  it("keeps Chocó's fast lane open when only Chaparral's last run failed", async () => {
+    await completeBackfill();
+    const calls = serving(FULL);
+    await recordRun(1, {}, new Date(Date.now() - 120_000));
+    await env.DB.prepare(
+      `INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, zone)
+       VALUES (?1, ?1, 'cron', ?1, ?1, 0, 500, 'tolima')`,
+    )
+      .bind(new Date(Date.now() - 60_000).toISOString())
+      .run();
+
+    await tick(15);
+    expect(calls()).toBe(1);
+  });
+
+  // One door: a refusal persisting past its grace holds every zone to one probe an hour.
+  it("holds the other zone's probe to the same hour while SGC refuses us", async () => {
+    await completeBackfill();
+    const calls = serves(
+      () => new Response("", { status: 410 }),
+      () => new Response("", { status: 410 }),
+    );
+    const ago = (min: number) => new Date(Date.now() - min * 60_000);
+    await recordRun(0, { http_status: 410 }, ago(120));
+    await recordRun(0, { http_status: 410 }, ago(61));
+
+    await tick(30, { hour: 13 });
+    expect([calls(), calls.tolima()]).toEqual([1, 0]);
   });
 });

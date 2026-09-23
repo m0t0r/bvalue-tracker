@@ -5,8 +5,8 @@ import { secureHeaders } from "hono/secure-headers";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
 import { computeStats, type CatalogStats } from "../core/gr.ts";
-import { MAINSHOCK_ID } from "../core/seiscomp.ts";
-import type { StatusResponse, StoredEvent } from "./api-types.ts";
+import { DEFAULT_ZONE, ZONE_IDS, ZONES, isZoneId, type ZoneId } from "../core/zones.ts";
+import type { HealthResponse, StatusResponse, StoredEvent, ZoneHealth } from "./api-types.ts";
 import { lastRun, toStored, type EventRow } from "./db.ts";
 import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
 import { asLevel, logger, type Logger } from "./log.ts";
@@ -82,23 +82,44 @@ app.use("/api/*", async (c, next) => {
  * page rendered, `/api/health` would have said `ok`, and the catalogue was nine hours
  * stale. `ingestAgeS` is the field to alert on — see .github/workflows/ingest-health.yml.
  *
+ * Per zone, because each zone is its own catalogue and a stale one is a fault even while the
+ * other is fresh. The top-level `ingestAgeS` is the **stalest** zone's, and null while any zone
+ * has never succeeded, so an alarm that reads only that field still fires for either zone.
+ *
  * Still no catalogue data: an age and a count say nothing about any event.
  */
 app.get("/api/health", async (c) => {
-  const agg = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM events").first<{ n: number }>();
-  const ok = await lastRun(c.env.DB, true);
-  const last = await lastRun(c.env.DB, false);
+  const db = c.env.DB;
   const ageS = (r: { finishedAt: string | null } | null) =>
     r?.finishedAt == null ? null : Math.max(0, Math.round((Date.now() - Date.parse(r.finishedAt)) / 1000));
+  // Independent reads, so they go together rather than one round trip after another.
+  const [last, ...perZone] = await Promise.all([
+    lastRun(db, false, null),
+    ...ZONE_IDS.map(async (zone): Promise<ZoneHealth> => {
+      const [agg, lastOfZone, okOfZone] = await Promise.all([
+        db.prepare("SELECT COUNT(*) AS n FROM events WHERE zone = ?").bind(zone).first<{ n: number }>(),
+        lastRun(db, false, zone),
+        lastRun(db, true, zone),
+      ]);
+      return {
+        totalEvents: agg?.n ?? 0,
+        ingestAgeS: ageS(okOfZone),
+        lastRunOk: lastOfZone === null ? null : lastOfZone.ok,
+      };
+    }),
+  ]);
+  const zones = Object.fromEntries(ZONE_IDS.map((z, i) => [z, perZone[i]!])) as Record<ZoneId, ZoneHealth>;
+  const ages = ZONE_IDS.map((z) => zones[z].ingestAgeS);
   c.header("cache-control", "no-store");
   return c.json({
     ok: true,
-    totalEvents: agg?.n ?? 0,
-    /** Seconds since ingest last succeeded. null when it never has. */
-    ingestAgeS: ageS(ok),
-    /** Whether the most recent finished run succeeded. null when none has. */
+    totalEvents: ZONE_IDS.reduce((n, z) => n + zones[z].totalEvents, 0),
+    /** The stalest zone's seconds since ingest last succeeded. null while any zone never has. */
+    ingestAgeS: ages.some((a) => a === null) ? null : Math.max(...(ages as number[])),
+    /** Whether the most recent finished run, of any zone, succeeded. null when none has. */
     lastRunOk: last === null ? null : last.ok,
-  });
+    zones,
+  } satisfies HealthResponse);
 });
 
 interface EventFilter {
@@ -128,9 +149,16 @@ function parseFilter(q: Record<string, string>): EventFilter {
   };
 }
 
-async function queryEvents(db: D1Database, f: EventFilter): Promise<StoredEvent[]> {
-  const where: string[] = [];
-  const args: (string | number)[] = [];
+/** `zone=choco|tolima`; none means Chocó, which every URL from before there were two assumes. */
+function parseZone(q: Record<string, string>): ZoneId {
+  if (q.zone === undefined || q.zone === "") return DEFAULT_ZONE;
+  if (isZoneId(q.zone)) return q.zone;
+  throw new HTTPException(400, { message: `zone must be one of ${ZONE_IDS.join(", ")}` });
+}
+
+async function queryEvents(db: D1Database, f: EventFilter, zone: ZoneId): Promise<StoredEvent[]> {
+  const where: string[] = ["zone = ?"];
+  const args: (string | number)[] = [zone];
   if (!f.includeRemoved) where.push("removed_at IS NULL");
   if (f.from) {
     where.push("time >= ?");
@@ -148,38 +176,42 @@ async function queryEvents(db: D1Database, f: EventFilter): Promise<StoredEvent[
     where.push("status = ?");
     args.push(f.status);
   }
-  const sql = `SELECT * FROM events ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY time`;
+  const sql = `SELECT * FROM events WHERE ${where.join(" AND ")} ORDER BY time`;
   const { results } = await db
     .prepare(sql)
     .bind(...args)
     .all<EventRow>();
   const events = results.map(toStored);
-  return f.excludeMainshock ? events.filter((e) => e.id !== MAINSHOCK_ID) : events;
+  const mainshock = ZONES[zone].mainshockId;
+  return f.excludeMainshock && mainshock !== null ? events.filter((e) => e.id !== mainshock) : events;
 }
 
-async function status(db: D1Database): Promise<StatusResponse> {
+async function status(db: D1Database, zone: ZoneId): Promise<StatusResponse> {
   const agg = await db
-    .prepare("SELECT COUNT(*) AS n, MAX(time) AS newest FROM events WHERE removed_at IS NULL")
+    .prepare("SELECT COUNT(*) AS n, MAX(time) AS newest FROM events WHERE zone = ? AND removed_at IS NULL")
+    .bind(zone)
     .first<{ n: number; newest: string | null }>();
   // Its id, in its own query rather than as a bare column beside MAX(time): SQLite would answer
   // that, but only while exactly one min/max aggregate is in the statement. One indexed row
-  // (events_time, walked backwards) costs less than that rule being broken silently later.
+  // (events_zone_time, walked backwards) costs less than that rule being broken silently later.
   const newest = await db
-    .prepare("SELECT id FROM events WHERE removed_at IS NULL ORDER BY time DESC LIMIT 1")
+    .prepare("SELECT id FROM events WHERE zone = ? AND removed_at IS NULL ORDER BY time DESC LIMIT 1")
+    .bind(zone)
     .first<{ id: string }>();
   return {
     totalEvents: agg?.n ?? 0,
     newestEventTime: agg?.newest ?? null,
     newestEventId: newest?.id ?? null,
-    lastRun: await lastRun(db, false),
-    lastSuccessfulRun: await lastRun(db, true),
-    backfill: await backfillProgress(db, new Date()),
+    lastRun: await lastRun(db, false, zone),
+    lastSuccessfulRun: await lastRun(db, true, zone),
+    backfill: await backfillProgress(db, new Date(), zone),
   };
 }
 
 app.get("/api/status", async (c) => {
+  const zone = parseZone(c.req.query());
   c.header("cache-control", "no-cache");
-  return c.json(await status(c.env.DB));
+  return c.json(await status(c.env.DB, zone));
 });
 
 /** `cluster=shallow|deep` narrows a response to one depth cluster. Anything else is refused rather than silently ignored. */
@@ -193,7 +225,7 @@ const ofCluster = (events: StoredEvent[], cluster: Cluster | null) =>
 
 app.get("/api/events", async (c) => {
   const q = c.req.query();
-  const events = ofCluster(await queryEvents(c.env.DB, parseFilter(q)), parseCluster(q));
+  const events = ofCluster(await queryEvents(c.env.DB, parseFilter(q), parseZone(q)), parseCluster(q));
   // Always revalidate: the page refetches right after a refresh and must not get the old body.
   c.header("cache-control", "no-cache");
   return c.json(events);
@@ -204,10 +236,11 @@ const csvLang = (q: Record<string, string>): CsvLang => (q.lang === "es" ? "es" 
 
 app.get("/api/events.csv", async (c) => {
   const q = c.req.query();
-  const events = ofCluster(await queryEvents(c.env.DB, parseFilter(q)), parseCluster(q));
+  const zone = parseZone(q);
+  const events = ofCluster(await queryEvents(c.env.DB, parseFilter(q), zone), parseCluster(q));
   return c.body(toCsv(events, csvLang(q)), 200, {
     "content-type": "text/csv; charset=utf-8",
-    "content-disposition": 'attachment; filename="sgc-choco-events.csv"',
+    "content-disposition": `attachment; filename="sgc-${zone}-events.csv"`,
     "cache-control": "no-cache",
   });
 });
@@ -221,7 +254,7 @@ const givenMc = (q: Record<string, string>): number | null =>
  */
 async function statsFor(db: D1Database, q: Record<string, string>): Promise<CatalogStats> {
   const cluster = parseCluster(q);
-  const events = await queryEvents(db, parseFilter(q));
+  const events = await queryEvents(db, parseFilter(q), parseZone(q));
   return cluster === null ? computeStats(events, givenMc(q)) : computeClusterStats(events, givenMc(q))[cluster].stats;
 }
 
@@ -235,7 +268,7 @@ app.get("/api/b-windows.csv", async (c) => {
   const q = c.req.query();
   return c.body(windowsToCsv((await statsFor(c.env.DB, q)).windows, csvLang(q)), 200, {
     "content-type": "text/csv; charset=utf-8",
-    "content-disposition": 'attachment; filename="sgc-choco-b-windows.csv"',
+    "content-disposition": `attachment; filename="sgc-${parseZone(q)}-b-windows.csv"`,
     "cache-control": "no-cache",
   });
 });
@@ -243,30 +276,31 @@ app.get("/api/b-windows.csv", async (c) => {
 app.post("/api/refresh", async (c) => {
   const db = c.env.DB;
   const now = new Date();
-  const l = log(c.env, { trigger: "manual" });
+  const zone = parseZone(c.req.query());
+  const l = log(c.env, { trigger: "manual", zone });
   const standDown = async (retryAfterS: number, why: string) => {
     // A press that stands down is the normal case with a 5-minute cron, so this is not a
     // warning. It is logged because "the button does nothing" is the report we would get,
     // and the reason it did nothing is otherwise nowhere.
     l.info({ retryAfterS, why }, "refresh stood down");
-    return c.json({ ...(await status(db)), refreshed: false, retryAfterS } satisfies StatusResponse);
+    return c.json({ ...(await status(db, zone)), refreshed: false, retryAfterS } satisfies StatusResponse);
   };
 
   // One reading of the run history, one decision from it. The checks inside dueNow only
   // answer with a useful retryAfterS; the guard that actually holds is the atomic claim,
   // which the plan's minIntervalS carries into ingest().
-  const history = await readHistory(db, now, l);
-  const plan = dueNow({ kind: "manual" }, now, history);
+  const history = await readHistory(db, now, l, zone);
+  const plan = dueNow({ kind: "manual" }, now, history, zone);
   if (plan.steps.length === 0) {
     return standDown(plan.retryAfterS ?? 5, history.inFlight ? "in flight" : "throttled");
   }
 
-  const work = runPlan({ db, log: l, analytics: c.env.INGEST_ANALYTICS }, plan);
+  const work = runPlan({ db, log: l, analytics: c.env.INGEST_ANALYTICS }, plan, zone);
   // Keep the ingest alive if the visitor closes the tab mid-request.
   c.executionCtx.waitUntil(work);
   // null means a concurrent caller won the claim, so nothing was sent to SGC.
   if ((await work) === null) return standDown(5, "claim held");
-  return c.json({ ...(await status(db)), refreshed: true } satisfies StatusResponse);
+  return c.json({ ...(await status(db, zone)), refreshed: true } satisfies StatusResponse);
 });
 
 /**
@@ -369,39 +403,49 @@ export default {
    * sequence in one invocation is race-free by construction.
    */
   async scheduled(controller, env) {
-    // The real clock, not the scheduled minute: a failure recorded seconds ago still counts
-    // against the fast lane, while which lane this tick *is* comes from scheduledTime.
-    const now = new Date();
     const minute = tickMinute(controller.scheduledTime);
     const l = log(env, { trigger: "cron", tickMinute: minute });
-    try {
-      const history = await readHistory(env.DB, now, l);
-      const plan = dueNow({ kind: "cron", scheduledTime: controller.scheduledTime }, now, history);
-      /**
-       * The line that would have caught the tickMinute fault in one query. `lanes` is what
-       * this tick decided to do; grouping 24 hours of these by it should show four fast
-       * ticks for every wide one and a sweep on the hour. For a day it was `["fast"]` every
-       * single time and nothing said so. `scheduledAt` is on the line too, because the
-       * dispatch is at :45 past and that offset is the whole reason the snap exists.
-       */
-      l.info(
-        {
-          scheduledAt: new Date(controller.scheduledTime).toISOString(),
-          lanes: plan.steps.map((s) => s.lane),
-          sgcUnwell: sgcUnwell(history.health, now),
-          backfill: `${history.backfill.done}/${history.backfill.total}`,
-          inFlight: history.inFlight,
-        },
-        plan.steps.length === 0 ? "tick stood down" : "tick planned",
-      );
+    // The zones one after another, in this one invocation: never two requests to SGC at once,
+    // and no second cron pattern to land inside the first one's claim window. Each zone reads
+    // the history afresh, so the second sees what the first just did — a refusal the first
+    // zone met holds the second one's probe to the same hour.
+    let thrown: unknown = null;
+    for (const zone of ZONE_IDS) {
+      const zl = l.child({ zone });
+      try {
+        // The real clock, not the scheduled minute: a failure recorded seconds ago still counts
+        // against the fast lane, while which lane this tick *is* comes from scheduledTime.
+        const now = new Date();
+        const history = await readHistory(env.DB, now, zl, zone);
+        const plan = dueNow({ kind: "cron", scheduledTime: controller.scheduledTime }, now, history, zone);
+        /**
+         * The line that would have caught the tickMinute fault in one query. `lanes` is what
+         * this tick decided to do; grouping 24 hours of these by it should show four fast
+         * ticks for every wide one and a sweep on the hour. For a day it was `["fast"]` every
+         * single time and nothing said so. `scheduledAt` is on the line too, because the
+         * dispatch is at :45 past and that offset is the whole reason the snap exists.
+         */
+        zl.info(
+          {
+            scheduledAt: new Date(controller.scheduledTime).toISOString(),
+            lanes: plan.steps.map((s) => s.lane),
+            sgcUnwell: sgcUnwell(history.health, now),
+            backfill: `${history.backfill.done}/${history.backfill.total}`,
+            inFlight: history.inFlight,
+          },
+          plan.steps.length === 0 ? "tick stood down" : "tick planned",
+        );
 
-      await runPlan({ db: env.DB, log: l, analytics: env.INGEST_ANALYTICS }, plan);
-    } catch (err) {
-      // A throw here is otherwise only an uncaught-exception log with no idea which lane
-      // it was in. Logged with the tick's own fields, then rethrown so the runtime still
-      // records the invocation as failed.
-      l.error({ err }, "tick failed");
-      throw err;
+        await runPlan({ db: env.DB, log: zl, analytics: env.INGEST_ANALYTICS }, plan, zone);
+      } catch (err) {
+        // A throw here is otherwise only an uncaught-exception log with no idea which lane
+        // it was in. Logged with the tick's own fields, and rethrown once every zone has had
+        // its turn, so the runtime still records the invocation as failed but one zone's
+        // fault does not also cost the other zone its tick.
+        zl.error({ err }, "tick failed");
+        thrown ??= err;
+      }
     }
+    if (thrown !== null) throw thrown;
   },
 } satisfies ExportedHandler<Env>;

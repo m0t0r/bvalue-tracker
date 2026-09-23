@@ -45,7 +45,9 @@
   "triggers": {
     // Every 15 min: the trailing 1 day, insert/update only. Every second tick widens to the
     // trailing 3 days and does removals; on the hour it also re-checks one older 7-day chunk
-    // for revisions. ~120 SGC requests/day.
+    // for revisions. ~120 SGC requests/day for Chocó. The Tolima zone (the Chaparral swarm) runs
+    // on the wide ticks only, in the same invocation after Chocó, plus its own hourly sweep: ~72
+    // more, ~192/day.
     // Deliberately ONE pattern: the old config had a second, `5 * * * *`, for the sweep, and
     // at five-minute spacing a second pattern lands within 120 s of the first — inside the
     // 150 s in-flight window — and the two steal each other's claim. One pattern with the
