@@ -100,8 +100,8 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   and it drops the Worker's own headers too. Check headers against `pnpm preview`, which
   runs the built Worker in workerd and prints `Parsed 2 valid header rules` if the file
   is well formed (the second rule is the asset cache policy under [Performance](performance.md)).
-- **`not_found_handling` is `none`, not `single-page-application`.** There is one page and
-  no client-side router, so the SPA fallback only meant that `/robots.txt`, `/favicon.ico`,
+- **`not_found_handling` is `none`, not `single-page-application`.** Every page is a real
+  file (`index.html`, and one per zone the build writes, such as `tolima.html`), so the SPA fallback only meant that `/robots.txt`, `/favicon.ico`,
   `/llms.txt` and every crawler's guess answered **200 with the whole app** — a soft 404 that
   also made Lighthouse call robots.txt invalid. An asset miss now falls through to the Worker,
   whose `notFound` handler answers `404 not found` as `text/plain`, with the headers above.

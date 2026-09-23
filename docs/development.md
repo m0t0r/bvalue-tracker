@@ -68,6 +68,14 @@ pnpm cli fetch --zone tolima --out data/tolima.csv                # the zone's o
   `pnpm-workspace.yaml`'s `allowBuilds`: its build script only copies the browser service
   worker, which nothing here uses. `worker.fetch(...)` in `worker/test` is not a network
   call — it invokes the Worker's own handler, which is the system under test.
+- **A plugin that reads the finished `index.html` must be `enforce: "post"`.** Vite 8 emits the
+  page late, and a `generateBundle` hook in the normal order finds only `.assetsignore` in the
+  client bundle. It was silent: the build passed and wrote no `tolima.html`. `pnpm build`, then
+  `ls dist/client/*.html`.
+- **Under `pnpm dev` a page path with no file is the Worker's 404**, because the Cloudflare
+  plugin applies `not_found_handling` in dev too, and it builds its request from
+  `req.originalUrl`, so a middleware that rewrites `req.url` changes nothing. The zone pages'
+  dev middleware serves the HTML itself through `server.transformIndexHtml`.
 - **`test/live.test.ts` must stay unmocked.** It is the daily canary against the real SGC
   form. `pnpm test:live` runs that file alone, so no MSW server is ever loaded in it.
 - `wrangler.test.jsonc` exists because the real config has `assets` without a

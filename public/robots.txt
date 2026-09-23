@@ -1,5 +1,5 @@
-# One page, and it is public. The API is same-origin only, so a crawler gets 403 there
-# anyway; saying so here saves it the request.
+# Every page is public, one per zone (/ and /tolima). The API is same-origin only, so a
+# crawler gets 403 there anyway; saying so here saves it the request.
 User-agent: *
 Allow: /
 Disallow: /api/

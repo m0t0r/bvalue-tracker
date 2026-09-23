@@ -18,7 +18,8 @@ terms in plain words.
 ## Features
 
 - **Two zones, one tab each, named by department.** Chocó (the M7.4 sequence) and Tolima (the
-  Chaparral swarm) each have their own catalogue, figures and link (`?zona=tolima`). Chocó is
+  Chaparral swarm) each have their own catalogue, figures and page (`/tolima`), and a shared link previews
+  as the zone it opens. Chocó is
   re-read every 15 minutes and Tolima every 30.
 - **Up-to-date catalogue.** A Cron Trigger re-reads SGC every 15 minutes, and a
   rotating sweep catches the revisions SGC makes to older events. Events SGC

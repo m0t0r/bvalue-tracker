@@ -1,8 +1,11 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
+import { DEFAULT_ZONE, ZONE_IDS } from "./core/zones.ts";
 
 /**
  * Preload the one font subset the page actually uses. Everything on screen is text, so the
@@ -29,8 +32,65 @@ function preloadLatinFont(): Plugin {
   };
 }
 
+/**
+ * One HTML file per zone, so a shared `/tolima` link previews as Tolima (`core/zone-pages.ts`).
+ * The build copies the finished `index.html` — hashed script, stylesheet and font preload already
+ * in it — and swaps in each other zone's meta tags; the asset layer serves `tolima.html` at
+ * `/tolima`. In dev the same page is served for the zone's path, with the same tags.
+ */
+function zonePages(): Plugin[] {
+  const zoneAt = (url: string | undefined) => {
+    const zone = zonePath((url ?? "/").split("?")[0] ?? "/");
+    return zone === DEFAULT_ZONE ? undefined : zone;
+  };
+  return [
+    {
+      // Dev serves a zone's page itself. Left to the Cloudflare plugin, /tolima goes to the Worker,
+      // which answers 404 for a path with no file (`not_found_handling: "none"`), and rewriting
+      // `req.url` does not help: the plugin builds its request from `req.originalUrl`.
+      name: "sgc-zone-pages:dev",
+      apply: "serve",
+      enforce: "pre",
+      configureServer(server) {
+        server.middlewares.use(async (req, res, next) => {
+          if ((req.method !== "GET" && req.method !== "HEAD") || zoneAt(req.url) === undefined) return next();
+          try {
+            const template = await readFile(path.join(server.config.root, "index.html"), "utf8");
+            const html = await server.transformIndexHtml(req.url!, template, req.originalUrl);
+            res.setHeader("content-type", "text/html; charset=utf-8");
+            res.end(html);
+          } catch (err) {
+            next(err);
+          }
+        });
+      },
+      transformIndexHtml(html, ctx) {
+        const zone = zoneAt(ctx.originalUrl);
+        return zone === undefined ? html : withZoneMeta(html, zone);
+      },
+    },
+    {
+      // Last, because Vite 8 emits index.html late: a plugin in the normal order finds no page in
+      // the bundle yet, and would silently write no zone file at all.
+      name: "sgc-zone-pages:build",
+      apply: "build",
+      enforce: "post",
+      generateBundle(_options, bundle) {
+        if (this.environment.name !== "client") return; // the Worker's environment has no page
+        const index = bundle["index.html"];
+        if (index?.type !== "asset") throw new Error("sgc-zone-pages: no index.html in the client bundle");
+        for (const zone of ZONE_IDS) {
+          if (zone === DEFAULT_ZONE) continue;
+          const source = withZoneMeta(String(index.source), zone);
+          this.emitFile({ type: "asset", fileName: zonePageFile(zone), source });
+        }
+      },
+    },
+  ];
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont()],
+  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont(), zonePages()],
   worker: { format: "es" },
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   environments: {
