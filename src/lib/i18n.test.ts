@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SHARE_META } from "../../core/zone-pages.ts";
 import { ZONE_IDS } from "../../core/zones.ts";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
 import { dicts, type Lang } from "./i18n.tsx";
@@ -92,6 +93,11 @@ describe("the two zones' names for themselves", () => {
     const c = dicts[lang].zones.tolima;
     expect(`${c.mapDesc} ${c.subtitle}`).not.toMatch(/sismo principal|mainshock|anillo|ring/i);
     expect(c.caveats.join(" ")).toMatch(/ningún sismo principal|no mainshock/i);
+  });
+
+  // The tab's title in Spanish is what a shared link previews as, which lives in the page's <head>.
+  it.each(ZONE_IDS)("gives %s the same title in the tab and in a link preview", (zone) => {
+    expect(dicts.es.zones[zone].docTitle).toBe(SHARE_META[zone].title);
   });
 
   it.each(each)("never calls a figure a forecast without saying it is not one, in %s for %s", (lang, zone) => {

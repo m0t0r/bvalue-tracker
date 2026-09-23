@@ -71,9 +71,20 @@ zone's filters away rather than carrying Chocó's "desde el 10 de agosto" into a
 the 20th of September. Each zone starts from `defaultFilters(zone)`, and the scope bar compares against
 those, so an untouched tab shows no chips on either side.
 
-- **The zone is in the URL as `?zona=`**, in Spanish because a reader sees it in every link they
-  share. Chocó keeps the bare URL, so every link from before there were two zones lands where it
-  did; the back button undoes a switch (`pushState`, `popstate`).
+- **Each zone is its own page: `/` is Chocó, `/tolima` is Tolima** (`core/zone-pages.ts`). The
+  link is shared person to person, mostly on WhatsApp, and a messenger's preview is read from the
+  `<head>` by a crawler that runs no JavaScript. With the zone in a query parameter there was one
+  `index.html`, and a Tolima link previewed as "Secuencia sísmica del Chocó" (2026-09-23).
+  - `index.html` is Chocó's page and the template. The build (`zonePages` in `vite.config.ts`)
+    copies the finished file once per other zone with that zone's `<title>`, description and
+    `og:*` swapped in, and the asset layer serves `tolima.html` at `/tolima` — no Worker, so
+    `public/_headers` covers it like the rest of the page. `withZoneMeta` throws if a tag is
+    missing or doubled, so a drifted template fails the build rather than shipping Chocó's
+    preview. The Spanish copy is `SHARE_META`; a test holds its titles to the tabs' `docTitle`.
+  - Chocó keeps the bare URL, so every link from before there were two zones lands where it did.
+    The query-parameter form the zone had for its first day is not read at all.
+  - Switching tabs moves to the other path without a reload, and the back button undoes it
+    (`pushState`, `popstate`). Paths are zone names; anything else in code or URLs is English.
 - **The tabs are named by department, "Chocó | Tolima"**, as SGC's daily bulletin names the pair.
   The Tolima tab's heading names the locality, "Enjambre sísmico de Chaparral (Tolima)", because
   its box covers only the swarm and "Tolima" alone would claim the whole department.

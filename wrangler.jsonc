@@ -6,7 +6,8 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-20",
   "compatibility_flags": ["nodejs_compat"],
-  // There is one page and no client-side router, so the single-page-application fallback only
+  // Every page is a real file (index.html, and tolima.html served at /tolima; see
+  // core/zone-pages.ts), so the single-page-application fallback only
   // meant that every wrong path — /robots.txt, /favicon.ico, a crawler's guess — answered 200
   // with the whole app. "none" sends an asset miss to the Worker, which answers a plain 404.
   "assets": {
