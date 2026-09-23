@@ -48,13 +48,15 @@ jobs:
           set -o pipefail
           curl --fail --silent --show-error --retry 5 --retry-delay 10 --retry-all-errors \
             "$PRODUCTION_URL/api/health" | tee health.json
+          # The script is one single-quoted shell string: an apostrophe anywhere in it, comments
+          # included, ends the string and bash runs the rest as a command (exit 127, 2026-09-23).
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const h = JSON.parse(readFileSync("health.json", "utf8"));
             const stale = Number(process.env.STALE_AFTER_S);
             if (h.ok !== true) { console.error("health says not ok"); process.exit(1); }
             // Each zone is its own catalogue, and one can go stale while the other is fine.
-            // The top-level age is already the stalest zone's; the zones are read by name so
+            // The top-level age is already that of the stalest zone; the zones are read by name so
             // the failure says which, and so a Worker that stopped reporting them fails too.
             const zones = h.zones && typeof h.zones === "object" ? Object.entries(h.zones) : [];
             if (zones.length === 0) {
