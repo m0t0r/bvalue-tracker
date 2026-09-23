@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IngestRun } from "../api-types.ts";
 import {
+  CADENCE,
   dueNow,
   REFRESH_MIN_INTERVAL_S,
   TRAILING_DAYS,
@@ -25,6 +26,7 @@ const failingSince = (since: Date, status: number | null) =>
 const history = (over: Partial<IngestHistory> = {}): IngestHistory => ({
   health: healthy(),
   inFlight: false,
+  lastSent: null,
   lastRun: null,
   backfill: { done: 6, total: 6 },
   ...over,
@@ -198,9 +200,13 @@ describe("cron lanes", () => {
  */
 describe("while SGC is refusing us", () => {
   const ago = (s: number) => new Date(NOW.getTime() - s * 1000);
-  /** Refused since `sinceS` ago, last asked `lastS` ago. */
+  /** Refused since `sinceS` ago, last asked `lastS` ago — by this zone, as the only one asking. */
   const refused = (sinceS: number, lastS: number, status = 410) =>
-    history({ health: failingSince(ago(sinceS), status), lastRun: finishedAt(ago(lastS)) });
+    history({
+      health: failingSince(ago(sinceS), status),
+      lastSent: ago(lastS).toISOString(),
+      lastRun: finishedAt(ago(lastS)),
+    });
 
   it("keeps the wide tick at full rate while the refusal is still young", () => {
     // One 410 can be a proxy having a moment; an hour of staleness is too much to spend on it.
@@ -220,6 +226,7 @@ describe("while SGC is refusing us", () => {
     const T = Date.UTC(2026, 8, 19, 12, 0);
     const oneFailure = history({
       health: failingSince(new Date(T), 410),
+      lastSent: new Date(T).toISOString(),
       lastRun: { ...finishedAt(new Date(T)), ok: false },
     });
     const at = (min: number) =>
@@ -332,5 +339,94 @@ describe("the visitor's refresh", () => {
     const after = dueNow(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), limited);
     expect(after.steps).toEqual([{ lane: "sweep" }]);
     expect(after.minIntervalS).toBe(REFRESH_MIN_INTERVAL_S);
+  });
+});
+
+/**
+ * The second zone. Chaparral runs on the wide ticks only, so adding it costs two trailing
+ * requests and one sweep an hour instead of five: SGC refused us on 2026-09-20 after ~20 hours
+ * at twelve an hour, and two zones on every lane would have put us back at ten.
+ */
+describe("the Tolima zone", () => {
+  const tolima = (caller: Parameters<typeof dueNow>[0], h = history(), now = NOW) => dueNow(caller, now, h, "tolima");
+
+  it("sits out the ticks between the wide ones", () => {
+    expect(tolima(cron(15)).steps).toEqual([]);
+    expect(tolima(cron(45)).steps).toEqual([]);
+  });
+
+  // A swarm's day holds far more than the ten events MAX_REMOVAL_SHARE needs to engage, which
+  // is the only reason the fast lane may not retire anything.
+  it("re-reads one trailing day on the wide tick, with removals", () => {
+    expect(tolima(cron(30)).steps).toEqual([{ lane: "wide", trigger: "cron", days: 1, allowRemovals: true }]);
+  });
+
+  it("sweeps on the hour, like Chocó", () => {
+    expect(tolima(cron(0)).steps.at(-1)).toEqual({ lane: "sweep" });
+  });
+
+  describe.each([0, 45, 449, -449])("dispatched %i s from the tick", (offsetS) => {
+    const hour = (zone: "choco" | "tolima") =>
+      [0, 15, 30, 45].flatMap(
+        (m) =>
+          dueNow({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, history(), zone)
+            .steps,
+      );
+
+    // The budget docs/sgc-data-source.md quotes: 5 + 3 = 8 requests an hour, ~192 a day.
+    it("sends three requests an hour, and the two zones eight", () => {
+      expect(hour("tolima")).toHaveLength(3);
+      expect(hour("tolima").filter((s) => s.lane === "sweep")).toHaveLength(1);
+      expect(hour("choco").length + hour("tolima").length).toBe(8);
+    });
+  });
+
+  // Its throttle is its own period, so a press lands on a run that was happening anyway.
+  it("holds the button to its own thirty minutes, counted from its own last run", () => {
+    const wait = CADENCE.tolima.refreshMinIntervalS;
+    expect(wait).toBe(1800);
+    const h = history({ lastRun: finishedAt(NOW), lastSent: NOW.toISOString() });
+    expect(tolima(MANUAL, h, at(wait - 60)).retryAfterS).toBe(60);
+    expect(tolima(MANUAL, h, at(wait + 1)).steps).toEqual([
+      { lane: "wide", trigger: "manual", days: 1, allowRemovals: true },
+    ]);
+  });
+
+  /**
+   * Both zones probed the tick the refusal was still in its grace, Chaparral seconds after Chocó,
+   * so the newest request is a few seconds past the tick. Counted exactly, the next hour's probe
+   * then lands seconds short of 3600 and stands down, and the first contact slips to +120 — the
+   * 90-minute freeze the single-zone timeline above guards against, back through the second zone.
+   */
+  it("still probes on the hour when the other zone's request left seconds after the tick", () => {
+    const T = Date.UTC(2026, 8, 19, 12, 0);
+    const bothProbed = history({
+      health: failingSince(new Date(T), 410),
+      lastSent: new Date(T + 30 * 60_000 + 8_000).toISOString(),
+      lastRun: { ...finishedAt(new Date(T + 30 * 60_000)), ok: false },
+    });
+    const at = (min: number) =>
+      dueNow({ kind: "cron", scheduledTime: T + min * 60_000 }, new Date(T + min * 60_000), bothProbed).steps.length >
+      0;
+    expect(at(60)).toBe(false);
+    expect(at(90)).toBe(true);
+  });
+
+  // Another zone having just run says nothing about how fresh this catalogue is.
+  it("does not stand the button down because the other zone ran a moment ago", () => {
+    const h = history({ lastRun: finishedAt(at(-3600)), lastSent: at(-60).toISOString() });
+    expect(tolima(MANUAL, h).steps).toHaveLength(1);
+  });
+
+  // But SGC is one door: while it refuses us, one knock an hour is the whole budget, whoever
+  // knocked. Chocó's probe at the top of the hour stands Chaparral's down.
+  it("counts the refusal's hour from the last request of any zone", () => {
+    const refused = history({
+      health: failingSince(at(-7200), 410),
+      lastSent: at(-60).toISOString(),
+      lastRun: finishedAt(at(-3700)),
+    });
+    expect(tolima(cron(30), refused).steps).toEqual([]);
+    expect(tolima(MANUAL, refused).steps).toEqual([]);
   });
 });

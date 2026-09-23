@@ -3,11 +3,12 @@ import { parseArgs } from "node:util";
 import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, computeClusterStats } from "./clusters.ts";
 import { fromCsv, toCsv, windowsToCsv } from "./csv.ts";
 import { bValue, computeStats, fmd, mcGoodnessOfFit, mcMaxCurvature, WINDOW_SIZE, WINDOW_STEP } from "./gr.ts";
-import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, MAINSHOCK_ID, fetchCatalog } from "./seiscomp.ts";
+import { MAINSHOCK_ID, fetchCatalog } from "./seiscomp.ts";
 import type { BBox, SeismicEvent } from "./types.ts";
+import { DEFAULT_ZONE, ZONES, ZONE_IDS, isZoneId } from "./zones.ts";
 
 const USAGE = `usage:
-  pnpm cli fetch  [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--bbox lonMin,latMin,lonMax,latMax] --out events.csv
+  pnpm cli fetch  [--zone ${ZONE_IDS.join("|")}] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--bbox=lonMin,latMin,lonMax,latMax] --out events.csv
   pnpm cli bvalue --input events.csv [--mc 2.3] [--manual-only] [--exclude-mainshock] [--windows] [--windows-out b-windows.csv] [--cluster shallow|deep]`;
 
 function parseDate(s: string): Date {
@@ -24,13 +25,22 @@ function parseBBox(s: string): BBox {
 async function cmdFetch(argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
-    options: { start: { type: "string" }, end: { type: "string" }, bbox: { type: "string" }, out: { type: "string" } },
+    options: {
+      zone: { type: "string" },
+      start: { type: "string" },
+      end: { type: "string" },
+      bbox: { type: "string" },
+      out: { type: "string" },
+    },
   });
   if (!values.out) throw new Error("--out is required");
+  const zoneId = values.zone ?? DEFAULT_ZONE;
+  if (!isZoneId(zoneId)) throw new Error(`bad --zone ${zoneId}, want ${ZONE_IDS.join(" or ")}`);
+  const zone = ZONES[zoneId];
   const page = await fetchCatalog({
-    start: values.start ? parseDate(values.start) : MAINSHOCK_DATE,
+    start: values.start ? parseDate(values.start) : zone.start,
     end: values.end ? parseDate(values.end) : new Date(Date.now() + 86_400_000),
-    bbox: values.bbox ? parseBBox(values.bbox) : CHOCO_SWARM_BBOX,
+    bbox: values.bbox ? parseBBox(values.bbox) : zone.bbox,
   });
   const events = [...page.events].sort((a, b) => a.time.localeCompare(b.time));
   await writeFile(values.out, toCsv(events));

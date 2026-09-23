@@ -1,4 +1,5 @@
 import type { SeismicEvent } from "../core/types.ts";
+import type { ZoneId } from "../core/zones.ts";
 import type { IngestRun, StoredEvent } from "./api-types.ts";
 import { IN_FLIGHT_MS, type SgcHealth } from "./plan.ts";
 
@@ -104,20 +105,22 @@ export function sameData(a: SeismicEvent, b: SeismicEvent): boolean {
   return DATA_FIELDS.every((f) => a[f] === b[f]);
 }
 
-export async function eventsBetween(db: D1Database, from: string, to: string): Promise<StoredEvent[]> {
+/** One zone's events in [from, to). Never another zone's: this is what ingest may retire. */
+export async function eventsBetween(db: D1Database, zone: ZoneId, from: string, to: string): Promise<StoredEvent[]> {
   const { results } = await db
-    .prepare("SELECT * FROM events WHERE time >= ? AND time < ? ORDER BY time")
-    .bind(from, to)
+    .prepare("SELECT * FROM events WHERE zone = ? AND time >= ? AND time < ? ORDER BY time")
+    .bind(zone, from, to)
     .all<EventRow>();
   return results.map(toStored);
 }
 
-export function insertStmt(db: D1Database, e: SeismicEvent, now: string): D1PreparedStatement {
+/** An event's zone is set once, here; an update never moves it (the zones' boxes do not overlap). */
+export function insertStmt(db: D1Database, e: SeismicEvent, now: string, zone: ZoneId): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO events (id, time, lat, lon, depth_km, mag, mag_type, phases, rms_s, gap_deg,
-         err_lat_km, err_lon_km, err_depth_km, region, status, solution_stamp, first_seen_at, updated_at, removed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+         err_lat_km, err_lon_km, err_depth_km, region, status, solution_stamp, first_seen_at, updated_at, removed_at, zone)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
        -- Two runs can overlap (cron + a visitor's refresh); the loser must update, not fail.
        ON CONFLICT(id) DO UPDATE SET
          time = excluded.time, lat = excluded.lat, lon = excluded.lon, depth_km = excluded.depth_km,
@@ -145,6 +148,7 @@ export function insertStmt(db: D1Database, e: SeismicEvent, now: string): D1Prep
       e.solutionStamp,
       now,
       now,
+      zone,
     );
 }
 
@@ -197,13 +201,14 @@ export async function runBatched(db: D1Database, stmts: D1PreparedStatement[], s
 }
 
 export interface IngestClaim {
+  zone: ZoneId;
   startedAt: string;
   trigger: IngestRun["trigger"];
   windowStart: string;
   windowEnd: string;
   /** Treat a run started after this instant, and not yet finished, as still in flight. */
   inFlightSince: string;
-  /** If set, refuse when a run finished after this instant (the visitor-facing throttle). */
+  /** If set, refuse when a run of this zone finished after this instant (the visitor-facing throttle). */
   finishedSince: string | null;
 }
 
@@ -214,21 +219,24 @@ export interface IngestClaim {
  * reads landed before either insert both passed and both queried SGC. SQLite evaluates
  * this insert-with-NOT-EXISTS atomically, so exactly one concurrent caller gets a row.
  * Returns null when another run holds the claim: the caller must stand down, not proceed.
+ *
+ * The in-flight half is across zones — one request to SGC at a time from this Worker, whichever
+ * catalogue it is for — and the throttle half is this zone's, like the page's freshness it guards.
  */
 export async function claimIngestRun(db: D1Database, c: IngestClaim): Promise<number | null> {
   const row = await db
     .prepare(
-      `INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
-       SELECT ?1, ?2, ?3, ?4
+      `INSERT INTO ingest_runs (started_at, trigger, window_start, window_end, zone)
+       SELECT ?1, ?2, ?3, ?4, ?7
        WHERE NOT EXISTS (
                SELECT 1 FROM ingest_runs WHERE finished_at IS NULL AND started_at > ?5
              )
          AND (?6 IS NULL OR NOT EXISTS (
-               SELECT 1 FROM ingest_runs WHERE finished_at IS NOT NULL AND finished_at > ?6
+               SELECT 1 FROM ingest_runs WHERE zone = ?7 AND finished_at IS NOT NULL AND finished_at > ?6
              ))
        RETURNING id`,
     )
-    .bind(c.startedAt, c.trigger, c.windowStart, c.windowEnd, c.inFlightSince, c.finishedSince)
+    .bind(c.startedAt, c.trigger, c.windowStart, c.windowEnd, c.inFlightSince, c.finishedSince, c.zone)
     .first<{ id: number }>();
   return row?.id ?? null;
 }
@@ -317,12 +325,17 @@ export async function sgcHealth(db: D1Database): Promise<SgcHealth> {
   };
 }
 
-export async function lastRun(db: D1Database, onlyOk: boolean): Promise<IngestRun | null> {
+/**
+ * The newest finished run — of one zone, or, with `zone` null, of any. Each shape has its own
+ * index (0005 for any zone, 0006 per zone), and each is one seek and the first entry.
+ */
+export async function lastRun(db: D1Database, onlyOk: boolean, zone: ZoneId | null): Promise<IngestRun | null> {
   const row = await db
     // Unfinished runs are in progress, not failed; they never count as the "last run".
     .prepare(
-      `SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ${onlyOk ? "AND ok = 1" : ""} ORDER BY id DESC LIMIT 1`,
+      `SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ${zone === null ? "" : "AND zone = ?1"} ${onlyOk ? "AND ok = 1" : ""} ORDER BY id DESC LIMIT 1`,
     )
+    .bind(...(zone === null ? [] : [zone]))
     .first<RunRow>();
   return row ? toRun(row) : null;
 }

@@ -1,11 +1,5 @@
-import {
-  CHOCO_SWARM_BBOX,
-  MAINSHOCK_DATE,
-  fetchCatalog,
-  sgcHttpError,
-  type FetchOptions,
-  type RefusalEvidence,
-} from "../core/seiscomp.ts";
+import { fetchCatalog, sgcHttpError, type FetchOptions, type RefusalEvidence } from "../core/seiscomp.ts";
+import { DEFAULT_ZONE, ZONES, type ZoneId } from "../core/zones.ts";
 import { recordRun } from "./analytics.ts";
 import type { IngestRun } from "./api-types.ts";
 import {
@@ -27,7 +21,17 @@ import { silentLogger, type Logger } from "./log.ts";
 import { IN_FLIGHT_MS, TRAILING_DAYS, type IngestHistory, type IngestLane, type IngestPlan } from "./plan.ts";
 
 const DAY_MS = 86_400_000;
-export const SWEEP_CHUNK_DAYS = 7;
+/**
+ * How much history one sweep re-reads. Every request is padded by a day on each side (the form's
+ * timezone is unverified) and its end date is inclusive, so a chunk of N days fetches N + 3 days
+ * of events. Chocó's 7-day chunk is 10 days, ~170 rows at September's rate. The Chaparral swarm has
+ * run ~130 a day: a week of it would be ~1,300 rows, ~1.3 MB of HTML to parse on a tick that is
+ * already over the free plan's 10 ms of CPU (docs/ingest.md, "The CPU budget"). One day fetches
+ * four, ~520 rows at that rate — three Chocó chunks, and the smallest the padding allows. More
+ * chunks means each is revisited less often — every N hours for N days of history — which late
+ * revisions can afford.
+ */
+export const SWEEP_CHUNK_DAYS: Record<ZoneId, number> = { choco: 7, tolima: 1 };
 /** A successful response may not retire more than this share of a window's known events. */
 const MAX_REMOVAL_SHARE = 0.2;
 
@@ -55,6 +59,8 @@ export interface IngestOptions {
   allowRemovals?: boolean;
   /** Which rule chose this run. Carried into the log line and the analytics point. */
   lane?: IngestLane;
+  /** Whose catalogue: which box SGC is asked for, and which events the run may retire. */
+  zone?: ZoneId;
 }
 
 const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -85,7 +91,8 @@ export async function ingest(
   const from = windowStart.toISOString();
   const to = windowEnd.toISOString();
   const lane = opts.lane ?? (trigger === "sweep" ? "sweep" : "wide");
-  const log = (deps.log ?? silentLogger).child({ lane, trigger });
+  const zone = opts.zone ?? DEFAULT_ZONE;
+  const log = (deps.log ?? silentLogger).child({ lane, trigger, zone });
   // Wall time, not CPU: in workerd the clock only advances across I/O, so this measures
   // how long SGC and D1 held the invocation. What the invocation *burned* is
   // $workers.cpuTimeMs in Workers Logs, which the runtime alone can see.
@@ -96,6 +103,7 @@ export async function ingest(
   const nowMs = Date.parse(nowIso);
   const minIntervalS = deps.guard?.minIntervalS ?? null;
   const runId = await claimIngestRun(db, {
+    zone,
     startedAt: nowIso,
     trigger,
     windowStart: from,
@@ -153,7 +161,7 @@ export async function ingest(
     else if (run.error !== null) log.warn(line, "ingest ok with a note");
     else log.info(line, "ingest ok");
 
-    recordRun(deps.analytics, run, { lane, durationMs, sgcMs: sgc.ms, httpStatus, retryAfterS }, log);
+    recordRun(deps.analytics, run, { lane, zone, durationMs, sgcMs: sgc.ms, httpStatus, retryAfterS }, log);
     return run;
   };
 
@@ -163,14 +171,14 @@ export async function ingest(
       {
         start: new Date(windowStart.getTime() - DAY_MS),
         end: new Date(windowEnd.getTime() + DAY_MS),
-        bbox: CHOCO_SWARM_BBOX,
+        bbox: ZONES[zone].bbox,
       },
       { ...WORKER_FETCH, ...fetchOptions },
     );
 
     const widenedFrom = new Date(startOfUtcDay(windowStart).getTime() - 2 * DAY_MS).toISOString();
     const widenedTo = new Date(windowEnd.getTime() + 3 * DAY_MS).toISOString();
-    const known = new Map((await eventsBetween(db, widenedFrom, widenedTo)).map((e) => [e.id, e]));
+    const known = new Map((await eventsBetween(db, zone, widenedFrom, widenedTo)).map((e) => [e.id, e]));
 
     // Origin time can move on revision, so an id may already exist outside the window we loaded.
     const elsewhere = await existingIds(
@@ -186,7 +194,7 @@ export async function ingest(
       seen.add(e.id);
       const prev = known.get(e.id);
       if (!prev && !elsewhere.has(e.id)) {
-        stmts.push(insertStmt(db, e, nowIso));
+        stmts.push(insertStmt(db, e, nowIso, zone));
         inserted++;
       } else if (!prev || prev.removedAt !== null || !sameData(prev, e)) {
         stmts.push(updateStmt(db, e, nowIso));
@@ -259,11 +267,12 @@ export function ingestTrailing(
   );
 }
 
-/** 7-day windows covering mainshock day → now. */
-export function sweepChunks(now: Date): { start: Date; end: Date }[] {
+/** The zone's history in `SWEEP_CHUNK_DAYS` windows, from the day its sequence began to now. */
+export function sweepChunks(now: Date, zone: ZoneId = DEFAULT_ZONE): { start: Date; end: Date }[] {
   const out: { start: Date; end: Date }[] = [];
-  for (let t = MAINSHOCK_DATE.getTime(); t < now.getTime(); t += SWEEP_CHUNK_DAYS * DAY_MS) {
-    out.push({ start: new Date(t), end: new Date(Math.min(t + SWEEP_CHUNK_DAYS * DAY_MS, now.getTime() + DAY_MS)) });
+  const step = SWEEP_CHUNK_DAYS[zone] * DAY_MS;
+  for (let t = ZONES[zone].start.getTime(); t < now.getTime(); t += step) {
+    out.push({ start: new Date(t), end: new Date(Math.min(t + step, now.getTime() + DAY_MS)) });
   }
   return out;
 }
@@ -272,26 +281,34 @@ export function sweepChunks(now: Date): { start: Date; end: Date }[] {
  * Re-check one older chunk per call, least recently attempted first, so late
  * revisions are picked up while every invocation stays small.
  */
-export async function ingestSweep(deps: IngestDeps): Promise<IngestRun | null> {
+export async function ingestSweep(deps: IngestDeps, zone: ZoneId = DEFAULT_ZONE): Promise<IngestRun | null> {
   const now = deps.now ?? new Date();
   const { results } = await deps.db
     // Ordered by last ATTEMPT, not last success: a chunk that keeps failing goes to the back
     // of the queue instead of being retried forever while every other chunk starves.
     .prepare(
-      "SELECT window_start AS s, MAX(started_at) AS last FROM ingest_runs WHERE trigger = 'sweep' GROUP BY window_start",
+      "SELECT window_start AS s, MAX(started_at) AS last FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' GROUP BY window_start",
     )
+    .bind(zone)
     .all<{ s: string; last: string }>();
   const last = new Map(results.map((r) => [r.s, r.last]));
-  const chunks = sweepChunks(now);
+  const chunks = sweepChunks(now, zone);
   chunks.sort((a, b) => (last.get(a.start.toISOString()) ?? "").localeCompare(last.get(b.start.toISOString()) ?? ""));
-  const next = chunks[0]!;
-  return ingest(deps, next.start, next.end, "sweep", { lane: "sweep" });
+  const next = chunks[0];
+  // A zone whose sequence starts after `now` has no history yet, and nothing to sweep.
+  if (next === undefined) return null;
+  return ingest(deps, next.start, next.end, "sweep", { lane: "sweep", zone });
 }
 
-export async function backfillProgress(db: D1Database, now: Date): Promise<{ done: number; total: number }> {
-  const starts = sweepChunks(now).map((c) => c.start.toISOString());
+export async function backfillProgress(
+  db: D1Database,
+  now: Date,
+  zone: ZoneId = DEFAULT_ZONE,
+): Promise<{ done: number; total: number }> {
+  const starts = sweepChunks(now, zone).map((c) => c.start.toISOString());
   const { results } = await db
-    .prepare("SELECT DISTINCT window_start AS s FROM ingest_runs WHERE trigger = 'sweep' AND ok = 1")
+    .prepare("SELECT DISTINCT window_start AS s FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' AND ok = 1")
+    .bind(zone)
     .all<{ s: string }>();
   const swept = new Set(results.map((r) => r.s));
   return { done: starts.filter((s) => swept.has(s)).length, total: starts.length };
@@ -299,9 +316,16 @@ export async function backfillProgress(db: D1Database, now: Date): Promise<{ don
 
 /**
  * Everything the recorded runs say, in one snapshot, so the plan is decided from one
- * reading of the table rather than from four that can disagree mid-tick.
+ * reading of the table rather than from four that can disagree mid-tick. SGC's health, what
+ * is in flight and when a request last left are across zones; the rest is `zone`'s (see
+ * `IngestHistory`).
  */
-export async function readHistory(db: D1Database, now: Date, log: Logger = silentLogger): Promise<IngestHistory> {
+export async function readHistory(
+  db: D1Database,
+  now: Date,
+  log: Logger = silentLogger,
+  zone: ZoneId = DEFAULT_ZONE,
+): Promise<IngestHistory> {
   // First close the books on any run the Worker was killed in the middle of. Everything
   // below reads finished runs, so until this happens a killed run is invisible: it is
   // neither the last run nor a failure, and the fast lane goes on as if SGC were fine.
@@ -312,11 +336,16 @@ export async function readHistory(db: D1Database, now: Date, log: Logger = silen
   // left open means the invocation died — out of memory, out of CPU, or evicted mid-fetch.
   // This is the line to alert on, and the line to look for first in any stale-data report.
   if (reaped > 0) log.warn({ reaped }, "reaped abandoned runs: an invocation was killed");
+  const last = await lastRun(db, false, zone);
+  // Refusals and rate limits are SGC's answer to this address, so they are read across zones; whether
+  // the last run failed is this zone's (`SgcHealth.lastOk` says why).
+  const health = await sgcHealth(db);
   return {
-    health: await sgcHealth(db),
+    health: { ...health, lastOk: last === null ? null : last.ok },
     inFlight: await runInFlight(db, now),
-    lastRun: await lastRun(db, false),
-    backfill: await backfillProgress(db, now),
+    lastSent: (await lastRun(db, false, null))?.startedAt ?? null,
+    lastRun: last,
+    backfill: await backfillProgress(db, now, zone),
   };
 }
 
@@ -325,7 +354,11 @@ export async function readHistory(db: D1Database, now: Date, log: Logger = silen
  * whether SGC was reached at all — or null when another run held the claim, so nothing
  * was sent. An empty plan is a stand-down and returns null without touching D1.
  */
-export async function runPlan(deps: IngestDeps, plan: IngestPlan): Promise<IngestRun | null> {
+export async function runPlan(
+  deps: IngestDeps,
+  plan: IngestPlan,
+  zone: ZoneId = DEFAULT_ZONE,
+): Promise<IngestRun | null> {
   let first: IngestRun | null = null;
   for (const [i, step] of plan.steps.entries()) {
     // The throttle guards the opening step only: a plan's own first run must not be what
@@ -333,11 +366,12 @@ export async function runPlan(deps: IngestDeps, plan: IngestPlan): Promise<Inges
     const d: IngestDeps = { ...deps, guard: { ...deps.guard, minIntervalS: i === 0 ? plan.minIntervalS : null } };
     const run =
       step.lane === "sweep"
-        ? await ingestSweep(d)
+        ? await ingestSweep(d, zone)
         : await ingestTrailing(d, step.trigger, {
             days: step.days,
             allowRemovals: step.allowRemovals,
             lane: step.lane,
+            zone,
           });
     if (i === 0) first = run;
   }

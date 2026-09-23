@@ -48,7 +48,9 @@ pnpm exec wrangler tail choco --format json  # live, for something happening now
 ### Every line the Worker writes
 
 One JSON object per line. `level`, `time` and `msg` are always there; a line about a run
-also carries `lane` and `trigger`.
+also carries `lane`, `trigger` and `zone`. A cron tick writes one `tick planned` / `tick stood
+down` line **per zone** — Chaparral's says `stood down` with `lanes: []` on the :15 and :45 ticks,
+which is its cadence, not a fault. The Analytics Engine point carries the zone in `blob7`.
 
 | `msg` | Level | When | The fields that matter |
 |---|---|---|---|
@@ -65,7 +67,7 @@ also carries `lane` and `trigger`.
 ### Symptom → what to ask
 
 - **"The page is showing old data."** `curl $PRODUCTION_URL/api/health` first: `ingestAgeS`
-  is the whole answer to *how* stale. Then `pnpm logs --since 6h --level error`. An
+  is the whole answer to *how* stale, and `zones` says *which* catalogue. Then `pnpm logs --since 6h --level error`. An
   `ingest failed` line with `httpStatus` means we were refused — read `sgcHeaders` before
   saying by whom; the 2026-09-20 refusal came from Cloudflare, not from SGC — the back-off is working as
   designed and the wide tick is still probing. **No error lines at all is the worse case**:

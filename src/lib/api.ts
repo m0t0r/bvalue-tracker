@@ -1,3 +1,4 @@
+import type { ZoneId } from "../../core/zones";
 import type { StatusResponse, StoredEvent } from "../../worker/api-types";
 
 export type { IngestRun, StatusResponse, StoredEvent } from "../../worker/api-types";
@@ -8,6 +9,6 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export const getEvents = () => json<StoredEvent[]>("/api/events");
-export const getStatus = () => json<StatusResponse>("/api/status");
-export const postRefresh = () => json<StatusResponse>("/api/refresh", { method: "POST" });
+export const getEvents = (zone: ZoneId) => json<StoredEvent[]>(`/api/events?zone=${zone}`);
+export const getStatus = (zone: ZoneId) => json<StatusResponse>(`/api/status?zone=${zone}`);
+export const postRefresh = (zone: ZoneId) => json<StatusResponse>(`/api/refresh?zone=${zone}`, { method: "POST" });

@@ -4,10 +4,10 @@
 [![Mozilla Observatory](https://img.shields.io/mozilla-observatory/grade/choco.sgc-swarm.workers.dev)](https://developer.mozilla.org/en-US/observatory/analyze?host=choco.sgc-swarm.workers.dev)
 
 A live monitor for the earthquake sequence in Chocó, Colombia, that followed the
-M7.4 San José del Palmar earthquake of 2026-08-10 12:34:27 UTC. It keeps a
-catalogue of the sequence up to date from the Servicio Geológico Colombiano (SGC),
-and computes the sequence's Gutenberg–Richter **b-value**, over the whole catalogue
-and over time.
+M7.4 San José del Palmar earthquake of 2026-08-10 12:34:27 UTC, and for the
+earthquake swarm at Chaparral, Tolima, that began on 2026-09-20. It keeps a
+catalogue of each up to date from the Servicio Geológico Colombiano (SGC), and
+computes its Gutenberg–Richter **b-value**, over the whole catalogue and over time.
 
 **Live:** <https://choco.sgc-swarm.workers.dev>
 
@@ -17,6 +17,9 @@ terms in plain words.
 
 ## Features
 
+- **Two zones, one tab each, named by department.** Chocó (the M7.4 sequence) and Tolima (the
+  Chaparral swarm) each have their own catalogue, figures and link (`?zona=tolima`). Chocó is
+  re-read every 15 minutes and Tolima every 30.
 - **Up-to-date catalogue.** A Cron Trigger re-reads SGC every 15 minutes, and a
   rotating sweep catches the revisions SGC makes to older events. Events SGC
   withdraws are marked as removed, never deleted.
@@ -109,6 +112,7 @@ pnpm test:live     # one test against the real SGC server
 
 ```sh
 pnpm cli fetch --out data/events.csv
+pnpm cli fetch --zone tolima --out data/tolima.csv
 pnpm cli bvalue --input data/events.csv --windows
 pnpm cli bvalue --input data/events.csv --mc 2.5 --manual-only --exclude-mainshock
 ```
