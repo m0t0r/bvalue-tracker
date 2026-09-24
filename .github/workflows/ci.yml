@@ -47,9 +47,9 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    # The Cloudflare secrets are set on the two wrangler steps only, not on the job:
+    # `pnpm install` runs dependencies' build scripts (esbuild, workerd, sharp), and a
+    # job-level env would hand the deploy token to each of them.
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,7 +64,13 @@ jobs:
       - run: pnpm exec vite build
       # Migrations first: the new Worker may depend on the new schema.
       - run: pnpm exec wrangler d1 migrations apply sgc-swarm --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - run: pnpm exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Smoke test
         if: vars.PRODUCTION_URL != ''
         # Through env, not interpolated into the script: a repository variable should not

@@ -38,6 +38,11 @@ repository settings:
 - secret `CLOUDFLARE_ACCOUNT_ID`
 - variable `PRODUCTION_URL` = the deployed URL, e.g. `https://choco.<subdomain>.workers.dev` (optional; enables the smoke test)
 
+The two secrets are set on the D1 migration and `wrangler deploy` steps only, never on the
+job. `pnpm install` runs the build scripts of the dependencies allowed in
+`pnpm-workspace.yaml`, and a job-level `env` would expose the deploy token to all of them. A
+new step that needs the token gets its own `env`.
+
 ## Dependency updates
 
 Dependabot (`.github/dependabot.yml`) opens weekly PRs for npm (pnpm) and GitHub Actions.
