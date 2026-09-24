@@ -41,7 +41,12 @@ repository settings:
 ## Dependency updates
 
 Dependabot (`.github/dependabot.yml`) opens weekly PRs for npm (pnpm) and GitHub Actions.
-Each new release waits a 7-day cooldown first; security updates skip it. Patch and minor
+Each new release waits a 7-day cooldown first; security updates skip it. Security updates
+need two repository settings, **Dependabot alerts** and **Dependabot security updates**
+(in the repository's security settings), both on since 2026-09-24 and free for a public repository.
+They are settings, not files, so a fork has to turn them on itself. Until that date both were
+off, which meant nothing reported a known vulnerability and the "security updates skip it"
+above never happened. Patch and minor
 updates come as one grouped PR per ecosystem. Majors come one PR each. Majors are ignored
 for `vitest` (held at 4.x, see [development.md](development.md#tooling-gotchas)) and
 `@types/node` (tracks the Node LTS in CI and `engines.node`).
@@ -56,7 +61,16 @@ often, and a patch or minor bump can add findings or change formatting. CI then 
 setting. A merge made with `GITHUB_TOKEN` does not fire `on: push`, so after merging it
 dispatches CI on `main` itself, and the deploy still waits for that run's tests. That job is
 also why `ci.yml` has a `workflow_dispatch` trigger and cancels only superseded PR runs,
-never a `main` run that may be mid-deploy.
+never a `main` run that may be mid-deploy. A security update is a Dependabot PR like any
+other: when it is a patch or minor bump it merges and deploys the same way, with no cooldown.
+
+`audit.yml` runs `pnpm audit --prod --audit-level high` on every PR and push to `main`. It
+covers `dependencies` only, the code that ships in the Worker or the page. An advisory in
+dev tooling shows up as a Dependabot alert instead: it reaches neither, and one with no
+upstream fix would keep a check red for weeks (on 2026-09-24, `sharp` under
+`@cloudflare/vitest-pool-workers` was exactly that). It is a separate workflow so that it
+flags without blocking. Auto-merge follows CI's conclusion and the deploy needs CI's tests,
+and a new advisory must not hold back every Dependabot update or a production fix.
 
 ## Scheduled checks
 

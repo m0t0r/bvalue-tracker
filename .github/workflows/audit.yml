@@ -1,0 +1,33 @@
+name: Dependency audit
+
+# Fails when a dependency that ships (`dependencies`, not `devDependencies`) has a known
+# high or critical advisory. Dev tooling is left to Dependabot alerts: it never reaches
+# the Worker or the page, and an advisory in it with no upstream fix would otherwise keep
+# this red for weeks.
+#
+# A workflow of its own, not a job in ci.yml, on purpose: dependabot-automerge.yml merges
+# on CI's conclusion and CI's deploy needs its tests, so a new advisory here must not hold
+# back every Dependabot update or a production fix. It flags; it does not block.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Nothing here pushes; keep the token out of .git/ for later steps.
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # Reads pnpm-lock.yaml and asks the npm registry; nothing is installed or run.
+      - run: pnpm audit --prod --audit-level high
