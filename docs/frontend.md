@@ -88,8 +88,8 @@ those, so an untouched tab shows no chips on either side.
 - **The tabs are named by department, "Chocó | Tolima"**, as SGC's daily bulletin names the pair.
   The Tolima tab's heading names the locality, "Enjambre sísmico de Chaparral (Tolima)", because
   its box covers only the swarm and "Tolima" alone would claim the whole department.
-- **The tabs sit in the header's top row with three controls**: the link to `/insights` ("Qué está
-  pasando", with a lightbulb), the language and the theme. The title and subtitle underneath are the
+- **The tabs sit in the header's top row with three controls**: the link to `/insights` ("¿Qué está
+  pasando?", with a lightbulb), the language and the theme. The title and subtitle underneath are the
   zone's own. On a phone the controls wrap under the tabs rather than squeezing them; at 375 px they
   share one row, which is why the link shows only its icon below `sm` (its words stay its name), and
   why the language button says "EN" / "ES" rather than the language's name (owner's call,

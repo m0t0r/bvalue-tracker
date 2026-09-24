@@ -57,8 +57,8 @@ const list = (items: string[], and: string) =>
 const deSource = (s: Source) => `de ${es.source[s]}`.replace(/^de el /, "del ");
 
 const es = {
-  docTitle: "Qué está pasando · sismos del Chocó y Tolima",
-  title: "Qué está pasando",
+  docTitle: "¿Qué está pasando? · sismos del Chocó y Tolima",
+  title: "¿Qué está pasando?",
   subtitle:
     "Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto, explicados en palabras sencillas con los datos del Servicio Geológico Colombiano.",
   back: "Volver al monitor",
@@ -146,8 +146,8 @@ const es = {
 type Copy = typeof es;
 
 const en: Copy = {
-  docTitle: "What is happening · the Chocó and Tolima earthquakes",
-  title: "What is happening",
+  docTitle: "What is happening? · the Chocó and Tolima earthquakes",
+  title: "What is happening?",
   subtitle:
     "The earthquakes felt in Colombia's coffee region since 10 August, explained in plain words with data from the Servicio Geológico Colombiano.",
   back: "Back to the monitor",
