@@ -20,6 +20,11 @@ export const KM_PER_DEG = 111.2;
 export const SECTION_DEPTH_KM = 200;
 /** Where the plate's label starts, in degrees east of the trench (~13 km). */
 const LABEL_EAST_OF_TRENCH = 0.12;
+/**
+ * The plate's motion arrow runs along the lower part of its body over this stretch east of the
+ * trench (~55–100 km): under the plate's label, and well west of Chocó's groups and their labels.
+ */
+const ARROW_EAST_OF_TRENCH = [0.5, 0.9] as const;
 
 export interface Section {
   cut: Cut;
@@ -162,6 +167,12 @@ function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; la
   // enough to leave room for three lines above the drawing's bottom.
   const at = pts.find((p) => p.lon >= sec.cut.trenchLon + LABEL_EAST_OF_TRENCH);
   const trench = sec.x(sec.cut.trenchLon);
+  // Which way the plate moves, along its own body: drawn at the rate the prose gives and cites
+  // (`CONVERGENCE_SOURCE`), never as a measured path.
+  const mid = (p: Plate) => p.topKm + p.thicknessKm * 0.75;
+  const from = pts.find((p) => p.lon >= sec.cut.trenchLon + ARROW_EAST_OF_TRENCH[0]);
+  const to = pts.find((p) => p.lon >= sec.cut.trenchLon + ARROW_EAST_OF_TRENCH[1]);
+  const arrow = `${clip}-arrow`;
 
   return (
     <g>
@@ -192,6 +203,37 @@ function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; la
           strokeWidth={1.25}
         />
       </g>
+      {from && to && (
+        <g>
+          <defs>
+            <marker id={arrow} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0,1 L9,5 L0,9 z" className="fill-foreground" />
+            </marker>
+          </defs>
+          <line
+            x1={sec.x(from.lon)}
+            y1={sec.y(mid(from))}
+            x2={sec.x(to.lon)}
+            y2={sec.y(mid(to))}
+            className="stroke-foreground"
+            strokeWidth={small ? 1.5 : 2}
+            markerEnd={`url(#${arrow})`}
+          />
+          {/* On a phone the cut is ~1 px per km and the words would cover the arrow; the prose gives the rate. */}
+          {!small && (
+            <text
+              x={sec.x(from.lon)}
+              y={sec.y(mid(to)) + fs + 4}
+              fontSize={fs - 1}
+              className="fill-foreground stroke-background tabular-nums"
+              paintOrder="stroke"
+              strokeWidth={4}
+            >
+              {c.plateRate}
+            </text>
+          )}
+        </g>
+      )}
       <path d={sea} className="fill-muted" />
       <path d={surface} fill="none" className="stroke-foreground" strokeWidth={1.5} strokeLinejoin="round" />
       <text x={trench} y={sec.y(0) - 6} fontSize={fs - 1} className="fill-muted-foreground">

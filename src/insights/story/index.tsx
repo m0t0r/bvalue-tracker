@@ -28,7 +28,7 @@ import { Graphic, type SceneId } from "./graphic";
 import { useActiveStep, useSize, useWide } from "./hooks";
 import { MainName, Note, Num, SourceName } from "./marks";
 import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
-import { CUTS } from "../plate";
+import { CONVERGENCE_SOURCE, CUTS } from "../plate";
 import { Rich } from "./rich";
 
 interface Step {
@@ -401,6 +401,25 @@ function useSteps(
           <Rich text={c.section.p4(f.shallowWest)} parts={{ shallow: names.shallow, depth: km(d.shallow?.depthKm) }} />
           {f.eastDeeper && ` ${c.section.eastDeeper}`}
         </p>
+        {main && (
+          <Note>
+            <Rich
+              text={c.section.rateNote}
+              parts={{
+                source: (
+                  <a
+                    className="underline underline-offset-4"
+                    href={CONVERGENCE_SOURCE}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {c.section.rateSource}
+                  </a>
+                ),
+              }}
+            />
+          </Note>
+        )}
       </>
     ),
   });
@@ -477,7 +496,8 @@ function useSteps(
                     </a>
                   ),
                 }}
-              />
+              />{" "}
+              {c.plate.usgsNorth}
             </p>
           )}
           <Note>
