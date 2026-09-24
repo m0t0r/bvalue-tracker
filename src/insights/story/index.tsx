@@ -324,7 +324,7 @@ function useSteps(
               text={c.energy.p2(f.mainHoldsMost)}
               parts={{
                 magLabel: <MainName>{fmtMag(main.mag)}</MainName>,
-                share: <Num>{claims.share(model.energy.choco[0])}</Num>,
+                share: <Num>{claims.sharePhrase(model.energy.choco[0])}</Num>,
               }}
             />
           </p>
@@ -534,8 +534,8 @@ function useSteps(
               <Rich
                 text={c.tolima.p2}
                 parts={{
-                  chocoShare: <Num>{claims.share(data.largestShare.choco)}</Num>,
-                  tolimaShare: <Num>{claims.share(data.largestShare.tolima)}</Num>,
+                  chocoShare: <Num>{claims.sharePhrase(data.largestShare.choco)}</Num>,
+                  tolimaShare: <Num>{claims.sharePhrase(data.largestShare.tolima)}</Num>,
                   mag: fmtMag(model.tolimaLargest.mag),
                 }}
               />

@@ -114,7 +114,9 @@ describe("the caveats, for each state of the mainshock", () => {
 
   it.each(all)("state the rule the page uses to name a mainshock, in %s for %s (%s)", (lang, zone, m) => {
     // The threshold is MAINSHOCK_MIN_GAP, written out: it is the one number the reader can check.
-    expect(dicts[lang].zones[zone].caveats(m).join(" ")).toMatch(/al menos 1 de magnitud|at least 1 magnitude unit/);
+    expect(dicts[lang].zones[zone].caveats(m).join(" ")).toMatch(
+      /al menos 1 unidad de magnitud|at least 1 magnitude unit/,
+    );
   });
 
   it.each(langs)("say 'no dominant event' on the Tolima tab only while none is found, in %s", (lang) => {

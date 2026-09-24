@@ -25,7 +25,7 @@ export interface Named {
 const es = {
   kicker: "Desde Pereira",
   title: "Lo que nos preguntamos sobre los sismos",
-  lede: "Desde el 10 de agosto, en el Eje Cafetero se siente temblar una y otra vez. Aquí van, una por una, las preguntas que nos hacemos, respondidas en palabras sencillas y con los datos del Servicio Geológico Colombiano.",
+  lede: "Desde el 10 de agosto, en el Eje Cafetero se han sentido temblores una y otra vez. Aquí respondemos, una por una, las preguntas que nos hacemos, en palabras sencillas y con los datos del Servicio Geológico Colombiano.",
   stats: {
     km: (km: number) => `~${f0(km)}\u00A0km`,
     kmLabel: "de Pereira a las tres fuentes, en línea recta",
@@ -40,22 +40,22 @@ const es = {
     "Las magnitudes del catálogo mezclan tipos (MLr, MLv, Mw…) que no son del todo comparables, así que las comparaciones de tamaño y energía son aproximadas.",
 
   far: {
-    short: "¿Por qué lo siento tan lejos?",
+    short: "¿Por qué lo siento si está tan lejos?",
     q: "¿Por qué siento en Pereira sismos que ocurren tan lejos?",
     p1: (lo: number, hi: number) =>
-      `Porque en sismos «lejos» se mide distinto. Las tres fuentes de estas semanas —el grupo de Istmina–Sipí, el grupo profundo junto al sismo grande y Chaparral— quedan todas a unos ${f0(lo)}–${f0(hi)}\u00A0km de Pereira en línea recta, contando la profundidad. A esa distancia las ondas de un evento de M4 llegan muy debilitadas, pero todavía pueden notarse.`,
+      `Porque, en sismos, «lejos» se mide distinto. Las tres fuentes de estas semanas —el grupo de Istmina–Sipí, el grupo profundo junto al sismo grande y Chaparral— quedan todas a unos ${f0(lo)}–${f0(hi)}\u00A0km de Pereira en línea recta, contando la profundidad. A esa distancia, las ondas de un evento de M4 llegan muy debilitadas, pero todavía pueden notarse.`,
     /** `similar`: its straight-line distance is within the sources' own range, which the tab checks. */
     p2: (ref: Named, epi: number, depth: number, hypo: number, similar: boolean) =>
-      `El ${mag(ref.mag)} del ${ref.date} estaba a ${f0(epi)}\u00A0km en el mapa y a ${f0(depth)}\u00A0km de profundidad: en línea recta, ${f0(hypo)}\u00A0km.${similar ? " Casi lo mismo que los otros. Lo que lo hizo tan fuerte no fue la cercanía sino el tamaño." : ""} Juega con los controles: elige un evento, cambia su tamaño o su distancia, y mira cuánta energía y cuánto movimiento llegarían, y cuánto tardarían las ondas.`,
+      `El ${mag(ref.mag)} del ${ref.date} estaba a ${f0(epi)}\u00A0km en el mapa y a ${f0(depth)}\u00A0km de profundidad: en línea recta, ${f0(hypo)}\u00A0km.${similar ? " Casi lo mismo que los otros: se sintió tan fuerte por su tamaño, no por estar más cerca." : ""} Prueba los controles: elige un evento, cambia su tamaño o su distancia, y mira cuánta energía liberaría, cuánto movimiento llegaría a Pereira y cuánto tardarían las ondas.`,
     takeaway: (km: number, ref: Named, similar: boolean): string =>
       similar
-        ? `Las tres fuentes están a unos ${f0(km)}\u00A0km en línea recta: un M4 llega hasta aquí muy atenuado, y el ${mag(ref.mag)} llegó con fuerza por su tamaño, no por estar más cerca.`
+        ? `Las tres fuentes están a unos ${f0(km)}\u00A0km en línea recta: un M4 llega hasta aquí muy atenuado, y el ${mag(ref.mag)} se sintió con fuerza por su tamaño, no por estar más cerca.`
         : "Lo que llega a Pereira depende del tamaño del evento y de su distancia en línea recta, contando la profundidad.",
     pick: "Elige un evento",
     presetReference: (ref: Named) => `El ${mag(ref.mag)} del ${ref.date}`,
     presetShallow: (m: number) => `${mag(m)} en Istmina–Sipí`,
     presetTolima: (m: number) => `${mag(m)} en Chaparral`,
-    custom: "A tu medida",
+    custom: "Personalizado",
     magnitude: "Magnitud",
     distance: "Distancia en el mapa desde Pereira",
     depth: "Profundidad",
@@ -63,11 +63,11 @@ const es = {
     energy: (ref: Named) => `Energía liberada, frente al ${mag(ref.mag)}`,
     energySame: "más o menos la misma",
     energyMore: (x: string) => `${x} veces más`,
-    energyLess: (x: string) => `1/${x} de aquella`,
+    energyLess: (x: string) => `${x} veces menos`,
     motion: (ref: Named) => `Amplitud en Pereira frente al ${mag(ref.mag)}, simplificada`,
     motionSame: "más o menos igual",
     motionMore: (x: string) => `≈ ${x} veces más`,
-    motionLess: (x: string) => `≈ 1/${x} de aquella`,
+    motionLess: (x: string) => `≈ ${x} veces menos`,
     scaleTitle: "Amplitud del movimiento en Pereira, simplificada (cada marca es 10 veces la anterior)",
     scaleAria: (x: string) =>
       `Escala de amplitud simplificada, frente a la del sismo de referencia. El evento elegido: ${x}.`,
@@ -80,7 +80,7 @@ const es = {
     labelTolima: "Chaparral",
     raceTitle: "La carrera de las ondas hasta Pereira",
     raceSpeed: (x: number) => `acelerada ×${x}`,
-    race: "Soltar las ondas",
+    race: "Iniciar la carrera",
     raceAria: (p: number, s: number) =>
       `Carrera de ondas: la onda P llega a los ${secs(p, "menos de un segundo")} y la onda S a los ${secs(s, "menos de un segundo")}.`,
     quake: "evento",
@@ -90,28 +90,28 @@ const es = {
         ? "A tan poca distancia, las ondas P y S llegan casi a la vez."
         : `Primero llega la onda P, que suele sentirse como un empujón o un golpe seco. Unos ${f0(gap)} segundos después llega la onda S, que suele ser el vaivén más fuerte.`,
     caption: (vp: number, vs: number) =>
-      `Una simplificación, no un modelo de sacudida: solo usa que la amplitud de las ondas crece 10 veces por cada unidad de magnitud y que se reparte al alejarse (1/distancia). Deja por fuera cuánto absorbe la roca, hacia dónde se rompió la falla y el suelo bajo cada casa, que en la realidad cuentan mucho. Velocidades típicas redondeadas: ondas P ≈ ${vp}\u00A0km/s, ondas S ≈ ${vs}\u00A0km/s; los tiempos son aproximados.`,
+      `Es una simplificación, no un modelo de sacudida: solo supone que la amplitud de las ondas crece 10 veces por cada unidad de magnitud y que disminuye al alejarse (1/distancia). Deja por fuera factores que en la realidad pesan mucho: cuánto absorbe la roca, hacia dónde se rompió la falla y el suelo bajo cada casa. Velocidades típicas redondeadas: ondas P ≈ ${vp}\u00A0km/s, ondas S ≈ ${vs}\u00A0km/s; los tiempos son aproximados.`,
   },
 
   big: {
     short: "¿Qué tan grande fue?",
     q: (ref: Named) => `¿Qué tan grande fue el sismo del ${ref.date}?`,
     p1: (ref: Named, units: string) =>
-      `Mucho más de lo que sugiere pasar de 4 a ${f1(ref.mag)}. La magnitud es una escala que multiplica: cada unidad es 10 veces más amplitud en los sismógrafos y unas 32 veces más energía. Entre un M4.0 y el ${mag(ref.mag)} hay ${f1(ref.mag - 4)} unidades, o sea unas ${units} veces la energía.`,
+      `Mucho más de lo que sugiere pasar de 4 a ${f1(ref.mag)}. La magnitud es una escala que multiplica: cada unidad es 10 veces más amplitud en los sismógrafos y unas 32 veces más energía. Entre un M4.0 y el ${mag(ref.mag)} hay ${f1(ref.mag - 4)} unidades, o sea, unas ${units} veces más energía.`,
     intro: (units: string) =>
-      `El rectángulo gris es aquel sismo partido en unos ${units} puntitos: cada uno es la energía de un evento de M4.0. Elige con qué compararlo.`,
+      `El rectángulo gris es ese sismo dividido en unos ${units} puntitos, cada uno con la energía de un evento de M4.0. Elige con qué compararlo.`,
     compare: "Comparar con",
-    rest: "Todos los demás del Chocó",
+    rest: "Todos los demás eventos del Chocó",
     swarm: "Todo el enjambre de Chaparral",
     dots: "puntos",
     ofRef: (pct: string, ref: Named) => `(${pct}\u00A0% del ${mag(ref.mag)})`,
     fits: "Cabe entero en la lupa. En el rectángulo grande es apenas el cuadrito de color de la esquina.",
     noFit: "No cabe en la lupa: es el bloque de color en la esquina del rectángulo grande.",
-    lens: "lupa: la esquina de arriba",
+    lens: "lupa: esquina superior",
     aria: (units: string, k: string, what: string) =>
       `El sismo de referencia como ${units} puntos; ${what} ocupa ${k} de ellos.`,
     caption:
-      "Energía liberada como ondas, con la relación de Gutenberg–Richter (la energía crece 31.6 veces por unidad de magnitud). Es aproximada y sirve para comparar, no como medida exacta. «Todos los demás» suma cada evento del catálogo del SGC en la zona, desde M2.0.",
+      "Energía liberada en forma de ondas, calculada con la relación de Gutenberg–Richter (la energía crece 31.6 veces por unidad de magnitud). Es aproximada: sirve para comparar, no como medida exacta. «Todos los demás» suma cada evento del catálogo del SGC en la zona, desde M2.0.",
     /** `small`: the rest is under a tenth of the reference's energy, which the tab checks. */
     takeaway: (pct: string, ref: Named, small: boolean) =>
       `Todo lo que ha temblado en el Chocó después del ${ref.date}, sumado, es ${small ? "apenas " : ""}el ${pct}\u00A0% de la energía de aquel sismo.`,
@@ -124,68 +124,68 @@ const es = {
       `¿Por qué ${still ? "sigue" : "siguió"} temblando ${WORDS_ES[weeks] ?? f0(weeks)} semanas después?`,
     qSoon: (still: boolean) => `¿Por qué ${still ? "sigue" : "siguió"} temblando?`,
     p1: (deepKm: number) =>
-      `Aquí está lo más interesante. Los eventos del Chocó se separan en dos grupos, y la profundidad basta para separarlos. El grupo profundo, a unos ${f0(deepKm)}\u00A0km bajo el sismo grande, es el de sus réplicas.`,
+      `Aquí está lo más interesante. Los eventos del Chocó forman dos grupos, y basta la profundidad para distinguirlos. El grupo profundo, a unos ${f0(deepKm)}\u00A0km de profundidad alrededor del sismo grande, reúne sus réplicas.`,
     /** `share`: of Chocó's events above Mc since the second week, the percentage from this group. */
     p2: (shallowKm: number, fromRef: number, share: { pct: string; mc: number } | null) =>
       `El grupo superficial está a unos ${f0(shallowKm)}\u00A0km de profundidad bajo Istmina y Sipí, a unos ${f0(fromRef)}\u00A0km del epicentro.${share ? ` Desde la segunda semana, el ${share.pct}\u00A0% de los eventos del Chocó de M${f1(share.mc)} o más han sido de este grupo.` : ""}`,
     deepLabel: "El grupo profundo:",
     shallowLabel: "El grupo superficial:",
-    why: "¿Por qué el grupo superficial no se apagó como unas réplicas? Con este catálogo nadie lo puede decir. Lo que los sismólogos suelen considerar en casos así: que el gran sismo cambió los esfuerzos en la roca y activó una zona que ya estaba cargada; que haya fluidos moviéndose por las fallas; o que un deslizamiento lento, que no se siente, esté empujando a su alrededor. Son posibilidades que se estudian, no conclusiones de esta página.",
+    why: "¿Por qué el grupo superficial no se apagó como lo hacen las réplicas? Con este catálogo nadie lo puede decir. En casos así, los sismólogos suelen considerar varias posibilidades: que el gran sismo haya cambiado los esfuerzos en la roca y activado una zona que ya estaba cargada; que haya fluidos moviéndose por las fallas; o que un deslizamiento lento, que no se siente, esté empujando la roca a su alrededor. Son hipótesis en estudio, no conclusiones de esta página.",
     /** Keyed on the `decay` claim for each group; `why` is only shown when the shallow group has not faded. */
     takeaway: (deep: Decay["case"], shallow: Decay["case"]): string =>
       deep === "young"
         ? "Todavía es pronto para ver cómo se apagan las réplicas del sismo grande."
         : deep === "not-decayed"
-          ? "Las réplicas del sismo grande todavía no se han apagado como suelen hacerlo unas réplicas normales."
+          ? "Las réplicas del sismo grande todavía no se han apagado como suelen hacerlo las réplicas."
           : shallow === "not-decayed"
             ? "Las réplicas del sismo grande se han ido apagando; el grupo superficial no sigue esa regla, por razones que todavía no se conocen."
             : shallow === "decayed"
               ? "Las réplicas del sismo grande se han ido apagando, y la actividad del grupo superficial también ha bajado."
               : "Las réplicas del sismo grande se han ido apagando.",
     sameScale: "Misma escala para los dos grupos",
-    curve: "Mostrar cómo se apagan unas réplicas normales",
+    curve: "Mostrar cómo suelen apagarse las réplicas",
     deepRow: (km: number) => `Grupo profundo · junto al sismo grande (~${f0(km)}\u00A0km)`,
     shallowRow: (km: number) => `Grupo superficial · Istmina–Sipí (~${f0(km)}\u00A0km)`,
     lull: "más tranquilo",
     rowAria: (label: string, total: number, days: number) => `${label}: ${total} eventos en ${days} días.`,
     caption: (mc: number) =>
-      `Eventos por día de Colombia con magnitud M${f1(mc)} o más (por debajo de ese tamaño el catálogo no los registra todos). Los rombos son los eventos de M4.0 o más. La curva punteada es solo la forma típica de unas réplicas, que caen más o menos como 1/tiempo (ley de Omori): parte del primer día de cada grupo y se divide por el número del día, sin ajustarla a los datos. Las franjas marcan los tramos más tranquilos de lo habitual.`,
+      `Eventos de magnitud M${f1(mc)} o más por día, en hora de Colombia (por debajo de ese tamaño el catálogo no los registra todos). Los rombos son los eventos de M4.0 o más. La curva punteada es solo la forma típica en que disminuyen las réplicas, más o menos como 1/tiempo (ley de Omori): parte del valor del primer día de cada grupo y lo divide por el número del día, sin ajustarse a los datos. Las franjas marcan los periodos más tranquilos de lo habitual.`,
   },
 
   swarm: {
     short: "¿Y Chaparral?",
     q: "¿Qué está pasando en Chaparral? ¿Es lo mismo?",
     p1: (start: string, depth: number, perDay: number, state: MainshockState): string =>
-      `${state === "none" ? "No. Chaparral es un enjambre, que es también como lo llama el SGC: muchos eventos, sin uno que domine." : "Chaparral es lo que el SGC llama un enjambre."} Empezó el ${start}, a unos ${f0(depth)}\u00A0km de profundidad, dentro de la corteza, y lleva unos ${f0(perDay)} eventos por día.`,
+      `${state === "none" ? "No. Chaparral es un enjambre (así lo llama también el SGC): muchos eventos, sin uno que domine." : "Chaparral es lo que el SGC llama un enjambre."} Empezó el ${start}, a unos ${f0(depth)}\u00A0km de profundidad, dentro de la corteza, y registra en promedio unos ${f0(perDay)} eventos por día.`,
     state: (s: MainshockState, largest: number, gap: number | null) =>
       s === "none"
         ? `Ninguno sobresale: el mayor, ${mag(largest)}, está solo ${gap === null ? "un poco" : f1(gap)} por encima del siguiente. Por eso no tiene sismo principal.`
-        : `Ahora su mayor evento, ${mag(largest)}, sí sobresale ${gap === null ? "" : `${f1(gap)} `}por encima del siguiente${s === "awaiting-review" ? ", aunque el SGC todavía no lo ha revisado" : ""}. Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre.`,
+        : `Ahora su evento mayor, ${mag(largest)}, sí sobresale${gap === null ? "" : `: está ${f1(gap)} por encima del siguiente`}${s === "awaiting-review" ? ", aunque el SGC todavía no lo ha revisado" : ""}. Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre.`,
     shareTitle: "¿Cuánta energía liberó el evento más grande de cada zona?",
     shareChoco: (m: number) => `Chocó: su mayor, ${mag(m)}`,
     shareTolima: (m: number) => `Chaparral: su mayor, ${mag(m)}`,
     shareCaption:
-      "Parte de la energía total de cada zona que liberó su evento más grande (momento sísmico, que crece 31.6 veces por unidad de magnitud). En una secuencia con sismo principal, uno solo lo domina todo. En un enjambre, la energía se reparte entre muchos parecidos.",
+      "Proporción de la energía total de cada zona que liberó su evento más grande (momento sísmico, que crece 31.6 veces por unidad de magnitud). En una secuencia con sismo principal, un solo evento domina. En un enjambre, la energía se reparte entre muchos eventos parecidos.",
     driftIntro:
-      "Los enjambres a menudo se desplazan poco a poco, algo que se suele asociar con fluidos que se abren camino o con una falla que se desliza despacio. ¿Se queda quieto este?",
+      "Los enjambres a menudo se desplazan poco a poco, algo que se suele asociar con fluidos que se abren camino o con una falla que se desliza despacio. ¿Este se queda en el mismo sitio?",
     driftTitle: (km: number) =>
       `${f0(km * 2)}\u00A0km × ${f0(km * 2)}\u00A0km alrededor de donde empezó, cada 12 horas. Norte arriba; la barra del primer cuadro mide 1\u00A0km.`,
     driftPanel: (when: string, n: number) => `${when} · ${n} eventos`,
     driftAria: (when: string, n: number) => `${when}: ${n} eventos`,
     driftCaption: (err: string) =>
-      `Cada cuadro son 12 horas del enjambre. La cruz es el centro de sus eventos (la mediana) y la línea, el camino del centro hasta ese momento. Cada epicentro tiene un error típico de ~${err}\u00A0km, así que un punto suelto no dice nada; cualquier corrimiento del centro es una pista que habría que confirmar relocalizando los eventos, no un hallazgo.`,
+      `Cada cuadro muestra 12 horas del enjambre. La cruz es el centro de sus eventos (la mediana) y la línea, el recorrido del centro hasta ese momento. Cada epicentro tiene un error típico de ~${err}\u00A0km, así que un punto aislado no dice nada; cualquier desplazamiento del centro es una pista que habría que confirmar relocalizando los eventos, no un hallazgo.`,
     takeaway: (state: MainshockState): string =>
       state === "none"
-        ? "Chaparral no tiene un sismo principal: es un enjambre, y los enjambres pueden apagarse o seguir sin que se sepa de antemano cuál de las dos cosas pasará."
-        : "Ahora un evento de Chaparral sobresale, pero cómo seguirá no se puede saber de antemano.",
+        ? "Chaparral no tiene un sismo principal: es un enjambre, y no se puede saber de antemano si se apagará o seguirá."
+        : "Ahora un evento de Chaparral sobresale, pero no se puede saber de antemano cómo seguirá.",
   },
 
   linked: {
     short: "¿Están conectados?",
     q: "¿Están conectados Chocó y Tolima?",
     p1: (km: number, weeks: number) =>
-      `El SGC ha planteado, como hipótesis preliminar, que el sismo grande del Chocó pudo cambiar los esfuerzos en la corteza y ayudar a reactivar fallas cerca de Chaparral, a unos ${f0(Math.round(km / 10) * 10)}\u00A0km de su epicentro y ${WORDS_ES[weeks] ?? f0(weeks)} semanas después. Es una idea razonable que se estudia, pero no está demostrada, y nada en esta página la pone a prueba.`,
-    p2: "Que dos cosas pasen cerca en el tiempo no es evidencia de que estén conectadas. La gráfica muestra qué pasó antes y qué después, nada más.",
+      `El SGC ha planteado, como hipótesis preliminar, que el sismo grande del Chocó pudo cambiar los esfuerzos en la corteza y ayudar a reactivar fallas cerca de Chaparral, a unos ${f0(Math.round(km / 10) * 10)}\u00A0km de su epicentro y ${WORDS_ES[weeks] ?? f0(weeks)} semanas después. Es una idea razonable y en estudio, pero no está demostrada, y nada en esta página la pone a prueba.`,
+    p2: "Que dos cosas ocurran casi al mismo tiempo no prueba que estén conectadas. La gráfica muestra qué pasó antes y qué después, nada más.",
     legendShallow: "Chocó, superficial",
     legendDeep: "Chocó, profundo",
     legendTolima: "Chaparral",
@@ -194,13 +194,13 @@ const es = {
     caption:
       "Cada punto es un evento del catálogo del SGC, por fecha y magnitud. Poner dos zonas en un mismo eje muestra cuándo pasó cada cosa, no que una causara la otra.",
     takeaway:
-      "Tal vez: el SGC lo plantea como hipótesis, y aquí solo se puede ver qué pasó antes y qué después, que no es lo mismo que una causa.",
+      "Tal vez. El SGC lo plantea como hipótesis; aquí solo se ve qué pasó antes y qué después, y eso no demuestra una causa.",
   },
 
   felt: {
     short: "¿Cuántas veces lo he sentido?",
     q: "¿Cuántas veces lo he sentido?",
-    p1: "Esta página no sabe qué sentiste tú, pero sí qué días hubo eventos del tamaño desde el que tú los notas. Pon el umbral donde te parezca, y el calendario marca los días con al menos un evento así en estas dos zonas.",
+    p1: "Esta página no sabe qué sentiste tú, pero sí qué días hubo eventos lo bastante grandes para que los notes. Pon el umbral donde te parezca y el calendario marcará los días con al menos un evento así en estas dos zonas.",
     threshold: "Yo los noto desde",
     daysOf: (n: number) => `de ${n} días`,
     events: (n: number) => `${n} ${n === 1 ? "evento" : "eventos"}`,
@@ -212,7 +212,7 @@ const es = {
     deepName: "Chocó profundo",
     tolimaName: "Chaparral",
     caption:
-      "Solo cuenta los eventos de las dos zonas que sigue esta página. En Colombia tiembla también en otros lugares, y algunos de esos también se sienten en Pereira. Que alguien lo note depende además de dónde estaba y del suelo; el umbral es tuyo.",
+      "Solo cuenta los eventos de las dos zonas que sigue esta página. En Colombia tiembla también en otros lugares, y algunos de esos también se sienten en Pereira. Que alguien lo note depende además de dónde estaba y del suelo; el umbral lo eliges tú.",
     takeaway: (days: number, total: number, m: number) =>
       `Con el umbral en ${mag(m)}, hubo eventos así en ${days} de ${total} días.`,
   },
@@ -224,28 +224,29 @@ const es = {
     p2: "La posición pública del SGC es que muchos sismos no significan, por sí solos, que venga uno grande. Por eso esta página no calcula probabilidades ni muestra alertas.",
     helpTitle: "Lo que sí sirve, siempre",
     help: [
-      "Estar preparado vale en cualquier momento, no por esta secuencia en particular: Colombia es un país sísmico.",
+      "Prepararse sirve siempre, no solo por esta secuencia: Colombia es un país sísmico.",
       "Tener un plan familiar: dónde protegerse, dónde reunirse y un morral de emergencia.",
       "Informarse en fuentes oficiales: los boletines del Servicio Geológico Colombiano (sgc.gov.co).",
     ],
-    takeaway: "Nadie puede anunciar el próximo sismo; lo útil es estar preparado siempre y seguir al SGC.",
+    takeaway:
+      "Nadie puede anunciar el próximo sismo; lo útil es estar preparado siempre y seguir la información del SGC.",
   },
 
   unknown: {
     short: "¿Qué no sabemos?",
     q: "¿Qué no sabemos todavía?",
-    p1: "Bastante, y es mejor decirlo claro. Esto es lo que ni estos datos ni esta página pueden responder hoy:",
+    p1: "Bastante, y es mejor decirlo con claridad. Esto es lo que ni estos datos ni esta página pueden responder hoy:",
     why: "Qué mueve la actividad del grupo de Istmina–Sipí y cómo va a evolucionar.",
     link: "Si Chaparral tiene que ver con el sismo grande del Chocó. Es una hipótesis del SGC, no un resultado.",
     faults: (choco: string, tolima: string, snapped: { depthKm: number; count: number } | null) =>
-      `La forma fina de las fallas. Las ubicaciones tienen errores típicos de ~${choco}\u00A0km en el Chocó y ~${tolima}\u00A0km en Chaparral${snapped ? `, y muchas profundidades se repiten en valores fijos (${snapped.count} eventos de Chaparral a ${f1(snapped.depthKm)}\u00A0km justos), señal de que no están bien determinadas` : ""}.`,
+      `La forma exacta de las fallas. Las ubicaciones tienen errores típicos de ~${choco}\u00A0km en el Chocó y ~${tolima}\u00A0km en Chaparral${snapped ? `, y muchas profundidades se repiten en valores fijos (${snapped.count} eventos de Chaparral a ${f1(snapped.depthKm)}\u00A0km justos), señal de que no están bien determinadas` : ""}.`,
     floor:
       "Los eventos por debajo de M2.0: el SGC no los publica en este catálogo, y las estaciones cercanas son pocas.",
     types:
       "Las magnitudes mezclan tipos (MLr, MLv, Mw) que no son del todo comparables, así que las cifras de energía son aproximadas.",
     revisions: "El catálogo cambia: el SGC revisa y a veces corrige o retira eventos después de publicarlos.",
     takeaway:
-      "Los datos muestran bien qué pasó y cómo se compara con lo típico; el porqué exacto y lo que viene siguen abiertos.",
+      "Los datos muestran bien qué pasó y cómo se compara con lo típico; el porqué exacto y lo que vendrá siguen sin respuesta.",
   },
 
   words: (n: number, lang: Lang) => (lang === "es" ? WORDS_ES : WORDS_EN)[n] ?? f0(n),
