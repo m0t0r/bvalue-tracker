@@ -93,20 +93,6 @@ export function App() {
           </TabsContent>
         ))}
       </Tabs>
-
-      <footer className="pb-8 text-sm text-muted-foreground">
-        {t.source}{" "}
-        <a
-          className="underline underline-offset-4"
-          target="_blank"
-          rel="noreferrer"
-          href="https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php"
-        >
-          bdrsnc.sgc.gov.co
-        </a>
-        <p className="mt-1 max-w-[75ch] text-pretty">{t.autoUpdateLong(updateEveryMin(zone))}</p>
-        <p className="mt-1 max-w-[75ch] text-pretty">{t.timeNote}</p>
-      </footer>
     </div>
   );
 }
@@ -142,106 +128,131 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   const { scope, view, deferred, selectCluster, magTabs, setFilters, clear } = useScope(events.data, zone);
   const chips = useMemo(() => scopeChips(scope, t, lang, zone), [scope, t, lang, zone]);
   const incomplete = !!status.data && status.data.backfill.done < status.data.backfill.total;
+  // Nothing is drawn under the loading skeleton. Whatever sat there would be pulled up into view
+  // when a failed load swaps the viewport-tall skeleton for a short alert: the caveats note did
+  // exactly that, 0.12 of CLS on every failed load, and PageSpeed Insights, whose runner the
+  // same-origin check refuses, scored the page on that state (docs/performance.md).
+  const settled = !events.isPending;
 
   return (
-    <main className="contents">
-      <StatusBar status={status.data} shown={events.data ? view.shown.length : null} />
-      {events.data ? (
-        <FilterScope
-          chips={chips}
-          cluster={scope.cluster}
-          shown={view.shown.length}
-          total={events.data.length}
-          onClear={clear}
-        />
-      ) : null}
+    <>
+      <main className="contents">
+        <StatusBar status={status.data} shown={events.data ? view.shown.length : null} />
+        {events.data ? (
+          <FilterScope
+            chips={chips}
+            cluster={scope.cluster}
+            shown={view.shown.length}
+            total={events.data.length}
+            onClear={clear}
+          />
+        ) : null}
 
-      {events.isError ? (
-        <Alert variant="destructive">
-          <AlertTriangleIcon />
-          <AlertTitle>{t.loadFailed}</AlertTitle>
-          <AlertDescription>
-            {t.loadFailedBody}
-            <TechnicalDetail>{String(events.error)}</TechnicalDetail>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+        {events.isError ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertTitle>{t.loadFailed}</AlertTitle>
+            <AlertDescription>
+              {t.loadFailedBody}
+              <TechnicalDetail>{String(events.error)}</TechnicalDetail>
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-      {/* Gate on data, not on "not pending": a failed load must not draw an empty dashboard
+        {/* Gate on data, not on "not pending": a failed load must not draw an empty dashboard
             that tells the reader to change their filters. Stale data stays visible if a refetch fails. */}
-      {events.data ? (
-        <>
-          {/* The number the reader came for leads; the controls that shape it follow. */}
-          {view.shown.length > 0 ? (
-            <div className="enter grid gap-6 lg:grid-cols-3">
-              <BSummary
-                stats={view.stats}
-                incomplete={incomplete}
-                cluster={scope.cluster === "all" ? null : scope.cluster}
-                tabs={magTabs}
-              />
-              <div className="lg:col-span-2">
-                <Deferred title={t.bTimeTitle}>
-                  <BOverTimeChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
-                </Deferred>
+        {events.data ? (
+          <>
+            {/* The number the reader came for leads; the controls that shape it follow. */}
+            {view.shown.length > 0 ? (
+              <div className="enter grid gap-6 lg:grid-cols-3">
+                <BSummary
+                  stats={view.stats}
+                  incomplete={incomplete}
+                  cluster={scope.cluster === "all" ? null : scope.cluster}
+                  tabs={magTabs}
+                />
+                <div className="lg:col-span-2">
+                  <Deferred title={t.bTimeTitle}>
+                    <BOverTimeChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
+                  </Deferred>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {/* The two depth groups are a finding about the Chocó catalogue (docs/science.md). */}
-          {ZONES[zone].depthClusters && view.base.length > 0 ? (
-            <ClustersCard events={deferred.base} stats={view.clusters} selection={selectCluster} />
-          ) : null}
-          <FiltersCard mcAuto={view.clusters.all.mcMaxc} value={scope.filters} onChange={setFilters} />
+            {/* The two depth groups are a finding about the Chocó catalogue (docs/science.md). */}
+            {ZONES[zone].depthClusters && view.base.length > 0 ? (
+              <ClustersCard events={deferred.base} stats={view.clusters} selection={selectCluster} />
+            ) : null}
+            <FiltersCard mcAuto={view.clusters.all.mcMaxc} value={scope.filters} onChange={setFilters} />
 
-          {view.shown.length === 0 ? (
-            <Card>
-              <CardContent>
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>{t.noEvents}</EmptyTitle>
-                    <EmptyDescription>{t.noEventsBody}</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <div className="enter grid gap-6 lg:grid-cols-2" style={{ "--i": 1 } as CSSProperties}>
-                <Deferred title={t.fmdTitle}>
-                  <FmdChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
-                </Deferred>
-                <Deferred title={t.mapTitle} height="map">
-                  <EventMap events={deferred.shown} />
-                </Deferred>
-              </div>
-              <div className="enter" style={{ "--i": 2 } as CSSProperties}>
-                <Deferred title={t.magTimeTitle}>
-                  <MagnitudeTimeChart events={deferred.shown} />
-                </Deferred>
-              </div>
-              <div className="enter" style={{ "--i": 3 } as CSSProperties}>
-                <EventsTable events={deferred.shown} />
-              </div>
-            </>
-          )}
-        </>
-      ) : events.isPending ? (
-        // At least a viewport tall, so nothing below is on screen to be pushed away when content arrives.
-        <Skeleton className="min-h-svh w-full" />
+            {view.shown.length === 0 ? (
+              <Card>
+                <CardContent>
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyTitle>{t.noEvents}</EmptyTitle>
+                      <EmptyDescription>{t.noEventsBody}</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="enter grid gap-6 lg:grid-cols-2" style={{ "--i": 1 } as CSSProperties}>
+                  <Deferred title={t.fmdTitle}>
+                    <FmdChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
+                  </Deferred>
+                  <Deferred title={t.mapTitle} height="map">
+                    <EventMap events={deferred.shown} />
+                  </Deferred>
+                </div>
+                <div className="enter" style={{ "--i": 2 } as CSSProperties}>
+                  <Deferred title={t.magTimeTitle}>
+                    <MagnitudeTimeChart events={deferred.shown} />
+                  </Deferred>
+                </div>
+                <div className="enter" style={{ "--i": 3 } as CSSProperties}>
+                  <EventsTable events={deferred.shown} />
+                </div>
+              </>
+            )}
+          </>
+        ) : events.isPending ? (
+          // At least a viewport tall, so nothing below is on screen to be pushed away when content arrives.
+          <Skeleton className="min-h-svh w-full" />
+        ) : null}
+
+        {settled ? (
+          <Alert role="note">
+            <InfoIcon />
+            <AlertTitle>{t.caveatsTitle}</AlertTitle>
+            <AlertDescription>
+              <ul className="flex max-w-[75ch] list-disc flex-col gap-1 ps-4">
+                {t.zones[zone].caveats.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+      </main>
+
+      {settled ? (
+        <footer className="pb-8 text-sm text-muted-foreground">
+          {t.source}{" "}
+          <a
+            className="underline underline-offset-4"
+            target="_blank"
+            rel="noreferrer"
+            href="https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php"
+          >
+            bdrsnc.sgc.gov.co
+          </a>
+          <p className="mt-1 max-w-[75ch] text-pretty">{t.autoUpdateLong(updateEveryMin(zone))}</p>
+          <p className="mt-1 max-w-[75ch] text-pretty">{t.timeNote}</p>
+        </footer>
       ) : null}
-
-      <Alert role="note">
-        <InfoIcon />
-        <AlertTitle>{t.caveatsTitle}</AlertTitle>
-        <AlertDescription>
-          <ul className="flex max-w-[75ch] list-disc flex-col gap-1 ps-4">
-            {t.zones[zone].caveats.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        </AlertDescription>
-      </Alert>
-    </main>
+    </>
   );
 }
