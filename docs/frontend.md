@@ -165,9 +165,10 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
     (`SourceName`): the blue is 4.42:1 as text in light mode and the violet 3.87:1 in dark.
   - The mainshock is a star wherever it is drawn, in the prose too (`MainName`); a diamond is any
     M ≥ 4 event, and on the questions tab those are `foreground`, not the mainshock's orange.
-- **Figures and their units never part at a line break.** `fmtKm`, `fmtPct` and thousands grouping
-  use a narrow no-break space (U+202F), and so does every "N km" written into the copy: a thin space
-  broke "~120 / km" at 320 px.
+- **Figures and their units never part at a line break.** `fmtKm`, `fmtPct` and every "N km" written
+  into the copy put a no-break space (U+00A0) before the unit: a thin space broke "~120 / km" at
+  320 px. Not the narrow one (U+202F): in Geist it reads as no space at all in a 30 px figure. That
+  one groups thousands ("125 893"), where the digits are meant to sit close.
 - **SVG text is sized in screen pixels.** A drawing that scales with its column (the questions tab's
   map, `viewBox` 400) multiplies its font sizes by viewBox units per pixel; in viewBox units alone
   its town names were 7 px on a 320 px phone.

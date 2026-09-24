@@ -11,26 +11,30 @@ export { median };
 
 const HOUR = 3_600_000;
 /**
- * A narrow no-break space: groups thousands ("125 900") the same way in both languages, where a point
- * or a comma would read as a decimal separator in one of them, and keeps a figure on the same line as
- * its unit. A thin space (U+2009) looks the same but may break: "~120 / km" at 320 px.
+ * Groups thousands ("125 900") the same way in both languages, where a point or a comma would read as a
+ * decimal separator in one of them. Narrow, and no-break: a thin space (U+2009) may break.
  */
-const THIN = "\u202F";
+const GROUP = "\u202F";
+/**
+ * Between a figure and its unit: a no-break space, so "~120 km" never parts at a line break (a thin
+ * space broke it at 320 px). Full width: in Geist a narrow one reads as no space at all at 30 px.
+ */
+const UNIT = "\u00A0";
 
 /** A whole number, thousands grouped with a narrow no-break space from five digits on, with a true minus. */
 export const fmtInt = (v: number) => {
   const s = Math.round(Math.abs(v)).toString();
-  const grouped = s.length > 4 ? s.replace(/\B(?=(\d{3})+(?!\d))/g, THIN) : s;
+  const grouped = s.length > 4 ? s.replace(/\B(?=(\d{3})+(?!\d))/g, GROUP) : s;
   return v < 0 ? `−${grouped}` : grouped;
 };
 /** A figure to `d` decimals, decimal point in both languages, with a true minus. */
 export const fmt = (v: number, d = 0) => (d === 0 ? fmtInt(v) : fmtNum(v, d));
 /** "124 km" */
-export const fmtKm = (v: number, d = 0) => `${fmt(v, d)}${THIN}km`;
+export const fmtKm = (v: number, d = 0) => `${fmt(v, d)}${UNIT}km`;
 /** "M4.5" */
 export const fmtMag = (m: number) => `M${m.toFixed(1)}`;
 /** A whole percentage: "96 %" in Spanish, which spaces the sign, and "96%" in English. */
-export const fmtPct = (v: number, lang: "es" | "en") => (lang === "es" ? `${fmtInt(v)}${THIN}%` : `${fmtInt(v)}%`);
+export const fmtPct = (v: number, lang: "es" | "en") => (lang === "es" ? `${fmtInt(v)}${UNIT}%` : `${fmtInt(v)}%`);
 
 /** `v` rounded to `sig` significant figures, for "about 126 000 times". Zero stays zero. */
 export const roundSig = (v: number, sig = 2) => {
