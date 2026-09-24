@@ -476,6 +476,35 @@ describe("API", () => {
     expect(bad.status).toBe(403);
   });
 
+  // PageSpeed Insights' runner sends neither same-origin signal (seen in production, 2026-09-24).
+  describe("a Cloudflare-verified Lighthouse run", () => {
+    const LIGHTHOUSE_UA =
+      "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36 Chrome-Lighthouse";
+    const asBot = (category: string | undefined, ua: string, method = "GET") =>
+      callRaw(method === "GET" ? "/api/events" : "/api/refresh", {
+        method,
+        headers: { "user-agent": ua },
+        cf: category === undefined ? {} : { verifiedBotCategory: category },
+      } as RequestInit);
+
+    it("may read the catalogue, so PageSpeed Insights scores the page and not its error state", async () => {
+      await ingest(deps(FULL), FROM, TO, "manual");
+      expect((await asBot("Search Engine Optimization", LIGHTHOUSE_UA)).status).toBe(200);
+    });
+
+    it("needs both halves: a Lighthouse user agent alone is only a claim", async () => {
+      expect((await asBot(undefined, LIGHTHOUSE_UA)).status).toBe(403);
+      expect((await asBot("", LIGHTHOUSE_UA)).status).toBe(403);
+      expect((await asBot("Search Engine Crawler", "Googlebot/2.1")).status).toBe(403);
+    });
+
+    it("may not POST /api/refresh, the one route that reaches SGC", async () => {
+      const calls = serving(FULL);
+      expect((await asBot("Search Engine Optimization", LIGHTHOUSE_UA, "POST")).status).toBe(403);
+      expect(calls()).toBe(0);
+    });
+  });
+
   it("names the newest event, and its id, so the page can link its time to SGC", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     const status = (await (await call("/api/status")).json()) as any;

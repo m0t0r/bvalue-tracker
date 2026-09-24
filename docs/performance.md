@@ -50,12 +50,34 @@ practices stayed at 100.
   `index.html` would fix that, and was left undone on purpose: the CSP has no `'unsafe-inline'`
   for scripts, so the shell could not read the remembered language, and an English reader would
   see the Spanish header until React mounted.
+- **Nothing is drawn under the loading skeleton** (`settled` in `App.tsx`). The skeleton is a
+  viewport tall so that nothing below it is on screen when the dashboard replaces it. A failed
+  load replaces it with a short alert instead, and whatever sat underneath was pulled up into
+  view: the "Cómo leer estas cifras" note moved 0.119 of CLS on every failed load (measured
+  2026-09-24, API aborted, phone and desktop alike). That note and the footer now wait until the
+  catalogue has either loaded or failed; measured the same way, 0. A 4xx is also no longer retried
+  (`shouldRetry` in `src/lib/api.ts`), so a refused load shows its error at once rather than after
+  TanStack's three backed-off retries, ~7 s.
+- **PageSpeed Insights is let through the same-origin check by name.** Its runner (Google's ASN,
+  `Chrome-Lighthouse` in the user agent, Cloudflare `verifiedBotCategory` "Search Engine
+  Optimization") sends neither `Sec-Fetch-Site` nor `Origin`, so the check answered every
+  `/api/*` call 403 and PSI scored the load-error state. Seen on 2026-09-24 in the invocation logs:
+  PSI reported mobile 85 with CLS 0.153 and desktop 69 with CLS 0.609, while local Lighthouse against
+  production the same morning gave 95 (CLS 0.003) and 99 (CLS 0.002) with both calls answering
+  200. [API](api.md) has the exception that fixed it. If PSI's console audit shows 403s again,
+  its runner has changed what it sends: read the invocation log before trusting the score. The
+  page has no CrUX field data, so PSI's "real users" panel is empty.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under
   [Tooling gotchas](development.md#tooling-gotchas), or the page queries SGC. `preview` serves assets
   **uncompressed**, so its absolute numbers are pessimistic against production — compare runs
-  with each other, not with a production score.
+  with each other, not with a production score. Add `--blocked-url-patterns='*/api/refresh*'` as
+  a second guard: refresh is the one route that reaches SGC. Lighthouse's simulated LCP on preview
+  is bimodal (4.4 s or 6.5 s for the same build, first run usually the low one), so take five runs
+  and compare medians. The load-error state is not reachable this way — Lighthouse ends the trace
+  before the retries do — so check it in `agent-browser` with `network route '**/api/*' --abort`
+  and a buffered `layout-shift` `PerformanceObserver` read after ~10 s.
 - The console must stay empty. The basemap style names sprite images OpenFreeMap does not
   ship (`circle-11`), which MapLibre warns about twice per load, so `event-map.tsx` answers
   `styleimagemissing` with an empty pixel. Real map errors still reach `console.error`.

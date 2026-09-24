@@ -20,8 +20,15 @@ Headers are forgeable and this is **not** authentication; it keeps the raw feed 
 casual reach. Use the page's download buttons, or `pnpm cli fetch`, which talks to SGC
 directly and is unaffected.
 
-Two exceptions:
+Three exceptions:
 
+- **A Lighthouse run Cloudflare has verified may read.** PageSpeed Insights' runner sends
+  neither header, so it only ever scored the page's load-error state
+  ([Performance](performance.md)). A `GET` or `HEAD` passes when the user agent contains
+  `Chrome-Lighthouse` **and** Cloudflare sets `request.cf.verifiedBotCategory`. The user agent
+  alone is a claim anyone can make; the category is Cloudflare's own verification of where the
+  request came from, and a caller cannot set it. Other verified bots, Googlebot included, are
+  still refused, and so is any `POST`: `/api/refresh` is the route that reaches SGC.
 - `GET /api/health` is open to anyone: `{ ok, totalEvents, ingestAgeS, lastRunOk, zones }`, no
   catalogue data. It is what the deploy smoke test and any uptime check should call. `zones`
   carries `{ totalEvents, ingestAgeS, lastRunOk }` for each zone, and the top-level `ingestAgeS` is
