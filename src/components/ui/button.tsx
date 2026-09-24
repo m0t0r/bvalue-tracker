@@ -17,6 +17,10 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        // Floats over the page, so it is opaque on hover too (`default` turns 80 % transparent there
+        // and lets the text underneath through) and lifted off it by a shadow.
+        floating:
+          "bg-primary text-primary-foreground shadow-lg hover:bg-[color-mix(in_oklch,var(--primary),var(--background)_18%)]",
         link: "text-primary underline-offset-4 hover:underline",
         // A disclosure that should not compete with the text it sits under ("Detalle técnico").
         "link-muted":
@@ -50,6 +54,9 @@ const buttonVariants = cva(
         "icon-sm-touch":
           "size-7 pointer-coarse:size-10 pointer-coarse:after:absolute pointer-coarse:after:-inset-0.5 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
+        // A round 44px button, at that size on every pointer so it needs no hit area outside itself.
+        // It clips its content, so an icon can travel out through the edge of the circle.
+        "icon-round": "size-11 overflow-hidden rounded-full",
       },
     },
     defaultVariants: {

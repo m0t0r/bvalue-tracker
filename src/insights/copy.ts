@@ -76,6 +76,7 @@ const es = {
   timeNote: "Fechas y horas de Colombia (UTC−5).",
   themeToDark: "Cambiar a tema oscuro",
   themeToLight: "Cambiar a tema claro",
+  backToTop: "Volver arriba",
 
   source: {
     shallow: "el grupo superficial del Chocó (Istmina–Sipí)",
@@ -165,6 +166,7 @@ const en: Copy = {
   timeNote: "Dates and times are Colombia time (UTC−5).",
   themeToDark: "Switch to dark theme",
   themeToLight: "Switch to light theme",
+  backToTop: "Back to top",
 
   source: {
     shallow: "Chocó's shallow group (Istmina–Sipí)",
