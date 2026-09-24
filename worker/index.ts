@@ -30,6 +30,21 @@ const log = (env: Env, bindings: Record<string, unknown> = {}): Logger => logger
  * what we are keeping off direct callers. Headers are forgeable and this is not an
  * authentication boundary; it keeps the raw data out of casual reach, nothing more.
  */
+/**
+ * PageSpeed Insights' runner sends neither Sec-Fetch-Site nor Origin, so without this it only ever
+ * scores the page's load-error state (docs/performance.md). Both halves are required: the user
+ * agent says Lighthouse, which anyone can claim, and Cloudflare's `verifiedBotCategory` says the
+ * request comes from a bot Cloudflare has verified by its network, which a caller cannot set.
+ * The category is missing from the generated `cf` types, hence the cast. Reads only: refresh is
+ * the route that reaches SGC, and nothing in a page load needs it.
+ */
+function isVerifiedLighthouse(c: Context<{ Bindings: Env }>): boolean {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") return false;
+  const cf = c.req.raw.cf as { verifiedBotCategory?: unknown } | undefined;
+  if (typeof cf?.verifiedBotCategory !== "string" || cf.verifiedBotCategory === "") return false;
+  return c.req.header("user-agent")?.includes("Chrome-Lighthouse") ?? false;
+}
+
 function isSameOrigin(c: Context<{ Bindings: Env }>): boolean {
   const site = c.req.header("sec-fetch-site");
   if (site !== undefined) return site === "same-origin";
@@ -68,7 +83,7 @@ app.use("/api/*", async (c, next) => {
     c.header("retry-after", "60");
     return c.json({ error: "rate limited" }, 429);
   }
-  if (c.req.path === "/api/health" || isSameOrigin(c)) return next();
+  if (c.req.path === "/api/health" || isSameOrigin(c) || isVerifiedLighthouse(c)) return next();
   c.header("cache-control", "no-store");
   return c.json({ error: "forbidden" }, 403);
 });

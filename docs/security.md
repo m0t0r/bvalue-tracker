@@ -47,7 +47,9 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   when the value is a plain number**, or every negative depth error and b-value would
   silently become text. Both CSV paths share `quote()`, so both are covered.
 - **`/api/*` is same-origin plus a per-IP rate limit.** See [API](api.md) for the rule and
-  its two exceptions. `/api/health` exists *because* of this: the deploy smoke test used to
+  its three exceptions. The newest (2026-09-24) lets a Cloudflare-verified Lighthouse run read,
+  so PageSpeed Insights can measure the real page. It was chosen over admitting every verified
+  bot, which would have handed the catalogue to commercial SEO crawlers too. `/api/health` exists *because* of this: the deploy smoke test used to
   curl `/api/status`, which now 403s.
 - **`POST /api/client-error` is a write route that writes nothing.** It is the one route
   that takes a body from the reader, so: it inherits the same-origin check and the rate
