@@ -72,7 +72,9 @@ practices stayed at 100.
   D3 appears in no chunk it loads. `/insights` starts at 364 kB — mostly React and the shared UI, the
   same chunks the monitor preloads — and each tab is a lazy chunk on top.
   - The Slab2 plate and its data (`section.json`) took the story chunk from 76.0 kB to 94.1 kB
-    (24.1 → 28.9 kB gzipped) on 2026-09-24, `vite build`. Nothing else moved.
+    (24.1 → 28.9 kB gzipped) on 2026-09-24, `vite build`. Nothing else moved. Chaparral's cut and the
+    two locator maps took it to 99.9 kB (30.4 kB gzipped) the same day; its data was already in
+    `section.json`.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

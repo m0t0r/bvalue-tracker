@@ -97,7 +97,38 @@ describe("storyModel on the production catalogue of 2026-09-24", () => {
       eastDeeper: true,
       depthsSnapped: true,
       tolimaCrustal: true,
+      tolimaFarFromPlate: true,
     });
+  });
+
+  it("shows Chaparral's cut, and only while Chocó's plate step explains the margin it uses", () => {
+    expect(m.tolimaCut).toBe(true);
+    const cat = captured as Catalogues;
+    // With no shallow group there is no plate step in Chocó, so no Chaparral cut either.
+    const noShallow = storyModel(insights({ ...cat, choco: cat.choco.filter((e) => e.depthKm >= 70) }, NOW));
+    expect(noShallow.plate.tolima).not.toBeNull();
+    expect(noShallow.tolimaCut).toBe(false);
+  });
+
+  it("puts Pereira ~107 km north of the swarm's centre, off Chaparral's cut", () => {
+    // Haversine from Pereira to the median of the fixture's 601 Chaparral events, recomputed in Python.
+    expect(m.tolimaToPereiraKm).toBeCloseTo(106.54, 1);
+  });
+
+  it("calls the swarm much further from the plate only while it is at least twice any Chocó source's gap", () => {
+    // Fixture gaps above the plate's top: shallow 30.3 km, deep −6.6, M7.4 −20.8; Chaparral 141.3.
+    const gaps = [m.plate.shallow, m.plate.deep, m.plate.main].map((p) => p!.plate.topKm - p!.depthKm);
+    const t = m.plate.tolima!;
+    expect(t.plate.topKm - t.depthKm).toBeGreaterThan(2 * Math.max(...gaps));
+    const cat = captured as Catalogues;
+    const with_ = (over: Partial<Catalogues>) =>
+      storyModel(insights({ ...cat, ...over }, NOW)).facts.tolimaFarFromPlate;
+    // The swarm 60 km deeper is no longer in the crust (median ~79 km), though still 81 km above the plate.
+    expect(with_({ tolima: cat.tolima.map((e) => ({ ...e, depthKm: e.depthKm + 60 })) })).toBe(false);
+    // Chocó's shallow events at 1 km put the shallow group ~71 km above the plate: twice that exceeds
+    // the swarm's 141 km, so the swarm is no longer "much further".
+    const shallowAt1 = cat.choco.map((e) => (e.depthKm < 70 ? { ...e, depthKm: 1 } : e));
+    expect(with_({ choco: shallowAt1 })).toBe(false);
   });
 
   it("stops calling the mainshock dominant once a later event takes its share or its title", () => {

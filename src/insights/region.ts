@@ -15,8 +15,11 @@ export interface Town {
   name: string;
   lat: number;
   lon: number;
-  /** `home` is Pereira; `city` is a reference the reader knows; `zone` is a town the sources are named after. */
-  kind: "home" | "city" | "zone";
+  /**
+   * `home` is Pereira; `city` is a reference the reader knows; `zone` is a town the sources are named
+   * after; `cut` is named only on the story's cuts, on whose line it lies (`onCut`).
+   */
+  kind: "home" | "city" | "zone" | "cut";
 }
 
 export const TOWNS: readonly Town[] = [
@@ -32,4 +35,12 @@ export const TOWNS: readonly Town[] = [
   { id: "sipi", name: "Sipí", lat: 4.6526, lon: -76.6441, kind: "zone" },
   { id: "sanjose", name: "San José del Palmar", lat: 4.8975, lon: -76.2336, kind: "zone" },
   { id: "chaparral", name: "Chaparral", lat: 3.7236, lon: -75.4847, kind: "zone" },
+  // DANE's DIVIPOLA centroid (datos.gov.co gdxc-w37w, municipality 76109), checked 2026-09-24.
+  { id: "buenaventura", name: "Buenaventura", lat: 3.8757, lon: -77.0107, kind: "cut" },
 ];
+
+/** How far off a cut's latitude a town may be and still be drawn on it: ~5.5 km. */
+export const ON_CUT_DEG = 0.05;
+
+/** A town lies on a cut, and may be drawn on its surface, when it is within `ON_CUT_DEG` of its latitude. */
+export const onCut = (t: Town, cut: { lat: number }) => Math.abs(t.lat - cut.lat) <= ON_CUT_DEG;
