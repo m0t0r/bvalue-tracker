@@ -26,7 +26,8 @@ import { fmt, fmtKm, fmtMag, fmtPct, roundSig } from "../shared";
 import { FILL } from "../tones";
 import { Graphic, type SceneId } from "./graphic";
 import { useActiveStep, useSize, useWide } from "./hooks";
-import { MainName, Note, Num, SourceName } from "./marks";
+import { ExternalLink, MainName, Note, Num, SourceName } from "./marks";
+import { RATE } from "./section";
 import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
 import { CONVERGENCE_SOURCE, CUTS } from "../plate";
 import { Rich } from "./rich";
@@ -378,7 +379,7 @@ function useSteps(
         {main && (
           <>
             <p>
-              {c.section.p2}{" "}
+              <Rich text={c.section.p2} parts={{ rate: RATE }} />{" "}
               <Rich
                 text={c.section.p2Main(f.deepNearMain)}
                 parts={{
@@ -401,25 +402,16 @@ function useSteps(
           <Rich text={c.section.p4(f.shallowWest)} parts={{ shallow: names.shallow, depth: km(d.shallow?.depthKm) }} />
           {f.eastDeeper && ` ${c.section.eastDeeper}`}
         </p>
-        {main && (
-          <Note>
-            <Rich
-              text={c.section.rateNote}
-              parts={{
-                source: (
-                  <a
-                    className="underline underline-offset-4"
-                    href={CONVERGENCE_SOURCE}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {c.section.rateSource}
-                  </a>
-                ),
-              }}
-            />
-          </Note>
-        )}
+        {/* Always: the drawing states the rate whether or not a mainshock is found. */}
+        <Note>
+          <Rich
+            text={c.section.rateNote}
+            parts={{
+              rate: RATE,
+              source: <ExternalLink href={CONVERGENCE_SOURCE}>{c.section.rateSource}</ExternalLink>,
+            }}
+          />
+        </Note>
       </>
     ),
   });
@@ -485,16 +477,7 @@ function useSteps(
                 text={c.plate.usgs}
                 parts={{
                   main: mainWord,
-                  usgs: (
-                    <a
-                      className="underline underline-offset-4"
-                      href={USGS_ASSESSED.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {c.plate.usgsLink}
-                    </a>
-                  ),
+                  usgs: <ExternalLink href={USGS_ASSESSED.url}>{c.plate.usgsLink}</ExternalLink>,
                 }}
               />{" "}
               {c.plate.usgsNorth}

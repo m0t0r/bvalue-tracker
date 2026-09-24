@@ -260,9 +260,13 @@ the reader's own questions). Everything above still applies to it; this section 
   America): GSRM 2.1 and ITRF2014 52–53 mm/yr; MORVEL 59 at 076°; NUVEL-1A 64. The geological models
   are faster, which DeMets et al. 2010 put down to Nazca slowing. The page uses the measured one.
   - It is **horizontal convergence**, so the copy says the plate "se mete por debajo, unos 5 cm al
-    año", not that it sinks 5 cm a year. The arrow on both cuts is drawn along the plate's body and
-    labelled with the same rate; it shows a direction, not a measured path. The note under the
-    section step names the source and links it.
+    año", not that it sinks 5 cm a year. The arrow on both cuts runs along the plate's body under the
+    plate label's line "se mete bajo Sudamérica, ~5 cm al año". That is fair along the slab too: the
+    plate does not stretch as it goes down, so what enters at the trench at the convergence rate moves
+    along the slab at about that rate. What the page must not say is that it drops 5 cm a year
+    straight down. The note citing the source is shown whenever the drawing is, with or without a
+    mainshock. The figure lives in one place (`CONVERGENCE_CM_PER_YEAR` in `src/insights/plate.ts`)
+    and every string takes it as `{rate}`.
   - The rate is Malpelo's, ~500 km west of the trench. It is the plate's speed, not a measured slip
     rate on the Colombian trench, and the page does not call it one.
 - **Checked and deliberately not on the page** (2026-09-24), so nobody researches them again:
@@ -276,7 +280,8 @@ the reader's own questions). Everything above still applies to it; this section 
     76.29° W, 103.4 km. The page uses SGC's, as it does everywhere, and quotes USGS only for its words.
 - **USGS also says the M7.4 was "near the northernmost extent where intermediate depth earthquakes in
   the South America subduction zone are observed"**. The story relays it, attributed, under the same
-  condition as the quote below.
+  condition as the quote below. The Spanish keeps its terms ("sismos de profundidad intermedia", with
+  USGS's own 70–300 km) rather than "at that depth", which would narrow what USGS said.
 - **Where the plate cannot decide, USGS's own assessment is quoted, attributed and linked, and
   only for the event it is about.** USGS's tectonic summary for us6000tjl2 says the M7.4 "likely
   occurred within the subducting Nazca plate" "due to its depth", and that intermediate-depth

@@ -7,12 +7,15 @@ import { geoMercator, geoPath } from "d3-geo";
 import { useId, useMemo } from "react";
 import type { Lang } from "@/lib/i18n";
 import { PEREIRA } from "../claims";
-import { plateAlong, type Cut, type Plate } from "../plate";
+import { CONVERGENCE_CM_PER_YEAR, plateAlong, type Cut, type Plate } from "../plate";
 import { REGION } from "../region";
 import { fmtKm } from "../shared";
 import { storyCopy } from "./copy";
+import { Rich } from "./rich";
 
 export const KM_PER_DEG = 111.2;
+/** The plate's rate as the copy's `{rate}` writes it, with a no-break space before the unit. */
+export const RATE = `${CONVERGENCE_CM_PER_YEAR}\u00a0cm`;
 /**
  * The cuts' depth at least, deep enough for the plate under Pereira (its top ~125 km, its bottom
  * ~190 km there). Under Chaparral the plate's bottom (~222 km) runs past it, and is clipped.
@@ -121,7 +124,7 @@ export function SectionFrame({ sec, small, lang }: { sec: Section; small: boolea
         </g>
       ))}
       <PlateAndGround sec={sec} small={small} lang={lang} />
-      <Locator sec={sec} small={small} />
+      <Locator sec={sec} small={small} lang={lang} />
       {/* West and east read along the bottom edge, clear of the labels on the surface. */}
       <text x={sec.x0} y={sec.y(sec.maxDepth) + (small ? 14 : 20)} fontSize={fs} className="fill-muted-foreground">
         {c.west}
@@ -164,12 +167,14 @@ function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; la
   const surface = `M${ground.map((g) => xy(g.lon, g.km)).join("L")}`;
   const sea = `M${ground.map((g) => xy(g.lon, Math.max(0, g.km))).join("L")}L${xy(ground.at(-1)!.lon, 0)}L${xy(ground[0]!.lon, 0)}Z`;
   // The label sits in the plate's body just past the trench, west of the events, where it is shallow
-  // enough to leave room for three lines above the drawing's bottom.
+  // enough to leave room for its lines (four on a desktop, three on a phone) above the arrow drawn
+  // under it and the drawing's bottom.
   const at = pts.find((p) => p.lon >= sec.cut.trenchLon + LABEL_EAST_OF_TRENCH);
   const trench = sec.x(sec.cut.trenchLon);
   // Which way the plate moves, along its own body: drawn at the rate the prose gives and cites
   // (`CONVERGENCE_SOURCE`), never as a measured path.
-  const mid = (p: Plate) => p.topKm + p.thicknessKm * 0.75;
+  // Lower on a phone, where the label's third line sits just above it.
+  const mid = (p: Plate) => p.topKm + p.thicknessKm * (small ? 0.88 : 0.75);
   const from = pts.find((p) => p.lon >= sec.cut.trenchLon + ARROW_EAST_OF_TRENCH[0]);
   const to = pts.find((p) => p.lon >= sec.cut.trenchLon + ARROW_EAST_OF_TRENCH[1]);
   const arrow = `${clip}-arrow`;
@@ -219,19 +224,6 @@ function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; la
             strokeWidth={small ? 1.5 : 2}
             markerEnd={`url(#${arrow})`}
           />
-          {/* On a phone the cut is ~1 px per km and the words would cover the arrow; the prose gives the rate. */}
-          {!small && (
-            <text
-              x={sec.x(from.lon)}
-              y={sec.y(mid(to)) + fs + 4}
-              fontSize={fs - 1}
-              className="fill-foreground stroke-background tabular-nums"
-              paintOrder="stroke"
-              strokeWidth={4}
-            >
-              {c.plateRate}
-            </text>
-          )}
         </g>
       )}
       <path d={sea} className="fill-muted" />
@@ -249,9 +241,22 @@ function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; la
           strokeWidth={4}
         >
           <tspan fontWeight={600}>{c.plate}</tspan>
+          {/* What the arrow just below shows. An arrow alone read as a path, or as nothing (owner
+              review, 2026-09-24); a hover tooltip would hide it on a phone. On a phone the short
+              line goes last: the lowest line reaches furthest east, towards the shallow group. */}
+          {!small && (
+            <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-foreground">
+              <Rich text={c.plateMotion} parts={{ rate: RATE }} />
+            </tspan>
+          )}
           <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-muted-foreground">
             {c.plateModel}
           </tspan>
+          {small && (
+            <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-foreground">
+              <Rich text={c.plateMotionShort} parts={{ rate: RATE }} />
+            </tspan>
+          )}
           {/* On a phone the third line reaches the shallow group; the prose explains the band. */}
           {!small && (
             <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-muted-foreground">
@@ -278,7 +283,9 @@ const LOCATOR_BOX = {
  * trench, the one part of either cut the plate and the events leave empty. Pereira is marked in its
  * own red, so the reader sees that it lies on Chocó's cut and north of Chaparral's.
  */
-function Locator({ sec, small }: { sec: Section; small: boolean }) {
+function Locator({ sec, small, lang }: { sec: Section; small: boolean; lang: Lang }) {
+  const c = storyCopy[lang].graphic;
+  const fs = small ? 8 : 9.5;
   const clip = `loc-${useId().replace(/[^\w-]/g, "")}`;
   // Projected once per frame: the drawing re-renders on every step and slider change, and both
   // cuts' locators stay mounted (a layer only fades), each over the whole region's outlines.
@@ -320,9 +327,37 @@ function Locator({ sec, small }: { sec: Section; small: boolean }) {
         ))}
       </g>
       {a && b && (
-        <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} className="stroke-foreground" strokeWidth={small ? 1.5 : 2} />
+        <g>
+          <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} className="stroke-foreground" strokeWidth={small ? 1.5 : 2} />
+          {/* Under the line's west end. It crosses the coast at this scale, so it has the page's halo. */}
+          <text
+            x={a[0] + 2}
+            y={a[1] + fs + 2}
+            fontSize={fs}
+            className="fill-foreground stroke-background"
+            paintOrder="stroke"
+            strokeWidth={3}
+          >
+            {c.locatorCut}
+          </text>
+        </g>
       )}
-      {P && <circle cx={P[0]} cy={P[1]} r={small ? 2 : 2.5} className="fill-place" />}
+      {P && (
+        <g>
+          <circle cx={P[0]} cy={P[1]} r={small ? 2 : 2.5} className="fill-place" />
+          <text
+            x={P[0] + 3}
+            y={P[1] - 4}
+            textAnchor="end"
+            fontSize={fs}
+            className="fill-foreground stroke-background"
+            paintOrder="stroke"
+            strokeWidth={3}
+          >
+            Pereira
+          </text>
+        </g>
+      )}
     </g>
   );
 }
