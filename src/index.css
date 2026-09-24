@@ -222,12 +222,36 @@
   }
 }
 
+/* A control that rises into place when it becomes useful and sinks away when it stops being so
+   (the insights page's back-to-top button). Leaving is quicker than arriving: the reader has
+   already moved on. Never from nothing: it starts at 90 %, a few pixels low. */
+.rise {
+  transition:
+    opacity 150ms var(--ease-out),
+    translate 150ms var(--ease-out),
+    scale 150ms var(--ease-out);
+
+  &[data-shown] {
+    transition-duration: 220ms;
+  }
+  &:not([data-shown]) {
+    opacity: 0;
+    translate: 0 0.5rem;
+    scale: 0.9;
+    pointer-events: none;
+  }
+}
+
 /* A faster spinner reads as a faster app. */
 [data-slot="spinner"] {
   animation-duration: 0.6s;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rise:not([data-shown]) {
+    translate: none;
+    scale: none;
+  }
   .enter {
     transition: opacity 200ms ease;
     transition-delay: 0ms;

@@ -1,11 +1,12 @@
 import { AlertTriangleIcon, ArrowLeftIcon, MoonIcon, SunIcon } from "lucide-react";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
 import { toggleTheme, useIsDark } from "@/lib/theme";
+import { BackToTop } from "./back-to-top";
 import { insightsCopy } from "./copy";
 import { useInsights } from "./use-insights";
 
@@ -31,6 +32,8 @@ export function InsightsApp() {
   const [tab, setTab] = useState<Tab>(readTab);
   const { data, isPending, isError, incomplete } = useInsights();
   const other = lang === "es" ? "en" : "es";
+  const tabList = useRef<HTMLDivElement>(null);
+  const footer = useRef<HTMLElement>(null);
 
   useEffect(() => {
     document.title = c.docTitle;
@@ -77,7 +80,7 @@ export function InsightsApp() {
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{c.title}</h1>
           <p className="max-w-prose text-muted-foreground text-pretty">{c.subtitle}</p>
-          <TabsList aria-label={c.tabsLabel}>
+          <TabsList ref={tabList} aria-label={c.tabsLabel}>
             {TABS.map((t) => (
               <TabsTrigger key={t} value={t}>
                 {c.tabs[t]}
@@ -119,8 +122,9 @@ export function InsightsApp() {
         </main>
       </Tabs>
 
+      {data && <BackToTop label={c.backToTop} tabs={tabList} end={footer} />}
       {data && (
-        <footer className="mt-auto flex flex-col gap-1 border-t pt-6 text-sm text-muted-foreground">
+        <footer ref={footer} className="mt-auto flex flex-col gap-1 border-t pt-6 text-sm text-muted-foreground">
           {data.dataEnd !== null && <p>{c.dataUpTo(data.dataEnd, lang)}</p>}
           <p className="max-w-prose text-pretty">{c.footer}</p>
           <p>{c.timeNote}</p>

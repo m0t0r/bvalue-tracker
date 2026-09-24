@@ -172,6 +172,16 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
 - **SVG text is sized in screen pixels.** A drawing that scales with its column (the questions tab's
   map, `viewBox` 400) multiplies its font sizes by viewBox units per pixel; in viewBox units alone
   its town names were 7 px on a 320 px phone.
+- **Back to top is a round button that appears only near the end of a tab** (`back-to-top.tsx`,
+  2026-09-24). One `IntersectionObserver` on the footer shows it within half a window of it, so it is
+  never over the text during the read; on a phone the story's drawing already takes the top half of
+  the window. It is `Button` `floating` / `icon-round`: the primary colour, so black with a white
+  arrow in light mode and inverted in dark, where black would vanish; opaque on hover (`default`
+  goes to 80 % there and lets the text through). On hover the arrow leaves through the top of the
+  circle and a second rises in behind it. It arrives in 220 ms and leaves in 150 ms (`.rise` in
+  `index.css`); reduced motion drops the movement and the smooth scroll. Hidden, it is `inert`.
+  Pressed, it moves focus to the selected tab before scrolling, so a keyboard reader lands where
+  they can switch tabs rather than on a button that has just vanished.
 - **Map outlines** are `src/insights/region.geo.json`, 26 kB of Natural Earth (public domain) cut to
   Colombia and its three neighbours by `scripts/insights-region.ts` and committed. Re-run the script
   only to change the countries.
@@ -496,6 +506,8 @@ a pointer to this section. What they ask, and how this page answers them:
     a 44 px hit area, while "Quitar filtros" and the group buttons kept 12 px text and `sm`'s
     56 px hit area. They now share the language button's values, so on touch those three buttons
     changed.
+  - `Button` variant `floating` and size `icon-round` are the insights page's back-to-top button:
+    opaque primary with a shadow, and a 44 px circle that clips what travels through its edge.
   - `Button` size `header` is the sortable column header (`sm` with the table's 14 px text);
     `inline` is a link-button inside running text, with no box of its own; `inline-touch` is
     `inline` growing like `sm-touch`. Variant `link-muted` is the "Detalle técnico" trigger.
