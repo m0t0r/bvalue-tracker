@@ -2,18 +2,21 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_FILTERS, activeFilterChips, applyFilters, defaultFilters, type Filters } from "@/lib/filters";
 import { scopeChips, DEFAULT_SCOPE } from "@/lib/scope";
 import { dicts } from "@/lib/i18n";
+import { MAINSHOCK_ID } from "../../core/seiscomp";
 
 const es = dicts.es;
 const labels = (f: Partial<Filters>, cluster: "all" | "shallow" | "deep" = "all") =>
-  activeFilterChips({ ...DEFAULT_FILTERS, ...f }, cluster, es, "es").map((c) => `${c.key}=${c.label}`);
+  activeFilterChips({ ...DEFAULT_FILTERS, ...f }, cluster, es, "es", DEFAULT_FILTERS, MAINSHOCK_ID).map(
+    (c) => `${c.key}=${c.label}`,
+  );
 
 describe("the filters a page is narrowed by", () => {
   it("names none on a page nobody has touched, so the scope bar stays away", () => {
-    expect(activeFilterChips(DEFAULT_FILTERS, "all", es, "es")).toEqual([]);
+    expect(activeFilterChips(DEFAULT_FILTERS, "all", es, "es", DEFAULT_FILTERS, MAINSHOCK_ID)).toEqual([]);
   });
 
   it("names the cluster, and carries its colour", () => {
-    const [chip] = activeFilterChips(DEFAULT_FILTERS, "shallow", es, "es");
+    const [chip] = activeFilterChips(DEFAULT_FILTERS, "shallow", es, "es", DEFAULT_FILTERS, MAINSHOCK_ID);
     expect(chip).toEqual({ key: "cluster", label: es.clusterShort.shallow, cluster: "shallow" });
   });
 
@@ -53,18 +56,18 @@ describe("a zone's own defaults", () => {
   });
 
   it("names no filter on an untouched Chaparral page", () => {
-    expect(scopeChips({ ...DEFAULT_SCOPE, filters: defaultFilters("tolima") }, es, "es", "tolima")).toEqual([]);
+    expect(scopeChips({ ...DEFAULT_SCOPE, filters: defaultFilters("tolima") }, es, "es", "tolima", null)).toEqual([]);
   });
 
   it("names the dates once they differ from the zone's own start", () => {
     const moved = { ...DEFAULT_SCOPE, filters: { ...defaultFilters("tolima"), from: "2026-09-22" } };
-    expect(scopeChips(moved, es, "es", "tolima").map((c) => c.key)).toEqual(["dates"]);
+    expect(scopeChips(moved, es, "es", "tolima", null).map((c) => c.key)).toEqual(["dates"]);
   });
 
   // An event from the day before, which the one-day padding on every SGC request brings in.
   it("leaves out what came before the zone's start", () => {
     const e = (time: string) => ({ time, mag: 2.5, status: "manual", id: "SGC2026aaaaaa" }) as never;
-    const kept = applyFilters([e("2026-09-19T20:00:00Z"), e("2026-09-20T08:27:00Z")], defaultFilters("tolima"));
+    const kept = applyFilters([e("2026-09-19T20:00:00Z"), e("2026-09-20T08:27:00Z")], defaultFilters("tolima"), null);
     expect(kept).toHaveLength(1);
   });
 });

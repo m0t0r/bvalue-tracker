@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { fromCsv, toCsv, windowsToCsv } from "../core/csv.ts";
-import { computeStats } from "../core/gr.ts";
+import { computeStats } from "@bvalue/seismo";
 import { parseCatalogHtml } from "../core/seiscomp.ts";
 
 describe("csv", () => {

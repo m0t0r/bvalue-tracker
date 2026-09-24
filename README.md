@@ -65,13 +65,14 @@ flowchart LR
   Workers free plan.
 - **Frontend:** React with shadcn/ui, TanStack Query, Form and Table, Recharts and
   MapLibre GL.
-- **Statistics:** written and tested here in `core/gr.ts`.
+- **Statistics:** written and tested here, in the `packages/seismo` library.
 
 ## Project structure
 
 | Path | Contents |
 |---|---|
 | `core/` | Runtime-neutral logic shared by the Worker, the browser and Node: the SGC request and HTML parser, the admission gate every event passes through, the statistics, CSV and the CLI. |
+| `packages/seismo/` | The seismology library: Gutenberg–Richter statistics and mainshock detection, pure and runtime-neutral, knowing nothing about SGC, a zone or the page. |
 | `worker/` | The Hono API, the ingest planner and ingest mechanics, D1 access, and the response types shared with the page. |
 | `src/` | The React page. `src/lib/i18n.tsx` holds every user-facing string in Spanish and English. |
 | `migrations/` | The D1 schema. |

@@ -6,6 +6,8 @@ export default defineConfig({
   test: {
     projects: [
       { test: { name: "core", include: ["test/**/*.test.ts"] } },
+      // The seismology library, on synthetic catalogues only: it knows nothing about SGC or a zone.
+      { test: { name: "seismo", include: ["packages/seismo/test/**/*.test.ts"] } },
       {
         // The page's own pure logic. It lives beside the module it tests, because `src` is the only
         // tsconfig project with the DOM lib, JSX and the "@" alias, and a test under `test/` would

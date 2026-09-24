@@ -4,8 +4,9 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
-import { computeStats, type CatalogStats } from "../core/gr.ts";
-import { DEFAULT_ZONE, ZONE_IDS, ZONES, isZoneId, type ZoneId } from "../core/zones.ts";
+import { computeStats, type CatalogStats } from "@bvalue/seismo";
+import { mainshockId, zoneMainshock } from "../core/mainshock.ts";
+import { DEFAULT_ZONE, ZONE_IDS, isZoneId, type ZoneId } from "../core/zones.ts";
 import type { HealthResponse, StatusResponse, StoredEvent, ZoneHealth } from "./api-types.ts";
 import { lastRun, toStored, type EventRow } from "./db.ts";
 import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
@@ -197,8 +198,24 @@ async function queryEvents(db: D1Database, f: EventFilter, zone: ZoneId): Promis
     .bind(...args)
     .all<EventRow>();
   const events = results.map(toStored);
-  const mainshock = ZONES[zone].mainshockId;
-  return f.excludeMainshock && mainshock !== null ? events.filter((e) => e.id !== mainshock) : events;
+  if (!f.excludeMainshock) return events;
+  const mainshock = await zoneMainshockId(db, zone);
+  return mainshock === null ? events : events.filter((e) => e.id !== mainshock);
+}
+
+/**
+ * The zone's mainshock, detected over its whole catalogue — never over the range a request asked
+ * for, which would drop "the largest of this range" (docs/ingest.md). Only the two largest events
+ * decide it (`zoneMainshock`), so this reads two rows' worth of answer. Unindexed on `mag`, it walks
+ * the zone's rows to find them; only `excludeMainshock=1` asks, which the page never sends (it
+ * detects on the catalogue it already holds), so it is not worth an index on the hot path.
+ */
+async function zoneMainshockId(db: D1Database, zone: ZoneId): Promise<string | null> {
+  const { results } = await db
+    .prepare("SELECT id, mag, status FROM events WHERE zone = ? AND removed_at IS NULL ORDER BY mag DESC LIMIT 2")
+    .bind(zone)
+    .all<{ id: string; mag: number; status: string }>();
+  return mainshockId(zoneMainshock(results));
 }
 
 async function status(db: D1Database, zone: ZoneId): Promise<StatusResponse> {

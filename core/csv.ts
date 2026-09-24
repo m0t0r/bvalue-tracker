@@ -1,5 +1,5 @@
 import { admitEvent } from "./admit.ts";
-import type { BWindow } from "./gr.ts";
+import type { BWindow } from "@bvalue/seismo";
 import type { SeismicEvent } from "./types.ts";
 
 const COLUMNS = [

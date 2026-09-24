@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { postRefresh, type StatusResponse } from "@/lib/api";
+import { postRefresh, type StatusResponse, type StoredEvent } from "@/lib/api";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
-import { fmtDateTime, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
+import { fmtDateTime, fmtDay, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
 import { useZone } from "@/lib/zone";
+import type { ZoneMainshock } from "../../core/mainshock";
 
 /** A wait the reader should not sit through: the cron will do the work instead. */
 const LONG_WAIT_S = 60;
@@ -29,7 +30,50 @@ function Stat({ label, value, hint }: { label: string; value: ReactNode | null; 
   );
 }
 
-export function StatusBar({ status, shown }: { status: StatusResponse | undefined; shown: number | null }) {
+/**
+ * What the mainshock rule (core/mainshock.ts) reads in the zone's catalogue today, on every tab and in
+ * every state, so "none clear" is a reading rather than an absence. The magnitude is a link to SGC's
+ * page for the event, like every value on the page that identifies one event, with its UTC time on
+ * hover. The rule itself is written out under "Cómo leer estas cifras".
+ */
+function MainshockStat({ mainshock: m }: { mainshock: ZoneMainshock<StoredEvent> | null }) {
+  const { t, lang } = useI18n();
+  if (m === null) return <Stat label={t.mainshock.label} value={null} />;
+  if (m.largest === null || m.runnerUp === null || m.gap === null) return <Stat label={t.mainshock.label} value="—" />;
+  const gap = m.gap.toFixed(1);
+  if (m.state === "none")
+    return <Stat label={t.mainshock.label} value={t.mainshock.none} hint={t.mainshock.noneHint(gap)} />;
+  const e = m.largest;
+  const day = fmtDay(Date.parse(e.time), lang);
+  return (
+    <Stat
+      label={t.mainshock.label}
+      value={
+        <a
+          className="underline underline-offset-4"
+          href={sgcEventUrl(e.id)}
+          target="_blank"
+          rel="noreferrer"
+          title={fmtUtc(e.time)}
+        >
+          M{e.mag.toFixed(1)} ({e.magType})
+        </a>
+      }
+      hint={m.state === "found" ? t.mainshock.gapHint(day, gap) : t.mainshock.pendingHint(day)}
+    />
+  );
+}
+
+export function StatusBar({
+  status,
+  shown,
+  mainshock,
+}: {
+  status: StatusResponse | undefined;
+  shown: number | null;
+  /** The zone's mainshock as detected over its whole catalogue; null until the catalogue has loaded. */
+  mainshock: ZoneMainshock<StoredEvent> | null;
+}) {
   const { t, lang } = useI18n();
   const zone = useZone().id;
   const qc = useQueryClient();
@@ -166,6 +210,7 @@ export function StatusBar({ status, shown }: { status: StatusResponse | undefine
               value={status ? (ok?.finishedAt ? relativeTime(ok.finishedAt, lang, now) : t.never) : null}
               hint={ok?.finishedAt ? fmtDateTime(ok.finishedAt, lang) : undefined}
             />
+            <MainshockStat mainshock={mainshock} />
           </div>
           {/* Below lg this block wraps onto its own line at the start edge, so it reads from there; beside the stats it hugs the end edge. */}
           <div className="flex flex-col items-start gap-2 lg:items-end">

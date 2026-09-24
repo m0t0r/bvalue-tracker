@@ -16,9 +16,11 @@ interface Props {
   /** The page's filters. The form renders these; it does not own them. */
   value: Filters;
   onChange: (f: Filters) => void;
+  /** Whether the zone has a detected mainshock for "Excluir sismo principal" to leave out. */
+  hasMainshock: boolean;
 }
 
-export function FiltersCard({ mcAuto, value, onChange }: Props) {
+export function FiltersCard({ mcAuto, value, onChange, hasMainshock }: Props) {
   const { t } = useI18n();
   const zone = useZone();
   const form = useForm({
@@ -162,8 +164,8 @@ export function FiltersCard({ mcAuto, value, onChange }: Props) {
                 </Field>
               )}
             </form.Field>
-            {/* A swarm has no mainshock, so there is nothing for this switch to exclude. */}
-            {zone.mainshockId === null ? null : (
+            {/* With no mainshock detected there is nothing for this switch to exclude. */}
+            {!hasMainshock ? null : (
               <form.Field name="excludeMainshock">
                 {(field) => (
                   <Field orientation="horizontal">

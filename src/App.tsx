@@ -20,6 +20,7 @@ import { useI18n } from "@/lib/i18n";
 import { scopeChips, useScope } from "@/lib/scope";
 import { toggleTheme, useIsDark } from "@/lib/theme";
 import { ZoneProvider, useZoneState } from "@/lib/zone";
+import { mainshockId } from "../core/mainshock";
 import { ZONES, ZONE_IDS, isZoneId, type ZoneId } from "../core/zones";
 import { updateEveryMin } from "../worker/plan.ts";
 
@@ -126,7 +127,9 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   // render behind, for the drawings that must not hold up the rolling digits — `src/lib/scope.ts`
   // says why, and holds the rule that every b-value here shares the catalogue's Mc.
   const { scope, view, deferred, selectCluster, magTabs, setFilters, clear } = useScope(events.data, zone);
-  const chips = useMemo(() => scopeChips(scope, t, lang, zone), [scope, t, lang, zone]);
+  // The mainshock is detected over the whole catalogue, whatever the filters leave (`pageView`).
+  const mainshock = mainshockId(view.mainshock);
+  const chips = useMemo(() => scopeChips(scope, t, lang, zone, mainshock), [scope, t, lang, zone, mainshock]);
   const incomplete = !!status.data && status.data.backfill.done < status.data.backfill.total;
   // Nothing is drawn under the loading skeleton. Whatever sat there would be pulled up into view
   // when a failed load swaps the viewport-tall skeleton for a short alert: the caveats note did
@@ -137,7 +140,11 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   return (
     <>
       <main className="contents">
-        <StatusBar status={status.data} shown={events.data ? view.shown.length : null} />
+        <StatusBar
+          status={status.data}
+          shown={events.data ? view.shown.length : null}
+          mainshock={events.data ? view.mainshock : null}
+        />
         {events.data ? (
           <FilterScope
             chips={chips}
@@ -174,7 +181,12 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                 />
                 <div className="lg:col-span-2">
                   <Deferred title={t.bTimeTitle}>
-                    <BOverTimeChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
+                    <BOverTimeChart
+                      stats={deferred.stats}
+                      magType={deferred.magType}
+                      cluster={deferred.cluster}
+                      mainshockTime={view.mainshock.state === "found" ? view.mainshock.largest.time : null}
+                    />
                   </Deferred>
                 </div>
               </div>
@@ -184,7 +196,12 @@ function ZonePage({ zone }: { zone: ZoneId }) {
             {ZONES[zone].depthClusters && view.base.length > 0 ? (
               <ClustersCard events={deferred.base} stats={view.clusters} selection={selectCluster} />
             ) : null}
-            <FiltersCard mcAuto={view.clusters.all.mcMaxc} value={scope.filters} onChange={setFilters} />
+            <FiltersCard
+              mcAuto={view.clusters.all.mcMaxc}
+              value={scope.filters}
+              onChange={setFilters}
+              hasMainshock={mainshock !== null}
+            />
 
             {view.shown.length === 0 ? (
               <Card>
@@ -204,12 +221,12 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                     <FmdChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
                   </Deferred>
                   <Deferred title={t.mapTitle} height="map">
-                    <EventMap events={deferred.shown} />
+                    <EventMap events={deferred.shown} mainshockId={mainshock} />
                   </Deferred>
                 </div>
                 <div className="enter" style={{ "--i": 2 } as CSSProperties}>
                   <Deferred title={t.magTimeTitle}>
-                    <MagnitudeTimeChart events={deferred.shown} />
+                    <MagnitudeTimeChart events={deferred.shown} mainshockId={mainshock} />
                   </Deferred>
                 </div>
                 <div className="enter" style={{ "--i": 3 } as CSSProperties}>
@@ -229,7 +246,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
             <AlertTitle>{t.caveatsTitle}</AlertTitle>
             <AlertDescription>
               <ul className="flex max-w-[75ch] list-disc flex-col gap-1 ps-4">
-                {t.zones[zone].caveats.map((c) => (
+                {t.zones[zone].caveats(view.mainshock.state).map((c) => (
                   <li key={c}>{c}</li>
                 ))}
               </ul>

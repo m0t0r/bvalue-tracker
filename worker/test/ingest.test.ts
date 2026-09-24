@@ -6,7 +6,7 @@ import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import { CHAPARRAL_BBOX, ZONE_IDS } from "../../core/zones.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
 import EMPTY from "../../test/fixtures/seiscomp-empty.html?raw";
-import { ABANDONED_ERROR, sgcHealth } from "../db.ts";
+import { ABANDONED_ERROR, insertStmt, sgcHealth } from "../db.ts";
 import worker from "../index.ts";
 import { ingest, ingestSweep, sweepChunks } from "../ingest.ts";
 import { IN_FLIGHT_MS } from "../plan.ts";
@@ -347,6 +347,89 @@ describe("API", () => {
     expect(lateNoMain).toHaveLength(late.length);
     const all = (await (await call("/api/events?excludeMainshock=1")).json()) as { id: string }[];
     expect(all).toHaveLength(785);
+    expect(all.some((e) => e.id === "SGC2026pqqmro")).toBe(false);
+  });
+
+  describe("excludeMainshock on a zone whose mainshock is detected, not written down", () => {
+    /** A Chaparral event, written the way ingest writes one. */
+    const put = async (id: string, mag: number, status: "manual" | "automatic", day = 21, removed = false) => {
+      await insertStmt(
+        env.DB,
+        {
+          id,
+          time: `2026-09-${day}T10:00:00Z`,
+          lat: 3.85,
+          lon: -75.63,
+          depthKm: 18,
+          mag,
+          magType: "MLr",
+          phases: null,
+          rmsS: null,
+          gapDeg: null,
+          errLatKm: null,
+          errLonKm: null,
+          errDepthKm: null,
+          region: "Chaparral - Tolima, Colombia",
+          status,
+          solutionStamp: null,
+        },
+        NOW.toISOString(),
+        "tolima",
+      ).run();
+      if (removed)
+        await env.DB.prepare("UPDATE events SET removed_at = ? WHERE id = ?").bind(NOW.toISOString(), id).run();
+    };
+    const ids = async (q: string) =>
+      ((await (await call(`/api/events?zone=tolima${q}`)).json()) as { id: string }[]).map((e) => e.id).sort();
+    /** The swarm as it stood: its largest 0.3 above the next. */
+    const swarm = async () => {
+      await put("SGC2026stzmyx", 4.5, "manual", 20);
+      await put("SGC2026sqogax", 4.2, "manual", 21);
+      await put("SGC2026aaaaaa", 3.1, "manual", 22);
+    };
+
+    it("drops nothing from a swarm, which has no mainshock", async () => {
+      await swarm();
+      expect(await ids("&excludeMainshock=1")).toEqual(await ids(""));
+      expect(await ids("")).toHaveLength(3);
+    });
+
+    it("drops a reviewed event that stands clear, whatever range is asked for", async () => {
+      await swarm();
+      await put("SGC2026bigone", 5.6, "manual", 23);
+      expect(await ids("&excludeMainshock=1")).toEqual(["SGC2026aaaaaa", "SGC2026sqogax", "SGC2026stzmyx"]);
+      // A range that holds only smaller events loses none of them to "the largest of this range".
+      // 20 September alone holds the M4.5 and an M3.0: within that day the M4.5 "stands clear", and
+      // it is still an ordinary event of the zone, which must not be dropped as if it were the mainshock.
+      await put("SGC2026smallx", 3.0, "manual", 20);
+      const day = await ids("&from=2026-09-20&to=2026-09-20");
+      expect(day).toEqual(["SGC2026smallx", "SGC2026stzmyx"]);
+      expect(await ids("&from=2026-09-20&to=2026-09-20&excludeMainshock=1")).toEqual(day);
+    });
+
+    it("drops nothing while the event that would stand clear awaits review", async () => {
+      await swarm();
+      await put("SGC2026bigone", 5.6, "automatic");
+      expect(await ids("&excludeMainshock=1")).toHaveLength(4);
+    });
+
+    it("ignores a withdrawn event, which neither is the mainshock nor stops one", async () => {
+      await swarm();
+      await put("SGC2026bigone", 5.6, "manual");
+      await put("SGC2026gonexx", 5.5, "manual", 22, true);
+      expect(await ids("&excludeMainshock=1")).not.toContain("SGC2026bigone");
+      await put("SGC2026gonebg", 7.0, "manual", 22, true);
+      expect(await ids("&excludeMainshock=1")).not.toContain("SGC2026bigone");
+    });
+
+    it("leaves Chocó's catalogue alone when Tolima has a mainshock, and the reverse", async () => {
+      await ingest(deps(FULL), FROM, TO, "manual");
+      await swarm();
+      await put("SGC2026bigone", 5.6, "manual");
+      const choco = (await (await call("/api/events?excludeMainshock=1")).json()) as { id: string }[];
+      expect(choco).toHaveLength(785);
+      expect(await ids("&excludeMainshock=1")).toHaveLength(3);
+    });
   });
 
   it("treats a bare `to` date as inclusive of that day", async () => {

@@ -2,8 +2,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, computeClusterStats } from "./clusters.ts";
 import { fromCsv, toCsv, windowsToCsv } from "./csv.ts";
-import { bValue, computeStats, fmd, mcGoodnessOfFit, mcMaxCurvature, WINDOW_SIZE, WINDOW_STEP } from "./gr.ts";
-import { MAINSHOCK_ID, fetchCatalog } from "./seiscomp.ts";
+import { bValue, computeStats, fmd, mcGoodnessOfFit, mcMaxCurvature, WINDOW_SIZE, WINDOW_STEP } from "@bvalue/seismo";
+import { MAINSHOCK_MIN_GAP, mainshockId, zoneMainshock } from "./mainshock.ts";
+import { fetchCatalog } from "./seiscomp.ts";
 import type { BBox, SeismicEvent } from "./types.ts";
 import { DEFAULT_ZONE, ZONES, ZONE_IDS, isZoneId } from "./zones.ts";
 
@@ -75,6 +76,17 @@ function report(label: string, events: SeismicEvent[], mcOverride?: number): num
   return mcOverride ?? maxc;
 }
 
+const fmtEvent = (e: SeismicEvent) => `${e.id} M${e.mag.toFixed(1)} ${e.magType} ${e.status} ${e.time}`;
+
+function describeMainshock(m: ReturnType<typeof zoneMainshock<SeismicEvent>>, n: number): string {
+  const head = `mainshock (largest ≥ ${MAINSHOCK_MIN_GAP.toFixed(1)} above every other of the ${n} events in this file):`;
+  if (m.largest === null || m.runnerUp === null) return `${head} none, fewer than two events`;
+  const pair = `${fmtEvent(m.largest)}, gap ${m.gap!.toFixed(1)} over ${fmtEvent(m.runnerUp)}`;
+  if (m.state === "found") return `${head} ${pair}`;
+  if (m.state === "awaiting-review") return `${head} none yet, awaiting review: ${pair}`;
+  return `${head} none clear, ${pair}`;
+}
+
 async function cmdBvalue(argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
@@ -90,9 +102,15 @@ async function cmdBvalue(argv: string[]): Promise<void> {
   });
   if (!values.input) throw new Error("--input is required");
   let events = fromCsv(await readFile(values.input, "utf8"));
+  // Over the whole file, before any filter, as the page and the API detect over a zone's whole
+  // catalogue. A file that is itself a date range gets that range's answer, which is why it is printed.
+  const mainshock = zoneMainshock(events);
+  console.log(describeMainshock(mainshock, events.length));
   if (values["manual-only"]) events = events.filter((e) => e.status === "manual");
   if (values["exclude-mainshock"]) {
-    events = events.filter((e) => e.id !== MAINSHOCK_ID);
+    const id = mainshockId(mainshock);
+    if (id === null) console.log("--exclude-mainshock: no mainshock in this file, nothing excluded");
+    events = events.filter((e) => e.id !== id);
   }
   if (events.length === 0) throw new Error("no events after filtering");
   const mcOverride = values.mc !== undefined ? Number(values.mc) : undefined;

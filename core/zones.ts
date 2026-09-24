@@ -6,7 +6,7 @@
  * The boxes must not overlap. An event id is the primary key of `events`, so an event inside two
  * boxes would belong to whichever zone ingested it first and silently vanish from the other.
  */
-import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE, MAINSHOCK_ID } from "./seiscomp.ts";
+import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE } from "./seiscomp.ts";
 import type { BBox } from "./types.ts";
 
 export const ZONE_IDS = ["choco", "tolima"] as const;
@@ -21,8 +21,6 @@ export interface Zone {
   bbox: BBox;
   /** The first UTC day of the sequence. The history the sweep back-fills begins here. */
   start: Date;
-  /** The sequence's mainshock, or null for a swarm, which has none. */
-  mainshockId: string | null;
   /**
    * Whether depth splits this sequence into the two groups of `core/clusters.ts`. That split was
    * measured on the Chocó catalogue (see docs/science.md) and says nothing about anywhere else.
@@ -43,14 +41,12 @@ export const ZONES: Record<ZoneId, Zone> = {
     id: "choco",
     bbox: CHOCO_SWARM_BBOX,
     start: MAINSHOCK_DATE,
-    mainshockId: MAINSHOCK_ID,
     depthClusters: true,
   },
   tolima: {
     id: "tolima",
     bbox: CHAPARRAL_BBOX,
     start: new Date(Date.UTC(2026, 8, 20)),
-    mainshockId: null,
     depthClusters: false,
   },
 };

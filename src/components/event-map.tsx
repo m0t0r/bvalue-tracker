@@ -47,14 +47,21 @@ const toGeoJson = (events: readonly StoredEvent[], mainshockId: string | null) =
   })),
 });
 
-export default function EventMap({ events }: { events: readonly StoredEvent[] }) {
+/** `mainshockId` is the zone's detected mainshock (`core/mainshock.ts`), drawn with a ring; null draws none. */
+export default function EventMap({
+  events,
+  mainshockId,
+}: {
+  events: readonly StoredEvent[];
+  mainshockId: string | null;
+}) {
   const { t, lang } = useI18n();
   const dark = useIsDark();
   const zone = useZone();
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
-  const latest = useRef(events);
-  latest.current = events;
+  const latest = useRef({ events, mainshockId });
+  latest.current = { events, mainshockId };
 
   // Rebuilt when the theme changes (basemap + outline colours); the parent re-keys it on language change.
   useEffect(() => {
@@ -88,7 +95,7 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
     m.on("error", (e) => console.error("map:", e.error?.message ?? e));
 
     m.on("load", () => {
-      m.addSource("events", { type: "geojson", data: toGeoJson(latest.current, zone.mainshockId) });
+      m.addSource("events", { type: "geojson", data: toGeoJson(latest.current.events, latest.current.mainshockId) });
       m.addLayer({
         id: "events",
         type: "circle",
@@ -141,14 +148,14 @@ export default function EventMap({ events }: { events: readonly StoredEvent[] })
 
   useEffect(() => {
     const src = map.current?.getSource("events") as GeoJSONSource | undefined;
-    src?.setData(toGeoJson(events, zone.mainshockId));
-  }, [events, zone]);
+    src?.setData(toGeoJson(events, mainshockId));
+  }, [events, mainshockId]);
 
   return (
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.mapTitle}</CardTitle>
-        <CardDescription>{t.zones[zone.id].mapDesc}</CardDescription>
+        <CardDescription>{mainshockId === null ? t.mapDesc : `${t.mapDesc} ${t.mapRing}`}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* The canvas is a keyboard stop (arrows pan, +/- zoom); its own outline is clipped, so the frame shows focus. */}

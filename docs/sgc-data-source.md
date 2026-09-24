@@ -103,7 +103,7 @@ Dead ends, do not retry:
   it never closes its `<center>` tags, so the tree nests ~1,500 deep. `htmlparser2`
   in streaming mode parses the same 0.8 MB in ~25 ms. Keep it.
 - There is no seismology, Gutenberg–Richter or usable QuakeML package on npm. The
-  statistics in `core/gr.ts` are written and tested here.
+  statistics are written and tested here, in `packages/seismo`.
 
 ## SGC rate limits and the request budget
 
