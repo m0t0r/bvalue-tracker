@@ -232,7 +232,7 @@ const es = {
   colStatus: "Estado",
   page: (a: number, b: number) => `Página ${a} de ${b}`,
   /** The link to /insights, the page that explains the sequences in plain words. */
-  insightsLink: "Qué está pasando",
+  insightsLink: "¿Qué está pasando?",
   themeToDark: "Cambiar a tema oscuro",
   themeToLight: "Cambiar a tema claro",
   prevPage: "Página anterior",
@@ -455,7 +455,7 @@ const en: Dict = {
   colRegion: "Region",
   colStatus: "Status",
   page: (a, b) => `Page ${a} of ${b}`,
-  insightsLink: "What is happening",
+  insightsLink: "What is happening?",
   themeToDark: "Switch to dark theme",
   themeToLight: "Switch to light theme",
   prevPage: "Previous page",
