@@ -34,6 +34,13 @@ export interface Cut {
 }
 
 export const SLAB2: Grid = raw.plate;
+
+/**
+ * Where the story's "about 5 cm a year" comes from: GPS on Malpelo Island, on the Nazca plate at
+ * 4.0° N, moving 53 mm/yr eastward relative to stable South America (Mora-Páez et al. 2019, J. South
+ * Am. Earth Sci. 89, Table 2). docs/science.md has the other published rates and why this one.
+ */
+export const CONVERGENCE_SOURCE = "https://doi.org/10.1016/j.jsames.2018.11.002";
 export const CUTS: Record<"choco" | "tolima", Cut> = raw.cuts;
 
 /**

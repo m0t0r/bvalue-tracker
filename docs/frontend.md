@@ -208,6 +208,10 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   - **The locator map sits in each cut's lower-left corner**, under the plate near the trench,
     the one area neither cut uses (104 × 72 px, 56 × 38 on a phone, where a larger one reached the
     deep group's label). It shows the coast, the cut's line and Pereira in `--place`.
+  - **The plate's motion arrow** is drawn by `PlateAndGround` on both cuts, 0.5–0.9° east of the
+    trench in the lower part of the plate's body: under the plate's label and clear of Chocó's
+    groups (at 0.95–1.3° it ran into the deep group's label). Its "~5 cm al año" is hidden on a
+    phone, where the words would cover the arrow; the prose gives the rate and its source.
   - On a phone Chaparral's "Pereira: ~N km al norte" note sits a line higher than on a desktop:
     at the surface it ran into "Buenaventura". The scene title is kept to "Corte por Chaparral ·
     misma escala": the longer "…que el del Chocó" was clipped at 320 px. The prose beside it says

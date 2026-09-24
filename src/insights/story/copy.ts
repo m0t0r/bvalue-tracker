@@ -78,7 +78,11 @@ const es = {
     chapter: "3 · Bajo tierra",
     title: "Dos grupos a distinta profundidad",
     p1: "Ahora mira los mismos eventos del Chocó de perfil, como si cortáramos la tierra de oeste a este, sin exagerar la escala. Pereira queda en la superficie, a la derecha.",
-    p2: "Bajo el Pacífico, la placa de Nazca —un enorme trozo del fondo del mar— se hunde despacio por debajo de Sudamérica. Por eso en esta parte de Colombia hay sismos tan profundos.",
+    p2: "Bajo el Pacífico, la placa de Nazca —un enorme trozo del fondo del mar— no choca de frente con Sudamérica: se mete por debajo, unos 5 cm al año, y sigue bajando hacia el interior de la Tierra. Por eso en esta parte de Colombia hay sismos tan profundos.",
+    /** The rate in p2 and on the drawing's arrow, with its source (docs/science.md). */
+    rateNote:
+      "La cifra de 5 cm al año es la velocidad a la que la placa de Nazca se acerca a Sudamérica, medida por GPS en la isla de Malpelo, que está sobre la propia placa ({source}).",
+    rateSource: "Mora-Páez y otros, 2019",
     /** Keyed on the deep group's centre lying within 40 km of the largest event's epicentre. */
     p2Main: (near: boolean): string =>
       near
@@ -118,6 +122,9 @@ const es = {
     /** When the mainshock gets the same answer as the deep group around it. */
     same: "Lo mismo ocurre con el {who}.",
     usgsLink: "USGS",
+    /** Only with `usgs`: USGS's own words about where the event sits in the subduction zone. */
+    usgsNorth:
+      "El USGS añade que este sismo ocurrió cerca del extremo norte de la zona de subducción de Sudamérica donde se registran sismos a esa profundidad.",
     note: "El dibujo es un corte a {lat} de latitud, entre los dos grupos. Cada grupo se compara con la placa en su propio lugar, no con el dibujo.",
   },
 
@@ -266,6 +273,7 @@ const es = {
     plate: "placa de Nazca",
     plateModel: "modelo Slab2 del USGS",
     plateBand: "franja clara: margen de error",
+    plateRate: "~5 cm al año",
     tolimaSectionTitle: "Corte por Chaparral · misma escala",
     tolimaSectionAria:
       "Corte de la tierra de oeste a este a la latitud de Chaparral, a la misma escala que el del Chocó: el enjambre a unos {depth} de profundidad y el borde de la placa de Nazca a unos {top}. Un mapa pequeño muestra por dónde pasa el corte.",
@@ -363,7 +371,10 @@ const en: StoryCopy = {
     chapter: "3 · Underground",
     title: "Two groups, at two depths",
     p1: "Now look at the same Chocó events from the side, as if the earth were cut from west to east, true to scale. Pereira sits on the surface, on the right.",
-    p2: "Under the Pacific, the Nazca plate — a huge slab of sea floor — sinks slowly beneath South America. That is why this part of Colombia has earthquakes this deep.",
+    p2: "Under the Pacific, the Nazca plate — a huge slab of sea floor — does not crash head-on into South America: it slides beneath it, about 5 cm a year, and keeps going down into the Earth. That is why this part of Colombia has earthquakes this deep.",
+    rateNote:
+      "The 5 cm a year is the speed at which the Nazca plate closes on South America, measured by GPS on Malpelo Island, which sits on the plate itself ({source}).",
+    rateSource: "Mora-Páez and others, 2019",
     p2Main: (near) =>
       near
         ? "The {main} began {depth} underground, and the {deep} ({n} events) lies around it."
@@ -396,6 +407,8 @@ const en: StoryCopy = {
     usgs: "The {usgs}, which studied the {main} with its own data, considers that given its depth it likely occurred within the subducting Nazca plate, and that earthquakes at that depth are usually due to the forces that bend the plate as it sinks.",
     same: "The same holds for the {who}.",
     usgsLink: "USGS",
+    usgsNorth:
+      "USGS adds that this earthquake occurred near the northernmost extent of the South America subduction zone where earthquakes at that depth are recorded.",
     note: "The drawing is a cut at {lat} latitude, between the two groups. Each group is compared with the plate at its own place, not with the drawing.",
   },
 
@@ -534,6 +547,7 @@ const en: StoryCopy = {
     plate: "Nazca plate",
     plateModel: "USGS Slab2 model",
     plateBand: "light band: margin of error",
+    plateRate: "~5 cm a year",
     tolimaSectionTitle: "Cut through Chaparral · same scale",
     tolimaSectionAria:
       "Cut through the earth from west to east at Chaparral's latitude, at the same scale as Chocó's: the swarm about {depth} down and the top of the Nazca plate about {top} down. A small map shows where the cut runs.",

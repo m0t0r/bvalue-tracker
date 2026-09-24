@@ -250,6 +250,33 @@ the reader's own questions). Everything above still applies to it; this section 
     the margin and the band that step explains. Its note says, as Chocó's does, that the swarm is
     compared with the plate at its own place, not with the drawing: the cut stays at 3.86° N while
     the swarm's median can drift.
+- **The plate's motion: "about 5 cm a year, eastward", from GPS, cited on the page** (verified
+  2026-09-24). GPS station MALO on Malpelo Island (4.0° N, 81.6° W, on the Nazca plate itself) moves
+  53.1 ± 0.6 mm/yr east and 4.2 north relative to stable South America (53.3 mm/yr at ~085°), and
+  46 mm/yr due east relative to the North Andean Block (Mora-Páez et al. 2019, *J. South Am. Earth
+  Sci.* 89, 76–91, Tables 2–3, doi:10.1016/j.jsames.2018.11.002; `CONVERGENCE_SOURCE` in
+  `src/insights/plate.ts`). Trenkamp et al. 2002 had 53.6 ± 2.1 (known only through Mora-Páez).
+  Other published rates at 4.5° N, 78° W (EarthScope plate-motion calculator, Nazca relative to South
+  America): GSRM 2.1 and ITRF2014 52–53 mm/yr; MORVEL 59 at 076°; NUVEL-1A 64. The geological models
+  are faster, which DeMets et al. 2010 put down to Nazca slowing. The page uses the measured one.
+  - It is **horizontal convergence**, so the copy says the plate "se mete por debajo, unos 5 cm al
+    año", not that it sinks 5 cm a year. The arrow on both cuts is drawn along the plate's body and
+    labelled with the same rate; it shows a direction, not a measured path. The note under the
+    section step names the source and links it.
+  - The rate is Malpelo's, ~500 km west of the trench. It is the plate's speed, not a measured slip
+    rate on the Colombian trench, and the page does not call it one.
+- **Checked and deliberately not on the page** (2026-09-24), so nobody researches them again:
+  - *The Caldas tear* (Vargas & Mann 2013, BSSA 103(3), doi:10.1785/0120120328): an offset in the
+    intermediate-depth seismicity north of the M7.4, placed at 5° N (Chiarabba et al. 2016) or 5.5° N
+    (Wagner et al. 2017; Mora-Páez et al. 2019). Its nature is disputed (a tear in Nazca, the edge of
+    the Panama indenter, or the edge of a Caribbean flat slab) and GPS shows no surface contrast
+    across it. Too unsettled for a lay sentence.
+  - *The Panamá–Chocó collision*: GPS puts its deformation north of 7.5° N, far from both zones.
+  - *USGS's location for us6000tjl2* is 4.8836° N, 76.2182° W, 108.2 km, against SGC's 4.99° N,
+    76.29° W, 103.4 km. The page uses SGC's, as it does everywhere, and quotes USGS only for its words.
+- **USGS also says the M7.4 was "near the northernmost extent where intermediate depth earthquakes in
+  the South America subduction zone are observed"**. The story relays it, attributed, under the same
+  condition as the quote below.
 - **Where the plate cannot decide, USGS's own assessment is quoted, attributed and linked, and
   only for the event it is about.** USGS's tectonic summary for us6000tjl2 says the M7.4 "likely
   occurred within the subducting Nazca plate" "due to its depth", and that intermediate-depth
