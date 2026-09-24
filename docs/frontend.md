@@ -175,6 +175,16 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
 - **Map outlines** are `src/insights/region.geo.json`, 26 kB of Natural Earth (public domain) cut to
   Colombia and its three neighbours by `scripts/insights-region.ts` and committed. Re-run the script
   only to change the countries.
+- **The plate and the ground under the story's cut** are `src/insights/section.json` (11 kB, 2.2 kB
+  gzipped), written by `scripts/insights-section.ts` from Slab2 and GEBCO and committed; only the
+  story chunk imports it. The script needs Slab2's "Data Volume" unpacked on disk, because
+  ScienceBase serves it behind a browser challenge. Its header says how to get it. The cut is true
+  to scale and starts at the trench, where Slab2's model begins. A vertical edge further west read
+  as the plate ending there. It is at least 200 km deep (`SECTION_DEPTH_KM`) so the plate under
+  Pereira shows. On a phone that makes it about 1 px per km, so the ticks go every 40 km and the
+  "más profundo hacia el este" arrow drops its words, which the sentence beside it already says.
+  The plate is neutral (`muted-foreground` at 20 % for the body, 10 % for the uncertainty band),
+  so the source colours stay the only colours in the drawing.
 
 ## Interface conventions
 
