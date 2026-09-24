@@ -477,6 +477,8 @@ function UnknownOverlay({ model, proj, small }: { model: StoryModel; proj: GeoPr
         const at = model.centres[s];
         const xy = at && proj([at.lon, at.lat]);
         if (!xy) return null;
+        // The mark sits on its own group's dots, in their colour, so a background halo keeps its
+        // outline apart from them.
         return (
           <text
             key={s}
@@ -484,8 +486,11 @@ function UnknownOverlay({ model, proj, small }: { model: StoryModel; proj: GeoPr
             y={xy[1] + (small ? 14 : 24)}
             textAnchor="middle"
             fontSize={small ? 44 : 72}
-            fontWeight={300}
-            className={FILL[s]}
+            fontWeight={500}
+            className={`${FILL[s]} stroke-background`}
+            paintOrder="stroke"
+            strokeWidth={small ? 5 : 7}
+            strokeLinejoin="round"
           >
             ?
           </text>
