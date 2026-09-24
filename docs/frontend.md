@@ -185,6 +185,23 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   "más profundo hacia el este" arrow drops its words, which the sentence beside it already says.
   The plate is neutral (`muted-foreground` at 20 % for the body, 10 % for the uncertainty band),
   so the source colours stay the only colours in the drawing.
+  - **Both cuts go through `story/section.tsx`**: `frameSections` frames Chocó's and Chaparral's at
+    one scale (see [the science](science.md#the-insights-page-insights-from-2026-09-24)), and
+    `SectionFrame` draws the depth axis, the plate, the ground and a locator map for either. Chaparral's
+    is its own scene (`tolimaSection`, step `tolima-section`, after the drift step), not a sub-state of
+    `TolimaScene`. Its dots come from the same shared layer as Chocó's, but they wait on the cut while
+    `TolimaScene` shows (hidden, since that scene draws its own map) and fade in in place: sliding from
+    the overview map's positions made them fly in from a map the reader was not looking at. Sharing
+    the scale shrank Chocó's cut by ~13% on a phone. The scale counts Chaparral's cut only while its
+    step is shown (`model.tolimaCut`), and each cut ends no further east than its ground data
+    (`cutEnd`), so a swarm drifting east cannot leave a stretch of cut without a surface.
+  - **The locator map sits in each cut's lower-left corner**, under the plate near the trench,
+    the one area neither cut uses (104 × 72 px, 56 × 38 on a phone, where a larger one reached the
+    deep group's label). It shows the coast, the cut's line and Pereira in `--place`.
+  - On a phone Chaparral's "Pereira: ~N km al norte" note sits a line higher than on a desktop:
+    at the surface it ran into "Buenaventura". The scene title is kept to "Corte por Chaparral ·
+    misma escala": the longer "…que el del Chocó" was clipped at 320 px. The prose beside it says
+    the rest.
 
 ## Interface conventions
 

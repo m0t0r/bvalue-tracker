@@ -627,6 +627,34 @@ function useSteps(
         </>
       ),
     });
+
+    // The swarm on its own cut, at Chocó's scale, against the plate by the same rule as Chocó's groups.
+    const pt = model.plate.tolima;
+    if (model.tolimaCut && pt && model.tolimaToPereiraKm !== null) {
+      steps.push({
+        id: "tolima-section",
+        scene: "tolimaSection",
+        sub: "",
+        title: c.tolimaCut.title,
+        body: (
+          <>
+            <p>
+              <Rich text={c.tolimaCut.p1} parts={{ km: km(roundSig(model.tolimaToPereiraKm, 2)) }} />
+            </p>
+            <p>
+              <Rich
+                text={c.plate.side(pt.side)}
+                parts={{ who: names.tolima, gap: km(pt.plate.topKm - pt.depthKm), margin: km(pt.marginKm) }}
+              />
+            </p>
+            {f.tolimaFarFromPlate && <p>{c.tolimaCut.p3}</p>}
+            <Note>
+              <Rich text={c.tolimaCut.note} parts={{ lat: `${CUTS.tolima.lat.toFixed(2)}\u00b0\u00a0N` }} />
+            </Note>
+          </>
+        ),
+      });
+    }
   }
 
   steps.push({

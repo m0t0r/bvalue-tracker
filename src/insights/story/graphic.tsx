@@ -9,32 +9,24 @@ import { useId, useMemo, type CSSProperties } from "react";
 import type { Lang } from "@/lib/i18n";
 import { fmtDay } from "@/lib/format";
 import { PEREIRA, SOURCES, type Insights, type Source } from "../claims";
-import { CUTS, plateAlong, type Cut, type Plate } from "../plate";
-import { REGION, TOWNS } from "../region";
+import { CUTS, groundAt } from "../plate";
+import { REGION, TOWNS, onCut } from "../region";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
-import { fmtKm } from "../shared";
+import { fmtKm, roundSig } from "../shared";
 import { FILL, STROKE } from "../tones";
 import { Layer, SceneTitle, radius, star } from "./marks";
 import type { Ev, StoryModel } from "./model";
 import { Rich } from "./rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
+import { KM_PER_DEG, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
 
-export type SceneId = "where" | "energy" | "section" | "clocks" | "tolima" | "felt" | "unknown";
+export type SceneId = "where" | "energy" | "section" | "clocks" | "tolima" | "tolimaSection" | "felt" | "unknown";
 export interface SceneState {
   scene: SceneId;
   sub: string;
   threshold: number;
 }
-
-const KM_PER_DEG = 111.2;
-/**
- * The cut's depth at least, deep enough for the plate under Pereira (its top ~125 km, its bottom
- * ~190 km there). Chaparral's cut, when it is drawn, uses the same so the two compare by eye.
- */
-const SECTION_DEPTH_KM = 200;
-/** Where the plate's label starts, in degrees east of the trench (~13 km). */
-const LABEL_EAST_OF_TRENCH = 0.12;
 
 /** Plain text for the drawing's text alternative: the template with its figures filled in. */
 const fill = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? "");
@@ -90,54 +82,56 @@ export function Graphic({
     return { proj, path: geoPath(proj), top };
   }, [model.all, width, height, small]);
 
-  // The cross-section runs west–east through Chocó, true to scale: one pixel is the same distance
-  // across and down. It starts at the trench, where the plate goes down and where Slab2's model of it
-  // begins, and its east edge reaches past Pereira so the reader sees where they stand.
-  const sec = useMemo(() => {
-    const cut = CUTS.choco;
-    const lons = model.choco.map((e) => e.lon).sort((a, b) => a - b);
+  // Two cross-sections, west–east through Chocó and through Chaparral, true to scale and at one
+  // scale: one pixel is the same distance across and down, in both. Each starts at the trench, where
+  // the plate goes down and where Slab2's model of it begins. Chocó's reaches past Pereira so the
+  // reader sees where they stand; Chaparral's ends just past the swarm.
+  const secs = useMemo(() => {
+    const east = (es: readonly Ev[], also: number) => {
+      const lons = es.map((e) => e.lon).sort((a, b) => a - b);
+      return Math.max(lons.length ? quantileSorted(lons, 0.99)! : also, also) + 0.15;
+    };
     const depths = model.choco.map((e) => e.depthKm).sort((a, b) => a - b);
-    const lon0 = cut.trenchLon;
-    const lon1 = Math.max(lons.length ? quantileSorted(lons, 0.99)! : PEREIRA.lon, PEREIRA.lon) + 0.15;
     const maxDepth = Math.max(
       SECTION_DEPTH_KM,
       Math.ceil(((depths.length ? quantileSorted(depths, 0.995)! : 100) + 10) / 20) * 20,
     );
-    const kmPerDegLon = KM_PER_DEG * Math.cos((cut.lat * Math.PI) / 180);
-    const padL = small ? 46 : 60;
-    const padR = small ? 8 : 24;
-    const top = small ? 64 : 104;
-    const bottom = small ? 38 : 56;
-    const spanKm = (lon1 - lon0) * kmPerDegLon;
-    const px = Math.max(0.01, Math.min((width - padL - padR) / spanKm, (height - top - bottom) / maxDepth));
-    const x0 = padL + (width - padL - padR - spanKm * px) / 2;
-    return {
-      cut,
-      lon0,
-      lon1,
-      x: (lon: number) => x0 + (lon - lon0) * kmPerDegLon * px,
-      y: (depth: number) => top + depth * px,
-      px,
-      x0,
-      x1: x0 + spanKm * px,
+    const tolima = model.bySrc.tolima;
+    return frameSections(
+      {
+        choco: { cut: CUTS.choco, lon1: east(model.choco, PEREIRA.lon) },
+        tolima: { cut: CUTS.tolima, lon1: east(tolima, tolima.length ? -Infinity : PEREIRA.lon) },
+      },
       maxDepth,
-      plate: plateAlong(cut, lon1),
-    };
-  }, [model.choco, width, height, small]);
+      width,
+      height,
+      small,
+      // A cut whose step is not shown does not get to shrink the one that is.
+      model.tolimaCut ? ["choco", "tolima"] : ["choco"],
+    );
+  }, [model.choco, model.bySrc.tolima, model.tolimaCut, width, height, small]);
+  const sec = secs.choco;
+  const secT = secs.tolima;
 
   if (width === 0 || height === 0) return null;
 
   const onMap = scene === "where" || scene === "unknown";
   const onSec = scene === "section";
+  const onSecT = scene === "tolimaSection";
   const main = model.main;
 
   const pos = (e: Ev): [number, number] => {
     if (onSec && e.source !== "tolima") return [sec.x(e.lon), sec.y(e.depthKm)];
+    // The swarm's dots wait on its cut while its own scene shows (they are hidden, and that scene draws
+    // its own map), so on the turn they fade in where they belong rather than fly in from a map the
+    // reader is not looking at.
+    if ((onSecT || scene === "tolima") && e.source === "tolima") return [secT.x(e.lon), secT.y(e.depthKm)];
     return map.proj([e.lon, e.lat]) ?? [0, 0];
   };
-  // On the cross-section, only Chocó's events inside the cut: the few beyond it would sit off the axes.
-  const inCut = (e: Ev) => e.lon >= sec.lon0 && e.lon <= sec.lon1 && e.depthKm <= sec.maxDepth;
-  const shown = (e: Ev) => onMap || (onSec && e.source !== "tolima" && inCut(e));
+  // On a cross-section, only its own zone's events inside the cut: the few beyond it would sit off the axes.
+  const inCut = (e: Ev, s: Section) => e.lon >= s.lon0 && e.lon <= s.lon1 && e.depthKm <= s.maxDepth;
+  const shown = (e: Ev) =>
+    onMap || (onSec && e.source !== "tolima" && inCut(e, sec)) || (onSecT && e.source === "tolima" && inCut(e, secT));
 
   const depthMedian = (s: Source) => data.distances[s]?.depthKm ?? null;
   // One text alternative for the whole drawing, for whichever scene is showing.
@@ -156,6 +150,10 @@ export function Graphic({
     tolima: fill(c.tolimaAria, {
       choco: data.largestShare.choco === null ? "" : share(data.largestShare.choco),
       tolima: data.largestShare.tolima === null ? "" : share(data.largestShare.tolima),
+    }),
+    tolimaSection: fill(c.tolimaSectionAria, {
+      depth: fmtKm(depthMedian("tolima") ?? 0),
+      top: fmtKm(model.plate.tolima?.plate.topKm ?? 0),
     }),
     felt: sub === "waves" ? c.wavesAria : c.calendarAria,
   };
@@ -179,7 +177,12 @@ export function Graphic({
       </Layer>
 
       <Layer on={onSec}>
+        <SectionFrame sec={sec} small={small} lang={lang} />
         <SectionBase data={data} model={model} sec={sec} small={small} sub={sub} lang={lang} />
+      </Layer>
+      <Layer on={onSecT}>
+        <SectionFrame sec={secT} small={small} lang={lang} />
+        <TolimaSectionBase data={data} model={model} sec={secT} small={small} lang={lang} />
       </Layer>
 
       {/* The dots the map and the cross-section share. Each slides on the compositor, deeper ones a
@@ -216,15 +219,22 @@ export function Graphic({
       <Layer on={scene === "unknown"}>
         <UnknownOverlay model={model} proj={map.proj} small={small} />
       </Layer>
-      <Layer on={onMap || onSec}>
+      <Layer on={onMap || onSec || onSecT}>
         <SceneTitle small={small}>
           {onSec ? (
             c.sectionTitle
+          ) : onSecT ? (
+            c.tolimaSectionTitle
           ) : (
             <Rich text={c.mapTitle} parts={{ from: fmtDay(model.start, lang), to: fmtDay(data.now, lang) }} />
           )}
         </SceneTitle>
-        <GroupLegend small={small} lang={lang} section={onSec} mainLabel={main ? `M${main.mag.toFixed(1)}` : null} />
+        <GroupLegend
+          small={small}
+          lang={lang}
+          sources={onSec ? ["shallow", "deep"] : onSecT ? ["tolima"] : SOURCES}
+          mainLabel={main && !onSecT ? `M${main.mag.toFixed(1)}` : null}
+        />
       </Layer>
 
       <Layer on={scene === "energy"}>
@@ -301,19 +311,17 @@ function OceanLabel({
 function GroupLegend({
   small,
   lang,
-  section,
+  sources,
   mainLabel,
 }: {
   small: boolean;
   lang: Lang;
-  section: boolean;
+  sources: readonly Source[];
   mainLabel: string | null;
 }) {
   const l = storyCopy[lang].legend;
   const items: { key: string; label: string; source?: Source }[] = [
-    { key: "shallow", label: l.shallow, source: "shallow" },
-    { key: "deep", label: l.deep, source: "deep" },
-    ...(section ? [] : [{ key: "tolima", label: l.tolima, source: "tolima" as const }]),
+    ...sources.map((s) => ({ key: s, label: l[s], source: s })),
     ...(mainLabel ? [{ key: "main", label: mainLabel }] : []),
   ];
   const fs = small ? 10 : 11.5;
@@ -337,6 +345,41 @@ function GroupLegend({
           </text>
         </g>
       ))}
+    </g>
+  );
+}
+
+/**
+ * A town the reader knows: a grey dot and its name with the page's halo, to the right on a map or
+ * `above` it on a cut's surface.
+ */
+function TownMark({
+  x,
+  y,
+  name,
+  fontSize,
+  above = false,
+}: {
+  x: number;
+  y: number;
+  name: string;
+  fontSize: number;
+  above?: boolean;
+}) {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <circle r={2.2} className="fill-muted-foreground" />
+      <text
+        x={above ? 0 : 5}
+        y={above ? -7 : 4}
+        textAnchor={above ? "middle" : undefined}
+        fontSize={fontSize}
+        paintOrder="stroke"
+        strokeWidth={3}
+        className="fill-muted-foreground stroke-background"
+      >
+        {name}
+      </text>
     </g>
   );
 }
@@ -408,21 +451,7 @@ function WhereOverlay({
       {TOWNS.filter((t) => t.kind === "city").map((t) => {
         const xy = proj([t.lon, t.lat]);
         if (!xy || xy[0] < 4 || xy[1] < top || xy[0] > width - 60) return null;
-        return (
-          <g key={t.id} transform={`translate(${xy[0]},${xy[1]})`}>
-            <circle r={2.2} className="fill-muted-foreground" />
-            <text
-              x={5}
-              y={4}
-              fontSize={fs - 1.5}
-              paintOrder="stroke"
-              strokeWidth={3}
-              className="fill-muted-foreground stroke-background"
-            >
-              {t.name}
-            </text>
-          </g>
-        );
+        return <TownMark key={t.id} x={xy[0]} y={xy[1]} name={t.name} fontSize={fs - 1.5} />;
       })}
       {SOURCES.map((s, i) => {
         const at = model.centres[s];
@@ -496,19 +525,6 @@ function UnknownOverlay({ model, proj, small }: { model: StoryModel; proj: GeoPr
   );
 }
 
-interface Section {
-  cut: Cut;
-  plate: ({ lon: number } & Plate)[];
-  lon0: number;
-  lon1: number;
-  x: (lon: number) => number;
-  y: (depth: number) => number;
-  px: number;
-  x0: number;
-  x1: number;
-  maxDepth: number;
-}
-
 function SectionBase({
   data,
   model,
@@ -526,8 +542,6 @@ function SectionBase({
 }) {
   const c = storyCopy[lang].graphic;
   const fs = small ? 10 : 12;
-  const ticks: number[] = [];
-  for (let d = 0; d <= sec.maxDepth; d += small ? 40 : 20) ticks.push(d);
   const P = sec.x(PEREIRA.lon);
   const main = model.main;
   const groups = (["shallow", "deep"] as const).flatMap((s) => {
@@ -543,34 +557,6 @@ function SectionBase({
 
   return (
     <g>
-      {ticks.map((d) => (
-        <g key={d}>
-          {d > 0 && <line x1={sec.x0} x2={sec.x1} y1={sec.y(d)} y2={sec.y(d)} className="stroke-border" />}
-          <text
-            x={sec.x0 - 6}
-            y={sec.y(d) + 4}
-            textAnchor="end"
-            fontSize={fs - 1}
-            className="fill-muted-foreground tabular-nums"
-          >
-            {d === 0 ? "0" : fmtKm(d)}
-          </text>
-        </g>
-      ))}
-      <PlateAndGround sec={sec} small={small} lang={lang} />
-      {/* West and east read along the bottom edge, clear of Pereira's label on the surface. */}
-      <text x={sec.x0} y={sec.y(sec.maxDepth) + (small ? 14 : 20)} fontSize={fs} className="fill-muted-foreground">
-        {c.west}
-      </text>
-      <text
-        x={sec.x1}
-        y={sec.y(sec.maxDepth) + (small ? 14 : 20)}
-        textAnchor="end"
-        fontSize={fs}
-        className="fill-muted-foreground"
-      >
-        {c.east}
-      </text>
       <g transform={`translate(${P},${sec.y(0)})`}>
         <path d="M-7,0 L0,-9 L7,0 Z" className="fill-place" />
         <text y={-14} textAnchor="middle" fontSize={fs + 1} fontWeight={650} className="fill-foreground">
@@ -699,87 +685,62 @@ function SectionBase({
 }
 
 /**
- * The Nazca plate under the cut, as USGS's Slab2 models it, and the ground on top, true to scale.
- * The plate is its modelled body (top to top + thickness) with a lighter band for the model's stated
- * uncertainty about its top; both are clipped to the drawing. The ground is GEBCO's land and sea
- * floor, a thin edge at this scale, with the sea between the sea floor and sea level.
+ * What sits on Chaparral's cut besides the plate: the swarm's label under its events, the towns on the
+ * cut's line, and a note that Pereira is not on it. Pereira is ~100 km to the north, and drawing it on
+ * this cut would put the swarm under it, which is false (plan decision: two cuts, not one).
  */
-function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; lang: Lang }) {
+function TolimaSectionBase({
+  data,
+  model,
+  sec,
+  small,
+  lang,
+}: {
+  data: Insights;
+  model: StoryModel;
+  sec: Section;
+  small: boolean;
+  lang: Lang;
+}) {
   const c = storyCopy[lang].graphic;
-  const clip = `sec-${useId().replace(/[^\w-]/g, "")}`;
   const fs = small ? 10 : 12;
-  const pts = sec.plate;
-  const xy = (lon: number, depth: number) => `${sec.x(lon).toFixed(1)},${sec.y(depth).toFixed(1)}`;
-  const band = (upper: (p: Plate) => number, lower: (p: Plate) => number) =>
-    pts.length < 2
-      ? undefined
-      : `M${pts.map((p) => xy(p.lon, upper(p))).join("L")}L${[...pts]
-          .reverse()
-          .map((p) => xy(p.lon, lower(p)))
-          .join("L")}Z`;
-  const ground = sec.cut.elevationM
-    .map((m, i) => ({ lon: sec.cut.lon0 + i * sec.cut.step, km: -m / 1000 }))
-    .filter((g) => g.lon >= sec.lon0 - 1e-9 && g.lon <= sec.lon1 + 1e-9);
-  const surface = `M${ground.map((g) => xy(g.lon, g.km)).join("L")}`;
-  const sea = `M${ground.map((g) => xy(g.lon, Math.max(0, g.km))).join("L")}L${xy(ground.at(-1)!.lon, 0)}L${xy(ground[0]!.lon, 0)}Z`;
-  // The label sits in the plate's body just past the trench, west of the events, where it is shallow
-  // enough to leave room for three lines above the drawing's bottom.
-  const at = pts.find((p) => p.lon >= sec.cut.trenchLon + LABEL_EAST_OF_TRENCH);
-  const trench = sec.x(sec.cut.trenchLon);
-
+  const at = model.centres.tolima;
+  const depth = data.distances.tolima?.depthKm;
+  const towns = TOWNS.filter((t) => t.kind === "cut" && onCut(t, sec.cut) && t.lon > sec.lon0 && t.lon < sec.lon1);
   return (
     <g>
-      <defs>
-        <clipPath id={clip}>
-          <rect x={sec.x0} y={sec.y(0)} width={sec.x1 - sec.x0} height={sec.y(sec.maxDepth) - sec.y(0)} />
-        </clipPath>
-      </defs>
-      <g clipPath={`url(#${clip})`}>
-        <path
-          d={band(
-            (p) => p.topKm - p.uncertaintyKm,
-            (p) => p.topKm + p.uncertaintyKm,
-          )}
-          className="fill-muted-foreground/10"
-        />
-        <path
-          d={band(
-            (p) => p.topKm,
-            (p) => p.topKm + p.thicknessKm,
-          )}
-          className="fill-muted-foreground/20"
-        />
-        <path
-          d={pts.length < 2 ? undefined : `M${pts.map((p) => xy(p.lon, p.topKm)).join("L")}`}
-          fill="none"
-          className="stroke-muted-foreground"
-          strokeWidth={1.25}
-        />
-      </g>
-      <path d={sea} className="fill-muted" />
-      <path d={surface} fill="none" className="stroke-foreground" strokeWidth={1.5} strokeLinejoin="round" />
-      <text x={trench} y={sec.y(0) - 6} fontSize={fs - 1} className="fill-muted-foreground">
-        {c.trench}
-      </text>
-      {at && (
+      {towns.map((t) => {
+        const x = sec.x(t.lon);
+        const y = sec.y(-Math.max(0, groundAt(sec.cut, t.lon) ?? 0) / 1000);
+        return <TownMark key={t.id} x={x} y={y} name={t.name} fontSize={fs} above />;
+      })}
+      {model.tolimaToPereiraKm !== null && (
         <text
-          x={sec.x(at.lon)}
-          y={sec.y(at.topKm + at.thicknessKm * 0.35)}
+          x={sec.x1}
+          // On a phone the note is as wide as half the cut and would run into the towns' names, so it
+          // sits a line higher, beside the legend, which on this cut holds one short entry.
+          y={sec.y(0) - (small ? 26 : 20)}
+          textAnchor="end"
           fontSize={fs}
           className="fill-foreground stroke-background"
           paintOrder="stroke"
           strokeWidth={4}
         >
-          <tspan fontWeight={600}>{c.plate}</tspan>
-          <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-muted-foreground">
-            {c.plateModel}
-          </tspan>
-          {/* On a phone the third line reaches the shallow group; the prose explains the band. */}
-          {!small && (
-            <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-muted-foreground">
-              {c.plateBand}
-            </tspan>
-          )}
+          <Rich text={c.pereiraNorth} parts={{ km: fmtKm(roundSig(model.tolimaToPereiraKm, 2)) }} />
+        </text>
+      )}
+      {at && depth !== undefined && (
+        <text
+          x={Math.min(sec.x(at.lon) + (small ? 10 : 16), sec.x1)}
+          y={sec.y(depth) + (small ? 24 : 36)}
+          textAnchor="end"
+          fontSize={fs}
+          fontWeight={600}
+          className="fill-foreground stroke-background"
+          paintOrder="stroke"
+          strokeWidth={4}
+        >
+          <Rich text={c.swarmAt} parts={{ km: fmtKm(depth) }} />
         </text>
       )}
     </g>

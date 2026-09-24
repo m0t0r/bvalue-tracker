@@ -227,6 +227,29 @@ the reader's own questions). Everything above still applies to it; this section 
     **deep group close** (88.7 km, top 82.1 km, margin 28.3 km); **M7.4 close** (103.4 km at
     4.99° N, 76.29° W, top 82.6 km, margin 25.7 km); **Chaparral above** by 141 km (18.9 km, top
     160.2 km).
+- **Chaparral has its own cut, at 3.86° N, and Pereira is not on it** (owner decision, 2026-09-24).
+  Projecting the swarm onto Chocó's cut would have drawn it almost under Pereira, which is ~100 km
+  to its north: false, and alarming. The cut says instead that Pereira lies "~{km} to the north, off
+  the cut" (the swarm's median epicentre to Pereira, 106.5 km on the 2026-09-24 fixture). Its only
+  surface place is Buenaventura, from DANE's DIVIPOLA centroid, ~2 km off the cut's latitude; a
+  town is drawn on a cut only within 0.05° (~5.5 km) of it (`onCut` in `src/insights/region.ts`).
+  - **Both cuts are drawn at one scale** (`frameSections` in `story/section.tsx`), set by the
+    longer of the two (Chaparral's, ~330 km from the trench against Chocó's ~290 km), so the distance
+    from each source down to the plate compares by eye. Under the swarm the plate's bottom (~222 km)
+    runs past the 200 km frame and is clipped, which the frame's edge shows.
+  - **"Much further from the plate than Chocó's groups" is a rule** (`facts.tolimaFarFromPlate` in
+    `story/model.ts`): the swarm is crustal, above the plate by the plate rule, and at least twice
+    (`FAR_FROM_PLATE`) as far above the plate's top as any Chocó source, a source inside or below
+    the plate counting as zero. On the fixture: 141.3 km against the shallow group's 30.3. The
+    sentence then says the swarm's earthquakes happen "on faults in the crust, far above the sinking
+    plate". It does not call it "another kind of activity" than Chocó's: by the same rule Chocó's
+    shallow group is above the plate too, and contrasting the swarm with "Chocó's groups" as if they
+    were in it contradicted the plate step (code review, 2026-09-24). It says nothing about a link
+    between the zones.
+  - **The step is shown only with Chocó's plate step** (`model.tolimaCut`), since its sentence uses
+    the margin and the band that step explains. Its note says, as Chocó's does, that the swarm is
+    compared with the plate at its own place, not with the drawing: the cut stays at 3.86° N while
+    the swarm's median can drift.
 - **Where the plate cannot decide, USGS's own assessment is quoted, attributed and linked, and
   only for the event it is about.** USGS's tectonic summary for us6000tjl2 says the M7.4 "likely
   occurred within the subducting Nazca plate" "due to its depth", and that intermediate-depth

@@ -65,6 +65,8 @@ export const NEAR_KM = 40;
 export const SNAPPED_SHARE = 0.2;
 /** Deeper than this, a median depth is not called "inside the crust". */
 export const CRUSTAL_KM = 30;
+/** The swarm is "much further from the plate" than Chocó's sources from this many times their largest gap. */
+export const FAR_FROM_PLATE = 2;
 
 /** Events at or above `minMag` in each 7-day week from `start`, the week in progress included. */
 export function strongByWeek(events: readonly Ev[], start: number, now: number, minMag: number): number[] {
@@ -123,6 +125,17 @@ export function storyModel(data: Insights) {
   const medianDepthError = (es: readonly Ev[]) =>
     median(es.flatMap((e) => (depthError(e) === null ? [] : [depthError(e)!]))) ?? null;
 
+  const plate = {
+    shallow: against(cen.shallow, shallowDepth, medianDepthError(bySrc.shallow)),
+    deep: against(cen.deep, deepDepth, medianDepthError(bySrc.deep)),
+    tolima: against(cen.tolima, data.distances.tolima?.depthKm, medianDepthError(tolima)),
+    main: main && mainFound ? against(main, main.depthKm, depthError(main)) : null,
+  };
+  // How far above the plate's top each source is; negative below it.
+  const gap = (p: (typeof plate)["shallow"]) => (p ? p.plate.topKm - p.depthKm : null);
+  const chocoGaps = [plate.shallow, plate.deep, plate.main].flatMap((p) => (p ? [gap(p)!] : []));
+  const tolimaCrustal = tolima.length > 0 && (median(tolima, (e) => e.depthKm) ?? Infinity) < CRUSTAL_KM;
+
   return {
     all,
     bySrc,
@@ -145,13 +158,21 @@ export function storyModel(data: Insights) {
     strongSince: all.filter((e) => e.mag >= 4 && e.id !== main?.id),
     centres: cen,
     /** Each source, and the mainshock once found, against the Slab2 plate at its own place. */
-    plate: {
-      shallow: against(cen.shallow, shallowDepth, medianDepthError(bySrc.shallow)),
-      deep: against(cen.deep, deepDepth, medianDepthError(bySrc.deep)),
-      tolima: against(cen.tolima, data.distances.tolima?.depthKm, medianDepthError(tolima)),
-      main: main && mainFound ? against(main, main.depthKm, depthError(main)) : null,
-    },
+    plate,
     chocoToTolimaKm: main && cen.tolima ? epicentralKm(main, cen.tolima) : null,
+    /** How far Pereira is from the swarm's centre on the map: it lies to the north, off Chaparral's cut. */
+    tolimaToPereiraKm: cen.tolima ? epicentralKm(PEREIRA, cen.tolima) : null,
+    /**
+     * Chaparral's cut is shown: the swarm has events and a place against the plate, and Chocó's plate
+     * step, which explains the band and the margin its sentence uses, is shown too. The drawing's
+     * shared scale takes Chaparral's cut into account only then.
+     */
+    tolimaCut:
+      tolima.length > 0 &&
+      data.start.tolima !== null &&
+      plate.tolima !== null &&
+      plate.shallow !== null &&
+      plate.deep !== null,
     /** What decides the wording of the story's data-dependent sentences. */
     facts: {
       distancesSimilar: hypo.length === 3 && Math.max(...hypo) <= SIMILAR_DISTANCE_RATIO * Math.min(...hypo),
@@ -170,7 +191,16 @@ export function storyModel(data: Insights) {
         bySrc.shallow.length > 0 && snapped.reduce((a, d) => a + d.count, 0) >= SNAPPED_SHARE * bySrc.shallow.length,
       /** USGS's assessment of where the mainshock broke applies: it is the event USGS assessed. */
       usgsAssessed: mainFound && main?.id === USGS_ASSESSED.sgcId,
-      tolimaCrustal: tolima.length > 0 && (median(tolima, (e) => e.depthKm) ?? Infinity) < CRUSTAL_KM,
+      tolimaCrustal,
+      /**
+       * The swarm is in the crust, above the plate by the plate rule, and at least FAR_FROM_PLATE times
+       * as far above the plate's top as any Chocó source: "much further from the plate".
+       */
+      tolimaFarFromPlate:
+        tolimaCrustal &&
+        plate.tolima?.side === "above" &&
+        chocoGaps.length > 0 &&
+        gap(plate.tolima)! >= FAR_FROM_PLATE * Math.max(0, ...chocoGaps),
       /** The last of the weekly counts covers a week still in progress. */
       weekInProgress: (data.now - start) % (7 * DAY) !== 0,
     },

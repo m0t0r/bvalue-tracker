@@ -197,6 +197,15 @@ const es = {
     note: "Los enjambres terminan de maneras distintas, y no se puede saber de antemano cómo terminará este. Según el SGC, que haya muchos sismos no significa por sí solo que venga uno grande.",
   },
 
+  /** Chaparral's cut, at the same scale as Chocó's (docs/science.md). */
+  tolimaCut: {
+    title: "Chaparral visto de perfil",
+    p1: "Ahora cortamos la tierra de la misma forma, de oeste a este, pero a la latitud de Chaparral y con la misma escala que en el Chocó. Pereira no aparece en este corte: queda a unos {km} al norte.",
+    /** Only while `facts.tolimaFarFromPlate` holds: crustal, above the plate, at least twice as far as any Chocó source. */
+    p3: "Compara los dos cortes: el enjambre de Chaparral está mucho más lejos de la placa que los grupos del Chocó. Sus sismos ocurren en fallas de la corteza, muy por encima de la placa que se hunde.",
+    note: "El dibujo es un corte a {lat} de latitud, a través del enjambre. El enjambre se compara con la placa en su propio lugar, no con el dibujo. El mapa pequeño de la esquina muestra por dónde pasa el corte.",
+  },
+
   felt: {
     chapter: "6 · Pereira",
     title: "Por qué los sientes",
@@ -250,13 +259,18 @@ const es = {
     unknownAria: "Mapa de los tres lugares con un signo de interrogación en cada uno.",
     sectionTitle: "Corte de oeste a este · sin exagerar la escala",
     sectionAria:
-      "Corte de la tierra de oeste a este con la profundidad de cada evento del Chocó: el grupo superficial a unos {shallow}, el profundo a unos {deep}.",
+      "Corte de la tierra de oeste a este con la profundidad de cada evento del Chocó: el grupo superficial a unos {shallow}, el profundo a unos {deep}. Un mapa pequeño muestra por dónde pasa el corte.",
     west: "← oeste · océano Pacífico",
     east: "este →",
     trench: "fosa",
     plate: "placa de Nazca",
     plateModel: "modelo Slab2 del USGS",
     plateBand: "franja clara: margen de error",
+    tolimaSectionTitle: "Corte por Chaparral · misma escala",
+    tolimaSectionAria:
+      "Corte de la tierra de oeste a este a la latitud de Chaparral, a la misma escala que el del Chocó: el enjambre a unos {depth} de profundidad y el borde de la placa de Nazca a unos {top}. Un mapa pequeño muestra por dónde pasa el corte.",
+    pereiraNorth: "Pereira: ~{km} al norte, fuera del corte",
+    swarmAt: "enjambre · ~{km}",
     eastDeeper: "más profundo hacia el este",
     groupAt: { shallow: "superficial · ~{km}", deep: "profundo · ~{km}" },
     errorLegend: "＋ error típico: {h} en horizontal, {depth} en profundidad",
@@ -456,6 +470,13 @@ const en: StoryCopy = {
     note: "Swarms end in different ways, and there is no knowing in advance which. According to SGC, many earthquakes do not by themselves mean a large one is coming.",
   },
 
+  tolimaCut: {
+    title: "Chaparral from the side",
+    p1: "Now we cut the earth the same way, west to east, but at Chaparral's latitude and at the same scale as in Chocó. Pereira is not on this cut: it lies about {km} to the north.",
+    p3: "Compare the two cuts: the Chaparral swarm is much further from the plate than Chocó's groups. Its earthquakes happen on faults in the crust, far above the sinking plate.",
+    note: "The drawing is a cut at {lat} latitude, through the swarm. The swarm is compared with the plate at its own place, not with the drawing. The small map in the corner shows where the cut runs.",
+  },
+
   felt: {
     chapter: "6 · Pereira",
     title: "Why you feel them",
@@ -506,13 +527,18 @@ const en: StoryCopy = {
     unknownAria: "Map of the three places with a question mark on each.",
     sectionTitle: "West–east cut · true to scale",
     sectionAria:
-      "Cut through the earth from west to east with the depth of each Chocó event: the shallow group about {shallow} down, the deep one about {deep}.",
+      "Cut through the earth from west to east with the depth of each Chocó event: the shallow group about {shallow} down, the deep one about {deep}. A small map shows where the cut runs.",
     west: "← west · Pacific Ocean",
     east: "east →",
     trench: "trench",
     plate: "Nazca plate",
     plateModel: "USGS Slab2 model",
     plateBand: "light band: margin of error",
+    tolimaSectionTitle: "Cut through Chaparral · same scale",
+    tolimaSectionAria:
+      "Cut through the earth from west to east at Chaparral's latitude, at the same scale as Chocó's: the swarm about {depth} down and the top of the Nazca plate about {top} down. A small map shows where the cut runs.",
+    pereiraNorth: "Pereira: ~{km} north, off the cut",
+    swarmAt: "swarm · ~{km}",
     eastDeeper: "deeper towards the east",
     groupAt: { shallow: "shallow · ~{km}", deep: "deep · ~{km}" },
     errorLegend: "＋ typical error: {h} horizontally, {depth} in depth",
