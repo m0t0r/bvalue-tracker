@@ -7,6 +7,10 @@ on:
     - cron: "23 11 * * *"
   workflow_dispatch:
 
+# Reads the repository and nothing else; say so rather than inheriting the default scope.
+permissions:
+  contents: read
+
 jobs:
   live:
     runs-on: ubuntu-latest
