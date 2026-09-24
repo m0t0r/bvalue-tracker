@@ -5,7 +5,7 @@
  */
 import { geoCircle, geoMercator, geoPath, type GeoProjection } from "d3-geo";
 import { quantileSorted } from "d3-array";
-import { useMemo, type CSSProperties } from "react";
+import { useId, useMemo, type CSSProperties } from "react";
 import type { Lang } from "@/lib/i18n";
 import { fmtDay } from "@/lib/format";
 import { PEREIRA, SOURCES, type Insights, type Source } from "../claims";
@@ -326,15 +326,15 @@ function GroupLegend({
   );
 }
 
-/** Pereira as a neutral mark: it is the reader's place, not a state, so it takes no signal colour. */
+/** Pereira, the reader's own place, in its own red (`--place`); the label stays in the text colour. */
 function PereiraMark({ x, y, small, label }: { x: number; y: number; small: boolean; label: string }) {
   return (
     <g transform={`translate(${x},${y})`}>
       <circle
         r={small ? 10 : 13}
-        className="origin-center fill-foreground/15 [transform-box:fill-box] motion-safe:animate-ping"
+        className="origin-center fill-place/25 [transform-box:fill-box] motion-safe:animate-beacon"
       />
-      <circle r={small ? 4.5 : 5.5} className="fill-foreground stroke-background" strokeWidth={2} />
+      <circle r={small ? 4.5 : 5.5} className="fill-place stroke-background" strokeWidth={2} />
       <text
         x={small ? 8 : 10}
         y={-8}
@@ -369,6 +369,8 @@ function WhereOverlay({
 }) {
   const c = storyCopy[lang];
   const P = proj([PEREIRA.lon, PEREIRA.lat]);
+  // The ring stops under the legend and its note (baselines 50 and 66), which it used to cut through.
+  const clip = `ring-${useId().replace(/[^\w-]/g, "")}`;
   if (!P) return null;
   const ring = geoCircle()
     .center([PEREIRA.lon, PEREIRA.lat])
@@ -377,8 +379,12 @@ function WhereOverlay({
   const fs = small ? 10.5 : 12.5;
   return (
     <g>
+      <clipPath id={clip}>
+        <rect y={small ? 55 : 71} width={width} height={9999} />
+      </clipPath>
       <path
         d={path(ring) ?? undefined}
+        clipPath={`url(#${clip})`}
         fill="none"
         className="stroke-foreground/50"
         strokeWidth={1.25}
@@ -390,7 +396,14 @@ function WhereOverlay({
         return (
           <g key={t.id} transform={`translate(${xy[0]},${xy[1]})`}>
             <circle r={2.2} className="fill-muted-foreground" />
-            <text x={5} y={4} fontSize={fs - 1.5} className="fill-muted-foreground">
+            <text
+              x={5}
+              y={4}
+              fontSize={fs - 1.5}
+              paintOrder="stroke"
+              strokeWidth={3}
+              className="fill-muted-foreground stroke-background"
+            >
               {t.name}
             </text>
           </g>
@@ -542,7 +555,7 @@ function SectionBase({
         {c.east}
       </text>
       <g transform={`translate(${P},${sec.y(0)})`}>
-        <path d="M-7,0 L0,-9 L7,0 Z" className="fill-foreground" />
+        <path d="M-7,0 L0,-9 L7,0 Z" className="fill-place" />
         <text y={-14} textAnchor="middle" fontSize={fs + 1} fontWeight={650} className="fill-foreground">
           Pereira
         </text>

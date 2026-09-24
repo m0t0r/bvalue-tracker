@@ -108,7 +108,7 @@ function Layout({
       <div className="min-w-0 max-w-3xl flex-1">
         <header className="pb-6">
           <p className="text-sm font-medium text-muted-foreground">{q.kicker}</p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{q.title}</h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">{q.title}</h2>
           <p className="mt-4 max-w-prose text-lg text-pretty text-muted-foreground">{q.lede}</p>
           <dl className="mt-8 grid grid-cols-3 gap-4 border-y py-5">
             <Stat value={q.stats.km(stats.km)} label={q.stats.kmLabel} />
@@ -129,7 +129,10 @@ function Layout({
             className="scroll-mt-6 border-b py-12 last:border-0"
           >
             <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{q.question(i + 1)}</p>
-            <h3 id={`${s.id}-h`} className="mt-2 max-w-prose text-2xl font-semibold tracking-tight text-balance">
+            <h3
+              id={`${s.id}-h`}
+              className="mt-2 max-w-prose text-xl font-semibold tracking-tight text-balance sm:text-2xl"
+            >
               <span aria-hidden>“</span>
               {s.q}
               <span aria-hidden>”</span>
@@ -153,7 +156,7 @@ function QuestionIndex({ sections, active }: { sections: { id: string; short: st
               href={`#${s.id}`}
               aria-current={on ? "location" : undefined}
               className={cn(
-                "flex gap-3 rounded-md px-2 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                "flex gap-3 rounded-md px-2 py-1.5 text-sm transition-colors pointer-coarse:py-3 outline-none focus-visible:ring-3 focus-visible:ring-ring",
                 on ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -167,9 +170,11 @@ function QuestionIndex({ sections, active }: { sections: { id: string; short: st
   );
 }
 
+// The figure is drawn above its label, so the reversed column is packed from its end, the top: the
+// three figures then share one line however many lines each label wraps to.
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="flex min-w-0 flex-col-reverse gap-1">
+    <div className="flex min-w-0 flex-col-reverse justify-end gap-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{value}</dd>
     </div>

@@ -47,7 +47,8 @@ export function InsightsApp() {
       <Tabs value={tab} onValueChange={(v) => setTab(v === "questions" ? "questions" : "story")} className="gap-8">
         <header className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Button variant="ghost" size="sm-touch" asChild>
+            {/* Pulled out by its own inline padding, so the arrow lines up with the title below it. */}
+            <Button variant="ghost" size="sm-touch" className="-ms-2.5 pointer-coarse:-ms-4" asChild>
               <a href="/">
                 <ArrowLeftIcon />
                 {c.back}
@@ -74,7 +75,7 @@ export function InsightsApp() {
               </Button>
             </div>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-balance">{c.title}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{c.title}</h1>
           <p className="max-w-prose text-muted-foreground text-pretty">{c.subtitle}</p>
           <TabsList aria-label={c.tabsLabel}>
             {TABS.map((t) => (
@@ -85,35 +86,37 @@ export function InsightsApp() {
           </TabsList>
         </header>
 
-        {incomplete && !isError ? (
-          <Alert variant="caution" role="status">
-            <AlertTriangleIcon />
-            <AlertTitle>{c.incompleteTitle}</AlertTitle>
-            <AlertDescription>{c.incompleteBody}</AlertDescription>
-          </Alert>
-        ) : null}
-        {isError ? (
-          <Alert variant="destructive">
-            <AlertTriangleIcon />
-            <AlertTitle>{c.loadFailed}</AlertTitle>
-            <AlertDescription>{c.loadFailedBody}</AlertDescription>
-          </Alert>
-        ) : isPending || !data ? (
-          <PageSkeleton label={c.loading} />
-        ) : (
-          <>
-            <TabsContent value="story">
-              <Suspense fallback={<PageSkeleton label={c.loading} />}>
-                <Story data={data} />
-              </Suspense>
-            </TabsContent>
-            <TabsContent value="questions">
-              <Suspense fallback={<PageSkeleton label={c.loading} />}>
-                <Questions data={data} />
-              </Suspense>
-            </TabsContent>
-          </>
-        )}
+        <main className="contents">
+          {incomplete && !isError ? (
+            <Alert variant="caution" role="status">
+              <AlertTriangleIcon />
+              <AlertTitle>{c.incompleteTitle}</AlertTitle>
+              <AlertDescription>{c.incompleteBody}</AlertDescription>
+            </Alert>
+          ) : null}
+          {isError ? (
+            <Alert variant="destructive">
+              <AlertTriangleIcon />
+              <AlertTitle>{c.loadFailed}</AlertTitle>
+              <AlertDescription>{c.loadFailedBody}</AlertDescription>
+            </Alert>
+          ) : isPending || !data ? (
+            <PageSkeleton label={c.loading} />
+          ) : (
+            <>
+              <TabsContent value="story">
+                <Suspense fallback={<PageSkeleton label={c.loading} />}>
+                  <Story data={data} />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="questions">
+                <Suspense fallback={<PageSkeleton label={c.loading} />}>
+                  <Questions data={data} />
+                </Suspense>
+              </TabsContent>
+            </>
+          )}
+        </main>
       </Tabs>
 
       {data && (

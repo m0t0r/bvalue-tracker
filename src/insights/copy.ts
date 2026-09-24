@@ -131,13 +131,13 @@ const es = {
     drift: (d: Drift): string => {
       if (d.case === "too-few") return "Aún hay muy pocos eventos para ver si la actividad se desplaza.";
       if (d.case === "none")
-        return `Con la precisión del catálogo (unos ${f1(d.errorKm)} km) no se ve que el centro de la actividad se haya movido.`;
-      return `El centro de la actividad se ha movido unos ${f1(d.km)} km hacia el ${COMPASS_ES[compassPoint(d.bearingDeg)]} en ${f0(d.hours / 24)} días, más que el error de localización (unos ${f1(d.errorKm)} km). Es un indicio, no una conclusión.`;
+        return `Con la precisión del catálogo (unos ${f1(d.errorKm)}\u202Fkm) no se ve que el centro de la actividad se haya movido.`;
+      return `El centro de la actividad se ha movido unos ${f1(d.km)}\u202Fkm hacia el ${COMPASS_ES[compassPoint(d.bearingDeg)]} en ${f0(d.hours / 24)} días, más que el error de localización (unos ${f1(d.errorKm)}\u202Fkm). Es un indicio, no una conclusión.`;
     },
     /** The last strong event from Chocó, when the swarm has taken over. */
     lastChoco: (ms: number, minMag: number, lang: Lang) =>
       `El último evento de M${f1(minMag)} o más en el Chocó fue el ${fmtDay(ms, lang)}.`,
-    share: (share: number) => `${share >= 0.999 ? "más del 99.9" : f1(share * 100)} %`,
+    share: (share: number) => `${share >= 0.999 ? "más del 99.9" : f1(share * 100)}\u202F%`,
   },
 };
 
@@ -211,8 +211,8 @@ const en: Copy = {
     drift: (d) => {
       if (d.case === "too-few") return "There are still too few events to see whether the activity is moving.";
       if (d.case === "none")
-        return `At the catalogue's precision (about ${f1(d.errorKm)} km) the centre of the activity has not visibly moved.`;
-      return `The centre of the activity has moved about ${f1(d.km)} km ${COMPASS_EN[compassPoint(d.bearingDeg)]} in ${f0(d.hours / 24)} days, more than the location error (about ${f1(d.errorKm)} km). A hint, not a conclusion.`;
+        return `At the catalogue's precision (about ${f1(d.errorKm)}\u202Fkm) the centre of the activity has not visibly moved.`;
+      return `The centre of the activity has moved about ${f1(d.km)}\u202Fkm ${COMPASS_EN[compassPoint(d.bearingDeg)]} in ${f0(d.hours / 24)} days, more than the location error (about ${f1(d.errorKm)}\u202Fkm). A hint, not a conclusion.`;
     },
     lastChoco: (ms, minMag, lang) => `Chocó's last event of M${f1(minMag)} or more was on ${fmtDay(ms, lang)}.`,
     share: (share) => `${share >= 0.999 ? "over 99.9" : f1(share * 100)}%`,
