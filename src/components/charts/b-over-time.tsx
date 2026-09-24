@@ -16,15 +16,21 @@ import { windowsToCsv } from "../../../core/csv";
 /** Below this span the axis labels carry the hour as well as the date. */
 const SHORT_SPAN_MS = 4 * 86_400_000;
 
-/** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
+/**
+ * `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits
+ * the statistics to one magnitude type. `mainshockTime` marks the detected mainshock, where the windows
+ * after it are the least complete; a mainshock before the first window's end is off the axis and not drawn.
+ */
 export const BOverTimeChart = memo(function BOverTimeChart({
   stats,
   magType,
   cluster,
+  mainshockTime,
 }: {
   stats: Stats;
   magType: string | null;
   cluster: Cluster | null;
+  mainshockTime: string | null;
 }) {
   const { t, lang } = useI18n();
   const zone = useZone();
@@ -144,6 +150,20 @@ export const BOverTimeChart = memo(function BOverTimeChart({
                 strokeDasharray="4 4"
                 label={{ value: "b = 1", position: "insideTopRight", fill: "var(--muted-foreground)", fontSize: 12 }}
               />
+              {mainshockTime !== null ? (
+                <ReferenceLine
+                  x={Date.parse(mainshockTime)}
+                  ifOverflow="discard"
+                  stroke="var(--chart-2)"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: t.mainshock.label,
+                    position: "insideTopLeft",
+                    fill: "var(--muted-foreground)",
+                    fontSize: 12,
+                  }}
+                />
+              ) : null}
               <Area
                 dataKey="band"
                 stroke="none"

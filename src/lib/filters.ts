@@ -2,10 +2,7 @@ import type { StoredEvent } from "@/lib/api";
 import { dayBounds, fmtDay } from "@/lib/format";
 import type { Dict } from "@/lib/i18n";
 import type { Cluster } from "../../core/clusters";
-import { MAINSHOCK_ID } from "../../core/seiscomp";
 import { ZONES, type ZoneId } from "../../core/zones";
-
-export { MAINSHOCK_ID };
 
 /**
  * The settings that decide which events are counted. Mc is deliberately not one of them: it moves
@@ -42,7 +39,15 @@ export const defaultFilters = (zone: ZoneId): Filters => ({
 /** Chocó's defaults, which were the only ones before there were two zones. */
 export const DEFAULT_FILTERS: Filters = defaultFilters("choco");
 
-export function applyFilters(events: readonly StoredEvent[], f: EventFilters): StoredEvent[] {
+/**
+ * `mainshockId` is the zone's detected mainshock (`core/mainshock.ts`), found over its whole
+ * catalogue by the caller: `excludeMainshock` removes that one event, and nothing when there is none.
+ */
+export function applyFilters(
+  events: readonly StoredEvent[],
+  f: EventFilters,
+  mainshockId: string | null,
+): StoredEvent[] {
   // The date fields are Colombian calendar days, like every other date on the page.
   const from = f.from ? dayBounds(f.from)[0] : "";
   const to = f.to ? dayBounds(f.to)[1] : "9999";
@@ -52,7 +57,7 @@ export function applyFilters(events: readonly StoredEvent[], f: EventFilters): S
       e.time <= to &&
       e.mag >= f.minMag &&
       (!f.manualOnly || e.status === "manual") &&
-      (!f.excludeMainshock || e.id !== MAINSHOCK_ID),
+      (!f.excludeMainshock || e.id !== mainshockId),
   );
 }
 
@@ -73,13 +78,17 @@ export interface FilterChip {
  * produces none and the scope bar stays away. Mc is in here although it selects no events: it moves
  * the b-value and the frequency–magnitude chart, and a Mc left on by hand is exactly the kind of
  * setting a reader forgets they changed.
+ *
+ * "Sin el sismo principal" is named only while there is a mainshock for it to leave out: with none
+ * the setting selects nothing, and a chip would claim an exclusion that is not happening.
  */
 export function activeFilterChips(
   f: Filters,
   cluster: ClusterChoice,
   t: Dict,
   lang: "es" | "en",
-  defaults: Filters = DEFAULT_FILTERS,
+  defaults: Filters,
+  mainshockId: string | null,
 ): FilterChip[] {
   const chips: FilterChip[] = [];
   if (cluster !== "all") chips.push({ key: "cluster", label: t.clusterShort[cluster], cluster });
@@ -94,7 +103,7 @@ export function activeFilterChips(
   }
   if (f.minMag !== defaults.minMag) chips.push({ key: "minMag", label: t.chipMinMag(f.minMag.toFixed(1)) });
   if (f.manualOnly) chips.push({ key: "manualOnly", label: t.chipManual });
-  if (f.excludeMainshock) chips.push({ key: "excludeMainshock", label: t.chipNoMainshock });
+  if (f.excludeMainshock && mainshockId !== null) chips.push({ key: "excludeMainshock", label: t.chipNoMainshock });
   if (f.mc !== null) chips.push({ key: "mc", label: t.chipMc(f.mc.toFixed(1)) });
   return chips;
 }

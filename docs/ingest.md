@@ -140,9 +140,11 @@ Each of these was a real bug in production or in review:
   right after a refresh.
 - Look up existing ids in one `IN (...)` query, not one query per event. Per-event
   queries can exhaust the per-invocation subrequest limit on a big chunk.
-- `excludeMainshock` filters by `MAINSHOCK_ID`, never by "the largest event in the
-  result", which silently drops a real aftershock for any range without the M7.4.
-- One statistics pipeline (`computeStats` in `core/gr.ts`) serves the page, the API
+- `excludeMainshock` drops the zone's detected mainshock, found over the zone's **whole**
+  catalogue (`zoneMainshock` in `core/mainshock.ts`), never "the largest event in the
+  result", which silently drops a real aftershock for any range without the mainshock.
+  `worker/test/ingest.test.ts` holds a day whose largest event "stands clear" within it.
+- One statistics pipeline (`computeStats` in `packages/seismo/src/gr.ts`) serves the page, the API
   and the CLI. When they were separate they disagreed (window step, end-date rule).
 - Ingest runs under `waitUntil`, so closing the tab mid-refresh does not abandon it.
   A partial write is safe: upserts are idempotent and removals are written last.

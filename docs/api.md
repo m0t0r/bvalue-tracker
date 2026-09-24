@@ -8,7 +8,11 @@ is a 400. The downloaded CSVs are named after the zone (`sgc-tolima-events.csv`)
 
 Filters: `from`, `to` (a bare date is inclusive of that day), `minMag`, `status`,
 `includeRemoved=1`, `excludeMainshock=1`, `cluster=shallow|deep` (anything else is a 400), and `mc`
-on `/api/stats` and `/api/b-windows.csv`. With `cluster`, the statistics keep the Mc of the whole
+on `/api/stats` and `/api/b-windows.csv`. `excludeMainshock` drops the zone's detected mainshock
+(`core/mainshock.ts`, [the rule](science.md#the-mainshock-detected-from-the-catalogue-never-pinned-from-2026-09-24)),
+found over the zone's whole catalogue whatever range was asked for, and drops nothing while there is
+none or while it awaits review. It reads the zone's rows unindexed on `mag`; only this parameter
+asks, and the page never sends it. With `cluster`, the statistics keep the Mc of the whole
 filtered catalogue, as the page does.
 
 **`/api/*` is same-origin only.** The Worker serves a request only when it carries

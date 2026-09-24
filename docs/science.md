@@ -23,7 +23,7 @@
   between the scales pulls the first down, and dropping the large events pushes the
   second up. With MLr_1 only, the September slide to ~0.58 mostly disappears (it ends
   near 0.8), so that slide leans on the larger MLv events. The b card has a tab for
-  each (`dominantMagType` in `core/gr.ts`); both use the all-types Mc so that only the
+  each (`dominantMagType` in `packages/seismo/src/gr.ts`); both use the all-types Mc so that only the
   magnitudes differ, and the b charts follow the tab. A proper fix is converting to
   one scale, which needs published SGC conversion relations: do not invent them.
 - **There are two clusters, and depth alone separates them** (`core/clusters.ts`, cut at
@@ -40,7 +40,7 @@
     Fixture figures, which the tests pin: 0.738 ± 0.032 (n = 438) and 0.816 ± 0.112 (n = 90).
     All were recomputed independently in Python.
   - **The two b-values cannot be told apart** (Utsu 1992 test, p = 0.24; `bDifference` in
-    `core/gr.ts`). The page says that in words. "Two different b-values" is not the finding.
+    `packages/seismo/src/gr.ts`). The page says that in words. "Two different b-values" is not the finding.
   - **The September slide in b is inside the shallow cluster and is not a mixing artefact**:
     1.08 ± 0.07 → 0.59 ± 0.04 over its own 150-event windows, stronger than in the mixture.
     The magnitude-type caveat above still applies inside the cluster: with MLr_1 only, the
@@ -81,7 +81,8 @@
   about what the swarm will do, and the page says so.
 - **The depth groups are Chocó's and do not apply here.** The swarm is one crustal population, so
   the groups card, its legend and its tooltip text are Chocó-only (`depthClusters` in
-  `core/zones.ts`). There is no mainshock, so no ring, no star and no "excluir sismo principal".
+  `core/zones.ts`). It has **no clear mainshock** (0.3 between its two largest events; see the
+  rule below), so no ring, no star and no "excluir sismo principal" — for as long as that holds.
 - The commonest magnitude type is **MLr_2** (387 of 447), not Chocó's MLr_1; the b card's tab picks
   it from the data (`dominantMagType`). The mixed-types caveat applies here too.
 - **Connection to Chocó: SGC's preliminary hypothesis, not a finding.** SGC has said the M7.4 may
@@ -91,6 +92,61 @@
 - **Do not put a probability of a larger event on this tab.** SGC's public position is that many
   events do not mean a large one is coming. The copy says swarms go either way and points to
   SGC's daily bulletins for official information.
+## The mainshock: detected from the catalogue, never pinned (from 2026-09-24)
+
+- **The rule, as the page states it**: the largest event is the mainshock when an SGC analyst has
+  reviewed it (`status = manual`) and it exceeds every other event in the zone by at least **1.0**
+  (`MAINSHOCK_MIN_GAP` in `core/mainshock.ts`, over `assessMainshock` in `packages/seismo`). Withdrawn
+  events do not count; automatic ones do, both ways. A larger automatic event is never passed over
+  for a smaller reviewed one: if it would stand clear it is **awaiting review** ("automático, en
+  revisión"), and if not there is no mainshock. An automatic event close in size stops a reviewed one.
+  A tie, or fewer than two events, is no mainshock. No clustering algorithm and no time window: the
+  zone's box from its start date is the sequence, for the reason the depth groups have none.
+- **Only the two largest events decide it**, in any order (a property test holds that), which is
+  what lets `excludeMainshock` on the API read `ORDER BY mag DESC LIMIT 2` instead of the catalogue.
+- **Why 1.0.** It is the exact inverse of the usual swarm definition, "several events within one
+  magnitude unit of the largest" (Holtkamp & Brudzinski 2011, EPSL), and real swarms sit far below
+  it (0.10 ± 0.09, range 0–0.36, in Puerto Rico: Ventura-Valentín & Brudzinski 2022, SRL 93). Båth's
+  mean is 1.2 (Båth 1965); Shcherbakov & Turcotte (2004, BSSA 94) found 1.16 ± 0.46 over ten
+  California mainshocks, **4 of them below 1.0**. So the rule is conservative in one direction only:
+  from published means and spreads, roughly **35–65% of genuine mainshock–aftershock sequences
+  fall below 1.0** (50–80% below 1.2, which by construction misses half). That is a normal
+  approximation; no paper states the fraction directly. **A zone without one has "no clear
+  mainshock", which is not the same as being a swarm**: the status bar says "Ninguno claro", never
+  "enjambre". The owner chose 1.0 over 1.2 on this basis (2026-09-24).
+- **An energy-share test was considered and not added.** "The largest released more than all the
+  others together" (≥ 50% of the moment) is too weak alone: in a two-event cluster any positive gap
+  passes it. At 80–90% it would match a gap of about 0.6–0.85, and on the real Chaparral swarm a new
+  event just clearing 1.0 (M5.5) would already hold 81% of the zone's energy — it adds a second
+  sentence and changes no answer.
+- **Magnitude types are compared as SGC publishes them.** A published SGC conversion to Mw exists
+  (Arcila et al. 2020, *Modelo nacional de amenaza sísmica*, doi:10.32685/9789585279469; applied in
+  Montejo et al. 2023, *Boletín Geológico* 50(1), only to Mw ≥ 3.5), but its coefficients were not
+  checked and nothing is published for the MLr/MLv variants the catalogue uses. Do not invent one.
+  Mixing ML and Mw plus 0.1 rounding may move a gap by ±0.2–0.3; that is an estimate, not a figure.
+  The rule also cannot fire below a largest event of M3.0, given the catalogue's M2.0 floor.
+- **Compared in whole tenths.** In floating point 4.6 − 3.6 is 0.9999999999999996, and 37 pairs
+  between M2 and M9 fail `>= 1.0` that way — M4.6 over M3.6 is a size the swarm could produce.
+- **Measured** (local copy, 2026-09-23): Chocó's Mw 7.4 (SGC2026pqqmro) stands **2.5** above the two
+  MLv 4.9 of 14 September — found, with nothing pinned; the fixture test recomputes it, and Python
+  agrees in exact decimals. Chaparral's M4.5 (type `M`, 3.96 km) stands **0.3** above three MLr 4.2.
+- **The label is retrospective and is recomputed on every read, never stored.** A later, larger
+  event takes it, and the old mainshock becomes a foreshock ("sismo premonitor"; USGS: "an earthquake
+  cannot be identified as a foreshock until after a larger earthquake in the same area occurs").
+  The rule is the last caveat under "Cómo leer estas cifras" on both tabs.
+- **Chocó is detected too, not pinned** (owner decision, 2026-09-24). The price: a large, mislocated
+  automatic event in the box would leave no clear mainshock — the ring, the star and "excluir" gone,
+  "Ninguno claro" in the status bar — until SGC reviews or withdraws it. That is the rule working.
+- **What follows the detection**: the "Sismo principal" stat in the status bar (always shown, in
+  every state), the map's ring and its legend sentence, the star on "Magnitud en el tiempo", a
+  marker on "Valor b en el tiempo", "Excluir sismo principal" and its chip, and the caveat that small
+  events are missed right after the mainshock. All read one answer, computed over the zone's whole
+  catalogue, never over the filtered view.
+- **Renaming a zone is not automatic.** "Enjambre" → "secuencia" is a scientific claim and SGC's
+  wording should lead it; `SHARE_META` is also baked into `tolima.html` at build time, so no runtime
+  rename could reach a link preview. It is a code change made by a person. Until then, while
+  something stands clear or awaits review on the Tolima tab, its caveats swap SGC's swarm line for
+  "Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre."
 - **A half-filled database produces a confident, wrong number.** Production once
   showed b = 0.49 because it held only the trailing 3 days. `/api/status` now
   reports `backfill: {done, total}`, and the page warns and demotes b until history

@@ -7,7 +7,7 @@ import {
   fmd,
   mcGoodnessOfFit,
   mcMaxCurvature,
-} from "../core/gr.ts";
+} from "../src/index.ts";
 
 function mulberry32(seed: number): () => number {
   let a = seed;

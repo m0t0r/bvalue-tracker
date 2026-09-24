@@ -4,7 +4,7 @@
  * the catalogue is almost empty, so any cut in that gap gives the same two populations; 70 km is
  * also the conventional boundary between shallow and intermediate-depth earthquakes.
  */
-import { bDifference, computeStats, type BDifference, type CatalogStats } from "./gr.ts";
+import { bDifference, computeStats, type BDifference, type CatalogStats } from "@bvalue/seismo";
 
 export const CLUSTER_DEPTH_KM = 70;
 export type Cluster = "shallow" | "deep";

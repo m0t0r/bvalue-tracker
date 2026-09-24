@@ -4,7 +4,8 @@
 
 | Path | What |
 |---|---|
-| `core/` | Shared, runtime-neutral logic: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), statistics (`gr.ts`, including the one `computeStats` pipeline), CSV, CLI. Used by the Worker, the browser and Node. |
+| `packages/seismo/` | `@bvalue/seismo`, the seismology library: Gutenberg–Richter statistics (`gr.ts`, including the one `computeStats` pipeline), mainshock detection (`mainshock.ts`), magnitude arithmetic in whole tenths (`magnitude.ts`). Knows nothing about SGC, zones or the page; tested on synthetic catalogues only. |
+| `core/` | Shared, runtime-neutral logic about *this* project: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), the zones, the depth groups, the zone's mainshock with SGC's meaning of "reviewed" (`mainshock.ts`), CSV, CLI. Used by the Worker, the browser and Node. |
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`). |
 | `src/` | React page: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL. `lib/i18n.tsx` holds every user-facing string in `es` and `en`. |
 | `migrations/` | D1 schema. |
@@ -46,8 +47,18 @@ pnpm cli fetch --zone tolima --out data/tolima.csv                # the zone's o
 
 `--bbox` is `lonMin,latMin,lonMax,latMax`; use the `=` form because the value starts with a minus.
 
+`bvalue` always prints the mainshock it detects over the whole file (the same rule as the page, see
+[the science](science.md#the-mainshock-detected-from-the-catalogue-never-pinned-from-2026-09-24)), and
+`--exclude-mainshock` drops that one event, or nothing when there is none. A file that is itself a
+date range gets that range's answer, which is why the line says how many events it looked at.
+
 ## Tooling gotchas
 
+- **`packages/seismo` is a pnpm workspace package consumed as TypeScript source** (`exports` points
+  at `src/index.ts`; there is no build step). Vite, the Worker bundle, `tsx` and vitest all compile
+  it in place. Its own `tsconfig.json` has `lib: ["ES2022"]` and `types: []`, so a DOM or Node
+  global in the library fails `pnpm typecheck` — that is what keeps it runtime-neutral. Its tests
+  are the `seismo` vitest project. Import it as `@bvalue/seismo`, never by a relative path.
 - **`vitest` is held at 4.x**: `@cloudflare/vitest-pool-workers` does not support 5.
   For the same reason `compatibility_date` cannot be newer than the pool's bundled
   runtime (it errored on 2026-09-01; 2026-08-20 works). Everything else is on latest.

@@ -91,11 +91,25 @@ those, so an untouched tab shows no chips on either side.
 - **The tabs sit in the header's top row with the language and theme buttons**, and the title and
   subtitle underneath are the zone's own. On a phone the controls wrap under the tabs rather than
   squeezing them; at 375 px they share one row.
-- **What is a Chocó finding stays on Chocó's tab**: the depth-groups card, the magnitude chart's
-  group legend and tooltip line, the mainshock ring and star, and "excluir sismo principal"
-  (`depthClusters` and `mainshockId` in `core/zones.ts`). The copy that differs lives in
-  `t.zones[zone]` — title, subtitle, back-fill text, map legend and the caveats — and the update
-  interval is a number from `worker/plan.ts` (`updateEveryMin`), never written into a string.
+- **What is a Chocó finding stays on Chocó's tab**: the depth-groups card and the magnitude chart's
+  group legend and tooltip line (`depthClusters` in `core/zones.ts`). The copy that differs lives in
+  `t.zones[zone]` — title, subtitle, back-fill text and the caveats — and the update interval is a
+  number from `worker/plan.ts` (`updateEveryMin`), never written into a string.
+- **The mainshock is detected, on every tab alike** (`view.mainshock` from `pageView`, over the
+  whole catalogue the page holds — never the filtered view; [the rule](science.md#the-mainshock-detected-from-the-catalogue-never-pinned-from-2026-09-24)).
+  The map's ring and its legend sentence (`mapRing`), the star, the marker on "Valor b en el
+  tiempo", "Excluir sismo principal" and its chip all appear only while one is found; the caveats
+  take the state as an argument (`caveats(state)`).
+  - **"Sismo principal" is the status bar's fourth stat, always shown** (`MainshockStat` in
+    `status-bar.tsx`): "M7.4 (Mw)" linked to SGC's page for it, with the day and the gap under it;
+    "automático, en revisión" while it waits; "Ninguno claro · el mayor, solo 0.3 por encima del
+    siguiente" for a swarm. Chosen over a notice that appears only when the copy is out of date, and
+    over a line under the title, from three variants tried on the real page (2026-09-24). A reading
+    that is always there says "none clear" as a
+    finding rather than leaving it to an absence, and needs no notion of the copy being "wrong".
+  - On a 375×812 phone it takes the status bar a line taller and the b-value still ends inside the
+    first screen, by 2 px (810 of 812; 722 without it). On 375×667 the b-value was already below the
+    fold. Anything added to the status bar now costs the b-value its place on that phone.
 - **A young catalogue changes the charts' time axes.** The magnitude chart labels every day when
   the whole range is two weeks or less (weekly, the swarm had one label), and "Valor b en el
   tiempo" adds the hour when its windows span under four days (a date alone repeated).

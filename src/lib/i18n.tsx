@@ -9,7 +9,20 @@ const esCommon = {
     "Las magnitudes mezclan tipos (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite compararlo con todos los tipos y con uno solo.",
   revisions:
     "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar todo el historial a lo largo del día para recoger esos cambios.",
+  /** The rule `core/mainshock.ts` applies, in one sentence a reader can check against the table. */
+  mainshockRule:
+    "La página llama sismo principal al evento más grande solo si un analista del SGC lo ha revisado y supera en al menos 1 de magnitud a todos los demás, comparando las magnitudes tal como las publica el SGC. Es una etiqueta a posteriori: si después llegara un evento mayor, el anterior pasaría a ser un sismo premonitor.",
+  /** Short-term aftershock incompleteness, for any zone with a mainshock. */
+  afterMainshock:
+    "Justo después del sismo principal se pierden eventos pequeños; las primeras ventanas son las menos fiables.",
 };
+
+/**
+ * What the page knows about the zone's mainshock when it writes the caveats. Detected from the
+ * catalogue (`core/mainshock.ts`), so the caveats follow it: a swarm's "no dominant event" is only
+ * said while nothing stands clear, and the note on missed small events only once something does.
+ */
+export type CaveatState = "found" | "awaiting-review" | "none";
 
 const es = {
   zoneLabel: "Zona",
@@ -30,14 +43,14 @@ const es = {
       backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} semanas`,
       backfillBody:
         "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
-      mapDesc: "Tamaño por magnitud, color por profundidad. El sismo principal va con anillo naranja.",
-      caveats: [
+      caveats: (m: CaveatState) => [
         esCommon.notForecast,
         esCommon.floor,
         esCommon.magTypes,
-        "Justo después del sismo principal se pierden eventos pequeños; las primeras ventanas son las menos fiables.",
+        ...(m === "found" ? [esCommon.afterMainshock] : []),
         esCommon.revisions,
         "La secuencia son dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
+        esCommon.mainshockRule,
       ],
     },
     tolima: {
@@ -49,16 +62,28 @@ const es = {
       backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} días`,
       backfillBody:
         "Todavía faltan días desde el 20 de septiembre. El valor b y los gráficos no son representativos hasta que termine.",
-      mapDesc: "Tamaño por magnitud, color por profundidad.",
-      caveats: [
+      caveats: (m: CaveatState) => [
         "El valor b describe el enjambre: cuánto pesan los eventos grandes frente a los pequeños. No es un pronóstico ni una alerta.",
         esCommon.floor,
         esCommon.magTypes,
-        "Es un enjambre: muchos eventos de tamaño parecido y ningún sismo principal. Unos enjambres se apagan sin un evento mayor y otros no, y estas cifras no permiten saber cuál será el caso. La información oficial está en los boletines diarios del SGC.",
+        // SGC's own definition of a swarm. Only while nothing stands clear: beside a notice about a
+        // mainshock, or an event awaiting review, it would contradict the page.
+        ...(m === "none"
+          ? [
+              "Es un enjambre: muchos eventos de tamaño parecido y ningún sismo principal claramente dominante. Unos enjambres se apagan sin un evento mayor y otros no, y estas cifras no permiten saber cuál será el caso. La información oficial está en los boletines diarios del SGC.",
+            ]
+          : []),
+        // What reconciles the tab's "enjambre" with a mainshock in the status bar: the name is SGC's to
+        // change, and a person changes the copy (docs/science.md). Never renamed automatically.
+        ...(m === "none"
+          ? []
+          : ["Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre."]),
+        ...(m === "found" ? [esCommon.afterMainshock] : []),
         "El SGC plantea como hipótesis preliminar que el sismo M7.4 del 10 de agosto en el Chocó cambió los esfuerzos en la corteza y favoreció que se reactivaran fallas de la zona de Chaparral. Es una hipótesis, no una conclusión.",
         // Not `esCommon.revisions`: with one-day chunks and one sweep an hour, "todo el historial a lo
         // largo del día" stops being true once the swarm is 24 days old.
         "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar el historial por partes, un día de eventos cada hora, para recoger esos cambios.",
+        esCommon.mainshockRule,
       ],
     },
   },
@@ -156,6 +181,21 @@ const es = {
   bTimeEmptyCluster: (have: string, need: number) =>
     `Este grupo tiene ${have} eventos ≥ Mc y cada ventana necesita ${need}, así que su valor b es una sola cifra, sin evolución en el tiempo.`,
   mapTitle: "Mapa",
+  mapDesc: "Tamaño por magnitud, color por profundidad.",
+  mapRing: "El sismo principal va con anillo naranja.",
+  /**
+   * The status bar's "Sismo principal": what the rule in core/mainshock.ts reads in the zone's whole
+   * catalogue today. Always shown, on every tab, so a reader sees "none clear" as a reading and not an
+   * omission. Neutral in every state: nothing failed, and none of it is a forecast. Magnitudes and the
+   * gap arrive preformatted to one decimal; `day` is a Colombian day ("24 sept").
+   */
+  mainshock: {
+    label: "Sismo principal",
+    none: "Ninguno claro",
+    gapHint: (day: string, gap: string) => `${day} · ${gap} por encima del siguiente`,
+    pendingHint: (day: string) => `${day} · automático, en revisión`,
+    noneHint: (gap: string) => `el mayor, solo ${gap} por encima del siguiente`,
+  },
   depth: "Profundidad (km)",
   magTimeTitle: "Magnitud en el tiempo",
   magTimeDesc: "Cada punto es un evento.",
@@ -223,6 +263,9 @@ const enCommon = {
     "Magnitudes mix several types (MLr, MLv, Mw, M), and that moves b by more than its margin of error. The b-value card lets you compare all types against a single one.",
   revisions:
     "Recent events may be automatic and can change after analyst review. The page re-reads the whole history over the course of each day to pick up those changes.",
+  mainshockRule:
+    "The page calls the largest event the mainshock only if an SGC analyst has reviewed it and it exceeds every other event by at least 1 magnitude unit, comparing magnitudes as SGC publishes them. The label is retrospective: if a larger event came later, the earlier one would become a foreshock.",
+  afterMainshock: "Right after the mainshock small events are missed; the earliest windows are the least reliable.",
 };
 
 const en: Dict = {
@@ -237,14 +280,14 @@ const en: Dict = {
       backfillTitle: (a, b) => `Loading history: ${a} of ${b} weeks`,
       backfillBody:
         "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
-      mapDesc: "Size by magnitude, colour by depth. The mainshock has an orange ring.",
-      caveats: [
+      caveats: (m) => [
         enCommon.notForecast,
         enCommon.floor,
         enCommon.magTypes,
-        "Right after the mainshock small events are missed; the earliest windows are the least reliable.",
+        ...(m === "found" ? [enCommon.afterMainshock] : []),
         enCommon.revisions,
         "The sequence is two groups of events at different depths. As of 19 September 2026 the deep group, the mainshock's own, had nearly all of its activity in the first week; almost everything since belongs to the shallow group, and that is where the b-value falls. The deep group's b-value comes from few events, so its margin of error is wide.",
+        enCommon.mainshockRule,
       ],
     },
     tolima: {
@@ -256,14 +299,20 @@ const en: Dict = {
       backfillTitle: (a, b) => `Loading history: ${a} of ${b} days`,
       backfillBody:
         "Days since 20 September are still missing. The b-value and charts are not representative until this finishes.",
-      mapDesc: "Size by magnitude, colour by depth.",
-      caveats: [
+      caveats: (m) => [
         "The b-value describes the swarm: how much the large events weigh against the small ones. It is not a forecast or an alert.",
         enCommon.floor,
         enCommon.magTypes,
-        "This is a swarm: many events of similar size and no mainshock. Some swarms die out without a larger event and some do not, and these figures cannot tell which this will be. The official information is in SGC's daily bulletins.",
+        ...(m === "none"
+          ? [
+              "This is a swarm: many events of similar size and no clearly dominant mainshock. Some swarms die out without a larger event and some do not, and these figures cannot tell which this will be. The official information is in SGC's daily bulletins.",
+            ]
+          : []),
+        ...(m === "none" ? [] : ["Until SGC describes it differently, this page keeps calling it a swarm."]),
+        ...(m === "found" ? [enCommon.afterMainshock] : []),
         "SGC's preliminary hypothesis is that the M7.4 of 10 August in Chocó changed the stresses in the crust and helped reactivate faults around Chaparral. It is a hypothesis, not a conclusion.",
         "Recent events may be automatic and can change after analyst review. The page re-reads the history in parts, one day of events each hour, to pick up those changes.",
+        enCommon.mainshockRule,
       ],
     },
   },
@@ -360,6 +409,15 @@ const en: Dict = {
   bTimeEmptyCluster: (have, need) =>
     `This group has ${have} events ≥ Mc and each window needs ${need}, so its b-value is a single figure with no change over time.`,
   mapTitle: "Map",
+  mapDesc: "Size by magnitude, colour by depth.",
+  mapRing: "The mainshock has an orange ring.",
+  mainshock: {
+    label: "Mainshock",
+    none: "None clear",
+    gapHint: (day, gap) => `${day} · ${gap} above the next`,
+    pendingHint: (day) => `${day} · automatic, under review`,
+    noneHint: (gap) => `the largest, only ${gap} above the next`,
+  },
   depth: "Depth (km)",
   magTimeTitle: "Magnitude over time",
   magTimeDesc: "Each dot is one event.",

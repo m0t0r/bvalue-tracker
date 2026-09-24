@@ -26,7 +26,7 @@ import type { ZoneId } from "../../../core/zones";
 const config = {
   mag: { label: "M", color: "var(--chart-1)" },
   deep: { label: "M", color: "var(--chart-4)" },
-  main: { label: "M7.4", color: "var(--chart-2)" },
+  main: { label: "M", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
 const DAY = 86_400_000;
@@ -67,10 +67,16 @@ function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
   return { domain: [0, top], ticks };
 }
 
-export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({ events }: { events: readonly StoredEvent[] }) {
+/** `mainshockId` is the zone's detected mainshock, drawn as a star apart from the other events; null draws none. */
+export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
+  events,
+  mainshockId,
+}: {
+  events: readonly StoredEvent[];
+  mainshockId: string | null;
+}) {
   const { t, lang } = useI18n();
   const zone = useZone();
-  const mainshockId = zone.mainshockId;
   const { points, deepPoints, main, daily, domain, days, count, magTop } = useMemo(() => {
     const pts = events.map((e) => ({
       t: Date.parse(e.time),

@@ -1,10 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { StoredEvent } from "@/lib/api";
-import { MAINSHOCK_ID } from "@/lib/filters";
 import { dicts } from "@/lib/i18n";
 import { DEFAULT_SCOPE, pageView, scopeChips, useScope, type Scope } from "@/lib/scope";
-import { computeStats } from "../../core/gr";
+import { computeStats } from "@bvalue/seismo";
+import { mainshockId } from "../../core/mainshock";
+import { MAINSHOCK_ID } from "../../core/seiscomp";
 
 /**
  * A catalogue built so that the Mc estimates a careless page could reach are all different: the
@@ -163,7 +164,7 @@ describe("the events a scope selects", () => {
 
 describe("what the scope bar names", () => {
   it("stays silent on a page nobody has touched", () => {
-    expect(scopeChips(DEFAULT_SCOPE, dicts.es, "es")).toEqual([]);
+    expect(scopeChips(DEFAULT_SCOPE, dicts.es, "es", "choco", MAINSHOCK_ID)).toEqual([]);
   });
 
   it("names the depth group and the filters as one list", () => {
@@ -171,6 +172,8 @@ describe("what the scope bar names", () => {
       scope({ cluster: "deep", filters: { ...DEFAULT_SCOPE.filters, minMag: 2.5, mc: 2.9 } }),
       dicts.es,
       "es",
+      "choco",
+      MAINSHOCK_ID,
     );
     expect(chips.map((c) => c.key)).toEqual(["cluster", "minMag", "mc"]);
   });
@@ -209,11 +212,14 @@ describe("the scope as the page holds it", () => {
       result.current.magTabs.onChange("type");
       result.current.setFilters({ ...DEFAULT_SCOPE.filters, minMag: 3 });
     });
-    expect(scopeChips(result.current.scope, dicts.es, "es").map((c) => c.key)).toEqual(["cluster", "minMag"]);
+    expect(scopeChips(result.current.scope, dicts.es, "es", "choco", MAINSHOCK_ID).map((c) => c.key)).toEqual([
+      "cluster",
+      "minMag",
+    ]);
 
     act(() => result.current.clear());
     expect(result.current.scope).toEqual({ ...DEFAULT_SCOPE, magScope: "type" });
-    expect(scopeChips(result.current.scope, dicts.es, "es")).toEqual([]);
+    expect(scopeChips(result.current.scope, dicts.es, "es", "choco", MAINSHOCK_ID)).toEqual([]);
   });
 
   it("draws nothing before the catalogue has arrived, and does not change identity waiting", () => {
@@ -222,5 +228,65 @@ describe("the scope as the page holds it", () => {
     const before = result.current.view.base;
     rerender();
     expect(result.current.view.base).toBe(before);
+  });
+});
+
+/**
+ * The mainshock is detected over the zone's whole catalogue (`core/mainshock.ts`), never over what
+ * the filters leave: "the largest of this view" would drop an ordinary event from any range without
+ * the mainshock in it. Nothing about it is Chocó's any more — the swarm below has none, until it does.
+ */
+describe("the mainshock the page draws and excludes", () => {
+  // A swarm shaped like Chaparral's: dozens of events, the largest M4.5 only 0.3 above the next.
+  const SWARM: StoredEvent[] = [
+    ...Array.from({ length: 60 }, (_, i) => ev(100 + i, 2.5 + (i % 12) / 10, 18, "MLr_2", { status: "manual" })),
+    ev(200, 4.5, 4, "M", { id: "SGC2026stzmyx", status: "manual" }),
+    ev(201, 4.2, 19, "MLr", { id: "SGC2026sqogax", status: "manual" }),
+  ];
+  const big = (status: "manual" | "automatic") =>
+    ev(300, 5.6, 17, "Mw", { id: "SGC2026bigone", status, time: "2026-09-25T14:03:00Z" });
+  const on = (events: StoredEvent[], filters: Partial<Scope["filters"]> = {}) =>
+    pageView(events, scope({ filters: { ...DEFAULT_SCOPE.filters, from: "", ...filters } }), NOW);
+
+  it("finds none in a swarm, and excluding it then drops nothing", () => {
+    const v = on(SWARM, { excludeMainshock: true });
+    expect(v.mainshock.state).toBe("none");
+    expect(v.shown).toHaveLength(SWARM.length);
+  });
+
+  it("finds a reviewed event that stands clear, and excludes that one event", () => {
+    const events = [...SWARM, big("manual")];
+    expect(on(events).mainshock).toMatchObject({ state: "found", gap: 1.1, largest: { id: "SGC2026bigone" } });
+    const v = on(events, { excludeMainshock: true });
+    expect(v.shown).toHaveLength(SWARM.length);
+    expect(v.shown.some((e) => e.id === "SGC2026bigone")).toBe(false);
+  });
+
+  it("excludes nothing while the event that would stand clear awaits review", () => {
+    const v = on([...SWARM, big("automatic")], { excludeMainshock: true });
+    expect(v.mainshock.state).toBe("awaiting-review");
+    expect(v.shown).toHaveLength(SWARM.length + 1);
+  });
+
+  it("detects over the whole catalogue, whatever the filters leave", () => {
+    const events = [...SWARM, big("manual")];
+    // Narrowed to the swarm's own M4.x events, the M4.5 would "stand clear" of the rest of the view.
+    const narrow = on(events, { minMag: 4.3, to: "2026-09-24" });
+    expect(narrow.shown.map((e) => e.id)).toEqual(["SGC2026stzmyx"]);
+    expect(narrow.mainshock.largest?.id).toBe("SGC2026bigone");
+    expect(on(events, { minMag: 4.2, to: "2026-09-24", excludeMainshock: true }).shown).toHaveLength(2);
+  });
+
+  it("finds Chocó's M7.4 in the synthetic Chocó catalogue by the rule alone", () => {
+    expect(pageView(EVENTS, scope(), NOW).mainshock).toMatchObject({ state: "found", largest: { id: MAINSHOCK_ID } });
+  });
+
+  it("names 'without the mainshock' only while there is one to leave out", () => {
+    const f = { ...DEFAULT_SCOPE.filters, from: "", excludeMainshock: true };
+    const keys = (events: StoredEvent[]) =>
+      scopeChips(scope({ filters: f }), dicts.es, "es", "tolima", mainshockId(on(events).mainshock)).map((c) => c.key);
+    expect(keys([...SWARM, big("manual")])).toContain("excludeMainshock");
+    expect(keys(SWARM)).not.toContain("excludeMainshock");
+    expect(keys([...SWARM, big("automatic")])).not.toContain("excludeMainshock");
   });
 });

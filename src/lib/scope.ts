@@ -33,7 +33,8 @@ import {
 import type { Dict, Lang } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
 import { clusterOf, computeClusterStats, type ClusterStats } from "../../core/clusters";
-import { computeStats, dominantMagType, type CatalogStats } from "../../core/gr";
+import { computeStats, dominantMagType, type CatalogStats } from "@bvalue/seismo";
+import { mainshockId, zoneMainshock, type ZoneMainshock } from "../../core/mainshock";
 import { DEFAULT_ZONE, type ZoneId } from "../../core/zones";
 
 /** Which magnitudes feed the b card and the two b charts: every type, or only the commonest one. */
@@ -84,14 +85,21 @@ export interface Measured {
   oneType: boolean;
 }
 
-export interface PageView extends Selection, Measured {}
+export interface PageView extends Selection, Measured {
+  /**
+   * The zone's mainshock, detected over the **whole** catalogue the page holds, never over what the
+   * filters leave. It is the same answer `/api/events?excludeMainshock=1` and the CLI reach.
+   */
+  mainshock: ZoneMainshock<StoredEvent>;
+}
 
 /**
  * The half that the depth group does not touch. Kept apart from `selectShown` for the same reason
  * Mc is kept out of both: choosing a group must leave the groups card comparing the very same
  * `base` it was already drawing two daily strips from.
  */
-export const selectBase = (events: readonly StoredEvent[], f: EventFilters): StoredEvent[] => applyFilters(events, f);
+export const selectBase = (events: readonly StoredEvent[], f: EventFilters, mainshock: string | null): StoredEvent[] =>
+  applyFilters(events, f, mainshock);
 
 export function selectShown(base: StoredEvent[], cluster: ClusterChoice): Selection {
   const shown = cluster === "all" ? base : base.filter((e) => clusterOf(e) === cluster);
@@ -99,8 +107,8 @@ export function selectShown(base: StoredEvent[], cluster: ClusterChoice): Select
   return { base, shown, magType, ofType: magType === null ? shown : shown.filter((e) => e.magType === magType) };
 }
 
-export const selectEvents = (events: readonly StoredEvent[], s: EventScope): Selection =>
-  selectShown(selectBase(events, s), s.cluster);
+export const selectEvents = (events: readonly StoredEvent[], s: EventScope, mainshock: string | null): Selection =>
+  selectShown(selectBase(events, s, mainshock), s.cluster);
 
 export function measure(sel: Selection, s: FitScope, now: number): Measured {
   // Fitted over `base`, so the Mc is the whole filtered catalogue's whichever group is chosen.
@@ -118,13 +126,14 @@ export function measure(sel: Selection, s: FitScope, now: number): Measured {
 
 /** The whole page, derived. Pure, so a test runs exactly what `useScope` runs. */
 export function pageView(events: readonly StoredEvent[], scope: Scope, now: number): PageView {
-  const sel = selectEvents(events, eventScope(scope));
-  return { ...sel, ...measure(sel, fitScope(scope), now) };
+  const mainshock = zoneMainshock(events);
+  const sel = selectEvents(events, eventScope(scope), mainshockId(mainshock));
+  return { ...sel, ...measure(sel, fitScope(scope), now), mainshock };
 }
 
 /** Everything the page is narrowed by, named for the reader. Both halves of the scope bar show these. */
-export const scopeChips = (scope: Scope, t: Dict, lang: Lang, zone: ZoneId = DEFAULT_ZONE): FilterChip[] =>
-  activeFilterChips(scope.filters, scope.cluster, t, lang, defaultFilters(zone));
+export const scopeChips = (scope: Scope, t: Dict, lang: Lang, zone: ZoneId, mainshock: string | null): FilterChip[] =>
+  activeFilterChips(scope.filters, scope.cluster, t, lang, defaultFilters(zone), mainshock);
 
 /** The groups card's control: which group the page is narrowed to, and the one way to change it. */
 export interface ClusterSelection {
@@ -180,9 +189,12 @@ export function useScope(events: readonly StoredEvent[] | undefined, zone: ZoneI
   // Three layers, and each one's dependencies are exactly the argument it is given, so a setting
   // can only rebuild what actually reads it: Mc rebuilds no array at all, and the depth group
   // leaves `base` — the two daily strips in the groups card — alone.
+  // Over the whole catalogue, and only when it changes: a filter never moves the mainshock.
+  const mainshock = useMemo(() => zoneMainshock(events ?? NO_EVENTS), [events]);
+  const mainshockEventId = mainshockId(mainshock);
   const base = useMemo(
-    () => selectBase(events ?? NO_EVENTS, { from, to, minMag, manualOnly, excludeMainshock }),
-    [events, from, to, minMag, manualOnly, excludeMainshock],
+    () => selectBase(events ?? NO_EVENTS, { from, to, minMag, manualOnly, excludeMainshock }, mainshockEventId),
+    [events, from, to, minMag, manualOnly, excludeMainshock, mainshockEventId],
   );
   const sel = useMemo(() => selectShown(base, cluster), [base, cluster]);
   // "The last 7 days" in the groups card is measured from the clock, not from the data: without a
@@ -192,7 +204,7 @@ export function useScope(events: readonly StoredEvent[] | undefined, zone: ZoneI
     () => measure(sel, { mc, cluster, magScope }, hour + 3_600_000),
     [sel, mc, cluster, magScope, hour],
   );
-  const view = useMemo(() => ({ ...sel, ...measured }), [sel, measured]);
+  const view = useMemo(() => ({ ...sel, ...measured, mainshock }), [sel, measured, mainshock]);
 
   const deferred = {
     base: useDeferredValue(view.base),

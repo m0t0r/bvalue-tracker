@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CLUSTER_DEPTH_KM, clusterOf, computeClusterStats } from "../core/clusters.ts";
-import { bValue, computeStats, dominantMagType } from "../core/gr.ts";
+import { bValue, computeStats, dominantMagType } from "@bvalue/seismo";
 import { MAINSHOCK_ID, parseCatalogHtml } from "../core/seiscomp.ts";
 
 const fixture = parseCatalogHtml(
