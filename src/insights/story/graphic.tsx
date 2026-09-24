@@ -19,7 +19,7 @@ import { Layer, SceneTitle, radius, star } from "./marks";
 import type { Ev, StoryModel } from "./model";
 import { Rich } from "./rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
-import { KM_PER_DEG, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
+import { KM_PER_DEG, RATE, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
 
 export type SceneId = "where" | "energy" | "section" | "clocks" | "tolima" | "tolimaSection" | "felt" | "unknown";
 export interface SceneState {
@@ -141,6 +141,7 @@ export function Graphic({
     section: fill(c.sectionAria, {
       shallow: fmtKm(depthMedian("shallow") ?? 0),
       deep: fmtKm(depthMedian("deep") ?? 0),
+      rate: RATE,
     }),
     energy:
       sub === "ladder"
@@ -154,6 +155,7 @@ export function Graphic({
     tolimaSection: fill(c.tolimaSectionAria, {
       depth: fmtKm(depthMedian("tolima") ?? 0),
       top: fmtKm(model.plate.tolima?.plate.topKm ?? 0),
+      rate: RATE,
     }),
     felt: sub === "waves" ? c.wavesAria : c.calendarAria,
   };

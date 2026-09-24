@@ -41,6 +41,8 @@ export const SLAB2: Grid = raw.plate;
  * Am. Earth Sci. 89, Table 2). docs/science.md has the other published rates and why this one.
  */
 export const CONVERGENCE_SOURCE = "https://doi.org/10.1016/j.jsames.2018.11.002";
+/** That rate as the page states it: 53 mm/yr, "about 5 cm a year". Every sentence and label reads it from here. */
+export const CONVERGENCE_CM_PER_YEAR = 5;
 export const CUTS: Record<"choco" | "tolima", Cut> = raw.cuts;
 
 /**

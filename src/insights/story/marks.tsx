@@ -53,6 +53,15 @@ export function Num({ children }: { children: ReactNode }) {
   return <span className="font-semibold whitespace-nowrap text-foreground tabular-nums">{children}</span>;
 }
 
+/** A link out of the page, in running text: to a source the text cites. */
+export function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a className="underline underline-offset-4" href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+}
+
 /** A small print aside under a step. */
 export function Note({ children }: { children: ReactNode }) {
   return <p className="border-l-2 pl-4 text-sm leading-relaxed text-muted-foreground">{children}</p>;

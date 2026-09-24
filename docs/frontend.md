@@ -200,8 +200,13 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
     deep group's label). It shows the coast, the cut's line and Pereira in `--place`.
   - **The plate's motion arrow** is drawn by `PlateAndGround` on both cuts, 0.5–0.9° east of the
     trench in the lower part of the plate's body: under the plate's label and clear of Chocó's
-    groups (at 0.95–1.3° it ran into the deep group's label). Its "~5 cm al año" is hidden on a
-    phone, where the words would cover the arrow; the prose gives the rate and its source.
+    groups (at 0.95–1.3° it ran into the deep group's label). **Its meaning is the plate label's own
+    line**, "se mete bajo Sudamérica, ~5 cm al año" (on a phone, "se mete ~5 cm al año", last, so the
+    longer model line does not reach further east). An unlabelled arrow read as a path or as nothing
+    in the owner's review (2026-09-24). A hover tooltip was rejected: a phone has no hover, and the
+    arrow's one fact would be hidden. A label of its own under the arrow collided with the deep
+    group's label on a desktop and on a phone.
+  - The locator names its line ("corte") and Pereira, at 9.5 px (8 on a phone).
   - On a phone Chaparral's "Pereira: ~N km al norte" note sits a line higher than on a desktop:
     at the surface it ran into "Buenaventura". The scene title is kept to "Corte por Chaparral ·
     misma escala": the longer "…que el del Chocó" was clipped at 320 px. The prose beside it says
