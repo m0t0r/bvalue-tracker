@@ -9,6 +9,7 @@ import { useId, useMemo, type CSSProperties } from "react";
 import type { Lang } from "@/lib/i18n";
 import { fmtDay } from "@/lib/format";
 import { PEREIRA, SOURCES, type Insights, type Source } from "../claims";
+import { CUTS, plateAlong, type Cut, type Plate } from "../plate";
 import { REGION, TOWNS } from "../region";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
@@ -27,6 +28,13 @@ export interface SceneState {
 }
 
 const KM_PER_DEG = 111.2;
+/**
+ * The cut's depth at least, deep enough for the plate under Pereira (its top ~125 km, its bottom
+ * ~190 km there). Chaparral's cut, when it is drawn, uses the same so the two compare by eye.
+ */
+const SECTION_DEPTH_KM = 200;
+/** Where the plate's label starts, in degrees east of the trench (~13 km). */
+const LABEL_EAST_OF_TRENCH = 0.12;
 
 /** Plain text for the drawing's text alternative: the template with its figures filled in. */
 const fill = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? "");
@@ -83,14 +91,19 @@ export function Graphic({
   }, [model.all, width, height, small]);
 
   // The cross-section runs west–east through Chocó, true to scale: one pixel is the same distance
-  // across and down. Its east edge reaches past Pereira so the reader sees where they stand.
+  // across and down. It starts at the trench, where the plate goes down and where Slab2's model of it
+  // begins, and its east edge reaches past Pereira so the reader sees where they stand.
   const sec = useMemo(() => {
+    const cut = CUTS.choco;
     const lons = model.choco.map((e) => e.lon).sort((a, b) => a - b);
     const depths = model.choco.map((e) => e.depthKm).sort((a, b) => a - b);
-    const lon0 = (lons.length ? quantileSorted(lons, 0.01)! : PEREIRA.lon - 1) - 0.12;
+    const lon0 = cut.trenchLon;
     const lon1 = Math.max(lons.length ? quantileSorted(lons, 0.99)! : PEREIRA.lon, PEREIRA.lon) + 0.15;
-    const maxDepth = Math.max(120, Math.ceil(((depths.length ? quantileSorted(depths, 0.995)! : 100) + 10) / 20) * 20);
-    const kmPerDegLon = KM_PER_DEG * Math.cos((PEREIRA.lat * Math.PI) / 180);
+    const maxDepth = Math.max(
+      SECTION_DEPTH_KM,
+      Math.ceil(((depths.length ? quantileSorted(depths, 0.995)! : 100) + 10) / 20) * 20,
+    );
+    const kmPerDegLon = KM_PER_DEG * Math.cos((cut.lat * Math.PI) / 180);
     const padL = small ? 46 : 60;
     const padR = small ? 8 : 24;
     const top = small ? 64 : 104;
@@ -99,6 +112,7 @@ export function Graphic({
     const px = Math.max(0.01, Math.min((width - padL - padR) / spanKm, (height - top - bottom) / maxDepth));
     const x0 = padL + (width - padL - padR - spanKm * px) / 2;
     return {
+      cut,
       lon0,
       lon1,
       x: (lon: number) => x0 + (lon - lon0) * kmPerDegLon * px,
@@ -107,6 +121,7 @@ export function Graphic({
       x0,
       x1: x0 + spanKm * px,
       maxDepth,
+      plate: plateAlong(cut, lon1),
     };
   }, [model.choco, width, height, small]);
 
@@ -482,6 +497,8 @@ function UnknownOverlay({ model, proj, small }: { model: StoryModel; proj: GeoPr
 }
 
 interface Section {
+  cut: Cut;
+  plate: ({ lon: number } & Plate)[];
   lon0: number;
   lon1: number;
   x: (lon: number) => number;
@@ -510,7 +527,7 @@ function SectionBase({
   const c = storyCopy[lang].graphic;
   const fs = small ? 10 : 12;
   const ticks: number[] = [];
-  for (let d = 0; d <= sec.maxDepth; d += 20) ticks.push(d);
+  for (let d = 0; d <= sec.maxDepth; d += small ? 40 : 20) ticks.push(d);
   const P = sec.x(PEREIRA.lon);
   const main = model.main;
   const groups = (["shallow", "deep"] as const).flatMap((s) => {
@@ -540,7 +557,7 @@ function SectionBase({
           </text>
         </g>
       ))}
-      <line x1={sec.x0} x2={sec.x1} y1={sec.y(0)} y2={sec.y(0)} className="stroke-foreground" strokeWidth={1.5} />
+      <PlateAndGround sec={sec} small={small} lang={lang} />
       {/* West and east read along the bottom edge, clear of Pereira's label on the surface. */}
       <text x={sec.x0} y={sec.y(sec.maxDepth) + (small ? 14 : 20)} fontSize={fs} className="fill-muted-foreground">
         {c.west}
@@ -589,7 +606,9 @@ function SectionBase({
             paintOrder="stroke"
             strokeWidth={4}
           >
-            {`M${main.mag.toFixed(1)} · ${fmtKm(main.depthKm)}`}
+            {/* On a phone the cut is ~1 px per km and the star sits near its east edge: the depth,
+                which the scale and the prose both give, would run off it. */}
+            {small ? `M${main.mag.toFixed(1)}` : `M${main.mag.toFixed(1)} · ${fmtKm(main.depthKm)}`}
           </text>
         </g>
       )}
@@ -633,8 +652,10 @@ function SectionBase({
             </marker>
           </defs>
           {/* Above and right of the arrow's middle, in the empty band between the two groups, with
-              the page's halo so a stray dot under it cannot break a letter. */}
+              the page's halo so a stray dot under it cannot break a letter. On a phone the cut is too
+              narrow for it, and the sentence beside the drawing says it. */}
           <text
+            display={small ? "none" : undefined}
             x={shallow.x + (deep.x - shallow.x) * 0.5 + 10}
             y={shallow.y + (deep.y - shallow.y) * 0.5 + (small ? 18 : 26) - 8}
             fontSize={fs - 0.5}
@@ -672,6 +693,94 @@ function SectionBase({
             <Rich text={c.errorLegend} parts={{ h: fmtKm(err.h, 1), depth: fmtKm(err.depth, 1) }} />
           </text>
         </g>
+      )}
+    </g>
+  );
+}
+
+/**
+ * The Nazca plate under the cut, as USGS's Slab2 models it, and the ground on top, true to scale.
+ * The plate is its modelled body (top to top + thickness) with a lighter band for the model's stated
+ * uncertainty about its top; both are clipped to the drawing. The ground is GEBCO's land and sea
+ * floor, a thin edge at this scale, with the sea between the sea floor and sea level.
+ */
+function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; lang: Lang }) {
+  const c = storyCopy[lang].graphic;
+  const clip = `sec-${useId().replace(/[^\w-]/g, "")}`;
+  const fs = small ? 10 : 12;
+  const pts = sec.plate;
+  const xy = (lon: number, depth: number) => `${sec.x(lon).toFixed(1)},${sec.y(depth).toFixed(1)}`;
+  const band = (upper: (p: Plate) => number, lower: (p: Plate) => number) =>
+    pts.length < 2
+      ? undefined
+      : `M${pts.map((p) => xy(p.lon, upper(p))).join("L")}L${[...pts]
+          .reverse()
+          .map((p) => xy(p.lon, lower(p)))
+          .join("L")}Z`;
+  const ground = sec.cut.elevationM
+    .map((m, i) => ({ lon: sec.cut.lon0 + i * sec.cut.step, km: -m / 1000 }))
+    .filter((g) => g.lon >= sec.lon0 - 1e-9 && g.lon <= sec.lon1 + 1e-9);
+  const surface = `M${ground.map((g) => xy(g.lon, g.km)).join("L")}`;
+  const sea = `M${ground.map((g) => xy(g.lon, Math.max(0, g.km))).join("L")}L${xy(ground.at(-1)!.lon, 0)}L${xy(ground[0]!.lon, 0)}Z`;
+  // The label sits in the plate's body just past the trench, west of the events, where it is shallow
+  // enough to leave room for three lines above the drawing's bottom.
+  const at = pts.find((p) => p.lon >= sec.cut.trenchLon + LABEL_EAST_OF_TRENCH);
+  const trench = sec.x(sec.cut.trenchLon);
+
+  return (
+    <g>
+      <defs>
+        <clipPath id={clip}>
+          <rect x={sec.x0} y={sec.y(0)} width={sec.x1 - sec.x0} height={sec.y(sec.maxDepth) - sec.y(0)} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clip})`}>
+        <path
+          d={band(
+            (p) => p.topKm - p.uncertaintyKm,
+            (p) => p.topKm + p.uncertaintyKm,
+          )}
+          className="fill-muted-foreground/10"
+        />
+        <path
+          d={band(
+            (p) => p.topKm,
+            (p) => p.topKm + p.thicknessKm,
+          )}
+          className="fill-muted-foreground/20"
+        />
+        <path
+          d={pts.length < 2 ? undefined : `M${pts.map((p) => xy(p.lon, p.topKm)).join("L")}`}
+          fill="none"
+          className="stroke-muted-foreground"
+          strokeWidth={1.25}
+        />
+      </g>
+      <path d={sea} className="fill-muted" />
+      <path d={surface} fill="none" className="stroke-foreground" strokeWidth={1.5} strokeLinejoin="round" />
+      <text x={trench} y={sec.y(0) - 6} fontSize={fs - 1} className="fill-muted-foreground">
+        {c.trench}
+      </text>
+      {at && (
+        <text
+          x={sec.x(at.lon)}
+          y={sec.y(at.topKm + at.thicknessKm * 0.35)}
+          fontSize={fs}
+          className="fill-foreground stroke-background"
+          paintOrder="stroke"
+          strokeWidth={4}
+        >
+          <tspan fontWeight={600}>{c.plate}</tspan>
+          <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-muted-foreground">
+            {c.plateModel}
+          </tspan>
+          {/* On a phone the third line reaches the shallow group; the prose explains the band. */}
+          {!small && (
+            <tspan x={sec.x(at.lon)} dy="1.25em" fontSize={fs - 1} className="fill-muted-foreground">
+              {c.plateBand}
+            </tspan>
+          )}
+        </text>
       )}
     </g>
   );

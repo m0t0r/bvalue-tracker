@@ -8,6 +8,7 @@
  * own word (docs/science.md). Decimal point in every number.
  */
 import type { Decay, Drift, Pace } from "../claims";
+import type { PlateSide } from "../plate";
 import type { MainshockState } from "@bvalue/seismo";
 
 const es = {
@@ -87,8 +88,8 @@ const es = {
     /** Keyed on the shallow group's centre lying west of the deep group's. */
     p4: (west: boolean): string =>
       west
-        ? "El {shallow} está más al oeste y a mucha menos profundidad, unos {depth}. Este catálogo no permite saber en qué estructura exacta está cada grupo."
-        : "El {shallow} está a mucha menos profundidad, unos {depth}. Este catálogo no permite saber en qué estructura exacta está cada grupo.",
+        ? "El {shallow} está más al oeste y a mucha menos profundidad, unos {depth}."
+        : "El {shallow} está a mucha menos profundidad, unos {depth}.",
     eastDeeper: "En el dibujo, la actividad es más profunda hacia el este.",
     caveatTitle: "Lo que este dibujo no puede decir",
     caveat1:
@@ -96,6 +97,28 @@ const es = {
     /** Only while the three commonest depths hold at least a fifth of the shallow group's events. */
     caveat2:
       "Además, muchas profundidades se repiten exactamente ({depths}), porque el cálculo las fija en ciertos valores. Por eso aquí no se distingue una falla, solo nubes de puntos.",
+  },
+
+  /** Where each source sits against the plate, from `plateSide` (docs/science.md). */
+  plate: {
+    title: "¿Dentro de la placa o encima?",
+    p1: "La franja gris es la placa de Nazca según Slab2, el modelo del USGS (Servicio Geológico de EE. UU.) de las placas que se hunden bajo los continentes: dónde está su borde superior y cuánto mide de grueso. La franja clara es el margen de error que el propio modelo declara para ese borde, de unos {unc} bajo estos eventos.",
+    p2: "Para decir que un grupo está encima de la placa o dentro de ella, la diferencia tiene que superar ese margen más el error de las propias profundidades.",
+    /** Keyed on `plateSide`'s answer for the group or the event named by {who}. */
+    side: (side: PlateSide): string =>
+      side === "above"
+        ? "El {who} está encima de la placa, en la roca de Sudamérica: según el modelo, el borde de la placa pasa unos {gap} más abajo, más que el margen ({margin})."
+        : side === "inside"
+          ? "El {who} está dentro de la placa según el modelo: más de {margin} por debajo de su borde superior."
+          : side === "below"
+            ? "El {who} está por debajo de la placa según el modelo, más allá del margen ({margin})."
+            : "El {who} está justo a la profundidad del borde de la placa, dentro del margen ({margin}): el modelo por sí solo no permite saber si está dentro de la placa o encima.",
+    /** Only while the page's mainshock is the event USGS assessed (`USGS_ASSESSED`). */
+    usgs: "El {usgs}, que estudió el {main} con sus propios datos, considera que por su profundidad probablemente ocurrió dentro de la placa de Nazca, y que los sismos a esa profundidad suelen deberse a las fuerzas que doblan la placa al hundirse.",
+    /** When the mainshock gets the same answer as the deep group around it. */
+    same: "Lo mismo ocurre con el {who}.",
+    usgsLink: "USGS",
+    note: "El dibujo es un corte a {lat} de latitud, entre los dos grupos. Cada grupo se compara con la placa en su propio lugar, no con el dibujo.",
   },
 
   clocks: {
@@ -228,8 +251,12 @@ const es = {
     sectionTitle: "Corte de oeste a este · sin exagerar la escala",
     sectionAria:
       "Corte de la tierra de oeste a este con la profundidad de cada evento del Chocó: el grupo superficial a unos {shallow}, el profundo a unos {deep}.",
-    west: "← oeste · costa del Pacífico",
+    west: "← oeste · océano Pacífico",
     east: "este →",
+    trench: "fosa",
+    plate: "placa de Nazca",
+    plateModel: "modelo Slab2 del USGS",
+    plateBand: "franja clara: margen de error",
     eastDeeper: "más profundo hacia el este",
     groupAt: { shallow: "superficial · ~{km}", deep: "profundo · ~{km}" },
     errorLegend: "＋ error típico: {h} en horizontal, {depth} en profundidad",
@@ -330,14 +357,32 @@ const en: StoryCopy = {
     p3: "That is why it was only {epi} from Pereira on the map, but {hypo} in a straight line.",
     p4: (west) =>
       west
-        ? "The {shallow} lies further west and much shallower, at about {depth}. This catalogue cannot tell which structure exactly each group sits in."
-        : "The {shallow} lies much shallower, at about {depth}. This catalogue cannot tell which structure exactly each group sits in.",
+        ? "The {shallow} lies further west and much shallower, at about {depth}."
+        : "The {shallow} lies much shallower, at about {depth}.",
     eastDeeper: "In the drawing, the activity is deeper towards the east.",
     caveatTitle: "What this drawing cannot say",
     caveat1:
       "Every location has a margin of error. For half of them it is about {h} horizontally (latitude and longitude together) and {depth} in depth: the crosses show it.",
     caveat2:
       "Also, many depths land on exactly the same values ({depths}): the calculation sets them in steps. So no fault can be seen here, only clouds of dots.",
+  },
+
+  plate: {
+    title: "Inside the plate, or above it?",
+    p1: "The grey band is the Nazca plate according to Slab2, the USGS (United States Geological Survey) model of the plates that sink beneath the continents: where its top is and how thick it is. The light band is the margin of error the model itself states for that top, about {unc} under these events.",
+    p2: "To say a group is above the plate or inside it, the difference has to exceed that margin plus the error in the depths themselves.",
+    side: (side) =>
+      side === "above"
+        ? "The {who} is above the plate, in South America's rock: according to the model, the plate's top runs about {gap} further down, more than the margin ({margin})."
+        : side === "inside"
+          ? "The {who} is inside the plate according to the model: more than {margin} below its top."
+          : side === "below"
+            ? "The {who} is below the plate according to the model, beyond the margin ({margin})."
+            : "The {who} sits right at the depth of the plate's top, within the margin ({margin}): the model alone cannot tell whether it is inside the plate or above it.",
+    usgs: "The {usgs}, which studied the {main} with its own data, considers that given its depth it likely occurred within the subducting Nazca plate, and that earthquakes at that depth are usually due to the forces that bend the plate as it sinks.",
+    same: "The same holds for the {who}.",
+    usgsLink: "USGS",
+    note: "The drawing is a cut at {lat} latitude, between the two groups. Each group is compared with the plate at its own place, not with the drawing.",
   },
 
   clocks: {
@@ -462,8 +507,12 @@ const en: StoryCopy = {
     sectionTitle: "West–east cut · true to scale",
     sectionAria:
       "Cut through the earth from west to east with the depth of each Chocó event: the shallow group about {shallow} down, the deep one about {deep}.",
-    west: "← west · Pacific coast",
+    west: "← west · Pacific Ocean",
     east: "east →",
+    trench: "trench",
+    plate: "Nazca plate",
+    plateModel: "USGS Slab2 model",
+    plateBand: "light band: margin of error",
     eastDeeper: "deeper towards the east",
     groupAt: { shallow: "shallow · ~{km}", deep: "deep · ~{km}" },
     errorLegend: "＋ typical error: {h} horizontally, {depth} in depth",

@@ -201,9 +201,40 @@ the reader's own questions). Everything above still applies to it; this section 
   distance matters", **never as a prediction of shaking**. Converting magnitude and distance into
   felt intensity needs a published equation for intermediate-depth events, and `docs/ideas.md`
   still stands: do not write one from memory.
-- **No drawn plate.** The subducting Nazca plate is explained in words (it is well established) and
-  the cross-section shows the events alone: they get deeper toward the east by themselves. A
-  schematic band was tried in the prototype, and its geometry was invented.
+- **The plate is drawn only from Slab2, labelled as a model, with its uncertainty** (from
+  2026-09-24; it replaced "no drawn plate": a schematic band was tried in the prototype, and its
+  geometry was invented). The source is USGS's Slab2 (Hayes 2018, doi:10.5066/F7PV6JNV, public
+  domain), South America model 02.23.18. The drawing shows three things: the plate's top, its
+  body (top + Slab2's thickness), and a lighter band for Slab2's stated depth uncertainty about the
+  top. The ground on top is GEBCO 2020 (doi:10.5285/a29c5465-b138-234d-e053-6c86abc040b9). Both are
+  committed data (`src/insights/section.json`, from `scripts/insights-section.ts`), and nothing about
+  the plate is drawn by hand. Slab2's metadata does not say what its uncertainty is (1σ or
+  otherwise), so the page calls it only "the margin of error the model itself states".
+  - **Chocó's cut is at 4.65° N**, between the groups' median latitudes (4.48 and 4.81). Events from
+    4.3–4.99° N are projected onto it, so each group is drawn up to ~6 km off its own plate depth,
+    well inside the ~22 km band. The page says so under the drawing.
+- **Above, inside or too close to call: a rule at each source's own place, never read off the
+  drawing** (`plateSide` in `src/insights/plate.ts`, applied in `story/model.ts`). The inputs are
+  the group's median epicentre and depth (or the mainshock's own), and Slab2 is interpolated there
+  from a 0.1° grid. The **margin is Slab2's uncertainty plus the source's median depth error**,
+  added, not combined in quadrature, so the rule leans towards "close". "Above" needs the depth
+  more than one margin shallower than the plate's top; "inside" needs it more than one margin
+  below the top and above the bottom; anything within a margin of either edge is "close". Slab2
+  gives no separate uncertainty for the thickness, so the bottom takes the top's margin.
+  - Measured on the 2026-09-24 fixture, recomputed in Python from Slab2's raw XYZ files:
+    **shallow group above** (42.2 km against a plate top of 72.5 km; margin 22.1 + 5.8 = 27.9 km, so
+    it clears the margin by only 2.4 km: if its median sinks ~3 km the page falls back to "close");
+    **deep group close** (88.7 km, top 82.1 km, margin 28.3 km); **M7.4 close** (103.4 km at
+    4.99° N, 76.29° W, top 82.6 km, margin 25.7 km); **Chaparral above** by 141 km (18.9 km, top
+    160.2 km).
+- **Where the plate cannot decide, USGS's own assessment is quoted, attributed and linked, and
+  only for the event it is about.** USGS's tectonic summary for us6000tjl2 says the M7.4 "likely
+  occurred within the subducting Nazca plate" "due to its depth", and that intermediate-depth
+  earthquakes are "usually attributed to bending forces within the subducted slab". It also calls the
+  rupture "primarily strike-slip". The story relays the first two as USGS's view (owner decision,
+  2026-09-24), and only while the detected mainshock is SGC2026pqqmro (`USGS_ASSESSED` in
+  `story/model.ts`), because the quote is about that event and no other. The rule's own answer
+  stays on the page beside it: Slab2 alone cannot place the M7.4 inside the plate.
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.

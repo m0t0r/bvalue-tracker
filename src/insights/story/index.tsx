@@ -27,7 +27,8 @@ import { FILL } from "../tones";
 import { Graphic, type SceneId } from "./graphic";
 import { useActiveStep, useSize, useWide } from "./hooks";
 import { MainName, Note, Num, SourceName } from "./marks";
-import { storyModel, type StoryModel } from "./model";
+import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
+import { CUTS } from "../plate";
 import { Rich } from "./rich";
 
 interface Step {
@@ -426,6 +427,62 @@ function useSteps(
               />
             </p>
           )}
+        </>
+      ),
+    });
+  }
+
+  // Where each source sits against the Slab2 plate, each by the same rule at its own place.
+  const plate = model.plate;
+  if (plate.shallow && plate.deep) {
+    const side = (who: ReactNode, p: NonNullable<typeof plate.shallow>) => (
+      <Rich text={c.plate.side(p.side)} parts={{ who, gap: km(p.plate.topKm - p.depthKm), margin: km(p.marginKm) }} />
+    );
+    steps.push({
+      id: "section-plate",
+      scene: "section",
+      sub: "plate",
+      title: c.plate.title,
+      body: (
+        <>
+          <p>
+            <Rich text={c.plate.p1} parts={{ unc: km(plate.deep.plate.uncertaintyKm) }} />
+          </p>
+          <p>{c.plate.p2}</p>
+          <p>{side(names.shallow, plate.shallow)}</p>
+          <p>
+            {side(names.deep, plate.deep)}
+            {plate.main && " "}
+            {plate.main &&
+              (plate.main.side === plate.deep.side ? (
+                <Rich text={c.plate.same} parts={{ who: <MainName>{mainWord}</MainName> }} />
+              ) : (
+                side(<MainName>{mainWord}</MainName>, plate.main)
+              ))}
+          </p>
+          {f.usgsAssessed && (
+            <p>
+              <Rich
+                text={c.plate.usgs}
+                parts={{
+                  main: mainWord,
+                  usgs: (
+                    <a
+                      className="underline underline-offset-4"
+                      href={USGS_ASSESSED.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {c.plate.usgsLink}
+                    </a>
+                  ),
+                }}
+              />
+            </p>
+          )}
+          <Note>
+            <Rich text={c.plate.note} parts={{ lat: `${CUTS.choco.lat.toFixed(2)}\u00b0\u00a0N` }} />
+          </Note>
         </>
       ),
     });

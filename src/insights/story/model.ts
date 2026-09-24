@@ -7,9 +7,20 @@
  */
 import { energyRatio, epicentralKm, hypocentralKm, seismicMoment } from "@bvalue/seismo";
 import { PEREIRA, SOURCES, type Insights, type QuakeLike, type Source } from "../claims";
+import { plateAt, plateSide } from "../plate";
 import { commonDepths, median, medianHorizontalErrorKm, timeWindows } from "../shared";
 
 const DAY = 86_400_000;
+
+/**
+ * The one event whose placement USGS has assessed in its own words: the M7.4 of 2026-08-10, SGC's
+ * SGC2026pqqmro and USGS's us6000tjl2. The story quotes that assessment only while this event is the
+ * mainshock the page detects, since the quote is about this event and no other.
+ */
+export const USGS_ASSESSED = {
+  sgcId: "SGC2026pqqmro",
+  url: "https://earthquake.usgs.gov/earthquakes/eventpage/us6000tjl2/executive",
+} as const;
 
 /** An event with its time parsed once and the source it belongs to. */
 export interface Ev extends QuakeLike {
@@ -102,6 +113,16 @@ export function storyModel(data: Insights) {
   const deepDepth = data.distances.deep?.depthKm;
   const tolimaDays = tolimaStart === null ? 0 : (data.now - tolimaStart) / DAY;
 
+  // Where a source sits against the plate, at its own place: the group's median epicentre and depth,
+  // with its median depth error, or the mainshock's own. Never read off the drawing, whose cut is at
+  // one latitude.
+  const against = (at: { lat: number; lon: number } | null, depthKm: number | undefined, errKm: number | null) => {
+    const plate = at && depthKm !== undefined ? plateAt(at.lat, at.lon) : null;
+    return plate && depthKm !== undefined ? { ...plateSide(depthKm, errKm ?? 0, plate), plate, depthKm } : null;
+  };
+  const medianDepthError = (es: readonly Ev[]) =>
+    median(es.flatMap((e) => (depthError(e) === null ? [] : [depthError(e)!]))) ?? null;
+
   return {
     all,
     bySrc,
@@ -123,6 +144,13 @@ export function storyModel(data: Insights) {
     /** Every event at M ≥ 4 in either zone since Chocó's catalogue begins, the largest excluded. */
     strongSince: all.filter((e) => e.mag >= 4 && e.id !== main?.id),
     centres: cen,
+    /** Each source, and the mainshock once found, against the Slab2 plate at its own place. */
+    plate: {
+      shallow: against(cen.shallow, shallowDepth, medianDepthError(bySrc.shallow)),
+      deep: against(cen.deep, deepDepth, medianDepthError(bySrc.deep)),
+      tolima: against(cen.tolima, data.distances.tolima?.depthKm, medianDepthError(tolima)),
+      main: main && mainFound ? against(main, main.depthKm, depthError(main)) : null,
+    },
     chocoToTolimaKm: main && cen.tolima ? epicentralKm(main, cen.tolima) : null,
     /** What decides the wording of the story's data-dependent sentences. */
     facts: {
@@ -140,6 +168,8 @@ export function storyModel(data: Insights) {
           : false,
       depthsSnapped:
         bySrc.shallow.length > 0 && snapped.reduce((a, d) => a + d.count, 0) >= SNAPPED_SHARE * bySrc.shallow.length,
+      /** USGS's assessment of where the mainshock broke applies: it is the event USGS assessed. */
+      usgsAssessed: mainFound && main?.id === USGS_ASSESSED.sgcId,
       tolimaCrustal: tolima.length > 0 && (median(tolima, (e) => e.depthKm) ?? Infinity) < CRUSTAL_KM,
       /** The last of the weekly counts covers a week still in progress. */
       weekInProgress: (data.now - start) % (7 * DAY) !== 0,
