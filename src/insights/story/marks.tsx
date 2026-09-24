@@ -36,11 +36,13 @@ export function SourceName({ source, children }: { source: Source; children: Rea
   );
 }
 
-/** The mainshock named in the prose, with its star colour. */
+/** The mainshock named in the prose, with the star the drawings mark it with. */
 export function MainName({ children }: { children: ReactNode }) {
   return (
     <span className="font-semibold whitespace-nowrap text-foreground">
-      <span aria-hidden className="mr-1.5 inline-block size-2.5 rotate-45 bg-chart-2 align-middle" />
+      <svg aria-hidden viewBox="-6 -6 12 12" className="mr-1.5 inline-block size-3 fill-chart-2 align-middle">
+        <path d={star(6)} />
+      </svg>
       {children}
     </span>
   );

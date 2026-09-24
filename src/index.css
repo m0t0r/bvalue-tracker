@@ -8,6 +8,7 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
+  --color-place: var(--place);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -49,6 +50,16 @@
   --radius-px: 1px;
   /* Cast by the pinned y axis of "Magnitud en el tiempo" once the plot has scrolled under it. */
   --shadow-pin: 6px 0 8px -7px var(--pin-shadow);
+  /* Pereira's pulse on the insights story: Tailwind's ping, three times and then still. Looped, it
+     pulsed beside the text for as long as a chapter was read. */
+  --animate-beacon: beacon 1s cubic-bezier(0, 0, 0.2, 1) 3;
+  @keyframes beacon {
+    75%,
+    100% {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
 }
 
 :root {
@@ -100,6 +111,14 @@
        the 0.10 that reads as one colour. The dark value is a different lightness and hue for the
        same reason; the violets nearer the light one's hue sat under 0.10 against the blue there. */
   --chart-5: oklch(0.3 0.16 310);
+  /* Pereira on the insights page: the reader's own place, marked red at the owner's request
+       (2026-09-24). Its own token, not `--destructive`, because it is not a failure; the two never
+       share a screen, since the load error replaces every drawing. Chosen by search against the
+       orange, the blue, the teal, the violet and --chart-3 under simulated protanopia, deuteranopia
+       and tritanopia (Machado 2009, OKLab ΔE): worst pair 0.109 (teal, protan). A darker red than
+       `--destructive`, because at that one's lightness it is 0.036 from the mainshock orange for a
+       deuteranope. 8.2:1 against the page. */
+  --place: oklch(0.45 0.18 29);
   --radius: 0.625rem;
 }
 
@@ -139,6 +158,9 @@
   --chart-4: oklch(0.85 0.085 195);
   /* See the light block. Worst pair 0.136 (blue, deutan); 3.9:1 against the page. */
   --chart-5: oklch(0.55 0.1 330);
+  /* See the light block. Darker than the orange here, where the orange is the lighter accent:
+       worst pair 0.119 (orange, tritan); 3.3:1 against a card, enough for a mark, not for text. */
+  --place: oklch(0.55 0.2 29);
 }
 
 @layer base {

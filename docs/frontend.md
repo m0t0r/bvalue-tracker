@@ -151,8 +151,26 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   so a choice made on one page holds on the other.
 - **Colours.** Chocó's groups keep the monitor's blue and teal and the mainshock its orange. The
   Chaparral swarm is `--chart-5`, a violet chosen by search against all four under simulated colour
-  blindness (the numbers are in `index.css`). **Pereira is `foreground`, never a colour**: it is the
-  reader's own marker, and red means failure.
+  blindness (the numbers are in `index.css`). **Pereira is red, `--place`** (owner's call,
+  2026-09-24): in `foreground` it read as black beside Chaparral's near-black violet. It is its own
+  token, not `--destructive`, because it marks a place and not a failure, and the two never share a
+  screen (the load error replaces every drawing). It is a darker red than `--destructive`, which at
+  its own lightness is 0.036 from the mainshock orange for a deuteranope; `--place` is ≥ 0.109 from
+  every chart colour under all three simulations. Its label stays in the text colour: dark mode's red
+  is 3.3:1 on a card, enough for a mark, not for text.
+  - **Text on a source's colour is chosen per tint, not left to `foreground`.** The story's calendar
+    tiles are a source colour at 40, 65 or 90 % (`TILE_TEXT` in `story/scenes.tsx`): black on
+    Chaparral's violet measured 1.72:1, white on the dark-mode teal 1.80:1. A label on a map names its
+    source with a dot of the colour and keeps its words in `foreground`, as the prose does
+    (`SourceName`): the blue is 4.42:1 as text in light mode and the violet 3.87:1 in dark.
+  - The mainshock is a star wherever it is drawn, in the prose too (`MainName`); a diamond is any
+    M ≥ 4 event, and on the questions tab those are `foreground`, not the mainshock's orange.
+- **Figures and their units never part at a line break.** `fmtKm`, `fmtPct` and thousands grouping
+  use a narrow no-break space (U+202F), and so does every "N km" written into the copy: a thin space
+  broke "~120 / km" at 320 px.
+- **SVG text is sized in screen pixels.** A drawing that scales with its column (the questions tab's
+  map, `viewBox` 400) multiplies its font sizes by viewBox units per pixel; in viewBox units alone
+  its town names were 7 px on a 320 px phone.
 - **Map outlines** are `src/insights/region.geo.json`, 26 kB of Natural Earth (public domain) cut to
   Colombia and its three neighbours by `scripts/insights-region.ts` and committed. Re-run the script
   only to change the countries.

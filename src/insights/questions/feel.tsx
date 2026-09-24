@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { P_WAVE_KMS, PEREIRA, S_WAVE_KMS, SOURCES, arrivalSeconds, type Insights, type Source } from "../claims";
 import { REGION, TOWNS } from "../region";
 import { questionsCopy, type Named } from "./copy";
-import { fmtInt } from "../shared";
+import { fmtInt, fmtKm } from "../shared";
 import { FILL } from "../tones";
 import { useReducedMotion } from "../use-reduced-motion";
 import { presets, ratioPhrase, relativeAmplitude, toPereira, type Preset } from "./derive";
@@ -104,7 +104,7 @@ export function FeelExplorer({
           <RangeField
             label={c.distance}
             value={epi}
-            display={`${epi} km`}
+            display={fmtKm(epi)}
             min={0}
             max={250}
             step={1}
@@ -113,7 +113,7 @@ export function FeelExplorer({
           <RangeField
             label={c.depth}
             value={depth}
-            display={`${depth} km`}
+            display={fmtKm(depth)}
             min={0}
             max={150}
             step={1}
@@ -122,10 +122,10 @@ export function FeelExplorer({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm">
             <div>
               <dt className="text-muted-foreground">{c.straight}</dt>
-              <dd className="text-lg font-semibold tabular-nums">{Math.round(km)} km</dd>
+              <dd className="text-lg font-semibold tabular-nums">{fmtKm(km)}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">{c.motion}</dt>
+              <dt className="text-muted-foreground">{c.motion(ref)}</dt>
               <dd className="text-lg font-semibold tabular-nums">{relText}</dd>
             </div>
             <div className="col-span-2">
@@ -157,6 +157,7 @@ function MiniMap({
 }) {
   const { lang } = useI18n();
   const c = questionsCopy[lang].far;
+  const [box, w] = useWidth(MAP);
   const { path, project } = useMemo(() => {
     const box = {
       type: "Feature" as const,
@@ -203,8 +204,12 @@ function MiniMap({
     { s: "tolima", lat: 3.6, lon: -75.55, text: c.labelTolima },
   ];
 
+  // The drawing scales with its column, so its text is sized in screen pixels: `k` viewBox units per
+  // pixel. In viewBox units alone the town names came out at 7 px on a 320 px phone.
+  const k = MAP / Math.max(1, w);
+
   return (
-    <div className="min-w-0">
+    <div ref={box} className="min-w-0">
       <svg
         viewBox={`0 0 ${MAP} ${MAP}`}
         role="img"
@@ -243,7 +248,8 @@ function MiniMap({
           return (
             <g key={t.id} transform={`translate(${x},${y})`} className="fill-muted-foreground">
               <circle r={2} />
-              <text x={5} y={4} fontSize={11}>
+              {/* The halo lifts the grey off the grey land: 4.34:1 on it in light mode, 4.73:1 on the page. */}
+              <text x={5} y={4} fontSize={11 * k} paintOrder="stroke" strokeWidth={3 * k} className="stroke-background">
                 {t.name}
               </text>
             </g>
@@ -257,26 +263,28 @@ function MiniMap({
               x={x}
               y={y}
               textAnchor="middle"
-              fontSize={12}
+              fontSize={12 * k}
               fontWeight={600}
               paintOrder="stroke"
-              strokeWidth={3}
-              className={cn(FILL[l.s], "stroke-background")}
+              strokeWidth={3 * k}
+              className="fill-foreground stroke-background"
             >
-              {l.text}
+              {/* The words in the text colour and the source's colour on a dot: the blue (4.42:1, light)
+                  and the violet (3.87:1, dark) are too faint for 12 px text. */}
+              <tspan className={FILL[l.s]}>●</tspan> {l.text}
             </text>
           );
         })}
         <g transform={`translate(${px},${py})`}>
-          <circle r={9} className="fill-foreground opacity-15" />
-          <circle r={4.5} strokeWidth={1.5} className="fill-foreground stroke-background" />
+          <circle r={9} className="fill-place/25" />
+          <circle r={4.5} strokeWidth={1.5} className="fill-place stroke-background" />
           <text
             x={9}
             y={-8}
-            fontSize={14}
+            fontSize={14 * k}
             fontWeight={700}
             paintOrder="stroke"
-            strokeWidth={3}
+            strokeWidth={3 * k}
             className="fill-foreground stroke-background"
           >
             Pereira
@@ -406,7 +414,7 @@ function WaveRace({ km }: { km: number }) {
         <line x1={x0} x2={x1} y1={34} y2={34} strokeWidth={2} className="stroke-border" />
         <line x1={x0} x2={x1} y1={66} y2={66} strokeWidth={2} className="stroke-border" />
         <text x={x0} y={20} fontSize={11} className="fill-muted-foreground">
-          {c.quake} · {Math.round(km)} km
+          {c.quake} · {fmtKm(km)}
         </text>
         <text x={x0} y={50} fontSize={11} className="fill-muted-foreground">
           P
@@ -417,7 +425,7 @@ function WaveRace({ km }: { km: number }) {
         <circle cx={at(p)} cy={34} r={6} className="fill-muted-foreground" />
         <circle cx={at(s)} cy={66} r={7} className="fill-foreground" />
         <g transform={`translate(${x1 + 10},50)`}>
-          <circle r={5} className="fill-foreground" />
+          <circle r={5} className="fill-place" />
           <text x={9} y={4} fontSize={12} fontWeight={600} className="fill-foreground">
             Pereira
           </text>

@@ -3,7 +3,7 @@ import { hypocentralKm } from "@bvalue/seismo";
 import { max as d3max } from "d3-array";
 import { scaleBand, scaleLinear, scaleTime } from "d3-scale";
 import { curveMonotoneX, line, symbol, symbolDiamond } from "d3-shape";
-import { useId, useMemo, useState, type CSSProperties } from "react";
+import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TZ_OFFSET_MS, dayStart, fmtDay, fmtDayTime } from "@/lib/format";
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { PEREIRA, SOURCES, strongDays, type Insights, type QuakeLike, type Source } from "../claims";
 import { insightsCopy } from "../copy";
 import { questionsCopy } from "./copy";
-import { median, medianHorizontalErrorKm, timeWindows } from "../shared";
+import { fmtKm, median, medianHorizontalErrorKm, timeWindows } from "../shared";
 import { BG, FILL } from "../tones";
 import { colombianDays, dailyCounts, dayIndexOf, kmFrom, omoriFromFirstDay } from "./derive";
 import { Figure, RangeField, Swatch, useWidth } from "./ui";
@@ -141,7 +141,7 @@ export function TwoClocks({ data, reference }: { data: Insights; reference: Quak
                     />
                   ))}
                 </g>
-                <g className="fill-chart-2 stroke-card">
+                <g className="fill-foreground stroke-card">
                   {r.strong.map((e) => {
                     const i = dayIndexOf(days, Date.parse(e.time));
                     if (i < 0 || i >= days.length) return null;
@@ -296,25 +296,16 @@ export function DriftMultiples({ data }: { data: Insights }) {
                   <line x1={-4} x2={4} />
                   <line y1={-4} y2={4} />
                 </g>
+                {/* The scale bar, in the first square only; the title says what it measures. */}
                 {i === 0 ? (
-                  <>
-                    <g transform={`translate(${S - 6 - km1},${S - 6})`} className="stroke-muted-foreground">
-                      <line x2={km1} strokeWidth={1.5} />
-                      <text
-                        x={km1 / 2}
-                        y={-3}
-                        textAnchor="middle"
-                        fontSize={7}
-                        strokeWidth={0}
-                        className="fill-muted-foreground"
-                      >
-                        1 km
-                      </text>
-                    </g>
-                    <text x={4} y={9} fontSize={7} className="fill-muted-foreground">
-                      {c.north}
-                    </text>
-                  </>
+                  <line
+                    x1={S - 6 - km1}
+                    x2={S - 6}
+                    y1={S - 6}
+                    y2={S - 6}
+                    strokeWidth={1.5}
+                    className="stroke-muted-foreground"
+                  />
                 ) : null}
               </svg>
               <p className="mt-1 text-2xs text-muted-foreground tabular-nums">
@@ -462,6 +453,31 @@ export function FeltCalendar({
     ).sort((a, b) => Date.parse(a.e.time) - Date.parse(b.e.time));
   }, [data, selected, threshold]);
   const name: Record<Source, string> = { shallow: c.shallowName, deep: c.deepName, tolima: c.tolimaName };
+  // One tab stop for the whole month (a roving tabindex): the arrows move between days, and Tab
+  // leaves. It was 45 buttons in the tab order. The stop is the day last moved to, else the chosen day,
+  // else the first with an event.
+  const cells = useRef<(HTMLButtonElement | null)[]>([]);
+  const [cursor, setCursor] = useState<number | null>(null);
+  const firstHit = Math.max(
+    0,
+    days.findIndex((d) => d.maxMag !== null),
+  );
+  const stop = Math.min(days.length - 1, cursor ?? (picked ? days.indexOf(picked) : firstHit));
+  const step: Record<string, (i: number) => number> = {
+    ArrowLeft: (i) => i - 1,
+    ArrowRight: (i) => i + 1,
+    ArrowUp: (i) => i - 7,
+    ArrowDown: (i) => i + 7,
+    Home: () => 0,
+    End: () => days.length - 1,
+  };
+  const move = (i: number, e: KeyboardEvent) => {
+    const to = step[e.key]?.(i);
+    if (to === undefined || to < 0 || to >= days.length) return;
+    e.preventDefault();
+    setCursor(to);
+    cells.current[to]?.focus();
+  };
 
   return (
     <Figure caption={c.caption}>
@@ -494,14 +510,22 @@ export function FeltCalendar({
         {Array.from({ length: lead }, (_, i) => (
           <div key={`lead-${i}`} />
         ))}
-        {days.map((d) => {
+        {days.map((d, i) => {
           const n = d.bySource.shallow + d.bySource.deep + d.bySource.tolima;
           const on = selected === d.start;
           return (
             <button
               key={d.start}
+              ref={(el) => {
+                cells.current[i] = el;
+              }}
               type="button"
-              onClick={() => setSelected(on ? null : d.start)}
+              tabIndex={i === stop ? 0 : -1}
+              onKeyDown={(e) => move(i, e)}
+              onClick={() => {
+                setCursor(i);
+                setSelected(on ? null : d.start);
+              }}
               aria-pressed={on}
               aria-label={c.dayAria(fmtDay(d.start, lang), n)}
               className={cn(
@@ -543,7 +567,7 @@ export function FeltCalendar({
                 <span className="w-12 font-semibold tabular-nums">M{e.mag.toFixed(1)}</span>
                 <span className="text-muted-foreground tabular-nums">{fmtDayTime(Date.parse(e.time), lang)}</span>
                 <span className="ml-auto text-right text-muted-foreground tabular-nums">
-                  {name[s]} · {Math.round(hypocentralKm(e, PEREIRA))} km
+                  {name[s]} · {fmtKm(hypocentralKm(e, PEREIRA))}
                 </span>
               </li>
             ))}

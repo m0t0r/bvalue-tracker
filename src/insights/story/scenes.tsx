@@ -633,7 +633,19 @@ export function TolimaScene({
 // =============================================================================================
 // Pereira: the calendar of days above the reader's threshold, and the waves' travel times.
 
-const COUNT_TINT = (n: number) => (n >= 4 ? "opacity-90" : n >= 2 ? "opacity-65" : "opacity-40");
+const TINTS = ["opacity-40", "opacity-65", "opacity-90"] as const;
+const tintStep = (n: number) => (n >= 4 ? 2 : n >= 2 ? 1 : 0);
+/**
+ * The text on a day, per source and tint step: the page's text colour where the tint is light and
+ * the page's own ground where it is dark, in each theme. Measured on the composited tile; each pick
+ * clears 4.5:1 (worst 4.56 in the browser, the dark shallow blue at 90 %). The text colour alone fell to 1.72:1 on
+ * Chaparral's violet in light mode and 1.80:1 on the deep teal in dark.
+ */
+const TILE_TEXT: Record<Source, readonly [string, string, string]> = {
+  shallow: ["fill-foreground", "fill-foreground", "fill-foreground dark:fill-background"],
+  deep: ["fill-foreground", "fill-foreground dark:fill-background", "fill-background"],
+  tolima: ["fill-foreground", "fill-background dark:fill-foreground", "fill-background dark:fill-foreground"],
+};
 
 export function FeltScene({
   data,
@@ -768,7 +780,7 @@ function Calendar({
               width={cell - 4}
               height={cell - 4}
               rx={r}
-              className={leader ? `${FILL[leader]} ${COUNT_TINT(n)} transition-opacity` : "fill-muted"}
+              className={leader ? `${FILL[leader]} ${TINTS[tintStep(n)]} transition-opacity` : "fill-muted"}
             />
             {d === mainDay && (
               <rect width={cell - 4} height={cell - 4} rx={r} fill="none" className="stroke-chart-2" strokeWidth={3} />
@@ -778,20 +790,20 @@ function Calendar({
                 x={small ? 4 : 7}
                 y={small ? 12 : 16}
                 fontSize={fs - 1}
-                className={n ? "fill-foreground" : "fill-muted-foreground"}
+                className={leader ? TILE_TEXT[leader][tintStep(n)] : "fill-muted-foreground"}
                 fontWeight={dom === 1 ? 700 : 400}
               >
                 {dom === 1 || i === 0 ? fmtDay(d.start, lang) : dom}
               </text>
             )}
-            {n > 0 && cell >= 22 && (
+            {leader && cell >= 22 && (
               <text
                 x={cell - (small ? 8 : 12)}
                 y={cell - (small ? 8 : 12)}
                 textAnchor="end"
                 fontSize={small ? 11 : 15}
                 fontWeight={650}
-                className="fill-foreground tabular-nums"
+                className={`${TILE_TEXT[leader][tintStep(n)]} tabular-nums`}
               >
                 {n}
               </text>

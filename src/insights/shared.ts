@@ -10,10 +10,14 @@ import type { QuakeLike } from "./claims";
 export { median };
 
 const HOUR = 3_600_000;
-/** A thin space: groups thousands ("125 900") the same way in both languages, where a point or a comma would read as a decimal separator in one of them. */
-const THIN = "\u2009";
+/**
+ * A narrow no-break space: groups thousands ("125 900") the same way in both languages, where a point
+ * or a comma would read as a decimal separator in one of them, and keeps a figure on the same line as
+ * its unit. A thin space (U+2009) looks the same but may break: "~120 / km" at 320 px.
+ */
+const THIN = "\u202F";
 
-/** A whole number, thousands grouped with a thin space from five digits on, with a true minus. */
+/** A whole number, thousands grouped with a narrow no-break space from five digits on, with a true minus. */
 export const fmtInt = (v: number) => {
   const s = Math.round(Math.abs(v)).toString();
   const grouped = s.length > 4 ? s.replace(/\B(?=(\d{3})+(?!\d))/g, THIN) : s;
