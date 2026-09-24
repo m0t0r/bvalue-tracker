@@ -6,12 +6,12 @@ const esCommon = {
     "Un valor b menor que 1 describe la secuencia: los eventos grandes pesan más de lo habitual. No es un pronóstico ni una alerta.",
   floor: "El SGC no publica eventos por debajo de M2.0 en este catálogo, así que el rango M0–M2 no existe aquí.",
   magTypes:
-    "Las magnitudes mezclan tipos (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite compararlo con todos los tipos y con uno solo.",
+    "Las magnitudes mezclan tipos (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite comparar el cálculo con todos los tipos y con uno solo.",
   revisions:
     "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar todo el historial a lo largo del día para recoger esos cambios.",
   /** The rule `core/mainshock.ts` applies, in one sentence a reader can check against the table. */
   mainshockRule:
-    "La página llama sismo principal al evento más grande solo si un analista del SGC lo ha revisado y supera en al menos 1 de magnitud a todos los demás, comparando las magnitudes tal como las publica el SGC. Es una etiqueta a posteriori: si después llegara un evento mayor, el anterior pasaría a ser un sismo premonitor.",
+    "La página llama sismo principal al evento más grande solo si un analista del SGC lo ha revisado y supera en al menos 1 unidad de magnitud a todos los demás, comparando las magnitudes tal como las publica el SGC. Es una etiqueta a posteriori: si después llegara un evento mayor, el anterior pasaría a ser un sismo premonitor.",
   /** Short-term aftershock incompleteness, for any zone with a mainshock. */
   afterMainshock:
     "Justo después del sismo principal se pierden eventos pequeños; las primeras ventanas son las menos fiables.",
@@ -49,7 +49,7 @@ const es = {
         esCommon.magTypes,
         ...(m === "found" ? [esCommon.afterMainshock] : []),
         esCommon.revisions,
-        "La secuencia son dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
+        "La secuencia está formada por dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
         esCommon.mainshockRule,
       ],
     },
@@ -99,7 +99,7 @@ const es = {
   refreshStillFailing: "No se envió: ya hay un reintento en camino.",
   ingestFailed: "La última consulta al SGC falló",
   ingestFailedBody:
-    "Se muestran los últimos datos guardados. Se reintenta solo hasta que el SGC vuelva a responder; no hace falta recargar.",
+    "Se muestran los últimos datos guardados. La consulta se repetirá automáticamente hasta que el SGC vuelva a responder; no hace falta recargar.",
   technicalDetail: "Detalle técnico",
   loadFailed: "No se pudieron cargar los datos",
   loadFailedBody: "Revisa tu conexión y recarga la página.",
@@ -157,7 +157,7 @@ const es = {
   bScopeNote: (type: string) => `Solo eventos con magnitud ${type}.`,
   clustersTitle: "Dos grupos de eventos",
   clustersDesc: (km: number) =>
-    `La secuencia son dos grupos separados por su profundidad: entre 55 y 75 km casi no hay eventos. El corte está en ${km} km.`,
+    `La secuencia está formada por dos grupos separados por la profundidad: entre 55 y 75 km casi no hay eventos. El corte está en ${km} km.`,
   clusterShort: { shallow: "Superficial", deep: "Profundo" },
   clusterName: { shallow: "Grupo superficial", deep: "Grupo profundo" },
   clusterWhere: {
@@ -182,7 +182,7 @@ const es = {
     `Este grupo tiene ${have} eventos ≥ Mc y cada ventana necesita ${need}, así que su valor b es una sola cifra, sin evolución en el tiempo.`,
   mapTitle: "Mapa",
   mapDesc: "Tamaño por magnitud, color por profundidad.",
-  mapRing: "El sismo principal va con anillo naranja.",
+  mapRing: "El sismo principal está marcado con un anillo naranja.",
   /**
    * The status bar's "Sismo principal": what the rule in core/mainshock.ts reads in the zone's whole
    * catalogue today. Always shown, on every tab, so a reader sees "none clear" as a reading and not an
@@ -217,7 +217,7 @@ const es = {
   tableTitle: "Catálogo",
   downloadCsv: "Descargar CSV",
   downloadBCsv: "Descargar CSV del valor b en el tiempo",
-  colTime: "Fecha-hora",
+  colTime: "Fecha y hora",
   colMag: "Mag.",
   colType: "Tipo",
   colDepth: "Prof. (km)",

@@ -69,7 +69,7 @@ const es = {
   loadFailedBody: "Revisa tu conexión y recarga la página.",
   incompleteTitle: "Todavía se está cargando el historial",
   incompleteBody:
-    "Al catálogo aún le faltan semanas. Hasta que se complete, las cifras y lo que dicen de ellas no son representativos. El monitor lo termina de cargar.",
+    "Al catálogo aún le faltan semanas. Hasta que se complete, las cifras y las conclusiones de esta página no son representativas. El monitor se encarga de terminar de cargarlo.",
   dataUpTo: (ms: number, lang: Lang) => `Datos del SGC hasta el ${fmtDay(ms, lang)}`,
   footer:
     "Página independiente, sin relación con el SGC. Las cifras describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
@@ -107,13 +107,13 @@ const es = {
     },
     /** A source's recent pace against its own usual one. */
     pace: (p: Pace, lang: Lang): string => {
-      if (p.case === "young") return "Lleva muy poco tiempo para saber cuál es su ritmo habitual.";
-      const rate = `${f1(p.recentPerDay)} eventos al día en los últimos 5 días, frente a unos ${f0(p.usualPerDay)} en un día típico (contando desde M${f1(p.mc)})`;
+      if (p.case === "young") return "Aún es pronto para saber cuál es su ritmo habitual.";
+      const rate = `${f1(p.recentPerDay)} eventos al día en los últimos 5 días, frente a unos ${f0(p.usualPerDay)} en un día típico (contando eventos de M${f1(p.mc)} o más)`;
       if (p.case === "quieter") {
         const since = p.quietSince === null ? "" : ` desde el ${fmtDay(p.quietSince, lang)}`;
         const before = p.pastLulls.find((l) => l.recovered);
         const again = before
-          ? ` Ya había pasado entre el ${fmtDay(before.from, lang)} y el ${fmtDay(before.to, lang)}, y luego volvió a su ritmo, así que todavía no se sabe si es una pausa o el final.`
+          ? ` Algo así ya ocurrió entre el ${fmtDay(before.from, lang)} y el ${fmtDay(before.to, lang)}, y luego volvió a su ritmo; por eso todavía no se sabe si es una pausa o el final.`
           : " Todavía no se sabe si es una pausa o el final.";
         return `Está más tranquilo${since}: ${rate}.${again}`;
       }
@@ -124,8 +124,8 @@ const es = {
     decay: (d: Decay): string => {
       if (d.case === "young") return "Todavía es pronto para ver cómo se apagan sus réplicas.";
       if (d.case === "decayed")
-        return `Se ha apagado como unas réplicas normales: unos ${f0(d.firstWeekPerDay)} eventos al día la primera semana, ${f1(d.lastWeekPerDay)} al día la última.`;
-      return `No se ha apagado como unas réplicas normales: ${f1(d.firstWeekPerDay)} eventos al día la primera semana y ${f1(d.lastWeekPerDay)} la última.`;
+        return `Se ha apagado como suelen hacerlo las réplicas: de unos ${f0(d.firstWeekPerDay)} eventos al día en la primera semana a ${f1(d.lastWeekPerDay)} en la última.`;
+      return `No se ha apagado como suelen hacerlo las réplicas: ${f1(d.firstWeekPerDay)} eventos al día en la primera semana y ${f1(d.lastWeekPerDay)} en la última.`;
     },
     /** The swarm's drift. Always a hint, never a finding. */
     drift: (d: Drift): string => {
@@ -138,6 +138,8 @@ const es = {
     lastChoco: (ms: number, minMag: number, lang: Lang) =>
       `El último evento de M${f1(minMag)} o más en el Chocó fue el ${fmtDay(ms, lang)}.`,
     share: (share: number) => `${share >= 0.999 ? "más del 99.9" : f1(share * 100)}\u00A0%`,
+    /** `share` inside a sentence, with the article Spanish wants: "liberó el 12.5 %", "liberó más del 99.9 %". */
+    sharePhrase: (share: number) => `${share >= 0.999 ? "más del 99.9" : `el ${f1(share * 100)}`}\u00A0%`,
   },
 };
 
@@ -216,6 +218,7 @@ const en: Copy = {
     },
     lastChoco: (ms, minMag, lang) => `Chocó's last event of M${f1(minMag)} or more was on ${fmtDay(ms, lang)}.`,
     share: (share) => `${share >= 0.999 ? "over 99.9" : f1(share * 100)}%`,
+    sharePhrase: (share) => `${share >= 0.999 ? "over 99.9" : f1(share * 100)}%`,
   },
 };
 

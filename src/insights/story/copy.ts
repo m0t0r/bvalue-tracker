@@ -42,11 +42,13 @@ const es = {
     chapter: "1 · Dónde estás",
     /** Keyed on whether the three straight-line distances are within a third of each other. */
     title: (similar: boolean): string =>
-      similar ? "Tres lugares, a una distancia parecida de ti" : "Tres lugares, a distintas distancias de ti",
-    p1: "Los eventos que sigue esta página vienen de tres lugares. Dos están en el Chocó, al occidente: un {shallow} cerca de Istmina y Sipí, y un {deep} alrededor del {main} del {date}. El tercero es un {tolima}, en el sur del Tolima.",
+      similar
+        ? "Tres lugares a distancias similares desde tu ubicación"
+        : "Tres lugares a distancias distintas desde tu ubicación",
+    p1: "Esta página sigue los eventos de tres lugares. Dos están en el Chocó, al occidente: un {shallow} cerca de Istmina y Sipí, y un {deep} alrededor del {main} del {date}. El tercero es el {tolima}, en el sur del Tolima.",
     p2: "Cada punto del mapa es un evento del catálogo del Servicio Geológico Colombiano (SGC): {n} desde el {date}.",
-    p3: "Un sismo empieza en un punto bajo tierra. Contando esa profundidad, en línea recta el grupo superficial está a unos {shallowKm} de Pereira, el grupo profundo a {deepKm} y Chaparral a {tolimaKm}.",
-    note: "Distancias: la mediana de cada lugar, en línea recta desde Pereira hasta el punto bajo tierra donde empezó cada evento.",
+    p3: "Todo sismo se origina en un punto bajo tierra, el foco. Medida en línea recta hasta ese punto, la distancia desde Pereira es de unos {shallowKm} al grupo superficial, {deepKm} al grupo profundo y {tolimaKm} a Chaparral.",
+    note: "Cada distancia es la mediana de los eventos de ese lugar, medida en línea recta desde Pereira hasta el foco de cada evento.",
   },
 
   energy: {
@@ -58,11 +60,11 @@ const es = {
     /** Keyed on the largest event holding more than half the energy, so the others' square is the smaller. */
     p2: (larger: boolean): string =>
       larger
-        ? "En el dibujo, el área de cada cuadrado es la energía. Todos esos eventos juntos caben en el cuadrito pequeño; el {magLabel}, por sí solo, tiene el {share} del total."
-        : "En el dibujo, el área de cada cuadrado es la energía. El {magLabel} tiene el {share} del total; todos los demás juntos, el resto.",
-    ladderTitle: "Cada punto de magnitud, unas 32 veces más energía",
+        ? "En el dibujo, el área de cada cuadrado representa la energía. Todos esos eventos juntos caben en el cuadrito pequeño; el {magLabel}, por sí solo, liberó {share} del total."
+        : "En el dibujo, el área de cada cuadrado representa la energía. El {magLabel} liberó {share} del total; todos los demás juntos, el resto.",
+    ladderTitle: "Un punto más de magnitud: unas 32 veces más energía",
     ladder1:
-      "La escala de magnitud engaña: subir un punto no es «un poco más fuerte». Es unas {x1} veces más energía, y en un sismógrafo, 10 veces más movimiento. Dos puntos: {x2} veces más energía.",
+      "La escala de magnitud engaña: subir un punto no significa «un poco más fuerte», sino unas {x1} veces más energía y 10 veces más movimiento en un sismógrafo. Dos puntos significan {x2} veces más energía.",
     ladder2:
       "Para igualar el {magLabel} harían falta unos {nAfter} eventos como el mayor que vino después ({after}, el {afterDate}), o unos {nM4} de magnitud 4.",
     /** Only while the page's rule finds a mainshock: it then stands at least 1.0 above every other event. */
@@ -73,42 +75,42 @@ const es = {
 
   section: {
     chapter: "3 · Bajo tierra",
-    title: "Dos grupos, a dos profundidades",
-    p1: "Ahora mira los mismos eventos del Chocó de lado, como si cortáramos la tierra de oeste a este, sin exagerar la escala. Pereira queda en la superficie, a la derecha.",
+    title: "Dos grupos a distinta profundidad",
+    p1: "Ahora mira los mismos eventos del Chocó de perfil, como si cortáramos la tierra de oeste a este, sin exagerar la escala. Pereira queda en la superficie, a la derecha.",
     p2: "Bajo el Pacífico, la placa de Nazca —un enorme trozo del fondo del mar— se hunde despacio por debajo de Sudamérica. Por eso en esta parte de Colombia hay sismos tan profundos.",
     /** Keyed on the deep group's centre lying within 40 km of the largest event's epicentre. */
     p2Main: (near: boolean): string =>
       near
-        ? "El {main} empezó a {depth} bajo tierra, y el {deep} ({n} eventos) está a su alrededor."
-        : "El {main} empezó a {depth} bajo tierra; el {deep} ({n} eventos) está a unos {km} de él.",
-    p3: "Por eso estaba a solo {epi} de Pereira en el mapa, pero a {hypo} en línea recta.",
+        ? "El {main} se originó a {depth} de profundidad, y el {deep} ({n} eventos) lo rodea."
+        : "El {main} se originó a {depth} de profundidad; el {deep} ({n} eventos) está a unos {km} de él.",
+    p3: "Así que en el mapa estaba a solo {epi} de Pereira, pero a {hypo} en línea recta.",
     /** Keyed on the shallow group's centre lying west of the deep group's. */
     p4: (west: boolean): string =>
       west
-        ? "El {shallow} está más al oeste y mucho menos profundo, a unos {depth}. Con este catálogo no se puede saber en qué estructura exacta está cada grupo."
-        : "El {shallow} está mucho menos profundo, a unos {depth}. Con este catálogo no se puede saber en qué estructura exacta está cada grupo.",
+        ? "El {shallow} está más al oeste y a mucha menos profundidad, unos {depth}. Este catálogo no permite saber en qué estructura exacta está cada grupo."
+        : "El {shallow} está a mucha menos profundidad, unos {depth}. Este catálogo no permite saber en qué estructura exacta está cada grupo.",
     eastDeeper: "En el dibujo, la actividad es más profunda hacia el este.",
     caveatTitle: "Lo que este dibujo no puede decir",
     caveat1:
-      "Cada ubicación tiene un margen de error. En la mitad de los casos es de unos {h} en horizontal (latitud y longitud juntas) y {depth} en profundidad: las cruces lo muestran.",
+      "Cada ubicación tiene un margen de error: en la mitad de los casos, unos {h} en horizontal (latitud y longitud juntas) y {depth} en profundidad. Las cruces del dibujo lo muestran.",
     /** Only while the three commonest depths hold at least a fifth of the shallow group's events. */
     caveat2:
-      "Además, muchas profundidades caen en los mismos valores exactos ({depths}): el cálculo las fija en pasos. Por eso aquí no se ve una falla, solo nubes de puntos.",
+      "Además, muchas profundidades se repiten exactamente ({depths}), porque el cálculo las fija en ciertos valores. Por eso aquí no se distingue una falla, solo nubes de puntos.",
   },
 
   clocks: {
     chapter: "4 · Dos relojes",
     deepTitle: (d: Decay["case"]): string =>
       d === "decayed"
-        ? "Las réplicas se apagan como se espera"
+        ? "Las réplicas se apagan como es habitual"
         : d === "not-decayed"
-          ? "Las réplicas no se apagan como se espera"
+          ? "Las réplicas no se apagan como es habitual"
           : "Las primeras réplicas",
     deep1:
-      "Después de un sismo grande vienen réplicas: eventos más pequeños en la misma zona, cada vez más espaciados. Una regla de 1894, la ley de Omori, dice que su ritmo baja más o menos como uno dividido por el tiempo transcurrido.",
+      "Después de un sismo grande vienen réplicas: eventos más pequeños en la misma zona, cada vez más espaciados. Una regla de 1894, la ley de Omori, dice que su número baja más o menos en proporción inversa al tiempo transcurrido: al doble de tiempo, la mitad de réplicas por día.",
     deep2: "Mira el {deep} en el dibujo. {claim}",
     deepNote:
-      "Se cuentan solo eventos de {mc} o más, que el catálogo registra completos. La línea discontinua es esa curva típica, anclada al primer día del grupo profundo: una ilustración, no un ajuste.",
+      "Solo se cuentan eventos de {mc} o más: desde ese tamaño, el catálogo los registra todos. La línea discontinua es esa curva típica, anclada al primer día del grupo profundo: es una ilustración, no un ajuste a los datos.",
     shallowTitle: (d: Decay["case"]): string =>
       d === "not-decayed"
         ? "El grupo superficial no siguió esa regla"
@@ -118,23 +120,23 @@ const es = {
     shallow1: "Ahora el {shallow}. {claim}",
     /** Only when the shallow group did not fade: this is then the answer to "why is it still shaking?". */
     shallowAnswer:
-      "Esta es la respuesta a «¿por qué siguió temblando tanto tiempo?»: en el Chocó, lo que continuó no fueron las réplicas del {main} apagándose despacio. Desde la segunda semana, {pct} de los eventos del Chocó vinieron del grupo superficial.",
+      "Esto responde a «¿por qué siguió temblando tanto tiempo?»: lo que continuó en el Chocó no fueron las réplicas del {main}, que se iban apagando despacio. Desde la segunda semana, el {pct} de los eventos del Chocó vinieron del grupo superficial.",
     shallowWeeks: (partial: boolean): string =>
       partial
         ? "Sus eventos de M4 o más, semana a semana desde el {date}: {weeks} (la última semana aún no ha terminado)."
         : "Sus eventos de M4 o más, semana a semana desde el {date}: {weeks}.",
     /** Only while the shallow group has not faded: it is the "why" of a group that kept going. */
-    why: "¿Por qué? No se sabe. Los sismólogos consideran varias posibilidades: que el {main} cambió los esfuerzos en la roca vecina, que haya fluidos moviéndose por las fracturas o que una falla se deslice lentamente. Este catálogo no permite decidir entre ellas.",
+    why: "¿Por qué? No se sabe. Los sismólogos consideran varias posibilidades: que el {main} haya cambiado los esfuerzos en la roca vecina, que haya fluidos moviéndose por las fracturas o que una falla se esté deslizando lentamente. Este catálogo no permite decidir entre ellas.",
     paceTitle: (p: Pace["case"]): string =>
       p === "quieter"
         ? "En los últimos días, más tranquilo"
         : p === "busier"
           ? "En los últimos días, más activo"
-          : "En los últimos días, a su ritmo",
+          : "En los últimos días, a su ritmo habitual",
     pace: "Mira el final de la línea del {shallow}. {claim}",
     paceNote: "El SGC todavía puede revisar y añadir eventos recientes.",
     /** Only when the pace claim found a lull to shade. */
-    lullNote: "Las franjas grises del dibujo son los tramos en que se calmó.",
+    lullNote: "Las franjas grises del dibujo marcan los periodos en que se calmó.",
   },
 
   tolima: {
@@ -144,7 +146,7 @@ const es = {
         ? "Chaparral: ahora un evento destaca"
         : m === "awaiting-review"
           ? "Chaparral: un evento destaca, pendiente de revisión"
-          : "Chaparral: muchos eventos, ninguno manda",
+          : "Chaparral: muchos eventos, ninguno domina",
     p1: (m: MainshockState): string =>
       m === "found"
         ? "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido. Ahora uno de ellos destaca sobre todos los demás."
@@ -152,24 +154,24 @@ const es = {
           ? "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido. Ahora uno destaca, aunque su magnitud todavía es automática y puede cambiar."
           : "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido, sin uno grande que domine.",
     stillSwarm: "Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre.",
-    p2: "Compara las dos franjas: en el Chocó, el evento mayor tiene {chocoShare} de la energía; en Chaparral, el mayor ({mag}) tiene {tolimaShare}.",
+    p2: "Compara las dos franjas: en el Chocó, el evento mayor liberó {chocoShare} de la energía; en Chaparral, el mayor ({mag}) liberó {tolimaShare}.",
     /** Keyed on the swarm's median depth being under 30 km, where it is certainly in the crust. */
     p3: (crustal: boolean): string =>
       crustal
-        ? "Van unos {perDay} eventos al día de media, a unos {depth} de profundidad, dentro de la corteza."
-        : "Van unos {perDay} eventos al día de media, a unos {depth} de profundidad.",
+        ? "El enjambre registra en promedio unos {perDay} eventos al día, a unos {depth} de profundidad, dentro de la corteza."
+        : "El enjambre registra en promedio unos {perDay} eventos al día, a unos {depth} de profundidad.",
     driftTitle: (d: Drift["case"]): string =>
-      d === "moved" ? "Parece moverse, despacio" : d === "none" ? "No se ve que se mueva" : "¿Se mueve?",
+      d === "moved" ? "Parece desplazarse despacio" : d === "none" ? "No parece desplazarse" : "¿Se desplaza?",
     /** The line is drawn only when the drift claim says the centre moved. */
     driftHow: (moved: boolean): string =>
       moved
-        ? "En el dibujo, cada punto es un evento, más intenso cuanto más reciente, y la línea une el centro de los eventos de cada medio día."
-        : "En el dibujo, cada punto es un evento, más intenso cuanto más reciente.",
+        ? "En el dibujo, cada punto es un evento (más intenso cuanto más reciente), y la línea une el centro de los eventos de cada periodo de 12 horas."
+        : "En el dibujo, cada punto es un evento (más intenso cuanto más reciente).",
     driftElsewhere:
       "En otros enjambres del mundo, desplazamientos así se han asociado con fluidos o con fallas que se deslizan lentamente. Aquí no se sabe.",
     hypothesis:
-      "El SGC ha planteado como hipótesis preliminar que el sismo del {date} pudo cambiar los esfuerzos en la corteza y ayudar a reactivar fallas cerca de Chaparral. Es eso, una hipótesis: que dos cosas pasen cerca en el tiempo no demuestra que una causó la otra.",
-    note: "Los enjambres terminan de maneras distintas y no se puede saber de antemano cómo. Según el SGC, que haya muchos sismos no significa por sí mismo que venga uno grande.",
+      "El SGC ha planteado como hipótesis preliminar que el sismo del {date} pudo cambiar los esfuerzos en la corteza y ayudar a reactivar fallas cerca de Chaparral. Es solo eso, una hipótesis: que dos cosas ocurran casi al mismo tiempo no demuestra que una haya causado la otra.",
+    note: "Los enjambres terminan de maneras distintas, y no se puede saber de antemano cómo terminará este. Según el SGC, que haya muchos sismos no significa por sí solo que venga uno grande.",
   },
 
   felt: {
@@ -177,17 +179,17 @@ const es = {
     title: "Por qué los sientes",
     p1: (similar: boolean): string =>
       similar
-        ? "Los tres lugares están a una distancia parecida de Pereira, así que, entre sus eventos, lo que más cambia es la magnitud. Ajusta la magnitud desde la que tú los notas:"
-        : "Los tres lugares están a distancias distintas de Pereira, así que cuentan la magnitud y también la distancia. Ajusta la magnitud desde la que tú los notas:",
+        ? "Los tres lugares están a distancias similares de Pereira, así que lo que más distingue a sus eventos es la magnitud. Elige desde qué magnitud los notas:"
+        : "Los tres lugares están a distancias distintas de Pereira, así que importan tanto la magnitud como la distancia. Elige desde qué magnitud los notas:",
     slider: "Los noto desde",
     sliderAria: "Magnitud desde la que notas un temblor",
-    days: "Con {mag} o más, {k} de {n} días desde el {date} tuvieron al menos un evento.",
-    note: "Que lo notes depende también de dónde estés: el piso, el tipo de suelo, si estás quieto. Esta página no calcula cuánto tembló en tu casa; para eso hacen falta modelos que aquí no se usan.",
+    days: "Desde el {date}, {k} de {n} días tuvieron al menos un evento de {mag} o más.",
+    note: "Que lo notes depende también de dónde estés: en qué piso, sobre qué tipo de suelo, si estás quieto o no. Esta página no calcula cuánto tembló en tu casa; para eso hacen falta modelos que aquí no se usan.",
     wavesTitle: "Unos segundos de viaje",
     waves1:
-      "Un sismo manda dos tipos de ondas por la roca. Las P, más rápidas (unos {vp} por segundo), llegan primero, como un golpe seco. Las S, más lentas (unos {vs} por segundo), llegan después y suelen mover más.",
+      "Un sismo envía dos tipos de ondas a través de la roca. Las P, más rápidas (unos {vp} por segundo), llegan primero, como un golpe seco. Las S, más lentas (unos {vs} por segundo), llegan después y suelen sacudir más.",
     waves2:
-      "Desde el {magLabel}, a {km}, las P tardaron unos {p} en llegar a Pereira y las S unos {s}. Por eso a veces se nota un primer sacudón y, segundos después, el vaivén.",
+      "Desde el {magLabel}, que estaba a {km}, las ondas P tardaron unos {p} en llegar a Pereira y las S unos {s}. Por eso a veces se nota un primer sacudón y, segundos después, el vaivén.",
     wavesNote:
       "Las velocidades son típicas y aproximadas; la roca real las cambia. El sismograma del dibujo es esquemático, no un registro real.",
   },
@@ -208,11 +210,11 @@ const es = {
     items: [
       "Si el enjambre de Chaparral tiene que ver con el sismo del {date}. El SGC lo plantea como hipótesis.",
       "Cuánto durará el enjambre de Chaparral.",
-      "Si vendrá un sismo más grande. Nadie sabe predecir sismos: ni el día, ni el lugar exacto, ni el tamaño.",
+      "Si vendrá un sismo más grande. Nadie puede predecir un sismo: ni el día, ni el lugar exacto, ni el tamaño.",
       "Qué pasa por debajo de M2.0: el catálogo público del SGC empieza ahí.",
     ],
     closing:
-      "Lo que sí sirve no es adivinar, sino estar preparado y seguir la información oficial del Servicio Geológico Colombiano.",
+      "Lo útil no es adivinar, sino estar preparado y seguir la información oficial del Servicio Geológico Colombiano.",
   },
 
   /** Labels drawn inside the pinned graphic, and its text alternative for each scene. */
@@ -220,7 +222,7 @@ const es = {
     mapTitle: "Eventos del catálogo del SGC, {from} – {to}",
     mapAria:
       "Mapa con los eventos de los tres lugares y Pereira. Las líneas dan la distancia en línea recta desde Pereira hasta cada lugar.",
-    mapNote: "Distancia en línea recta hasta el punto bajo tierra · círculo: 120 km en el mapa",
+    mapNote: "Distancia en línea recta hasta el foco · círculo: 120 km en el mapa",
     ocean: "Océano Pacífico",
     unknownAria: "Mapa de los tres lugares con un signo de interrogación en cada uno.",
     sectionTitle: "Corte de oeste a este · sin exagerar la escala",
@@ -233,7 +235,7 @@ const es = {
     errorLegend: "＋ error típico: {h} en horizontal, {depth} en profundidad",
     energyTitle: "Energía liberada · área proporcional",
     energyShareAria:
-      "Dos cuadrados cuya área es la energía: el evento mayor tiene el {share}; todos los demás eventos juntos, el resto.",
+      "Dos cuadrados cuya área representa la energía: el evento mayor liberó {share}; todos los demás eventos juntos, el resto.",
     energyOthers: "{n} eventos más, todos juntos",
     energyMain: "{date} · {share} de la energía",
     ladderAria: "Tres cuadrados para M4, M5 y M6; cada uno tiene unas 32 veces el área del anterior.",
@@ -241,19 +243,19 @@ const es = {
     clocksTitle: "Eventos por día ({mc} o más) · Chocó",
     clocksAria:
       "Eventos por día desde el primer evento, en escala logarítmica, para el grupo profundo y el superficial, con la curva típica de réplicas como referencia.",
-    clocksAxis: "días desde el {date} (el eje se estira al principio)",
+    clocksAxis: "días desde el {date} (la escala amplía los primeros días)",
     omori: ["curva típica", "de réplicas"],
     lines: { shallow: "superficial", deep: "profundo" },
     strongRow: "◆ cada evento de M4 o más",
     lull: "calma",
-    tolimaTitle: "Cuánta energía tiene el evento mayor",
+    tolimaTitle: "Cuánta energía liberó el evento mayor",
     tolimaAria:
-      "Dos franjas con la parte de la energía de cada evento, del mayor al menor: en el Chocó el evento mayor tiene el {choco}; en Chaparral, el {tolima}. Debajo, un mapa de cerca de Chaparral.",
+      "Dos franjas con la parte de la energía de cada evento, del mayor al menor: en el Chocó el evento mayor liberó {choco}; en Chaparral, {tolima}. Debajo, un mapa de cerca de Chaparral.",
     stripChoco: "Chocó · el mayor ({mag}): {share}",
     stripTolima: "Chaparral · el mayor ({mag}): {share}",
     stripNote: "cada franja es un evento, del mayor al menor",
     closeUp: "Chaparral de cerca · más intenso = más reciente",
-    track: "centro de cada medio día",
+    track: "centro cada 12 horas",
     errorCircle: "error de localización: unos {km}",
     calendarTitle: "Días con al menos un evento de {mag} o más",
     calendarAria:

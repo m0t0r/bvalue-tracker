@@ -47,7 +47,7 @@ export function Graphic({
   lang: Lang;
 }) {
   const c = storyCopy[lang].graphic;
-  const share = insightsCopy[lang].claims.share;
+  const share = insightsCopy[lang].claims.sharePhrase;
   const { scene, sub } = state;
   const small = width < 560;
   const k = small ? 0.8 : 1;
