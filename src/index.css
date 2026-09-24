@@ -8,6 +8,7 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
+  --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
@@ -93,6 +94,12 @@
   --chart-2: #d16100;
   --chart-3: oklch(0.556 0 0);
   --chart-4: oklch(0.4 0.068 195);
+  /* The Chaparral swarm on the insights page, beside Chocó's two groups and the mainshock. Chosen
+       by search against the blue, the teal, the orange and --chart-3 under simulated protanopia,
+       deuteranopia and tritanopia (Machado 2009, OKLab ΔE): worst pair 0.132 (teal, deutan), above
+       the 0.10 that reads as one colour. The dark value is a different lightness and hue for the
+       same reason; the violets nearer the light one's hue sat under 0.10 against the blue there. */
+  --chart-5: oklch(0.3 0.16 310);
   --radius: 0.625rem;
 }
 
@@ -130,6 +137,8 @@
   --chart-2: #fe7802;
   --chart-3: oklch(0.708 0 0);
   --chart-4: oklch(0.85 0.085 195);
+  /* See the light block. Worst pair 0.136 (blue, deutan); 3.9:1 against the page. */
+  --chart-5: oklch(0.55 0.1 330);
 }
 
 @layer base {

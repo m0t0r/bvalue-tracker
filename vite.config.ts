@@ -89,11 +89,52 @@ function zonePages(): Plugin[] {
   ];
 }
 
+/**
+ * `/insights`, the explanations page, is its own HTML file and its own bundle (`insights.html`,
+ * `src/insights/main.tsx`), so D3 never loads with the monitor and Recharts and MapLibre never load
+ * with it. The asset layer serves `insights.html` at `/insights` in production; in dev the
+ * Cloudflare plugin would hand that path to the Worker, which answers 404 (see `zonePages`), so
+ * this serves it first.
+ */
+function insightsPage(): Plugin {
+  return {
+    name: "sgc-insights-page:dev",
+    apply: "serve",
+    enforce: "pre",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const route = (req.url ?? "").split("?")[0]?.replace(/\/+$/, "");
+        if ((req.method !== "GET" && req.method !== "HEAD") || route !== "/insights") return next();
+        try {
+          const template = await readFile(path.join(server.config.root, "insights.html"), "utf8");
+          const html = await server.transformIndexHtml(req.url!, template, req.originalUrl);
+          res.setHeader("content-type", "text/html; charset=utf-8");
+          res.end(html);
+        } catch (err) {
+          next(err);
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont(), zonePages()],
+  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont(), zonePages(), insightsPage()],
   worker: { format: "es" },
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   environments: {
+    // Two pages, two entries: the monitor and the explanations. The zone pages are copies of the
+    // first, written by `zonePages` after the bundle.
+    client: {
+      build: {
+        rollupOptions: {
+          input: {
+            index: path.resolve(import.meta.dirname, "index.html"),
+            insights: path.resolve(import.meta.dirname, "insights.html"),
+          },
+        },
+      },
+    },
     /**
      * A source map for the Worker, and for the Worker only. `upload_source_maps` in
      * wrangler.jsonc has nothing to upload unless the build emits one, and without it a

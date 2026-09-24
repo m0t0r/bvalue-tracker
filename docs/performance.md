@@ -67,6 +67,10 @@ practices stayed at 100.
   200. [API](api.md) has the exception that fixed it. If PSI's console audit shows 403s again,
   its runner has changed what it sends: read the invocation log before trusting the score. The
   page has no CrUX field data, so PSI's "real users" panel is empty.
+- **`/insights` is its own entry, so it costs the monitor nothing** (2026-09-24, `pnpm build`): the
+  monitor's initial JavaScript went from 539.5 kB to 541.5 kB (its header link and two strings), and
+  D3 appears in no chunk it loads. `/insights` starts at 364 kB — mostly React and the shared UI, the
+  same chunks the monitor preloads — and each tab is a lazy chunk on top.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

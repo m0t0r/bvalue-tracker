@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
+    <!-- Its own page and its own bundle (src/insights/main.tsx): D3 and the explanations never load
+         with the monitor, and the monitor's Recharts and MapLibre never load here. The copy of
+         these tags is `docTitle` in src/insights/copy.ts. -->
+    <title>Qué está pasando · sismos del Chocó y Tolima</title>
+    <meta
+      name="description"
+      content="Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto de 2026, explicados en palabras sencillas con los datos del Servicio Geológico Colombiano."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Secuencia sísmica del Chocó" />
+    <meta property="og:title" content="Qué está pasando · sismos del Chocó y Tolima" />
+    <meta
+      property="og:description"
+      content="Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto de 2026, explicados en palabras sencillas con los datos del Servicio Geológico Colombiano."
+    />
+    <meta property="og:url" content="https://choco.sgc-swarm.workers.dev/insights" />
+    <meta property="og:locale" content="es_CO" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta name="twitter:card" content="summary" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/insights/main.tsx"></script>
+  </body>
+</html>

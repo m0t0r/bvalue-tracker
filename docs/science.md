@@ -151,3 +151,59 @@
   showed b = 0.49 because it held only the trailing 3 days. `/api/status` now
   reports `backfill: {done, total}`, and the page warns and demotes b until history
   is complete. Keep that guard whenever ingest changes.
+
+## The insights page (`/insights`, from 2026-09-24)
+
+A second page explains the two zones to a reader in Pereira who is not a seismologist and feels
+the larger events: where they come from, why it has not stopped, why Chaparral is different, and
+what nobody knows. Two tabs tell it two ways ("La historia", a scrolling story, and "Preguntas",
+the reader's own questions). Everything above still applies to it; this section is what is new.
+
+- **No sentence about the data is fixed.** Every trend the page states is a rule in
+  `src/insights/claims.ts` that picks one of a few pre-written sentences (`src/insights/copy.ts`)
+  and fills in its figures, over the live catalogue, on every load. A rule that cannot decide
+  returns a neutral case, and the page says less rather than something false. When a situation
+  arises that no sentence covers (a clear mainshock in Chaparral, say), a person adds one. No
+  language model writes or rewrites any of it (owner decision, 2026-09-24).
+- **The rules, and why their thresholds are what they are:**
+  - *Pace* (`pace`): a source's last 120 h at or above the zone's Mc against its median day since
+    its first event. Quieter below half, busier above 1.5×. A sliding 120 h, not the last five
+    calendar days, so the day in progress does not drag it down; the median, so one busy day does
+    not set "usual". Two weeks of history before it has a usual pace at all. Earlier lulls are runs
+    of days whose trailing five-day mean is under half the usual rate, and "recovered" means the
+    mean came back to the usual rate before the next one — which is what lets the page say "it did
+    this before and picked up again" only when it did.
+  - *Decay* (`decay`): the last week at under a tenth of the first week's rate reads as an ordinary
+    aftershock decay. Three weeks of history first.
+  - *Where the strong events came from* (`recentStrong`): all from one source, three in four from
+    one ("mostly"), or a mix. The threshold is the reader's, M4.0 by default: they say that is
+    where they start to feel them, and the page never claims an event was felt.
+  - *Drift* (`drift`): the median epicentre of the swarm's first day against the last 24 h. A
+    movement is stated only when it exceeds both 1.5 km and the events' median horizontal location
+    error, and always as a hint. Ten events at each end or nothing.
+- **Measured on production, 2026-09-24 14:44 UTC** (the fixture `test/fixtures/api-events-2026-09-24.json`,
+  every figure recomputed in Python): the shallow group ran **4.8 events a day** in the last 120 h
+  against a median day of **10** (Mc 2.3) — quieter, but only just past the half-rate line, so the
+  page states both figures. It did the same from **30 August to 9 September** and came back
+  (14 September's five-day mean was 12). No M ≥ 4 in Chocó since **19 September 23:20 UTC**; all
+  17 since the swarm began came from Chaparral, 17 of the week's 25. The deep group went from 10.9
+  events a day in its first week to 0.3 in the last. The M7.4 holds over 99.9% of Chocó's moment;
+  Chaparral's largest, M4.5, about 12–13% of the swarm's.
+- **The two coincide in time, and the page must not connect them.** Chocó's shallow group quietened
+  on the day the Chaparral swarm began. Nothing here tests a link, and two lines on one chart would
+  read as one. The page names SGC's hypothesis about the M7.4 and Chaparral as SGC's, and says
+  outright that timing is not cause.
+- **Simplifications, each labelled where it appears:** energy ratios from log E = 1.5 M + const
+  (31.6× a unit, 1000× two); recorded amplitude 10× a unit (Richter's definition; a rule of thumb
+  for the other types); P ≈ 6.5 km/s and S ≈ 3.7 km/s for "the waves took about N seconds"; a 1/t
+  curve anchored to the deep group's first day as "the typical aftershock shape (Omori's law)",
+  never fitted; a relative ground-motion figure of 10^M ÷ distance only as an illustration of "why
+  distance matters", **never as a prediction of shaking**. Converting magnitude and distance into
+  felt intensity needs a published equation for intermediate-depth events, and `docs/ideas.md`
+  still stands: do not write one from memory.
+- **No drawn plate.** The subducting Nazca plate is explained in words (it is well established) and
+  the cross-section shows the events alone: they get deeper toward the east by themselves. A
+  schematic band was tried in the prototype, and its geometry was invented.
+- **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
+  for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
+  map, because it was 103 km deep.
