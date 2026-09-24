@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { commonDepths, fmtInt, fmtPct, horizontalErrorKm, roundSig, timeWindows } from "./shared";
 
 describe("formats", () => {
-  it("groups thousands with a thin space in both languages, from five digits", () => {
+  it("groups thousands with a narrow no-break space in both languages, from five digits", () => {
     expect(fmtInt(1234)).toBe("1234");
     expect(fmtInt(125_893)).toBe("125\u202F893");
     expect(fmtInt(-12_000)).toBe("−12\u202F000");
-    expect(fmtPct(96, "es")).toBe("96\u202F%");
+    expect(fmtPct(96, "es")).toBe("96\u00A0%");
     expect(fmtPct(96, "en")).toBe("96%");
   });
   it("rounds to significant figures without reaching zero", () => {
