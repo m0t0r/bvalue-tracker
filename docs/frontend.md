@@ -88,9 +88,13 @@ those, so an untouched tab shows no chips on either side.
 - **The tabs are named by department, "Chocó | Tolima"**, as SGC's daily bulletin names the pair.
   The Tolima tab's heading names the locality, "Enjambre sísmico de Chaparral (Tolima)", because
   its box covers only the swarm and "Tolima" alone would claim the whole department.
-- **The tabs sit in the header's top row with the language and theme buttons**, and the title and
-  subtitle underneath are the zone's own. On a phone the controls wrap under the tabs rather than
-  squeezing them; at 375 px they share one row.
+- **The tabs sit in the header's top row with three controls**: the link to `/insights` ("Qué está
+  pasando", with a lightbulb), the language and the theme. The title and subtitle underneath are the
+  zone's own. On a phone the controls wrap under the tabs rather than squeezing them; at 375 px they
+  share one row, which is why the link shows only its icon below `sm` (its words stay its name), and
+  why the language button says "EN" / "ES" rather than the language's name (owner's call,
+  2026-09-24). The button's accessible name is "EN (English)": the full name for a screen reader, with
+  the visible code kept in it so a voice command for what is on screen still finds it.
 - **What is a Chocó finding stays on Chocó's tab**: the depth-groups card and the magnitude chart's
   group legend and tooltip line (`depthClusters` in `core/zones.ts`). The copy that differs lives in
   `t.zones[zone]` — title, subtitle, back-fill text and the caveats — and the update interval is a
@@ -115,6 +119,43 @@ those, so an untouched tab shows no chips on either side.
   tiempo" adds the hour when its windows span under four days (a date alone repeated).
   Its magnitude axis tops out per zone, M8 for Chocó and M6 for Chaparral, and grows past that
   only for an event that needs it.
+
+## The insights page
+
+**`/insights` is a second page with its own HTML file and its own bundle** (`insights.html`,
+`src/insights/main.tsx`; the `client` entry in `vite.config.ts`). It explains the zones in plain
+words for a reader in Pereira (the rules for what it may say are in
+[the science](science.md#the-insights-page-insights-from-2026-09-24)). D3's maths modules
+(`d3-geo`, `d3-scale`, `d3-shape`, `d3-array`) load only there, and the monitor's Recharts and
+MapLibre never do; React renders the SVG, so there is no `d3-selection`.
+
+- **The route.** The asset layer serves `insights.html` at `/insights` in production. In dev the
+  Cloudflare plugin would hand that path to the Worker, which answers 404 (the same trap as the zone
+  pages), so `insightsPage` in `vite.config.ts` serves it first. The monitor's header links to it,
+  and it links back.
+- **Two tabs, "La historia" and "Preguntas"**, in the query string (`?tab=questions`; the story is
+  the bare URL). Switching replaces the history entry rather than pushing one: back leaves the page.
+  Each tab is its own lazy chunk (`src/insights/story`, `src/insights/questions`), so the shell and
+  the data arrive first.
+- **Live data, kept current like the monitor.** `useInsights` reads `/api/events` for both zones under
+  `["events", zone]`, and computes every claim with `insights()` over them and a clock rounded to
+  the minute. Status is polled every minute and on returning to the tab, and a zone's events are
+  refetched when its last ingest changes, the monitor's own rule, so a page left open does not keep
+  counting "the last 7 days" over a catalogue that stopped growing. The two pages are separate
+  documents and share no cache. Status also drives the warning while either zone's history is
+  incomplete (`backfill.done < total`); the page never starts the back-fill, which is the monitor's,
+  so nothing on it can reach SGC.
+- **Copy.** The shell and every data-dependent sentence live in `src/insights/copy.ts`; each is a
+  function of a claim's result, so the words cannot say more than the rule decided. Each tab keeps its
+  long-form prose in its own `copy.ts`. Language and theme are the monitor's (`useI18n`, `theme.ts`),
+  so a choice made on one page holds on the other.
+- **Colours.** Chocó's groups keep the monitor's blue and teal and the mainshock its orange. The
+  Chaparral swarm is `--chart-5`, a violet chosen by search against all four under simulated colour
+  blindness (the numbers are in `index.css`). **Pereira is `foreground`, never a colour**: it is the
+  reader's own marker, and red means failure.
+- **Map outlines** are `src/insights/region.geo.json`, 26 kB of Natural Earth (public domain) cut to
+  Colombia and its three neighbours by `scripts/insights-region.ts` and committed. Re-run the script
+  only to change the countries.
 
 ## Interface conventions
 

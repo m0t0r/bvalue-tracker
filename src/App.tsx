@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangleIcon, InfoIcon, MoonIcon, SunIcon } from "lucide-react";
+import { AlertTriangleIcon, InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
 import { lazy, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
 import { ClustersCard } from "@/components/clusters-card";
@@ -64,9 +64,21 @@ export function App() {
               ))}
             </TabsList>
             <div className="ml-auto flex items-center gap-2">
+              {/* The explanations page, for a reader who wants the why rather than the figures. */}
+              <Button variant="outline" size="sm-touch" asChild>
+                <a href="/insights">
+                  <LightbulbIcon />
+                  {/* Icon only on a phone, so the tabs and the three controls still share one row at
+                      375 px; the words stay the link's name. */}
+                  <span className="max-sm:sr-only">{t.insightsLink}</span>
+                </a>
+              </Button>
               {/* The `-touch` sizes: on touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
               <Button variant="outline" size="sm-touch" lang={other} onClick={() => setLang(other)}>
-                {lang === "es" ? "English" : "Español"}
+                {/* The code the page switches to, in its own language; the name spells it out, and keeps the
+                    code in it so a voice command for what is on screen still finds the button. */}
+                {lang === "es" ? "EN" : "ES"}
+                <span className="sr-only">{lang === "es" ? " (English)" : " (Español)"}</span>
               </Button>
               <Button
                 variant="outline"

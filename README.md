@@ -33,6 +33,10 @@ terms in plain words.
 - **Map, charts and table.** Events on a map, magnitude over time, the
   frequency–magnitude distribution and a sortable events table, all driven by one
   set of filters.
+- **"Qué está pasando" (`/insights`).** A second page that explains the two zones in plain words to a
+  reader in the coffee region who feels the larger events: a scrolling story and a set of questions,
+  both drawn with D3 from the live catalogue. Every sentence about the data is chosen by a tested rule,
+  so it cannot drift from the figures beside it.
 - **Downloadable data.** CSV of the events and of b over time, straight from the page.
 - **CLI.** Fetch the catalogue to CSV and compute b-values offline, independent of
   the hosted app.
@@ -74,7 +78,7 @@ flowchart LR
 | `core/` | Runtime-neutral logic shared by the Worker, the browser and Node: the SGC request and HTML parser, the admission gate every event passes through, the statistics, CSV and the CLI. |
 | `packages/seismo/` | The seismology library: Gutenberg–Richter statistics and mainshock detection, pure and runtime-neutral, knowing nothing about SGC, a zone or the page. |
 | `worker/` | The Hono API, the ingest planner and ingest mechanics, D1 access, and the response types shared with the page. |
-| `src/` | The React page. `src/lib/i18n.tsx` holds every user-facing string in Spanish and English. |
+| `src/` | The React pages. `src/lib/i18n.tsx` holds the monitor's strings in Spanish and English; `src/insights/` is the explanations page, with its claim rules and its own copy. |
 | `migrations/` | The D1 schema. |
 | `scripts/` | Operator tools outside the Worker, such as `pnpm logs`. |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime), against SGC responses captured as fixtures. |
