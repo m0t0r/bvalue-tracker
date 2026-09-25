@@ -268,9 +268,13 @@ const es = {
     items: [
       "Si el enjambre de Chaparral tiene que ver con el sismo del {date}. El SGC lo plantea como hipótesis.",
       "Cuánto durará el enjambre de Chaparral.",
-      "Si vendrá un sismo más grande. Nadie puede predecir un sismo: ni el día, ni el lugar exacto, ni el tamaño.",
-      "Qué pasa por debajo de M2.0: el catálogo público del SGC empieza ahí.",
     ],
+    bigger:
+      "Si vendrá un sismo más grande. Nadie puede predecir un sismo: ni el día, ni el lugar exacto, ni el tamaño.",
+    /** After `bigger`, only while the questions tab shows USGS's forecast. */
+    forecast:
+      "El USGS sí publica un pronóstico de probabilidades para el Chocó; lo encuentras en la pregunta «¿Viene uno más grande?» de la pestaña «Preguntas».",
+    floor: "Qué pasa por debajo de M2.0: el catálogo público del SGC empieza ahí.",
     closing:
       "Lo útil no es adivinar, sino estar preparado y seguir la información oficial del Servicio Geológico Colombiano.",
   },
@@ -569,9 +573,12 @@ const en: StoryCopy = {
     items: [
       "Whether the Chaparral swarm has to do with the earthquake of {date}. SGC puts it forward as a hypothesis.",
       "How long the Chaparral swarm will last.",
-      "Whether a larger earthquake will come. Nobody can predict earthquakes: not the day, the exact place or the size.",
-      "What happens below M2.0: SGC's public catalogue starts there.",
     ],
+    bigger:
+      "Whether a larger earthquake will come. Nobody can predict earthquakes: not the day, the exact place or the size.",
+    forecast:
+      'USGS does publish a forecast of probabilities for Chocó; you will find it under the question "Is a bigger one coming?" on the "Questions" tab.',
+    floor: "What happens below M2.0: SGC's public catalogue starts there.",
     closing:
       "What helps is not guessing but being prepared, and following the official information of the Servicio Geológico Colombiano.",
   },

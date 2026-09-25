@@ -379,7 +379,7 @@ the reader's own questions). Everything above still applies to it; this section 
   map, because it was 103 km deep.
 - **USGS's products for the M7.4, as the daily job reads them** (re-fetched 2026-09-24 for
   us6000tjl2; `worker/usgs.ts`, [the daily USGS job](ingest.md#the-daily-usgs-job)). DYFI and PAGER
-  are on the questions tab (below); the forecast is shown by nothing until the plan's Part D. The facts:
+  are on the questions tab (below), and so is the forecast (the last rule in this section). The facts:
   - *DYFI*: the 10 km cell that contains Pereira's point has **CDI 8 from 41 responses**, of 1,249
     in total. DYFI labels that cell **"Dos Quebradas"**, not Pereira; the two cells it labels
     "Pereira" lie just west of the city (CDI 7.7 from 10, 7.3 from 2). The page's point decides the
@@ -425,4 +425,81 @@ the reader's own questions). Everything above still applies to it; this section 
     modelo del USGS"), dated from the product's own
     update time, and linked to USGS's event page. The question also points to SGC as the
     authority and to its form for reporting a felt earthquake.
+- **"¿Viene uno más grande?" relays USGS's aftershock forecast; the page computes none** (from
+  2026-09-25; `usgsForecast` in `src/insights/claims.ts`, the box in `questions/forecast.tsx`). The
+  reader's real question is whether another big one is coming, and a reviewed, official answer with
+  its uncertainty is more honest than "nobody knows" alone. The method is USGS's (an ETAS model on
+  ComCat, reviewed by a USGS seismologist at each update), so `docs/ideas.md`'s demand that the
+  researcher check a forecast's method applies to one built here, and none is. The wording was
+  reviewed by the owner before it was built. **"No es un pronóstico" is about the page's own
+  figures**: the b-value and every count stay descriptions, and the footer says "las cifras que
+  calcula esta página". The rules:
+  - **Only a reviewed forecast, only for the mainshock the page detects, only while fresh.** Shown
+    while the digest's `sgcEventId` is the zone's `found` mainshock, its `review-status` is
+    `reviewed` (an automatic one is hidden; owner, 2026-09-25), and the clock is before USGS's
+    `nextForecastTime`; without one, before 14 days from issue (two missed weekly updates). The
+    file's `expireTime` is a year after issue and is ignored. A stale box is hidden, never greyed, at
+    the due time to the millisecond: the page's clock is rounded to the minute, so `useInsights` also
+    re-renders at the due time itself (the code review found a replaced forecast staying up to 90 s).
+    **Known gap, kept on purpose** (code review, 2026-09-25): the daily job (`7 11 * * *`) stores
+    USGS's next forecast only on its next run, and USGS publishes about two hours after the nominal
+    time, so the box is missing for up to about a day each week (on the fixture, from 28 Sept 16:00
+    UTC to the job of the 29th). A grace period would show a probability USGS has already replaced;
+    the fix, if the gap matters, is for the job to fetch soon after `nextUpdateAt`. For the same
+    reason a page left open across `nextUpdateAt` drops the box then. It then asks `/api/context`
+    again on a return to the tab, but only once a job run has finished since the due time (the job's
+    schedule is `core/products.ts`, shared with the Worker's cron), so a reader flipping tabs through
+    the gap sends nothing the server could not answer; after a failed attempt, 10 minutes before the
+    next; and for two days past the due time at most (`contextRecheckDue` in `context-refresh.ts`).
+    So the page shows USGS's next forecast once the job has stored it, without a reload.
+    Chocó only: the page asks USGS for nothing about Tolima, where SGC's position rules out a
+    probability of a larger event (above).
+  - **USGS's windows start at the forecast's start, not today** (2026-09-21 16:00 UTC for all four
+    on the fixture), so a window is named by its dates ("entre el 21 sept y el 28 sept"), never "the
+    next week"; an ended window is dropped, and nothing is rescaled to the days left, which would be
+    computing a forecast. **The week and the month only, at M5 and M6** (owner, 2026-09-25): the year
+    window is the most alarming and least useful, and M4+ invites reading every M4 as felt. The month
+    adds one sentence for USGS's "as large as the mainshock or larger" (0.33 % on the fixture), named
+    by the window's two dates like the rows, and only while the month window itself is shown.
+  - **The words never say more than the number.** A whole percent, never a decimal (43.47 % claims a
+    precision a model lacks); under 0.5 % "menos del 1 %", from 99.5 % "más del 99 %". Beside it a
+    natural frequency **worked out from the percentage shown**, so one shown figure always gets one
+    phrase (the code review found 19.6 % and 20 % both shown "20 %" but read "1 de cada 5" and "2 de
+    cada 10"): from a shown 95 % "casi seguro"; from 20 %, "unas k de cada 10", k the shown percent in
+    tenths (45 % is 5); below, "alrededor de 1 de cada N", N = 100 ÷ the shown percent, whole under 20
+    and one significant figure from 20 (a shown 6 % is 16.7, so "1 de cada 17"; 2 % is "1 de cada
+    50"). Under 1 %, shown only as "menos del 1 %", N comes from the probability itself (0.33 % is
+    "1 de cada 300"), and below 0.1 % it is "menos de 1 de cada 1000". Counts are written as the page
+    writes counts (`fmtInt`: "1000"). "4 de cada 10" for 15 % would be too coarse and "1 de cada 2" for
+    43 % would overstate it; tests hold every band edge, one phrase per shown percent over the whole
+    range, and each frequency within 5 points and a factor of 1.5 of the percentage beside it. The most likely
+    count and USGS's range are said as "lo más probable es que no haya ninguno, aunque según el USGS
+    podría haber hasta 3"; the range's "95 %" is left out (a reader would take it for a second
+    probability) and USGS's page, linked, states it. One line explains "4 de cada 10" with a
+    frequency the box shows.
+  - **A magnitude at the source is not shaking in Pereira.** One sentence says almost all of Chocó's
+    events are over N km away in a straight line: the largest multiple of 10 km that at least 95 % of
+    them lie beyond (110 on the fixture, where 95.9 % do; 76.6 % are over 120). Not a group's median,
+    which half its events are nearer than (the first version used it, and the code review caught
+    "más de" claiming it of every source), nor the nearest event, a 62.8 km outlier. It adds that an
+    M5's waves arrive much weakened, **but only from 100 km** (`FAR_FROM_KM`): the claim was weighed at
+    the ~110 km Chocó is today, and a catalogue that brought the figure down (the code review imagined
+    "más de 0 km") would make it false, so nearer than that the box keeps only "a magnitude is not
+    shaking here". The distance is worked out once per catalogue (`chocoReach`), not every minute. It
+    points to "¿Qué tan fuerte se sintió?"
+    for the M7.4. It never says the forecast's M5 will be that far: **USGS's circle (125.4 km around
+    4.57° N, 76.69° W) reaches Pereira**, 113 km from its centre. No intensity is given for a
+    hypothetical M5 (the rule above against a felt-intensity equation stands).
+  - **Its limits are stated in the box**: one circle holding both of Chocó's groups (said only while
+    both groups' median epicentres are inside it), so it cannot say which one; USGS's catalogue at
+    M ≥ 4.45, not SGC's, so its figures cannot be checked against the page's counts; and its b = 1.0
+    against the page's (0.74 at Mc 2.3 on the fixture). USGS's background page says it "usually"
+    keeps the generic b and fits only the productivity, so the page says the model "uses" b = 1.0,
+    never that it computed it. `M4.45` is written as USGS gives it.
+  - **Attributed and bounded.** Its own box headed "El USGS publica este pronóstico", with USGS's
+    issue date, its reviewer and its next update; nothing of the page's is drawn inside it; SGC is
+    named as the authority for what to do, and the box gives no advice of its own. The number never
+    travels without its caveats: nothing in share previews, the monitor, notifications or the MCP
+    server. The story's "Lo que nadie sabe" adds one line pointing to the question, under the same
+    conditions (`usgsForecast` again).
 

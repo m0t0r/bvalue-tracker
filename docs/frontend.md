@@ -176,10 +176,14 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   the distance question it answers for one real event. It appears only when `feltInPereira` has a
   figure (see [the science](science.md#the-insights-page-insights-from-2026-09-24)), so it is in the
   index or not at all. **Because a question can appear or not, the page waits for `/api/context`**:
-  `useInsights` asks for it beside the catalogues and counts it in `isPending`, with no retry and no
-  refetch while the page is open (`staleTime: Infinity`). A late answer, a retried 5xx or a refetch
-  on focus after the daily job dropped a digest would each have inserted or removed a question above
-  the reader and renumbered the rest (code review, 2026-09-25). It is a few hundred bytes and goes
+  `useInsights` asks for it beside the catalogues and counts it in `isPending`, with no retry. A late
+  answer or a retried 5xx would have inserted a question above the reader and renumbered the rest
+  (code review, 2026-09-25). **Whether question 2 exists is decided by the first settled answer, for
+  good** (`keepFeltFromFirst` in `context-refresh.ts`): a later answer, fetched to keep the forecast
+  current (see its bullet below), may update USGS's felt figures but never adds or removes one, so no
+  refetch renumbers the questions. After a failed first load the page never asks again while open.
+  The first answer is kept with React's set-during-render pattern, not an effect, so no extra commit
+  (and no second skeleton frame) follows it. It is a few hundred bytes and goes
   out with the much larger catalogues, so the wait costs nothing measurable; a failure settles at
   once and only hides the question, never the page's load error.
   - The readings sit side by side in a `Figure` (stacked on a phone), each a large numeral with the
@@ -196,6 +200,40 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   text alternative lists every row with its label. Both layouts, the first part's and the second's,
   stay mounted so the step change cross-fades; drawing only the active one was suggested in review
   and declined, since the two fits cost well under a millisecond.
+- **USGS's forecast is a box inside "¿Viene uno más grande?"**, not a question of its own
+  (`questions/forecast.tsx`, 2026-09-25; the rules are in
+  [the science](science.md#the-insights-page-insights-from-2026-09-24)). The draft wording had it as a
+  new question, "¿Puede venir otro grande?", beside the existing one; two questions that close in the
+  index, one right after the other opening "Nadie puede predecir…", read as a duplicate, so the owner
+  chose one question: its "nadie lo sabe" and SGC's position first, then a one-paragraph bridge
+  ("Lo que sí existe es un pronóstico de probabilidades…"), the box, and "Lo que sí sirve" after it.
+  Without a fresh reviewed forecast the question is exactly as it was. The box is a `section` headed
+  by an `h4`, one `h5` per window and a `dl` of the rows; a large percentage figure was left out on
+  purpose, so the number is never read without its sentence. Its content arrives with
+  `/api/context`, which the page already waits for, so it never appears under the reader on load. It
+  can leave under one: on a page left open across USGS's next update it is dropped then, the
+  science's staleness rule winning over layout (at most once a week). **The page then picks up the
+  next forecast on its own** (`context-refresh.ts`, tested): `refetchOnWindowFocus` and
+  `refetchOnReconnect` are a function, `contextRecheckDue`, over the answer and the last attempt, and
+  `staleTime` stays `Infinity` so nothing else refetches. A return to the tab asks again only once
+  the daily job has run since the forecast was due and since the page's last answer (its schedule is
+  `core/products.ts`, shared with the Worker), so the gap before the job, up to about 19 hours, sends
+  nothing; after a failed attempt, 10 minutes before the next; for two days past the due time at
+  most. Never with no forecast stored, and never after a failed first load. A failed refetch keeps
+  what the page has. The box coming or going on a return to the tab can move what is below it, once
+  a week at most; that is the price of a page that stays current without a reload, and browsers with
+  scroll anchoring keep the reader's line in place. The first version used a `staleTime` function and
+  looked right in unit tests, but TanStack counts `staleTime` from the fetch, and a query with no data
+  is always stale, so it neither refetched when due nor stayed quiet after a failed load; a browser
+  check and the code review caught both. **Checked in a browser on 2026-09-25** (with the recheck then
+  due at the forecast's due time; agent-browser cannot move the clock to a job run, so the job-timed
+  version rests on its unit tests): with a forecast due two minutes after load, the box left at the
+  due time and, on the next return to the tab, came back with the newer figures while question 2
+  stayed although the newer answer had no felt data; with `/api/context` failing on load, a return to
+  the tab sent no request. `useInsights` decides the
+  forecast once (`forecast`) for both tabs. The story's pointer is a sentence naming the question and the tab, not
+  a hyperlink: a `?tab=` link reloads the page, and the hash would be read before the question
+  exists. A test holds the sentence to both names, so renaming either breaks it.
 - **Back to top is a round button that appears only near the end of a tab** (`back-to-top.tsx`,
   2026-09-24). One `IntersectionObserver` on the footer shows it within half a window of it, so it is
   never over the text during the read; on a phone the story's drawing already takes the top half of

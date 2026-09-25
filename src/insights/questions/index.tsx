@@ -7,12 +7,21 @@
  * said by its sentence in `../copy.ts`.
  */
 import { energyRatio, epicentralKm } from "@bvalue/seismo";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { dayStart, fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ContextResponse } from "@/lib/api";
-import { SOURCES, decay, feltInPereira, lastStrong, recentStrong, type Insights, type QuakeLike } from "../claims";
+import {
+  SOURCES,
+  decay,
+  feltInPereira,
+  lastStrong,
+  recentStrong,
+  type Forecast,
+  type Insights,
+  type QuakeLike,
+} from "../claims";
 import { insightsCopy } from "../copy";
 import { BothZonesTimeline, DriftMultiples, EnergyShare, FeltCalendar, TwoClocks } from "./charts";
 import { questionsCopy, type Named } from "./copy";
@@ -20,6 +29,7 @@ import { commonDepths, fmtInt, median, medianHorizontalErrorKm, roundSig } from 
 import { colombianDays, toPereira } from "./derive";
 import { EnergyDots, pct } from "./energy-dots";
 import { FeelExplorer } from "./feel";
+import { ForecastBox } from "./forecast";
 import { Shaking } from "./shaking";
 import { P, Takeaway } from "./ui";
 
@@ -33,7 +43,16 @@ const chocoStillActive = (data: Insights) =>
     (e) => e.mag >= data.mc.choco! && Date.parse(e.time) > data.now - 7 * DAY && Date.parse(e.time) <= data.now,
   );
 
-export function Questions({ data, context }: { data: Insights; context: ContextResponse | null }) {
+export function Questions({
+  data,
+  context,
+  forecast,
+}: {
+  data: Insights;
+  context: ContextResponse | null;
+  /** USGS's forecast as `usgsForecast` decided it, once for both tabs (`useInsights`). */
+  forecast: Forecast | null;
+}) {
   const { lang } = useI18n();
   const q = questionsCopy[lang];
   const ref = data.mainshock.choco.largest;
@@ -82,7 +101,12 @@ export function Questions({ data, context }: { data: Insights; context: ContextR
       q: q.felt.q,
       body: <Felt data={data} threshold={threshold} onThreshold={setThreshold} />,
     },
-    { id: "q-bigger", short: q.bigger.short, q: q.bigger.q, body: <Bigger /> },
+    {
+      id: "q-bigger",
+      short: q.bigger.short,
+      q: q.bigger.q,
+      body: <Bigger forecast={forecast} named={named} feltShown={felt !== null} />,
+    },
     { id: "q-unknown", short: q.unknown.short, q: q.unknown.q, body: <Unknown data={data} /> },
   ];
   return <Layout data={data} reference={ref} named={named} sections={sections} />;
@@ -380,13 +404,34 @@ function Felt({
   );
 }
 
-function Bigger() {
+/**
+ * When USGS's forecast box comes or goes on an open page (its due time, or a return to the tab), the
+ * question holding it changes height. Browsers with CSS scroll anchoring keep the reader's line in
+ * place by themselves; where `overflow-anchor` is unsupported (Safari, as far as the page can tell),
+ * a change wholly above the reader is scrolled away by hand, so the text under them does not jump.
+ */
+function useKeepReaderInPlace(id: string, change: unknown) {
+  const height = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const before = height.current;
+    const after = el.offsetHeight;
+    height.current = after;
+    if (before === null || before === after || CSS.supports("overflow-anchor", "auto")) return;
+    if (el.getBoundingClientRect().bottom < 0) window.scrollBy(0, after - before);
+  }, [id, change]);
+}
+
+function Bigger({ forecast, named, feltShown }: { forecast: Forecast | null; named: Named; feltShown: boolean }) {
   const { lang } = useI18n();
   const c = questionsCopy[lang].bigger;
+  useKeepReaderInPlace("q-bigger", forecast);
   return (
     <>
       <P>{c.p1}</P>
       <P>{c.p2}</P>
+      {forecast ? <ForecastBox forecast={forecast} named={named} feltShown={feltShown} /> : null}
       <div className="mt-6 max-w-prose rounded-xl bg-muted p-5">
         <p className="text-sm font-semibold">{c.helpTitle}</p>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5 text-base/7">

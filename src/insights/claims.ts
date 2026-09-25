@@ -15,7 +15,7 @@ import { dayStart } from "@/lib/format";
 import { clusterOf } from "../../core/clusters";
 import { mainshockId, zoneMainshock, type ZoneMainshock } from "../../core/mainshock";
 import { PEREIRA } from "../../core/places";
-import type { ContextResponse } from "../../worker/api-types";
+import type { ContextResponse, ForecastDigest } from "../../worker/api-types";
 import { medianHorizontalErrorKm } from "./shared";
 
 const HOUR = 3_600_000;
@@ -451,6 +451,191 @@ export function feltInPereira(context: ContextResponse, mainshock: ZoneMainshock
 }
 
 // ---------------------------------------------------------------------------------------------
+// USGS's aftershock forecast for the mainshock: relayed as USGS publishes it, never computed here
+
+/** USGS's windows the page relays, by USGS's own labels (owner, 2026-09-25: no day, no year). */
+export const FORECAST_WINDOWS = ["1 Week", "1 Month"] as const;
+/** The "M or larger" thresholds the page relays (owner, 2026-09-25). */
+export const FORECAST_MAGNITUDES = [5, 6] as const;
+/** "One as large as the mainshock or larger" is given for this window alone (owner, 2026-09-25). */
+const ABOVE_MAINSHOCK_WINDOW = "1 Month";
+/** "Casi todos": the share of Chocó's events the box's distance holds for. */
+const ALMOST_ALL = 0.95;
+/**
+ * The box says Chocó's events are "over N km" away and that an M5's waves arrive much weakened only
+ * from here: the claim was checked at the ~110 km Chocó is today (docs/science.md), and nearer, it is
+ * not bound to hold. Below it the box keeps only "a magnitude is not shaking here".
+ */
+export const FAR_FROM_KM = 100;
+
+/**
+ * Where Chocó's events are, for the forecast box: the distance, in 10 km steps, that almost all
+ * (ALMOST_ALL) of them lie beyond in a straight line from Pereira, and each group's median
+ * epicentre. Not a median distance, which half the events are nearer than, and not the nearest
+ * event, one outlier. Depends on the catalogue alone, so `insights` works it out once per catalogue.
+ */
+export interface ChocoReach {
+  beyondKm: number | null;
+  centres: { shallow: LatLon | null; deep: LatLon | null };
+}
+
+export function chocoReach(shallow: readonly QuakeLike[], deep: readonly QuakeLike[]): ChocoReach {
+  const kms = [...shallow, ...deep].map((e) => hypocentralKm(e, PEREIRA)).sort((a, b) => a - b);
+  const centre = (es: readonly QuakeLike[]) =>
+    es.length ? { lat: median(es.map((e) => e.lat))!, lon: median(es.map((e) => e.lon))! } : null;
+  return {
+    // No more than 5% of the events are nearer than kms[k], so at least 95% lie beyond its floor.
+    beyondKm: kms.length ? Math.floor(kms[Math.floor(kms.length * (1 - ALMOST_ALL))]! / 10) * 10 : null,
+    centres: { shallow: centre(shallow), deep: centre(deep) },
+  };
+}
+
+export interface ForecastRow {
+  /** "M or larger". */
+  magnitude: number;
+  /** USGS's probability of at least one, 0–1. */
+  probability: number;
+  /** USGS's most likely number, and its 95% range. */
+  median: number;
+  p95Min: number;
+  p95Max: number;
+}
+
+/**
+ * What the forecast box shows. Each window is named by its own dates: USGS's windows all start at
+ * the forecast's start, not today, so "the next week" would be a week already partly gone.
+ */
+export interface Forecast {
+  issuedAt: string;
+  nextUpdateAt: string | null;
+  windows: { start: string; end: string; rows: ForecastRow[] }[];
+  /** The chance of one at the mainshock's magnitude (USGS's) or larger, in the month window. */
+  aboveMainshock: { magnitude: number; probability: number; start: string; end: string } | null;
+  /**
+   * USGS's model, for the box's limits: its b and its magnitude cut-off, and whether its circle holds
+   * the median epicentres of both of Chocó's groups (it cannot say which group the next one is in).
+   */
+  model: { b: number; mc: number; radiusKm: number; holdsBothGroups: boolean };
+  /**
+   * The page's own figures the limits set beside USGS's, and `chocoReach`'s distance when it is at
+   * least FAR_FROM_KM, the one the box says an M5's waves arrive much weakened from; null nearer.
+   */
+  page: { b: number | null; mc: number | null; farKm: number | null };
+  /** USGS's forecast page for the event; null for an id that is not shaped like USGS's. */
+  usgsUrl: string | null;
+}
+
+/**
+ * A probability as a natural frequency, in words that never say more than the percentage beside it:
+ * "4 in 10" for 43% is fair, "1 in 2" would overstate it, and "4 in 10" for 15% would be too coarse
+ * (it is 1.5 in 10), so small chances are "1 in N". It is worked out from the percentage shown, so
+ * one shown figure always gets one phrase (19.6% and 20% are both "20%: 2 in 10"): the band, the
+ * tenths (a shown 45% is 5 in 10) and N (100/6 = 16.7, so a shown 6% is "1 in 17"). N is a whole
+ * number under 20 and one significant figure from 20: USGS's figures are model output, not
+ * measurements. Under 1%, where the figure is only "less than 1%", N comes from the probability
+ * itself (1/0.0033 = 303 is "1 in 300").
+ */
+export type Natural =
+  | { case: "almost-certain" }
+  | { case: "tenths"; tenths: number }
+  | { case: "one-in"; n: number }
+  | { case: "under-one-in-1000" };
+
+export function naturalFrequency(p: number): Natural {
+  const pct = wholePercent(p);
+  if (pct.case === "over-99") return { case: "almost-certain" };
+  if (pct.case === "under-1") return p < 0.001 ? { case: "under-one-in-1000" } : { case: "one-in", n: oneIn(1 / p) };
+  const v = pct.value;
+  if (v >= 95) return { case: "almost-certain" };
+  if (v >= 20) return { case: "tenths", tenths: Math.round(v / 10) };
+  return { case: "one-in", n: oneIn(100 / v) };
+}
+
+/** N in "1 in N": a whole number under 20, one significant figure from 20. */
+function oneIn(n: number): number {
+  if (n < 20) return Math.round(n);
+  const unit = 10 ** Math.floor(Math.log10(n));
+  return Math.round(n / unit) * unit;
+}
+
+/**
+ * A probability in whole percent, never a decimal: 43.47% would claim a precision a model lacks.
+ * Under half a percent it is "less than 1%" rather than 0, and from 99.5% "more than 99%" rather
+ * than 100.
+ */
+export type Percent = { case: "under-1" } | { case: "over-99" } | { case: "whole"; value: number };
+
+export function wholePercent(p: number): Percent {
+  if (p < 0.005) return { case: "under-1" };
+  if (p >= 0.995) return { case: "over-99" };
+  return { case: "whole", value: Math.round(p * 100) };
+}
+
+/**
+ * Without a next update from USGS, a forecast older than this is not shown: two missed weekly
+ * updates. The file's own `expireTime` is a year after issue, so it is no guide (docs/science.md).
+ */
+export const FORECAST_MAX_AGE_DAYS = 14;
+
+/**
+ * When a stored forecast stops being shown: USGS's next update, or 14 days after issue without one.
+ * `context-refresh.ts` asks for the next forecast from the same moment.
+ */
+export const forecastStaleAt = (d: ForecastDigest) =>
+  d.nextUpdateAt === null ? Date.parse(d.issuedAt) + FORECAST_MAX_AGE_DAYS * DAY : Date.parse(d.nextUpdateAt);
+
+/**
+ * `now` is the exact time, which the page passes at the due time itself: `data.now` is rounded to the
+ * minute and would keep a replaced forecast on screen for up to a minute and a half.
+ */
+export function usgsForecast(context: ContextResponse, data: Insights, now = data.now): Forecast | null {
+  const product = context.forecast;
+  // About the mainshock the page detects, as with `feltInPereira`, and only once USGS has reviewed it:
+  // the case for relaying it at all is that a USGS seismologist has checked it.
+  if (!product || product.sgcEventId !== mainshockId(data.mainshock.choco)) return null;
+  const d = product.digest;
+  if (d.reviewStatus !== "reviewed") return null;
+  if (!(now < forecastStaleAt(d))) return null;
+  const windows = d.windows.flatMap((w) => {
+    if (!(FORECAST_WINDOWS as readonly string[]).includes(w.label) || Date.parse(w.end) <= now) return [];
+    const rows = FORECAST_MAGNITUDES.flatMap((m) => {
+      const bin = w.bins.find((b) => b.magnitude === m);
+      return bin ? [{ ...bin }] : [];
+    });
+    return rows.length ? [{ start: w.start, end: w.end, rows }] : [];
+  });
+  if (windows.length === 0) return null;
+  // Only under a window the box shows, so its dates are on the page above it.
+  const month = d.windows.find(
+    (w) => w.label === ABOVE_MAINSHOCK_WINDOW && windows.some((s) => s.start === w.start && s.end === w.end),
+  );
+  const aboveMainshock =
+    month?.aboveMainshock != null ? { ...month.aboveMainshock, start: month.start, end: month.end } : null;
+  const { beyondKm, centres } = data.chocoReach;
+  const inCircle = (c: LatLon | null) => c !== null && epicentralKm(d.model.regionCenter, c) <= d.model.regionRadiusKm;
+  return {
+    issuedAt: d.issuedAt,
+    nextUpdateAt: d.nextUpdateAt,
+    windows,
+    aboveMainshock,
+    model: {
+      b: d.model.b,
+      mc: d.model.mc,
+      radiusKm: d.model.regionRadiusKm,
+      holdsBothGroups: inCircle(centres.shallow) && inCircle(centres.deep),
+    },
+    page: {
+      b: data.b.choco,
+      mc: data.mc.choco,
+      farKm: beyondKm !== null && beyondKm >= FAR_FROM_KM ? beyondKm : null,
+    },
+    usgsUrl: USGS_EVENT_ID.test(product.sourceEventId)
+      ? `https://earthquake.usgs.gov/earthquakes/eventpage/${product.sourceEventId}/oaf/forecast`
+      : null,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Everything at once
 
 export interface Insights {
@@ -461,6 +646,10 @@ export interface Insights {
   distances: ReturnType<typeof distancesFrom>;
   /** Each zone's Mc (maximum curvature), from the same pipeline as the main page. */
   mc: { choco: number | null; tolima: number | null };
+  /** Each zone's b over the events at or above that Mc: the b card's figure, all magnitude types. */
+  b: { choco: number | null; tolima: number | null };
+  /** Where Chocó's events are, for the forecast box (`chocoReach`). */
+  chocoReach: ChocoReach;
   mainshock: {
     choco: ReturnType<typeof zoneMainshock<QuakeLike>>;
     tolima: ReturnType<typeof zoneMainshock<QuakeLike>>;
@@ -475,10 +664,22 @@ export interface Insights {
   start: { choco: number | null; tolima: number | null };
 }
 
+/**
+ * `chocoReach` once per Chocó catalogue: `insights` runs every minute for the clock, and the
+ * catalogue array is the same object until the next ingest brings a new one.
+ */
+const reachByCatalogue = new WeakMap<readonly QuakeLike[], ChocoReach>();
+function cachedReach(choco: readonly QuakeLike[], sources: Record<Source, QuakeLike[]>): ChocoReach {
+  let reach = reachByCatalogue.get(choco);
+  if (!reach) reachByCatalogue.set(choco, (reach = chocoReach(sources.shallow, sources.deep)));
+  return reach;
+}
+
 export function insights(cat: Catalogues, now: number): Insights {
   const sources = bySource(cat);
   const live = { choco: cat.choco.filter((e) => !e.removedAt), tolima: cat.tolima.filter((e) => !e.removedAt) };
-  const mc = { choco: computeStats(live.choco).mc, tolima: computeStats(live.tolima).mc };
+  const stats = { choco: computeStats(live.choco), tolima: computeStats(live.tolima) };
+  const mc = { choco: stats.choco.mc, tolima: stats.tolima.mc };
   const firstTime = (es: readonly QuakeLike[]) => (es.length ? Math.min(...es.map((e) => Date.parse(e.time))) : null);
   const start = { choco: firstTime(live.choco), tolima: firstTime(live.tolima) };
   const newest = [...live.choco, ...live.tolima].reduce((m, e) => Math.max(m, Date.parse(e.time)), -Infinity);
@@ -488,6 +689,8 @@ export function insights(cat: Catalogues, now: number): Insights {
     sources,
     distances: distancesFrom(sources),
     mc,
+    b: { choco: stats.choco.fit?.b ?? null, tolima: stats.tolima.fit?.b ?? null },
+    chocoReach: cachedReach(cat.choco, sources),
     mainshock: { choco: zoneMainshock(live.choco), tolima: zoneMainshock(live.tolima) },
     largestShare: { choco: largestMomentShare(live.choco), tolima: largestMomentShare(live.tolima) },
     shallowPace: mc.choco === null ? null : pace(sources.shallow, mc.choco, now),

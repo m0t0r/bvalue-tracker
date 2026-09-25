@@ -16,6 +16,9 @@
   decaying like a textbook sequence, so model the clusters separately. Present any
   such number as an unofficial estimate with its uncertainty, name SGC as the
   authority, and have the researcher check the method before it goes public.
+  The forecast half is now done by relaying USGS's own reviewed forecast for the M7.4 (from
+  2026-09-25, under "¿Viene uno más grande?"; see [the science](science.md)), which the page does
+  not compute. A forecast built here, per cluster, and the felt-intensity half are still open.
 - Per-cluster depth over time; migration plots; cumulative
   seismic moment; filtering by RMS/GAP/location error; a view of SGC's revisions,
   which our database records and SGC does not publish.

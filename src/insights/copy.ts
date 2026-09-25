@@ -9,14 +9,20 @@
  */
 import type { Lang } from "@/lib/i18n";
 import { fmtDay } from "@/lib/format";
+import { fmtInt, fmtPct } from "./shared";
 import {
   SOURCES,
   compassPoint,
   intensityLevel,
+  naturalFrequency,
+  wholePercent,
   type Decay,
   type Drift,
   type Felt,
+  type ForecastRow,
+  type Natural,
   type Pace,
+  type Percent,
   type Source,
   type StrongMix,
 } from "./claims";
@@ -85,6 +91,56 @@ const fromSourceShort: Record<Source, string> = {
 const list = (items: string[], and: string) =>
   items.length < 2 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} ${and} ${items.at(-1)}`;
 
+type ForecastCount = Pick<ForecastRow, "median" | "p95Min" | "p95Max">;
+
+/** The frequency "how to read" explains: the first in tenths the box shows, else the first "1 in N". */
+const howToRead = (ps: readonly number[]) => {
+  const ns = ps.map(naturalFrequency);
+  return ns.find((n) => n.case === "tenths") ?? ns.find((n) => n.case === "one-in");
+};
+
+/**
+ * A natural frequency in words: "unas 4 de cada 10", "alrededor de 1 de cada 50". Every count is
+ * written as the page writes counts (`fmtInt`: "1000", grouped only from five digits).
+ */
+const naturalEs = (n: Natural) => {
+  switch (n.case) {
+    case "almost-certain":
+      return "es casi seguro";
+    case "tenths":
+      return `unas ${n.tenths} de cada 10`;
+    case "one-in":
+      return `alrededor de 1 de cada ${fmtInt(n.n)}`;
+    case "under-one-in-1000":
+      return `menos de 1 de cada ${fmtInt(1000)}`;
+  }
+};
+const naturalEn = (n: Natural) => {
+  switch (n.case) {
+    case "almost-certain":
+      return "almost certain";
+    case "tenths":
+      return `about ${n.tenths} in 10`;
+    case "one-in":
+      return `about 1 in ${fmtInt(n.n)}`;
+    case "under-one-in-1000":
+      return `less than 1 in ${fmtInt(1000)}`;
+  }
+};
+/** A percentage, the whole ones through the page's `fmtPct`: "43 %", "más del 99 %", "menos del 1 %". */
+const pctEs = (p: Percent) =>
+  p.case === "whole"
+    ? fmtPct(p.value, "es")
+    : `${p.case === "over-99" ? "más del" : "menos del"} ${fmtPct(p.case === "over-99" ? 99 : 1, "es")}`;
+/** The same after "es", with the article Spanish wants: "del 43 %", "de más del 99 %". */
+const percentEs = (p: Percent) => `${p.case === "whole" ? "del" : "de"} ${pctEs(p)}`;
+const percentEn = (p: Percent) =>
+  p.case === "whole"
+    ? fmtPct(p.value, "en")
+    : p.case === "over-99"
+      ? `over ${fmtPct(99, "en")}`
+      : `less than ${fmtPct(1, "en")}`;
+
 /** "de" + the source's name, contracted where Spanish contracts it: "del grupo…", "del enjambre…". */
 const deSource = (s: Source) => `de ${es.source[s]}`.replace(/^de el /, "del ");
 
@@ -104,7 +160,7 @@ const es = {
     "Al catálogo aún le faltan semanas. Hasta que se complete, las cifras y las conclusiones de esta página no son representativas. El monitor se encarga de terminar de cargarlo.",
   dataUpTo: (ms: number, lang: Lang) => `Datos del SGC hasta el ${fmtDay(ms, lang)}`,
   footer:
-    "Página independiente, sin relación con el SGC. Las cifras describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
+    "Página independiente, sin relación con el SGC. Las cifras que calcula esta página describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
   timeNote: "Fechas y horas de Colombia (UTC−5).",
   themeToDark: "Cambiar a tema oscuro",
   themeToLight: "Cambiar a tema claro",
@@ -199,6 +255,36 @@ const es = {
         return `Según los reportes que recibió el USGS, ${at} se sintió con intensidad ${named(f.reported.level, "es")}.`;
       return `El modelo del USGS estima que el M${f1(mag)} sacudió Pereira con intensidad ${named(f.modelled!.level, "es")}.`;
     },
+    /** USGS's probability of at least one, in whole percent and as a natural frequency. */
+    forecastChance: (p: number): string =>
+      `La probabilidad de que haya al menos uno es ${percentEs(wholePercent(p))}: ${naturalEs(naturalFrequency(p))}.`,
+    /**
+     * USGS's most likely number and its range. USGS calls the range 95%; the sentence leaves the 95%
+     * out, which a reader would take for a second probability, and the source link states it.
+     */
+    forecastCount: ({ median: m, p95Min: lo, p95Max: hi }: ForecastCount): string => {
+      if (m === 0) {
+        if (hi === 0) return "Lo más probable es que no haya ninguno.";
+        return `Lo más probable es que no haya ninguno, aunque según el USGS podría haber ${hi === 1 ? "uno" : `hasta ${hi}`}.`;
+      }
+      const likely = m === 1 ? "Lo más probable es que haya uno" : `Lo más probable es que haya unos ${m}`;
+      if (lo === hi) return `${likely}.`;
+      return m === 1
+        ? `${likely}; según el USGS, podrían ser entre ${lo} y ${hi}.`
+        : `${likely}; según el USGS, entre ${lo} y ${hi}.`;
+    },
+    /** What "4 de cada 10" means, said with a frequency the box shows: tenths first. Empty if none has one. */
+    forecastHowToRead: (ps: readonly number[]): string => {
+      const n = howToRead(ps);
+      if (n?.case === "tenths")
+        return `«${n.tenths} de cada 10» quiere decir que, si este mismo periodo se repitiera 10 veces, en unas ${n.tenths} habría al menos uno.`;
+      if (n?.case === "one-in")
+        return `«1 de cada ${fmtInt(n.n)}» quiere decir que, si este mismo periodo se repitiera ${fmtInt(n.n)} veces, en una de ellas habría al menos uno.`;
+      return "";
+    },
+    /** One as large as the mainshock (USGS's magnitude) or larger, in the window from `start` to `end`. */
+    forecastAbove: (a: { magnitude: number; probability: number }, start: string, end: string): string =>
+      `La probabilidad de que haya uno igual o mayor que el M${f1(a.magnitude)} entre el ${start} y el ${end} es ${percentEs(wholePercent(a.probability))}: ${naturalEs(naturalFrequency(a.probability))}.`,
   },
 };
 
@@ -220,7 +306,7 @@ const en: Copy = {
     "The catalogue is still missing weeks. Until it is complete, the figures and what is said about them are not representative. The monitor finishes loading it.",
   dataUpTo: (ms, lang) => `SGC data up to ${fmtDay(ms, lang)}`,
   footer:
-    "An independent page, not affiliated with SGC. The figures describe what has already happened and are not a forecast. For official information, consult the Servicio Geológico Colombiano.",
+    "An independent page, not affiliated with SGC. The figures this page computes describe what has already happened and are not a forecast. For official information, consult the Servicio Geológico Colombiano.",
   timeNote: "Dates and times are Colombia time (UTC−5).",
   themeToDark: "Switch to dark theme",
   themeToLight: "Switch to light theme",
@@ -303,6 +389,26 @@ const en: Copy = {
         return `According to the reports USGS received, the ${m} was felt in Pereira at intensity ${named(f.reported.level, "en")}.`;
       return `USGS's model estimates the ${m} shook Pereira at intensity ${named(f.modelled!.level, "en")}.`;
     },
+    forecastChance: (p) =>
+      `The chance of at least one is ${percentEn(wholePercent(p))}: ${naturalEn(naturalFrequency(p))}.`,
+    forecastCount: ({ median: m, p95Min: lo, p95Max: hi }) => {
+      if (m === 0) {
+        if (hi === 0) return "Most likely none.";
+        return `Most likely none, though USGS says there could be ${hi === 1 ? "one" : `up to ${hi}`}.`;
+      }
+      const likely = m === 1 ? "Most likely one" : `Most likely about ${m}`;
+      return lo === hi ? `${likely}.` : `${likely}; USGS says between ${lo} and ${hi}.`;
+    },
+    forecastHowToRead: (ps) => {
+      const n = howToRead(ps);
+      if (n?.case === "tenths")
+        return `"${n.tenths} in 10" means that if this same period were repeated 10 times, about ${n.tenths} of them would have at least one.`;
+      if (n?.case === "one-in")
+        return `"1 in ${fmtInt(n.n)}" means that if this same period were repeated ${fmtInt(n.n)} times, about one of them would have at least one.`;
+      return "";
+    },
+    forecastAbove: (a, start, end) =>
+      `The chance of one as large as the M${f1(a.magnitude)} or larger from ${start} to ${end} is ${percentEn(wholePercent(a.probability))}: ${naturalEn(naturalFrequency(a.probability))}.`,
   },
 };
 
