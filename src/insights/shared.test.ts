@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commonDepths, fmtInt, fmtPct, horizontalErrorKm, roundSig, timeWindows } from "./shared";
+import { commonDepths, fmtInt, fmtPct, fmtTimes, horizontalErrorKm, roundSig, timeWindows } from "./shared";
 
 describe("formats", () => {
   it("groups thousands with a narrow no-break space in both languages, from five digits", () => {
@@ -8,6 +8,14 @@ describe("formats", () => {
     expect(fmtInt(-12_000)).toBe("−12\u202F000");
     expect(fmtPct(96, "es")).toBe("96\u00A0%");
     expect(fmtPct(96, "en")).toBe("96%");
+  });
+  it("writes an energy ratio so a one-tenth gap never reads as '1 times'", () => {
+    expect(fmtTimes(1.4125)).toBe("1.4");
+    expect(fmtTimes(1.995)).toBe("2");
+    expect(fmtTimes(2.818)).toBe("2.8");
+    expect(fmtTimes(7.943)).toBe("8");
+    expect(fmtTimes(89.13)).toBe("89");
+    expect(fmtTimes(501.2)).toBe("500");
   });
   it("rounds to significant figures without reaching zero", () => {
     expect(roundSig(125_893)).toBe(130_000);

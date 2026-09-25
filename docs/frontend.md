@@ -186,6 +186,16 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
     perceived-shaking term beside it. A reading USGS has not published has no tile; one hidden by the
     fewer-than-5 rule keeps its tile with a dash and the reason, because there USGS does have
     reports and the reader should know why they are not shown.
+- **Story step 2 draws squares true to energy, one per row, largest first** (`Ranks` in
+  `story/scenes.tsx`, `rankLayout` in `history.ts`, 2026-09-25): the M7.4 in the mainshock's orange,
+  past earthquakes in `muted-foreground`. Squares are right-aligned so each label sits beside its own
+  square; left-aligned, the small ones' labels floated ~250 px from them. A row is never shorter than
+  its two lines of text, and the labels step down a pixel at a time (to 9 px) until every row fits:
+  at 320 × 640 the second part's nine rows did not fit at 11 px and the drawing came out empty. The
+  drawing's title names the M7.4 ("frente al M7.4"), because every row's ratio is against it. The
+  text alternative lists every row with its label. Both layouts, the first part's and the second's,
+  stay mounted so the step change cross-fades; drawing only the active one was suggested in review
+  and declined, since the two fits cost well under a millisecond.
 - **Back to top is a round button that appears only near the end of a tab** (`back-to-top.tsx`,
   2026-09-24). One `IntersectionObserver` on the footer shows it within half a window of it, so it is
   never over the text during the read; on a phone the story's drawing already takes the top half of

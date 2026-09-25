@@ -7,18 +7,19 @@ import { geoCircle, geoMercator, geoPath, type GeoProjection } from "d3-geo";
 import { quantileSorted } from "d3-array";
 import { useId, useMemo, type CSSProperties } from "react";
 import type { Lang } from "@/lib/i18n";
-import { fmtDay } from "@/lib/format";
+import { fmtDate, fmtDay } from "@/lib/format";
 import { SOURCES, type Insights, type Source } from "../claims";
 import { PEREIRA } from "../../../core/places";
 import { CUTS, groundAt } from "../plate";
 import { REGION, TOWNS, onCut } from "../region";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
-import { fmtKm, roundSig } from "../shared";
+import { quakeYear, type Compared } from "../history";
+import { fmtKm, fmtMag, fmtTimes, roundSig } from "../shared";
 import { FILL, STROKE } from "../tones";
 import { Layer, SceneTitle, radius, star } from "./marks";
 import type { Ev, StoryModel } from "./model";
-import { Rich } from "./rich";
+import { Rich, fill } from "./rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
 import { KM_PER_DEG, RATE, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
 
@@ -29,8 +30,21 @@ export interface SceneState {
   threshold: number;
 }
 
-/** Plain text for the drawing's text alternative: the template with its figures filled in. */
-const fill = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? "");
+/** The history drawing's text alternative: every square, largest first, with what its label says. */
+function historyAria(model: StoryModel, withLarger: boolean, lang: Lang) {
+  const c = storyCopy[lang].graphic;
+  const h = model.history;
+  const main = model.main;
+  if (!h || !main) return "";
+  const row = (r: Compared) =>
+    `${fill(c.historyRow, { name: r.quake.name[lang], year: String(quakeYear(r.quake)) })}, ${fill(
+      c.historyTimes(r.relation),
+      { mag: fmtMag(r.quake.mag), x: fmtTimes(r.times) },
+    )}`;
+  const mainRow = `${fill(c.historyMain, { date: fmtDate(main.t, lang) })}, ${fmtMag(main.mag)}`;
+  const list = [...(withLarger ? h.larger.map(row) : []), mainRow, ...h.smaller.map(row)];
+  return fill(c.historyAria, { list: list.join("; ") });
+}
 
 export function Graphic({
   data,
@@ -144,10 +158,7 @@ export function Graphic({
       deep: fmtKm(depthMedian("deep") ?? 0),
       rate: RATE,
     }),
-    energy:
-      sub === "ladder"
-        ? c.ladderAria
-        : fill(c.energyShareAria, { share: data.largestShare.choco === null ? "" : share(data.largestShare.choco) }),
+    energy: sub === "ladder" ? c.ladderAria : historyAria(model, sub === "larger", lang),
     clocks: c.clocksAria,
     tolima: fill(c.tolimaAria, {
       choco: data.largestShare.choco === null ? "" : share(data.largestShare.choco),

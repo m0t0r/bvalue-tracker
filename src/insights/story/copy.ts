@@ -10,6 +10,7 @@
 import type { Decay, Drift, Pace } from "../claims";
 import type { PlateSide } from "../plate";
 import type { MainshockState } from "@bvalue/seismo";
+import type { Relation } from "../history";
 
 const es = {
   hero: {
@@ -53,16 +54,34 @@ const es = {
   },
 
   energy: {
-    chapter: "2 · El más grande",
-    /** Keyed on the largest event being the mainshock and holding at least 90 % of the energy. */
-    title: (dominant: boolean): string =>
-      dominant ? "Un solo sismo liberó casi toda la energía" : "El evento mayor y todos los demás",
-    p1: "El {main} del {date} fue de magnitud {mag} (se escribe {magLabel}). Después vinieron {n} eventos más en la misma zona del Chocó.",
-    /** Keyed on the largest event holding more than half the energy, so the others' square is the smaller. */
-    p2: (larger: boolean): string =>
-      larger
-        ? "En el dibujo, el área de cada cuadrado representa la energía. Todos esos eventos juntos caben en el cuadrito pequeño; el {magLabel}, por sí solo, liberó {share} del total."
-        : "En el dibujo, el área de cada cuadrado representa la energía. El {magLabel} liberó {share} del total; todos los demás juntos, el resto.",
+    chapter: "2 · ¿Qué tan grande?",
+    /** Keyed on the mainshock standing clear of everything in the region's record (`largestInRegion`). */
+    title: (largest: boolean): string =>
+      largest ? "El más grande de la región en {years} años de registros" : "Comparado con sismos que se recuerdan",
+    p1: "El {main} del {date} fue de magnitud {mag} (se escribe {magLabel}). Para ver qué tanto es, compáralo con sismos que se recuerdan en Colombia.",
+    /** Only while the mainshock stands clear of the region's record. */
+    region:
+      "Desde {from}, ningún sismo registrado a menos de {radius} de Pereira había sido tan grande. En el dibujo, el área de cada cuadrado representa la energía liberada.",
+    drawing: "En el dibujo, el área de cada cuadrado representa la energía liberada.",
+    /** Only while the mainshock outsizes it. */
+    armenia: "El de Armenia, en {year}, fue de {pastMag}: el {magLabel} liberó unas {x} veces más energía.",
+    /** Only while the mainshock outsizes both. */
+    pair: "En 1995 hubo dos: cerca de Calima ({mag1}) y cerca de Neira ({mag2}). El {magLabel} liberó unas {x1} veces más energía que el primero y unas {x2} veces más que el segundo.",
+    /** Keyed on how the mainshock compares with a past event near the same place and depth. */
+    near: (relation: Relation): string =>
+      `Y algo parecido ya había pasado casi en el mismo lugar: el {date} hubo un {pastMag} a {depth} de profundidad, a unos {km} de este. ${
+        relation === "more"
+          ? "Hay {gap} de diferencia en la escala: el {magLabel} liberó unas {x} veces más energía."
+          : relation === "same"
+            ? "Fue casi del mismo tamaño."
+            : "Aquel fue mayor: unas {x} veces más energía que el {magLabel}."
+      }`,
+    historyNote:
+      "Magnitudes de momento (Mw) del catálogo {source} ({from}–{to}), consultado a través del USGS; la del {magLabel} es la del SGC. Los sismos del dibujo son una selección de sismos conocidos, no todos los que ha habido, y la ubicación de los antiguos es aproximada. Es historia, no un pronóstico.",
+    largerTitle: "Pero Colombia ha tenido sismos más grandes",
+    larger1: "Hubo sismos todavía mayores, y el dibujo los pone a la misma escala:",
+    largerItem: "{name}, {date}: {pastMag}, unas {x} veces la energía del {magLabel}.",
+    larger2: "Que hayan ocurrido no dice cuándo habrá otro: la historia sirve para comparar, no para pronosticar.",
     ladderTitle: "Un punto más de magnitud: unas 32 veces más energía",
     ladder1:
       "La escala de magnitud engaña: subir un punto no significa «un poco más fuerte», sino unas {x1} veces más energía y 10 veces más movimiento en un sismógrafo. Dos puntos significan {x2} veces más energía.",
@@ -287,10 +306,17 @@ const es = {
     groupAt: { shallow: "superficial · ~{km}", deep: "profundo · ~{km}" },
     errorLegend: "＋ error típico: {h} en horizontal, {depth} en profundidad",
     energyTitle: "Energía liberada · área proporcional",
-    energyShareAria:
-      "Dos cuadrados cuya área representa la energía: el evento mayor liberó {share}; todos los demás eventos juntos, el resto.",
-    energyOthers: "{n} eventos más, todos juntos",
-    energyMain: "{date} · {share} de la energía",
+    historyTitle: "Energía frente al {magLabel} · área proporcional",
+    historyAria: "Cuadrados cuya área representa la energía de cada sismo, del mayor al menor: {list}.",
+    historyMain: "Chocó · {date}",
+    historyRow: "{name} · {year}",
+    /** Keyed on how the mainshock compares with the row's event. */
+    historyTimes: (relation: Relation): string =>
+      relation === "more"
+        ? "{mag} · {x} veces menos energía"
+        : relation === "same"
+          ? "{mag} · casi la misma energía"
+          : "{mag} · {x} veces más energía",
     ladderAria: "Tres cuadrados para M4, M5 y M6; cada uno tiene unas 32 veces el área del anterior.",
     ladderNote: "Cada punto de magnitud: unas 32 veces más energía",
     clocksTitle: "Eventos por día ({mc} o más) · Chocó",
@@ -353,14 +379,29 @@ const en: StoryCopy = {
   },
 
   energy: {
-    chapter: "2 · The largest",
-    title: (dominant) =>
-      dominant ? "One earthquake released almost all the energy" : "The largest event and all the others",
-    p1: "The {main} of {date} was magnitude {mag} (written {magLabel}). After it came {n} more events in the same part of Chocó.",
-    p2: (larger) =>
-      larger
-        ? "In the drawing, each square's area is its energy. All those events together fit in the small square; the {magLabel} alone holds {share} of the total."
-        : "In the drawing, each square's area is its energy. The {magLabel} holds {share} of the total; all the others together, the rest.",
+    chapter: "2 · How big?",
+    title: (largest) =>
+      largest ? "The largest in the region in {years} years of records" : "Next to earthquakes people remember",
+    p1: "The {main} of {date} was magnitude {mag} (written {magLabel}). To see how big that is, compare it with earthquakes people in Colombia remember.",
+    region:
+      "Since {from}, no recorded earthquake within {radius} of Pereira had been this large. In the drawing, each square's area is the energy it released.",
+    drawing: "In the drawing, each square's area is the energy it released.",
+    armenia: "The Armenia earthquake of {year} was {pastMag}: the {magLabel} released about {x} times as much energy.",
+    pair: "In 1995 there were two: near Calima ({mag1}) and near Neira ({mag2}). The {magLabel} released about {x1} times as much energy as the first, and about {x2} times as much as the second.",
+    near: (relation) =>
+      `And something like it had happened almost in the same place before: on {date} there was an {pastMag} at {depth} deep, about {km} from this one. ${
+        relation === "more"
+          ? "They are {gap} apart on the scale: the {magLabel} released about {x} times as much energy."
+          : relation === "same"
+            ? "It was almost the same size."
+            : "That one was larger: about {x} times the energy of the {magLabel}."
+      }`,
+    historyNote:
+      "Moment magnitudes (Mw) from the {source} catalogue ({from}–{to}), read through USGS; the {magLabel}'s is SGC's. The earthquakes drawn are a selection of well-known ones, not every one there has been, and the older ones' locations are approximate. This is history, not a forecast.",
+    largerTitle: "But Colombia has had larger earthquakes",
+    larger1: "There have been larger ones still, and the drawing puts them at the same scale:",
+    largerItem: "{name}, {date}: {pastMag}, about {x} times the energy of the {magLabel}.",
+    larger2: "That they happened says nothing about when another will: history is for comparing, not for forecasting.",
     ladderTitle: "Each step of magnitude, about 32 times the energy",
     ladder1:
       "The magnitude scale is deceptive: one step up is not “a bit stronger”. It is about {x1} times the energy, and on a seismograph 10 times the motion. Two steps: {x2} times the energy.",
@@ -563,10 +604,16 @@ const en: StoryCopy = {
     groupAt: { shallow: "shallow · ~{km}", deep: "deep · ~{km}" },
     errorLegend: "＋ typical error: {h} horizontally, {depth} in depth",
     energyTitle: "Energy released · area to scale",
-    energyShareAria:
-      "Two squares whose area is energy: the largest event holds {share}; all the other events together, the rest.",
-    energyOthers: "{n} more events, all together",
-    energyMain: "{date} · {share} of the energy",
+    historyTitle: "Energy against the {magLabel} · area to scale",
+    historyAria: "Squares whose area is each earthquake's energy, largest first: {list}.",
+    historyMain: "Chocó · {date}",
+    historyRow: "{name} · {year}",
+    historyTimes: (relation) =>
+      relation === "more"
+        ? "{mag} · {x} times less energy"
+        : relation === "same"
+          ? "{mag} · about the same energy"
+          : "{mag} · {x} times more energy",
     ladderAria: "Three squares for M4, M5 and M6; each has about 32 times the area of the one before.",
     ladderNote: "Each step of magnitude: about 32 times the energy",
     clocksTitle: "Events per day ({mc} and up) · Chocó",

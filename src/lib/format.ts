@@ -41,6 +41,9 @@ export const fmtRegion = (region: string) => region.replace(/,\s*Colombia$/, "")
 export const fmtDateTime = (iso: string, lang: Lang) => DATE_TIME[lang].format(new Date(iso));
 /** "18 sept 2026" */
 export const fmtDate = (ms: number, lang: Lang) => DATE[lang].format(ms);
+const YEAR = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, year: "numeric" });
+/** The Colombian calendar year of an instant, by Colombia's own clock then (it ran on UTC−4 in 1992–93). */
+export const fmtYear = (ms: number) => Number(YEAR.format(ms));
 /** Axis tick: "18 sept" */
 export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms);
 /** Axis tick on a range of a few days, where a date alone repeats: "18 sept, 14:00" */

@@ -87,11 +87,9 @@ describe("storyModel on the production catalogue of 2026-09-24", () => {
     expect(m.errors.choco.depth).toBeGreaterThan(0);
   });
 
-  it("words the story for this catalogue: similar distances, a dominant mainshock, snapped crustal depths", () => {
+  it("words the story for this catalogue: similar distances, snapped crustal depths", () => {
     expect(m.facts).toMatchObject({
       distancesSimilar: true,
-      mainDominant: true,
-      mainHoldsMost: true,
       deepNearMain: true,
       shallowWest: true,
       eastDeeper: true,
@@ -131,21 +129,14 @@ describe("storyModel on the production catalogue of 2026-09-24", () => {
     expect(with_({ choco: shallowAt1 })).toBe(false);
   });
 
-  it("stops calling the mainshock dominant once a later event takes its share or its title", () => {
-    const later = {
-      id: "big-later",
-      time: "2026-09-24T10:00:00Z",
-      lat: 4.5,
-      lon: -76.7,
-      depthKm: 40,
-      mag: 7.4,
-      magType: "Mw",
-      status: "manual",
-    };
+  it("measures the fixture's M7.4 against past earthquakes as the region's largest", () => {
+    expect(m.history?.largestInRegion).toBe(true);
+    expect(m.history?.near?.quake.id).toBe("iscgem656068");
+  });
+
+  it("compares nothing when Chocó has no events", () => {
     const cat = captured as Catalogues;
-    const moved = storyModel(insights({ ...cat, choco: [...cat.choco, later] }, NOW));
-    expect(moved.facts.mainDominant).toBe(false);
-    expect(moved.facts.mainHoldsMost).toBe(false);
+    expect(storyModel(insights({ ...cat, choco: [] }, NOW)).history).toBeNull();
   });
 
   it("draws the swarm's track from 12-hour windows of at least 20 events, in time order", () => {

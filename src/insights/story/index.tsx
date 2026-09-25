@@ -8,7 +8,7 @@ import { scaleLinear, scaleTime } from "d3-scale";
 import { useMemo, useState, type ReactNode } from "react";
 import { Slider } from "@/components/ui/slider";
 import { useI18n, type Lang } from "@/lib/i18n";
-import { fmtDay } from "@/lib/format";
+import { fmtDate, fmtDay } from "@/lib/format";
 import {
   P_WAVE_KMS,
   S_WAVE_KMS,
@@ -19,18 +19,19 @@ import {
   strongDays,
   type Insights,
 } from "../claims";
-import { energyRatio } from "@bvalue/seismo";
+import { energyRatio, magnitudeGap } from "@bvalue/seismo";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
-import { fmt, fmtKm, fmtMag, fmtPct, roundSig } from "../shared";
+import { fmt, fmtKm, fmtMag, fmtPct, fmtTimes, roundSig } from "../shared";
 import { FILL } from "../tones";
 import { Graphic, type SceneId } from "./graphic";
 import { useActiveStep, useSize, useWide } from "./hooks";
 import { ExternalLink, MainName, Note, Num, SourceName } from "./marks";
 import { RATE } from "./section";
 import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
+import { HISTORY, ISCGEM_URL, quakeYear } from "../history";
 import { CONVERGENCE_SOURCE, CUTS } from "../plate";
-import { Rich } from "./rich";
+import { Rich, fill } from "./rich";
 
 interface Step {
   id: string;
@@ -299,40 +300,126 @@ function useSteps(
     ),
   });
 
-  if (main && model.energy.choco[0] !== undefined) {
-    const eq = model.equivalents!;
+  if (main && model.history) {
+    const h = model.history;
+    const magLabel = fmtMag(main.mag);
+    const times = (x: number) => <Num>{fmtTimes(x)}</Num>;
+    const pastMag = (m: number) => <Num>{fmtMag(m)}</Num>;
     steps.push({
-      id: "energy-share",
+      id: "energy-history",
       scene: "energy",
-      sub: "share",
+      sub: "history",
       chapter: c.energy.chapter,
-      title: c.energy.title(f.mainDominant),
+      title: fill(c.energy.title(h.largestInRegion), { years: fmt(h.years) }),
       body: (
         <>
           <p>
             <Rich
               text={c.energy.p1}
-              parts={{
-                main: mainWord,
-                date: mainDate,
-                mag: <Num>{main.mag.toFixed(1)}</Num>,
-                magLabel: fmtMag(main.mag),
-                n: <Num>{fmt(model.choco.length - 1)}</Num>,
-              }}
+              parts={{ main: mainWord, date: mainDate, mag: <Num>{main.mag.toFixed(1)}</Num>, magLabel }}
             />
           </p>
           <p>
+            {h.largestInRegion ? (
+              <Rich
+                text={c.energy.region}
+                parts={{ from: String(HISTORY.region.from), radius: km(HISTORY.region.radiusKm) }}
+              />
+            ) : (
+              c.energy.drawing
+            )}
+          </p>
+          {h.featured.armenia && (
+            <p>
+              <Rich
+                text={c.energy.armenia}
+                parts={{
+                  year: String(quakeYear(h.featured.armenia.quake)),
+                  pastMag: pastMag(h.featured.armenia.quake.mag),
+                  magLabel: <MainName>{magLabel}</MainName>,
+                  x: times(h.featured.armenia.times),
+                }}
+              />
+            </p>
+          )}
+          {h.featured.pair && (
+            <p>
+              <Rich
+                text={c.energy.pair}
+                parts={{
+                  mag1: pastMag(h.featured.pair[0]!.quake.mag),
+                  mag2: pastMag(h.featured.pair[1]!.quake.mag),
+                  magLabel,
+                  x1: times(h.featured.pair[0]!.times),
+                  x2: times(h.featured.pair[1]!.times),
+                }}
+              />
+            </p>
+          )}
+          {h.near && (
+            <p>
+              <Rich
+                text={c.energy.near(h.near.relation)}
+                parts={{
+                  date: fmtDate(Date.parse(h.near.quake.time), lang),
+                  pastMag: pastMag(h.near.quake.mag),
+                  depth: km(h.near.quake.depthKm),
+                  km: km(roundSig(h.near.km, 1)),
+                  gap: <Num>{fmt(Math.abs(magnitudeGap(main.mag, h.near.quake.mag)), 1)}</Num>,
+                  magLabel,
+                  x: times(h.near.times),
+                }}
+              />
+            </p>
+          )}
+          <Note>
             <Rich
-              text={c.energy.p2(f.mainHoldsMost)}
+              text={c.energy.historyNote}
               parts={{
-                magLabel: <MainName>{fmtMag(main.mag)}</MainName>,
-                share: <Num>{claims.sharePhrase(model.energy.choco[0])}</Num>,
+                source: <ExternalLink href={ISCGEM_URL}>ISC-GEM</ExternalLink>,
+                magLabel,
+                from: String(HISTORY.region.from),
+                to: HISTORY.source.iscgemEnd.slice(0, 4),
               }}
             />
-          </p>
+          </Note>
         </>
       ),
     });
+    if (h.larger.length) {
+      steps.push({
+        id: "energy-larger",
+        scene: "energy",
+        sub: "larger",
+        title: c.energy.largerTitle,
+        body: (
+          <>
+            <p>{c.energy.larger1}</p>
+            <ul className="list-disc space-y-2 pl-5">
+              {h.larger.map((r) => (
+                <li key={r.quake.id}>
+                  <Rich
+                    text={c.energy.largerItem}
+                    parts={{
+                      name: r.quake.name[lang],
+                      date: fmtDate(Date.parse(r.quake.time), lang),
+                      pastMag: pastMag(r.quake.mag),
+                      x: times(r.times),
+                      magLabel,
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+            <p>{c.energy.larger2}</p>
+          </>
+        ),
+      });
+    }
+  }
+
+  if (main && model.energy.choco[0] !== undefined) {
+    const eq = model.equivalents!;
     steps.push({
       id: "energy-ladder",
       scene: "energy",

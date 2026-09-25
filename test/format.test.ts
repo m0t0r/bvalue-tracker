@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { dayBounds, dayStart, fmtDateTime, fmtDay, fmtIsoDateTime, fmtRegion, fmtUtc } from "../src/lib/format.ts";
+import {
+  dayBounds,
+  dayStart,
+  fmtDateTime,
+  fmtDay,
+  fmtIsoDateTime,
+  fmtRegion,
+  fmtUtc,
+  fmtYear,
+} from "../src/lib/format.ts";
 
 // 03:10 UTC on 11 August is still 22:10 on 10 August in Colombia (UTC−5, no daylight saving).
 const LATE = "2026-08-11T03:10:00Z";
@@ -13,6 +22,12 @@ describe("Colombian time", () => {
     expect(fmtUtc(LATE)).toBe("2026-08-11 03:10 UTC");
   });
 
+  it("gives a past event's year by Colombia's own clock, which ran on UTC−4 in 1992–93", () => {
+    expect(fmtYear(Date.parse("1999-01-25T18:19:18Z"))).toBe(1999);
+    expect(fmtYear(Date.parse("2027-01-01T04:30:00Z"))).toBe(2026);
+    // 00:30 on 1 January 1993 in Colombia, during its daylight saving; a fixed UTC−5 says 1992.
+    expect(fmtYear(Date.parse("1993-01-01T04:30:00Z"))).toBe(1993);
+  });
   it("starts a day at Colombian midnight", () => {
     expect(new Date(dayStart(LATE)).toISOString()).toBe("2026-08-10T05:00:00.000Z");
     expect(new Date(dayStart("2026-08-11T05:00:00Z")).toISOString()).toBe("2026-08-11T05:00:00.000Z");

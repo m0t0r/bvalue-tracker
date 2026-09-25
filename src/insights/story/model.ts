@@ -8,6 +8,7 @@
 import { energyRatio, epicentralKm, hypocentralKm, seismicMoment } from "@bvalue/seismo";
 import { SOURCES, type Insights, type QuakeLike, type Source } from "../claims";
 import { PEREIRA } from "../../../core/places";
+import { compareHistory } from "../history";
 import { plateAt, plateSide } from "../plate";
 import { commonDepths, median, medianHorizontalErrorKm, timeWindows } from "../shared";
 
@@ -58,8 +59,6 @@ export function energyShares(events: readonly { mag: number }[]): number[] {
  */
 /** Three straight-line distances count as "similar" when the farthest is within a third of the nearest. */
 export const SIMILAR_DISTANCE_RATIO = 4 / 3;
-/** The largest event "released almost all the energy" from this share of the zone's moment. */
-export const DOMINANT_SHARE = 0.9;
 /** The deep group lies "around" the largest event when its centre is this close to the epicentre, km. */
 export const NEAR_KM = 40;
 /** Depths "snap to steps" when the three commonest values hold this share of the group. */
@@ -111,7 +110,6 @@ export function storyModel(data: Insights) {
   const cen = { shallow: centre(bySrc.shallow), deep: centre(bySrc.deep), tolima: centre(tolima) };
   const hypo = SOURCES.flatMap((s) => (data.distances[s] ? [data.distances[s].hypocentralKm] : []));
   const snapped = commonDepths(bySrc.shallow);
-  const mainShare = energyShares(choco)[0] ?? null;
   const shallowDepth = data.distances.shallow?.depthKm;
   const deepDepth = data.distances.deep?.depthKm;
   const tolimaDays = tolimaStart === null ? 0 : (data.now - tolimaStart) / DAY;
@@ -148,6 +146,8 @@ export function storyModel(data: Insights) {
     mainEpiKm: main ? epicentralKm(main, PEREIRA) : null,
     mainHypoKm: main ? hypocentralKm(main, PEREIRA) : null,
     largestAfter,
+    /** The largest event against past Colombian earthquakes (`../history.ts`). */
+    history: main ? compareHistory(main, mainFound) : null,
     /** How many events like the largest aftershock, and like an M4.0, it takes to match the largest. */
     equivalents: main
       ? {
@@ -177,9 +177,6 @@ export function storyModel(data: Insights) {
     /** What decides the wording of the story's data-dependent sentences. */
     facts: {
       distancesSimilar: hypo.length === 3 && Math.max(...hypo) <= SIMILAR_DISTANCE_RATIO * Math.min(...hypo),
-      /** The page's rule finds a mainshock, and it holds at least DOMINANT_SHARE of the energy. */
-      mainDominant: ms.state === "found" && mainShare !== null && mainShare >= DOMINANT_SHARE,
-      mainHoldsMost: mainShare !== null && mainShare > 0.5,
       deepNearMain: main && cen.deep ? epicentralKm(main, cen.deep) <= NEAR_KM : false,
       deepFromMainKm: main && cen.deep ? epicentralKm(main, cen.deep) : null,
       shallowWest: cen.shallow && cen.deep ? cen.shallow.lon < cen.deep.lon : false,

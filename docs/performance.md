@@ -83,6 +83,8 @@ practices stayed at 100.
     72.2 kB (22.2 → 23.9 kB gzipped), and the shell from 21.3 kB to 25.6 kB (8.5 → 10.0 kB gzipped):
     its rule and its sentences are in `claims.ts` and `copy.ts`, which the shell already loads. One
     more same-origin request, `/api/context`, a few hundred bytes, goes out with the catalogues.
+  - The history step (2026-09-25, `vite build`) took the story chunk from 88.4 kB to 93.7 kB (27.2 →
+    28.8 kB gzipped): `history.json` and its rules. The shell did not move.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under
