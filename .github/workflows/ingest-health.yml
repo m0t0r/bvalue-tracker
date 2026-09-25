@@ -39,7 +39,7 @@ jobs:
           # Two wide ticks. One failed run only stands the fast lane down — the wide tick
           # keeps probing SGC every 30 minutes and is what lets the fast lane back in — so
           # a single failure must not page anyone. An hour of no success is a real fault,
-          # whether that is SGC refusing us or this Worker being killed mid-run. Chaparral
+          # whether that is SGC refusing us or this Worker being killed mid-run. Chocó
           # runs on the wide ticks only, so the same hour is two of its runs as well.
           STALE_AFTER_S: "3600"
         # Through env rather than interpolated into the script: a repository variable

@@ -95,7 +95,7 @@ the pinned towns change:
   call — it invokes the Worker's own handler, which is the system under test.
 - **A plugin that reads the finished `index.html` must be `enforce: "post"`.** Vite 8 emits the
   page late, and a `generateBundle` hook in the normal order finds only `.assetsignore` in the
-  client bundle. It was silent: the build passed and wrote no `tolima.html`. `pnpm build`, then
+  client bundle. It was silent: the build passed and wrote no second zone page. `pnpm build`, then
   `ls dist/client/*.html`.
 - **Under `pnpm dev` a page path with no file is the Worker's 404**, because the Cloudflare
   plugin applies `not_found_handling` in dev too, and it builds its request from

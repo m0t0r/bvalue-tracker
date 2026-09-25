@@ -3,7 +3,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
-import { CHAPARRAL_BBOX, ZONE_IDS } from "../../core/zones.ts";
+import { CHAPARRAL_BBOX, ZONE_IDS, type ZoneId } from "../../core/zones.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
 import EMPTY from "../../test/fixtures/seiscomp-empty.html?raw";
 import { ABANDONED_ERROR, insertStmt, sgcHealth } from "../db.ts";
@@ -681,11 +681,11 @@ async function tick(minute: number, { hour = 12, offsetS = 45 } = {}) {
   await worker.scheduled!({ cron: "*/15 * * * *", scheduledTime: at.getTime(), noRetry() {} }, env);
 }
 
-/** Chocó's newest run. The same tick runs Chaparral after it, so "the newest run" alone would be that one. */
-const latestRun = async () =>
-  (await env.DB.prepare("SELECT * FROM ingest_runs WHERE zone = 'choco' ORDER BY id DESC LIMIT 1").first<
-    Record<string, unknown>
-  >())!;
+/** One zone's newest run. A tick runs both zones, Chaparral first, so "the newest run" alone would be Chocó's. */
+const latestRun = async (zone: ZoneId = "choco") =>
+  (await env.DB.prepare("SELECT * FROM ingest_runs WHERE zone = ? ORDER BY id DESC LIMIT 1")
+    .bind(zone)
+    .first<Record<string, unknown>>())!;
 
 /** The window a trailing run of `days` opened, derived from when it actually started. */
 function expectedWindowStart(startedAt: string, days: number): string {
@@ -696,32 +696,33 @@ function expectedWindowStart(startedAt: string, days: number): string {
 /** Records a finished run, as the back-off reads them. */
 const recordRun = (
   ok: number,
-  fields: { http_status?: number | null; retry_after_s?: number | null } = {},
+  fields: { http_status?: number | null; retry_after_s?: number | null; zone?: ZoneId } = {},
   finishedAt = NOW,
 ) =>
-  env.DB.prepare(`INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, retry_after_s)
-              VALUES (?, ?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?, ?, ?)`)
+  env.DB.prepare(`INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, retry_after_s, zone)
+              VALUES (?, ?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?, ?, ?, ?)`)
     .bind(
       finishedAt.toISOString(),
       finishedAt.toISOString(),
       ok,
       fields.http_status ?? null,
       fields.retry_after_s ?? null,
+      fields.zone ?? "choco",
     )
     .run();
 
 describe("cron lanes", () => {
-  it("loads one trailing day on a narrow tick and three on a wide one", async () => {
+  it("loads one trailing day on Chaparral's narrow tick and three on Chocó's wide one", async () => {
     // Otherwise the wide tick also pulls a history chunk, and that would be the latest run.
     await completeBackfill();
     serving(FULL);
 
     await tick(15);
-    const fast = await latestRun();
+    const fast = await latestRun("tolima");
     expect(fast.window_start).toBe(expectedWindowStart(fast.started_at as string, 1));
 
     await tick(30);
-    const wide = await latestRun();
+    const wide = await latestRun("choco");
     expect(wide.window_start).toBe(expectedWindowStart(wide.started_at as string, 3));
   });
 
@@ -765,35 +766,36 @@ describe("cron lanes", () => {
 });
 
 // The rule itself lives in worker/plan.ts and is tested there, without a database. What is
-// left here is the wiring: that the rows readHistory reads really do drive the lanes.
+// left here is the wiring: that the rows readHistory reads really do drive the lanes. The fast
+// lane is Chaparral's, so these count Chaparral's requests.
 describe("fast lane back-off, through the cron", () => {
   it("stands the fast lane down after a failure, and the wide tick's success lets it back in", async () => {
     await completeBackfill();
     const calls = serving(FULL);
 
     await tick(15);
-    expect(calls()).toBe(1);
+    expect(calls.tolima()).toBe(1);
 
-    await recordRun(0, { http_status: 500 });
+    await recordRun(0, { http_status: 500, zone: "tolima" });
     await tick(45);
-    expect(calls()).toBe(1);
+    expect(calls.tolima()).toBe(1);
 
     await tick(30); // the wide tick keeps probing, whatever SGC has been doing
-    expect(calls()).toBe(2);
+    expect(calls.tolima()).toBe(2);
     await tick(15, { hour: 13 });
-    expect(calls()).toBe(3);
+    expect(calls.tolima()).toBe(3);
   });
 
   it("keeps the wide tick running while a Retry-After holds the fast lane down", async () => {
     await completeBackfill();
-    await recordRun(0, { http_status: 429, retry_after_s: 86_400 });
+    await recordRun(0, { http_status: 429, retry_after_s: 86_400, zone: "tolima" });
     const calls = serving(FULL);
 
     await tick(15);
-    expect(calls()).toBe(0);
+    expect([calls(), calls.tolima()]).toEqual([0, 0]);
 
     await tick(30);
-    expect(calls()).toBe(1);
+    expect([calls(), calls.tolima()]).toEqual([1, 1]);
   });
 });
 
@@ -806,10 +808,10 @@ describe("fast lane back-off, through the cron", () => {
  */
 describe("a run the Worker was killed in the middle of", () => {
   /** A claimed run that never came back, started `agoMs` ago on the real clock. */
-  const openRun = (agoMs: number) =>
-    env.DB.prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
-                VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
-      .bind(new Date(Date.now() - agoMs).toISOString())
+  const openRun = (agoMs: number, zone: ZoneId = "choco") =>
+    env.DB.prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end, zone)
+                VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?)`)
+      .bind(new Date(Date.now() - agoMs).toISOString(), zone)
       .run();
 
   it("is closed as failed once it is past the in-flight window, and says so", async () => {
@@ -840,22 +842,22 @@ describe("a run the Worker was killed in the middle of", () => {
       Record<string, unknown>
     >())!;
     expect(row.finished_at).toBeNull();
-    // And it still holds the claim, so this tick did not reach SGC either.
-    expect(calls()).toBe(0);
+    // And it still holds the claim, so this tick did not reach SGC either — for either zone.
+    expect([calls(), calls.tolima()]).toEqual([0, 0]);
   });
 
   // The whole point of recording it: an invocation that died is a failed query, and the
   // rules that read failures — the fast lane's back-off and the page's alert — must see it.
   it("stands the fast lane down, and the wide tick still lets it back in", async () => {
     await completeBackfill();
-    await openRun(10 * 60_000);
+    await openRun(10 * 60_000, "tolima");
     const calls = serving(FULL);
 
     await tick(15);
-    expect(calls()).toBe(0);
+    expect(calls.tolima()).toBe(0);
 
     await tick(30);
-    expect(calls()).toBe(1);
+    expect(calls.tolima()).toBe(1);
   });
 
   it("is what /api/status reports as the last run, with the reason in the technical detail", async () => {
@@ -913,13 +915,13 @@ describe("the refusal back-off, through the cron", () => {
     await recordRun(0, { http_status: 410 }, ago(90));
     await recordRun(0, { http_status: 410 }, ago(10));
     await tick(30);
-    expect(calls()).toBe(0);
+    expect([calls(), calls.tolima()]).toEqual([0, 0]);
 
     // An hour since anything asked: the probe goes, because a probe that stopped could
-    // never see SGC come back.
+    // never see SGC come back. Chaparral's goes first; its success lets Chocó's through.
     await recordRun(0, { http_status: 410 }, ago(61));
     await tick(30, { hour: 13 }); // a wide tick off the hour, so the sweep is not in it too
-    expect(calls()).toBe(1);
+    expect([calls(), calls.tolima()]).toEqual([1, 1]);
   });
 
   it("keeps the wide tick at full rate for a plain 500, however long it lasts", async () => {
@@ -1022,17 +1024,17 @@ describe("what a tick writes to the log", () => {
 
     // The hour's four ticks, each of which should say something different about itself. Each
     // zone says so on its own line.
-    const planned = () => withMsg(got(), "tick planned").filter((l) => l.zone === "choco");
+    const planned = () => withMsg(got(), "tick planned").filter((l) => l.zone === "tolima");
     await tick(15);
     expect(planned()[0]).toMatchObject({ level: "info", tickMinute: 15, lanes: ["fast"] });
-    expect(withMsg(got(), "tick stood down")[0]).toMatchObject({ zone: "tolima", tickMinute: 15, lanes: [] });
+    expect(withMsg(got(), "tick stood down")[0]).toMatchObject({ zone: "choco", tickMinute: 15, lanes: [] });
 
     await tick(30);
     expect(planned()[1]).toMatchObject({ tickMinute: 30, lanes: ["wide"] });
 
     await tick(0);
     expect(planned()[2]).toMatchObject({ tickMinute: 0, lanes: ["wide", "sweep"] });
-    expect(withMsg(got(), "tick planned").at(-1)).toMatchObject({ zone: "tolima", lanes: ["wide", "sweep"] });
+    expect(withMsg(got(), "tick planned").at(-1)).toMatchObject({ zone: "choco", lanes: ["wide", "sweep"] });
   });
 
   it("records what the run cost and what it changed", async () => {
@@ -1203,7 +1205,7 @@ describe("two zones", () => {
 
     const bad = await call("/api/events?zone=cali");
     expect(bad.status).toBe(400);
-    expect(await bad.json()).toEqual({ error: "zone must be one of choco, tolima" });
+    expect(await bad.json()).toEqual({ error: "zone must be one of tolima, choco" });
     expect((await call("/api/events.csv?zone=tolima")).headers.get("content-disposition")).toContain(
       "sgc-tolima-events.csv",
     );
@@ -1227,20 +1229,20 @@ describe("two zones", () => {
     expect((await progress("choco")).backfill.done).toBe(0);
   });
 
-  it("asks for Chaparral on the wide ticks only, after Chocó, in the same invocation", async () => {
+  it("asks for Chocó on the wide ticks only, after Chaparral, in the same invocation", async () => {
     await completeBackfill();
     const calls = serving(FULL);
 
     await tick(15);
-    expect([calls(), calls.tolima()]).toEqual([1, 0]);
+    expect([calls(), calls.tolima()]).toEqual([0, 1]);
 
     await tick(30);
-    expect([calls(), calls.tolima()]).toEqual([2, 1]);
+    expect([calls(), calls.tolima()]).toEqual([1, 2]);
     const last = (await env.DB.prepare(
       "SELECT zone, window_start, started_at FROM ingest_runs ORDER BY id DESC LIMIT 1",
     ).first<Record<string, string>>())!;
-    expect(last.zone).toBe("tolima");
-    expect(last.window_start).toBe(expectedWindowStart(last.started_at!, 1));
+    expect(last.zone).toBe("choco");
+    expect(last.window_start).toBe(expectedWindowStart(last.started_at!, 3));
   });
 
   // The throttle is about one catalogue's freshness: Chocó's tick a minute ago does not make
@@ -1255,21 +1257,16 @@ describe("two zones", () => {
     expect([calls(), calls.tolima()]).toEqual([1, 1]);
   });
 
-  // Chaparral's own failure — a timeout on its larger response, say — is not SGC being unwell for
-  // Chocó. Refusals and rate limits are still read across zones; a plain failure is the zone's.
-  it("keeps Chocó's fast lane open when only Chaparral's last run failed", async () => {
+  // Chocó's own failure — a timeout on its wider window, say — is not SGC being unwell for
+  // Chaparral. Refusals and rate limits are still read across zones; a plain failure is the zone's.
+  it("keeps Chaparral's fast lane open when only Chocó's last run failed", async () => {
     await completeBackfill();
     const calls = serving(FULL);
-    await recordRun(1, {}, new Date(Date.now() - 120_000));
-    await env.DB.prepare(
-      `INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, zone)
-       VALUES (?1, ?1, 'cron', ?1, ?1, 0, 500, 'tolima')`,
-    )
-      .bind(new Date(Date.now() - 60_000).toISOString())
-      .run();
+    await recordRun(1, { zone: "tolima" }, new Date(Date.now() - 120_000));
+    await recordRun(0, { http_status: 500 }, new Date(Date.now() - 60_000));
 
     await tick(15);
-    expect(calls()).toBe(1);
+    expect(calls.tolima()).toBe(1);
   });
 
   // One door: a refusal persisting past its grace holds every zone to one probe an hour.
@@ -1284,6 +1281,6 @@ describe("two zones", () => {
     await recordRun(0, { http_status: 410 }, ago(61));
 
     await tick(30, { hour: 13 });
-    expect([calls(), calls.tolima()]).toEqual([1, 0]);
+    expect([calls(), calls.tolima()]).toEqual([0, 1]);
   });
 });

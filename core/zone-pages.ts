@@ -5,26 +5,36 @@
  * be in the HTML the server sends for that link. With one `index.html` for both zones, every link
  * previewed as Chocó whatever it opened.
  *
- * `index.html` is Chocó's page and the template for the others: the build writes one more file per
- * zone (`tolima.html`, which the asset layer serves at `/tolima`) with the tags below swapped in.
- * Plain TypeScript with no DOM, because vite.config.ts runs it in Node at build time.
+ * `index.html` is the home zone's page and the template for the others: the build writes one more
+ * file per zone (`choco.html`, which the asset layer serves at `/choco`) with the tags below swapped
+ * in. Plain TypeScript with no DOM, because vite.config.ts runs it in Node at build time.
  */
-import { DEFAULT_ZONE, ZONE_IDS, type ZoneId } from "./zones.ts";
+import { ZONE_IDS, type ZoneId } from "./zones.ts";
 
-/** Chocó keeps the bare URL, so every link shared before there were two zones still lands where it did. */
-export const ZONE_PATHS: Record<ZoneId, string> = { choco: "/", tolima: "/tolima" };
+/**
+ * The zone the bare URL opens: where the activity is. Chaparral since 2026-09-25, when the Chocó
+ * sequence had quietened and the swarm had not; Chocó before. It is the page's choice only — an API
+ * request that names no zone still gets `DEFAULT_ZONE`.
+ */
+export const HOME_ZONE: ZoneId = "tolima";
+
+/**
+ * The home zone has the bare URL and every other zone its own name. A path that belonged to the
+ * home zone before it moved (`/tolima`) is not kept: nothing serves it, and it answers 404.
+ */
+export const ZONE_PATHS: Record<ZoneId, string> = { tolima: "/", choco: "/choco" };
 
 /** The file the build writes for a zone, relative to the client build's root. */
 export const zonePageFile = (zone: ZoneId): string =>
-  zone === DEFAULT_ZONE ? "index.html" : `${ZONE_PATHS[zone].slice(1)}.html`;
+  zone === HOME_ZONE ? "index.html" : `${ZONE_PATHS[zone].slice(1)}.html`;
 
 /**
- * The zone a path shows; any path that is not another zone's is Chocó's. A trailing slash is
- * allowed, since the asset layer redirects it away anyway.
+ * The zone a path shows; any path that is not another zone's is the home zone's. A trailing slash
+ * is allowed, since the asset layer redirects it away anyway.
  */
 export function zonePath(pathname: string): ZoneId {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  return ZONE_IDS.find((z) => ZONE_PATHS[z] === path) ?? DEFAULT_ZONE;
+  return ZONE_IDS.find((z) => ZONE_PATHS[z] === path) ?? HOME_ZONE;
 }
 
 /**

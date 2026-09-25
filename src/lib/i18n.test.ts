@@ -31,9 +31,9 @@ describe("the failed-ingest alert", () => {
 
 describe("the standing note under the refresh button", () => {
   // The interval is the Worker's, read from worker/plan.ts, never written into the copy.
-  it("quotes the cron's own interval for Chocó, and the wide tick's for Chaparral", () => {
-    expect(updateEveryMin("choco")).toBe(CRON_EVERY_MIN);
-    expect(updateEveryMin("tolima")).toBe(30);
+  it("quotes the cron's own interval for Chaparral, and the wide tick's for Chocó", () => {
+    expect(updateEveryMin("tolima")).toBe(CRON_EVERY_MIN);
+    expect(updateEveryMin("choco")).toBe(30);
   });
 
   it.each(each)("names the zone's interval, in %s for %s", (lang, zone) => {

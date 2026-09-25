@@ -4,8 +4,8 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
-import { DEFAULT_ZONE, ZONE_IDS } from "./core/zones.ts";
+import { HOME_ZONE, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
+import { ZONE_IDS } from "./core/zones.ts";
 
 /**
  * Preload the one font subset the page actually uses. Everything on screen is text, so the
@@ -33,19 +33,19 @@ function preloadLatinFont(): Plugin {
 }
 
 /**
- * One HTML file per zone, so a shared `/tolima` link previews as Tolima (`core/zone-pages.ts`).
+ * One HTML file per zone, so a shared `/choco` link previews as Chocó (`core/zone-pages.ts`).
  * The build copies the finished `index.html` — hashed script, stylesheet and font preload already
- * in it — and swaps in each other zone's meta tags; the asset layer serves `tolima.html` at
- * `/tolima`. In dev the same page is served for the zone's path, with the same tags.
+ * in it — and swaps in each other zone's meta tags; the asset layer serves `choco.html` at
+ * `/choco`. In dev the same page is served for the zone's path, with the same tags.
  */
 function zonePages(): Plugin[] {
   const zoneAt = (url: string | undefined) => {
     const zone = zonePath((url ?? "/").split("?")[0] ?? "/");
-    return zone === DEFAULT_ZONE ? undefined : zone;
+    return zone === HOME_ZONE ? undefined : zone;
   };
   return [
     {
-      // Dev serves a zone's page itself. Left to the Cloudflare plugin, /tolima goes to the Worker,
+      // Dev serves a zone's page itself. Left to the Cloudflare plugin, /choco goes to the Worker,
       // which answers 404 for a path with no file (`not_found_handling: "none"`), and rewriting
       // `req.url` does not help: the plugin builds its request from `req.originalUrl`.
       name: "sgc-zone-pages:dev",
@@ -80,7 +80,7 @@ function zonePages(): Plugin[] {
         const index = bundle["index.html"];
         if (index?.type !== "asset") throw new Error("sgc-zone-pages: no index.html in the client bundle");
         for (const zone of ZONE_IDS) {
-          if (zone === DEFAULT_ZONE) continue;
+          if (zone === HOME_ZONE) continue;
           const source = withZoneMeta(String(index.source), zone);
           this.emitFile({ type: "asset", fileName: zonePageFile(zone), source });
         }

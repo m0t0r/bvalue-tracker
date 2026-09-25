@@ -1,4 +1,4 @@
-import { DEFAULT_ZONE, type ZoneId } from "../core/zones.ts";
+import type { ZoneId } from "../core/zones.ts";
 import type { IngestRun } from "./api-types.ts";
 
 /**
@@ -67,14 +67,16 @@ const TRAILING_FAST_DAYS = 1;
 export const REFRESH_MIN_INTERVAL_S = 900;
 
 /**
- * How often each zone is asked, and how much. The Chocó sequence has every lane. Chaparral runs
- * on the wide ticks only — two requests an hour plus the hourly sweep, rather than four — because
- * SGC's refusal on 2026-09-20 came after ~20 h at 12 requests an hour, and two zones on the fast
- * lane would put us back near that (docs/sgc-data-source.md). Its window is one day, with
- * removals: the fast lane forbids them only because a quiet day holds too few events for
- * `MAX_REMOVAL_SHARE` to engage, and the swarm has had ~130 a day. Older days are the sweep's.
- * The page's throttle is each zone's own period, for the same reason `REFRESH_MIN_INTERVAL_S`
- * is the cron's: a press then almost always lands on a run that was happening anyway.
+ * How often each zone is asked, and how much. Chaparral, where the activity is, has every lane
+ * (from 2026-09-25; until then it was Chocó). Chocó, six weeks after its M7.4 and quietening,
+ * runs on the wide ticks only — two requests an hour plus the hourly sweep, rather than four —
+ * because SGC's refusal on 2026-09-20 came after ~20 h at 12 requests an hour, and two zones on
+ * the fast lane would put us back near that (docs/sgc-data-source.md). Chaparral's window is
+ * one day, with removals on the wide tick: the fast lane forbids them only because a quiet day
+ * holds too few events for `MAX_REMOVAL_SHARE` to engage, and the swarm has had ~130 a day.
+ * Older days are the sweep's. The page's throttle is each zone's own period, for the same
+ * reason `REFRESH_MIN_INTERVAL_S` is the cron's: a press then almost always lands on a run
+ * that was happening anyway.
  */
 export interface Cadence {
   /** Whether the zone runs on the ticks between the wide ones. */
@@ -85,8 +87,8 @@ export interface Cadence {
 }
 
 export const CADENCE: Record<ZoneId, Cadence> = {
-  choco: { fastLane: true, trailingDays: TRAILING_DAYS, refreshMinIntervalS: REFRESH_MIN_INTERVAL_S },
-  tolima: { fastLane: false, trailingDays: 1, refreshMinIntervalS: WIDE_TICK_EVERY_MIN * 60 },
+  choco: { fastLane: false, trailingDays: TRAILING_DAYS, refreshMinIntervalS: WIDE_TICK_EVERY_MIN * 60 },
+  tolima: { fastLane: true, trailingDays: 1, refreshMinIntervalS: REFRESH_MIN_INTERVAL_S },
 };
 
 /** How often a zone's catalogue is re-read, in minutes: the number the page quotes to its reader. */
@@ -99,8 +101,8 @@ const IN_FLIGHT_RETRY_S = 5;
 export interface SgcHealth {
   /**
    * Whether this zone's most recent finished run succeeded; null when none has finished yet. The
-   * zone's own, unlike the two fields below: a failure only Chaparral meets — a timeout on its
-   * larger response, a row the parser refuses — must not shut Chocó's fast lane.
+   * zone's own, unlike the two fields below: a failure only Chocó meets — a timeout on its wider
+   * window, a row the parser refuses — must not shut Chaparral's fast lane.
    */
   lastOk: boolean | null;
   /**
@@ -256,7 +258,7 @@ function sinceS(startedAt: string | null | undefined, now: Date): number {
  * every lane rule can be checked without a database. Both callers ask once and then execute
  * the plan with `runPlan`; neither restates a rule that lives here.
  */
-export function dueNow(caller: Caller, now: Date, history: IngestHistory, zone: ZoneId = DEFAULT_ZONE): IngestPlan {
+export function dueNow(caller: Caller, now: Date, history: IngestHistory, zone: ZoneId): IngestPlan {
   const cadence = CADENCE[zone];
   if (caller.kind === "manual") return refreshPlan(now, history, cadence);
 
