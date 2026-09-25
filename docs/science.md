@@ -290,6 +290,31 @@ the reader's own questions). Everything above still applies to it; this section 
   2026-09-24), and only while the detected mainshock is SGC2026pqqmro (`USGS_ASSESSED` in
   `story/model.ts`), because the quote is about that event and no other. The rule's own answer
   stays on the page beside it: Slab2 alone cannot place the M7.4 inside the plate.
+- **The 3D block's ground and rupture plane** (`src/insights/block.json`, from
+  `scripts/insights-block.ts`, 2026-09-24; nothing shows them yet). The ground is GEBCO 2020 every
+  0.05° over the Slab2 box, the same source and rounding as the cuts: where Chocó's cut (4.65° N)
+  meets it, every shared point is equal, and a test holds that. The 0.05° spacing (~5.5 km) steps
+  over peaks: the grid's highest node is 4,610 m, 3 km west of the Nevado del Ruiz's 5,321 m summit. The plane is USGS's
+  finite-fault model for us6000tjl2 (product `us6000tjl2_1`, version 1, `reviewed`, pinned by its
+  URL): strike 225.6°, dip 71.8°, rake 33°, 150 × 66 km in 25 × 11 patches of 6 × 6 km, from
+  82.3 km to 144.9 km deep, 4.05–5.12° N. Recomputed in Python from the raw file. Before any of it
+  is drawn:
+  - **Three locations for one earthquake.** The model is built around its own hypocentre, 4.987° N,
+    76.082° W, **125 km**; USGS's catalogue has 4.8836° N, 76.2182° W, 108.2 km; SGC has 4.99° N,
+    76.29° W, 103.4 km. SGC's is 23 km across and 22 km above the model's. Drawn as USGS places it,
+    the plane does not pass through the page's mainshock dot; moving it to SGC's would draw a plane
+    USGS never published. Label it "modelo del USGS" and say the locations differ; do not shift it.
+  - **The largest slip is far from the hypocentre**: 3.98 m in the patch 94–99 km deep at about
+    4.47° N, 76.49° W, ~70 km south-west of the hypocentre along the strike. A finite-fault model's
+    slip is poorly resolved in detail; show where it slipped most as the model's, not as a measured
+    fact, or show the plane plain.
+  - **Show it only while the detected mainshock is SGC2026pqqmro**, as with `USGS_ASSESSED`: the plane
+    is about that event and no other.
+  - **The plane is not fitted to the plate.** Its top edge is flat at 82 km, while Slab2's plate top
+    along that edge runs from ~97 km at the NE end to ~74 km at the SW end: the plane starts ~15 km
+    above the plate's top at one end and ~8 km inside it at the other, both within Slab2's ~24 km
+    uncertainty. The model's top is set by its hypocentre and width. Do not draw or describe the
+    rupture as starting at the plate's surface.
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.

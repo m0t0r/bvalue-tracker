@@ -221,6 +221,11 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
     at the surface it ran into "Buenaventura". The scene title is kept to "Corte por Chaparral ·
     misma escala": the longer "…que el del Chocó" was clipped at 320 px. The prose beside it says
     the rest.
+- **The 3D block's data** is `src/insights/block.json` (22 kB, 6.7 kB gzipped; `block.ts` types it),
+  written by `scripts/insights-block.ts` and committed: GEBCO 2020 every 0.05° over the Slab2 box, and
+  USGS's finite-fault plane for the M7.4. The plate is `section.json`'s grid and the events are the live
+  catalogue, so neither is repeated. **Nothing imports it yet**: it is for the 3D prototype (unit E1 of
+  the plan), which loads it in its own lazy chunk. The script needs no manual download.
 
 ## Interface conventions
 

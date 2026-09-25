@@ -21,6 +21,7 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { elevations, r } from "./gebco";
 
 const dir = process.argv[2] ?? "";
 if (!dir) throw new Error("usage: pnpm tsx scripts/insights-section.ts <Slab2Distribute_Mar2018 directory>");
@@ -38,7 +39,6 @@ const CUTS = { choco: { lat: 4.65, lon1: -75.3 }, tolima: { lat: 3.86, lon1: -75
 const CUT_STEP = 0.02;
 const TRENCH_MARGIN = 0.3;
 
-const r = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
 const key = (lon: number, lat: number) => `${r(lon, 2)},${r(lat, 2)}`;
 
 async function grid(name: "dep" | "thk" | "unc") {
@@ -100,25 +100,6 @@ async function trenchLon(lat: number) {
   }
   if (best === null) throw new Error(`the trench does not cross ${lat}° N`);
   return r(best, 3);
-}
-
-async function elevations(points: [number, number][]) {
-  const out: number[] = [];
-  for (let i = 0; i < points.length; i += 100) {
-    const batch = points.slice(i, i + 100);
-    const url = `https://api.opentopodata.org/v1/gebco2020?locations=${batch.map(([lon, lat]) => `${lat},${lon}`).join("|")}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Open Topo Data: HTTP ${res.status}`);
-    const body = (await res.json()) as { status: string; results: { elevation: number | null }[] };
-    if (body.status !== "OK" || body.results.length !== batch.length) throw new Error(`Open Topo Data: ${body.status}`);
-    for (const p of body.results) {
-      if (p.elevation === null) throw new Error("Open Topo Data returned no elevation");
-      out.push(Math.round(p.elevation / 10) * 10);
-    }
-    // The public API allows one request a second.
-    if (i + 100 < points.length) await new Promise((ok) => setTimeout(ok, 1100));
-  }
-  return out;
 }
 
 const cuts: Record<string, { lat: number; lon0: number; step: number; trenchLon: number; elevationM: number[] }> = {};
