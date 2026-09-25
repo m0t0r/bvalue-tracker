@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
-import { getEvents, getStatus } from "@/lib/api";
-import type { StatusResponse } from "@/lib/api";
+import { getContext, getEvents, getStatus } from "@/lib/api";
+import type { ContextResponse, StatusResponse } from "@/lib/api";
 import { useNow } from "@/lib/use-now";
 import { insights, type Insights } from "./claims";
 
@@ -12,7 +12,13 @@ import { insights, type Insights } from "./claims";
  * zone's events are refetched when its status reports a newer ingest. So a page left open does not
  * go on counting "the last 7 days" over a catalogue that has stopped growing.
  */
-export function useInsights(): { data: Insights | null; isPending: boolean; isError: boolean; incomplete: boolean } {
+export function useInsights(): {
+  data: Insights | null;
+  context: ContextResponse | null;
+  isPending: boolean;
+  isError: boolean;
+  incomplete: boolean;
+} {
   const qc = useQueryClient();
   const choco = useQuery({ queryKey: ["events", "choco"], queryFn: () => getEvents("choco") });
   const tolima = useQuery({ queryKey: ["events", "tolima"], queryFn: () => getEvents("tolima") });
@@ -26,6 +32,18 @@ export function useInsights(): { data: Insights | null; isPending: boolean; isEr
     queryFn: () => getStatus("tolima"),
     ...statusOptions,
   });
+  // What USGS publishes about Chocó's mainshock (docs/api.md), asked for with the catalogues. The
+  // page waits for it to settle, answered or failed, before drawing a tab, and never asks again
+  // while it is open: question 2 exists only when it has an answer, so a late answer, a retry or a
+  // refetch on focus would insert or remove a whole question above the reader and renumber the rest.
+  // It changes once a day at most. A failure hides that question and is never the load error.
+  const context = useQuery({
+    queryKey: ["context", "choco"],
+    queryFn: () => getContext("choco"),
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
   useRefetchOnIngest(qc, "choco", chocoStatus.data);
   useRefetchOnIngest(qc, "tolima", tolimaStatus.data);
   const incomplete = [chocoStatus.data, tolimaStatus.data].some((s) => !!s && s.backfill.done < s.backfill.total);
@@ -37,7 +55,13 @@ export function useInsights(): { data: Insights | null; isPending: boolean; isEr
     () => (choco.data && tolima.data ? insights({ choco: choco.data, tolima: tolima.data }, now) : null),
     [choco.data, tolima.data, now],
   );
-  return { data, isPending: choco.isPending || tolima.isPending, isError: choco.isError || tolima.isError, incomplete };
+  return {
+    data,
+    context: context.data ?? null,
+    isPending: choco.isPending || tolima.isPending || context.isPending,
+    isError: choco.isError || tolima.isError,
+    incomplete,
+  };
 }
 
 /** Refetch a zone's events when its last successful ingest changes. The monitor's rule. */

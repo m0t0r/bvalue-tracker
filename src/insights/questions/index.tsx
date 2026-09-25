@@ -11,7 +11,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { dayStart, fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { SOURCES, decay, lastStrong, recentStrong, type Insights, type QuakeLike } from "../claims";
+import type { ContextResponse } from "@/lib/api";
+import { SOURCES, decay, feltInPereira, lastStrong, recentStrong, type Insights, type QuakeLike } from "../claims";
 import { insightsCopy } from "../copy";
 import { BothZonesTimeline, DriftMultiples, EnergyShare, FeltCalendar, TwoClocks } from "./charts";
 import { questionsCopy, type Named } from "./copy";
@@ -19,6 +20,7 @@ import { commonDepths, fmtInt, median, medianHorizontalErrorKm, roundSig } from 
 import { colombianDays, toPereira } from "./derive";
 import { EnergyDots, pct } from "./energy-dots";
 import { FeelExplorer } from "./feel";
+import { Shaking } from "./shaking";
 import { P, Takeaway } from "./ui";
 
 const WEEK = 7 * 86_400_000;
@@ -31,7 +33,7 @@ const chocoStillActive = (data: Insights) =>
     (e) => e.mag >= data.mc.choco! && Date.parse(e.time) > data.now - 7 * DAY && Date.parse(e.time) <= data.now,
   );
 
-export function Questions({ data }: { data: Insights }) {
+export function Questions({ data, context }: { data: Insights; context: ContextResponse | null }) {
   const { lang } = useI18n();
   const q = questionsCopy[lang];
   const ref = data.mainshock.choco.largest;
@@ -40,9 +42,21 @@ export function Questions({ data }: { data: Insights }) {
   const named: Named = { mag: ref.mag, date: fmtDay(Date.parse(ref.time), lang) };
   const weeks = Math.floor((data.now - Date.parse(ref.time)) / WEEK);
   const still = chocoStillActive(data);
+  // USGS's figures for the mainshock, only while they are about the mainshock the page detects.
+  const felt = context ? feltInPereira(context, data.mainshock.choco) : null;
 
   const sections: { id: string; short: string; q: string; body: ReactNode }[] = [
     { id: "q-far", short: q.far.short, q: q.far.q, body: <Far data={data} reference={ref} named={named} /> },
+    ...(felt
+      ? [
+          {
+            id: "q-shaking",
+            short: q.shaking.short,
+            q: q.shaking.q(named),
+            body: <Shaking felt={felt} mag={ref.mag} />,
+          },
+        ]
+      : []),
     // The energy dots only make sense for an event well above the M4.0 each dot stands for.
     ...(ref.mag >= 5
       ? [

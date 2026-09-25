@@ -9,10 +9,42 @@
  */
 import type { Lang } from "@/lib/i18n";
 import { fmtDay } from "@/lib/format";
-import { SOURCES, compassPoint, type Decay, type Drift, type Pace, type Source, type StrongMix } from "./claims";
+import {
+  SOURCES,
+  compassPoint,
+  intensityLevel,
+  type Decay,
+  type Drift,
+  type Felt,
+  type Pace,
+  type Source,
+  type StrongMix,
+} from "./claims";
 
 const f1 = (v: number) => v.toFixed(1);
 const f0 = (v: number) => Math.round(v).toString();
+
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X+"];
+/**
+ * USGS's perceived-shaking term for each level of the Modified Mercalli scale, I to X+, as its
+ * ShakeMap and PAGER legends print it (checked 2026-09-24). The Spanish is the page's translation,
+ * so it is never put in quotes as if USGS had said it.
+ */
+const SHAKING: Record<Lang, string[]> = {
+  en: ["not felt", "weak", "weak", "light", "moderate", "strong", "very strong", "severe", "violent", "extreme"],
+  es: ["no sentido", "débil", "débil", "leve", "moderado", "fuerte", "muy fuerte", "severo", "violento", "extremo"],
+};
+
+/** A level on the Modified Mercalli scale as USGS writes it, "VIII", with its perceived-shaking term. */
+export function intensityName(level: number, lang: Lang): { roman: string; shaking: string } {
+  const i = intensityLevel(level) - 1;
+  return { roman: ROMAN[i]!, shaking: SHAKING[lang][i]! };
+}
+/** "VIII (severo)" or 'VIII ("severe")' inside a sentence: USGS's English term quoted, ours not. */
+const named = (level: number, lang: Lang) => {
+  const n = intensityName(level, lang);
+  return lang === "en" ? `${n.roman} ("${n.shaking}")` : `${n.roman} (${n.shaking})`;
+};
 
 const COMPASS_ES = {
   N: "norte",
@@ -141,6 +173,32 @@ const es = {
     share: (share: number) => `${share >= 0.999 ? "más del 99.9" : f1(share * 100)}\u00A0%`,
     /** `share` inside a sentence, with the article Spanish wants: "liberó el 12.5 %", "liberó más del 99.9 %". */
     sharePhrase: (share: number) => `${share >= 0.999 ? "más del 99.9" : `el ${f1(share * 100)}`}\u00A0%`,
+    /** What people reported against what USGS's model estimates. Empty unless both are shown. */
+    feltAgreement: (f: Felt): string => {
+      if (!f.agreement || !f.reported || !f.modelled) return "";
+      const r = intensityName(f.reported.level, "es").roman;
+      const m = intensityName(f.modelled.level, "es").roman;
+      switch (f.agreement.case) {
+        case "same":
+          return `Los reportes y el modelo del USGS coinciden: los dos dan intensidad ${named(f.reported.level, "es")}.`;
+        case "within-one":
+          return `Los reportes y el modelo del USGS casi coinciden: ${r} según la gente y ${m} según el modelo, apenas un grado de diferencia.`;
+        case "higher":
+        case "lower":
+          return `Las dos cifras del USGS difieren en ${f.agreement.levels} grados: la gente reportó ${r}, ${f.agreement.case === "higher" ? "más" : "menos"} de lo que estima el modelo (${m}). Suele pasar: el modelo calcula el movimiento típico a esa distancia, y lo que siente cada persona depende también del suelo, del edificio y del piso en que esté.`;
+      }
+    },
+    /** The question's one sentence. Whose figure it is, always. */
+    feltTakeaway: (f: Felt, mag: number): string => {
+      const at = `en Pereira el M${f1(mag)}`;
+      if (f.reported && f.modelled && f.agreement && f.agreement.levels <= 1)
+        return `Según el USGS, ${at} se sintió con intensidad ${named(f.reported.level, "es")}: así lo reportó la gente, y su modelo ${f.agreement.levels === 0 ? "coincide" : "casi coincide"}.`;
+      if (f.reported && f.modelled)
+        return `Según el USGS, la gente reportó que ${at} se sintió con intensidad ${named(f.reported.level, "es")}, y su modelo estima ${intensityName(f.modelled.level, "es").roman}: las dos cifras no coinciden.`;
+      if (f.reported)
+        return `Según los reportes que recibió el USGS, ${at} se sintió con intensidad ${named(f.reported.level, "es")}.`;
+      return `El modelo del USGS estima que el M${f1(mag)} sacudió Pereira con intensidad ${named(f.modelled!.level, "es")}.`;
+    },
   },
 };
 
@@ -221,6 +279,30 @@ const en: Copy = {
     lastChoco: (ms, minMag, lang) => `Chocó's last event of M${f1(minMag)} or more was on ${fmtDay(ms, lang)}.`,
     share: (share) => `${share >= 0.999 ? "over 99.9" : f1(share * 100)}%`,
     sharePhrase: (share) => `${share >= 0.999 ? "over 99.9" : f1(share * 100)}%`,
+    feltAgreement: (f) => {
+      if (!f.agreement || !f.reported || !f.modelled) return "";
+      const r = intensityName(f.reported.level, "en").roman;
+      const m = intensityName(f.modelled.level, "en").roman;
+      switch (f.agreement.case) {
+        case "same":
+          return `USGS's reports and model agree: both give intensity ${named(f.reported.level, "en")}.`;
+        case "within-one":
+          return `USGS's reports and model nearly agree: ${r} from people and ${m} from the model, just one level apart.`;
+        case "higher":
+        case "lower":
+          return `USGS's two figures differ by ${f.agreement.levels} levels: people reported ${r}, ${f.agreement.case === "higher" ? "more" : "less"} than the model estimates (${m}). That is common: the model works out the typical shaking at that distance, and what each person feels also depends on the ground, the building and the floor they are on.`;
+      }
+    },
+    feltTakeaway: (f, mag) => {
+      const m = `M${f1(mag)}`;
+      if (f.reported && f.modelled && f.agreement && f.agreement.levels <= 1)
+        return `According to USGS, the ${m} was felt in Pereira at intensity ${named(f.reported.level, "en")}: that is what people reported, and its model ${f.agreement.levels === 0 ? "agrees" : "nearly agrees"}.`;
+      if (f.reported && f.modelled)
+        return `According to USGS, people in Pereira reported the ${m} at intensity ${named(f.reported.level, "en")}, and its model estimates ${intensityName(f.modelled.level, "en").roman}: the two do not agree.`;
+      if (f.reported)
+        return `According to the reports USGS received, the ${m} was felt in Pereira at intensity ${named(f.reported.level, "en")}.`;
+      return `USGS's model estimates the ${m} shook Pereira at intensity ${named(f.modelled!.level, "en")}.`;
+    },
   },
 };
 

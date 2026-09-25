@@ -268,7 +268,8 @@ can measure and do (`durationMs`, `sgcMs`); CPU time only the runtime can see.
 `worker/external.ts` fetches what USGS publishes about each zone's mainshock and stores a small
 digest in D1 (`external_products`, `migrations/0007`) for `GET /api/context`
 ([API](api.md)). It exists for the insights page's felt-intensity card and the USGS aftershock
-forecast (plan Parts A and D); nothing shows it until those ship.
+forecast (plan Parts A and D). DYFI and PAGER are on the insights page's questions tab; the forecast waits
+for Part D.
 
 - **Its own cron, `7 11 * * *`, once a day, and its own invocation.** `scheduled()` branches on
   `controller.cron`: `INGEST_CRON` (`worker/plan.ts`) runs the ingest, `PRODUCTS_CRON` runs this,

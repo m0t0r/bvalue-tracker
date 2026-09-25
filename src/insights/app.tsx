@@ -30,7 +30,7 @@ export function InsightsApp() {
   const c = insightsCopy[lang];
   const dark = useIsDark();
   const [tab, setTab] = useState<Tab>(readTab);
-  const { data, isPending, isError, incomplete } = useInsights();
+  const { data, context, isPending, isError, incomplete } = useInsights();
   const other = lang === "es" ? "en" : "es";
   const tabList = useRef<HTMLDivElement>(null);
   const footer = useRef<HTMLElement>(null);
@@ -114,7 +114,7 @@ export function InsightsApp() {
               </TabsContent>
               <TabsContent value="questions">
                 <Suspense fallback={<PageSkeleton label={c.loading} />}>
-                  <Questions data={data} />
+                  <Questions data={data} context={context} />
                 </Suspense>
               </TabsContent>
             </>

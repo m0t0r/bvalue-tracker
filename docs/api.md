@@ -62,7 +62,8 @@ from any event other than the zone's mainshock, but only once a day, so **a cons
 only while `sgcEventId` is the zone's detected mainshock**. The route itself does not filter: that
 would read the zone's events, unindexed on `mag`, on every load. `checkedAt` is when the job last saw
 USGS's current version; an old one means USGS or the job has been failing, and the page decides
-what that hides (plan Parts A and D). Credit "USGS" beside any figure from it (US public domain).
+what that hides. The questions tab (`feltInPereira`) hides nothing on age: each figure it shows
+carries its product's own date, and it drops a digest whose `sgcEventId` is not the detected mainshock. Credit "USGS" beside any figure from it (US public domain).
 
 CSV headers are the stable machine names (`id,time,lat,…`) by default. `?lang=es` on
 either CSV endpoint, and the page's download buttons while the page is in Spanish,
