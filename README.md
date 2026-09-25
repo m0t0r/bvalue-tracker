@@ -35,7 +35,8 @@ terms in plain words.
   set of filters.
 - **"Qué está pasando" (`/insights`).** A second page that explains the two zones in plain words to a
   reader in the coffee region who feels the larger events: a scrolling story and a set of questions,
-  both drawn with D3 from the live catalogue. Every sentence about the data is chosen by a tested rule,
+  both drawn with D3 from the live catalogue, and a 3D block of the region (OGL) with every event at
+  its depth, the subducting plate and where the rock broke in the M7.4. Every sentence about the data is chosen by a tested rule,
   so it cannot drift from the figures beside it.
 - **Downloadable data.** CSV of the events and of b over time, straight from the page.
 - **CLI.** Fetch the catalogue to CSV and compute b-values offline, independent of

@@ -9,7 +9,7 @@
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
 | `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL for the monitor; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
-| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts` and `insights-block.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground and rupture plane), once, by hand. |
+| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts` and `insights-block.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground and rupture plane), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
 | `src/**/*.test.ts` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec, kept for history. Its §3 lists every verified fact about the SGC endpoint. |
@@ -51,6 +51,20 @@ pnpm cli fetch --zone tolima --out data/tolima.csv                # the zone's o
 [the science](science.md#the-mainshock-detected-from-the-catalogue-never-pinned-from-2026-09-24)), and
 `--exclude-mainshock` drops that one event, or nothing when there is none. A file that is itself a
 date range gets that range's answer, which is why the line says how many events it looked at.
+
+## The 3D block's map
+
+The top of the 3D tab's block is an image of the monitor's map, baked once per theme
+(`src/insights/block3d/basemap-{light,dark}.webp`). Redo it only if the block's bounds, the map style or
+the pinned towns change:
+
+1. `pnpm dev --port <p>`, then open `/src/insights/block3d/bake-basemap.html?theme=light` in
+   `agent-browser` with `set viewport 2048 822 2` (the height is the block's Mercator height at that
+   width; the page sizes its own map and prints it in the title). It reads OpenFreeMap and Mapterhorn
+   directly, in dev only.
+2. Wait until `get title` starts with `ready`, then `screenshot` (4096 × 1644 at scale 2).
+3. `cwebp -q 78 <png> -o src/insights/block3d/basemap-light.webp`; the same with `theme=dark`.
+4. Look at it before committing: the towns the block pins (`PINNED` in `shared.ts`) must be absent.
 
 ## Tooling gotchas
 

@@ -133,10 +133,10 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   Cloudflare plugin would hand that path to the Worker, which answers 404 (the same trap as the zone
   pages), so `insightsPage` in `vite.config.ts` serves it first. The monitor's header links to it,
   and it links back.
-- **Two tabs, "La historia" and "Preguntas"**, in the query string (`?tab=questions`; the story is
-  the bare URL). Switching replaces the history entry rather than pushing one: back leaves the page.
-  Each tab is its own lazy chunk (`src/insights/story`, `src/insights/questions`), so the shell and
-  the data arrive first.
+- **Three tabs, "La historia", "Preguntas" and "En 3D"**, in the query string (`?tab=questions`,
+  `?tab=3d`; the story is the bare URL). Switching replaces the history entry rather than pushing
+  one: back leaves the page. Each tab is its own lazy chunk (`src/insights/story`,
+  `src/insights/questions`, `src/insights/block3d`), so the shell and the data arrive first.
 - **Live data, kept current like the monitor.** `useInsights` reads `/api/events` for both zones under
   `["events", zone]`, and computes every claim with `insights()` over them and a clock rounded to
   the minute. Status is polled every minute and on returning to the tab, and a zone's events are
@@ -238,8 +238,53 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
 - **The 3D block's data** is `src/insights/block.json` (22 kB, 6.7 kB gzipped; `block.ts` types it),
   written by `scripts/insights-block.ts` and committed: GEBCO 2020 every 0.05° over the Slab2 box, and
   USGS's finite-fault plane for the M7.4. The plate is `section.json`'s grid and the events are the live
-  catalogue, so neither is repeated. **Nothing imports it yet**: it is for the 3D prototype (unit E1 of
-  the plan), which loads it in its own lazy chunk. The script needs no manual download.
+  catalogue, so neither is repeated. The script needs no manual download.
+
+### The 3D tab ("En 3D", `src/insights/block3d`, from 2026-09-25)
+
+A block of the region, 500 × 200 km and 240 km deep, with every event at its depth, the Slab2 plate,
+USGS's rupture plane and the monitor's own map on top. Chosen from four prototype variants (branch
+`prototype/3d`, never merged; the plan's unit E1): a slowly turning preview on the tab opens a
+full-screen viewer with five views to jump to.
+
+- **Engine: OGL, not three.js** (owner's choice, 2026-09-25). Both were built; OGL came to 36 kB
+  gzipped against three.js's 158 kB for the same scene, and screenshots of five views in both themes
+  differed by a mean of under 0.5/255. Its shaders are ours: `scene.ts` reproduces three.js's Lambert
+  (linear light ÷ π, sRGB out) and flat materials. Every geometry must carry every attribute its
+  program declares, or OGL throws inside `Geometry.draw`, which is why the events have their own
+  instanced vertex shader. three.js's extras (PBR, shadows, model loaders, post-processing) are what
+  we gave up; the engine-free logic (`shared.ts`) keeps a switch back cheap.
+- **Files.** `shared.ts` is everything without an engine or a DOM (coordinates, the views and how
+  they frame the block, where the map lies, `blockModel` over the data) and is what the tests hold;
+  `scene.ts` draws; `index.tsx` is the tab, the viewer and the key; `copy.ts` has both languages.
+- **Live data.** The tab reads the same `Insights` as the others, so it follows each ingest. A newer
+  catalogue goes to the scene through `setData`, which redraws the events in place and keeps the
+  camera; the scene is rebuilt only for a new language or theme, since its labels and colours are
+  drawn inside it. A replay only changes how many events are drawn; the buffers are rewritten only
+  when the exaggeration, the highlight or the catalogue changes. The WebGL check runs once, and
+  releases its probe's context: browsers keep only a few alive, and one per render (as a first
+  version did during the replay) would have cost the viewer its own.
+- **The map on top is baked, not live.** `bake-basemap.html` renders OpenFreeMap's positron or dark
+  style with Mapterhorn's relief, as `event-map.tsx` draws them, at exactly the block's bounds; the
+  screenshot becomes `basemap-{light,dark}.webp` (201 and 116 kB; one loads, by theme). How to redo it
+  is in [development](development.md#the-3d-blocks-map). A live MapLibre map was rejected: ~250 kB
+  gzipped more, no camera glide into it, and it cannot show anything below the ground. The block's
+  pinned towns, reserves (labelled in English), airports and road shields are left off the image.
+  The credit, OpenFreeMap © OpenMapTiles © OpenStreetMap and © Mapterhorn, is on the block.
+- **Drawing decisions from the owner's review**: the plate is a solid-looking slab (60 % top, walls on
+  its cut faces) in a grey a quarter of the way from the page's background to its text (a twentieth
+  in dark mode, where the lights brighten it about three times), and the **events and the rupture are
+  drawn through it** (render order after the plate), so it never hides data. Looking straight down,
+  the ground turns see-through and what only makes sense from the side (depth ticks, the plate, its
+  margin, the box, the underground labels) hides. Towns are teardrop pins, Pereira in `--place`,
+  their names in the text colour. The block's size is written on its top edges.
+- **The viewer is a modal dialog**: focus goes to its close button and stays inside it, Escape closes
+  it and returns focus to "Explorar en 3D", and the page behind does not scroll. Reduced motion stops
+  the preview's rotation and makes the views jump instead of glide. Without WebGL 2 the tab says so
+  and points to the story's cuts, which remain the text alternative.
+- **Checked at 390 px and 1440 px, both themes, both languages** (2026-09-25): the side-length label
+  ends at the block's edge (a centred one ran off a phone's screen), and the exaggeration note sits top
+  left, clear of the credit.
 
 ## Interface conventions
 

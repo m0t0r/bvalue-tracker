@@ -291,7 +291,7 @@ the reader's own questions). Everything above still applies to it; this section 
   `story/model.ts`), because the quote is about that event and no other. The rule's own answer
   stays on the page beside it: Slab2 alone cannot place the M7.4 inside the plate.
 - **The 3D block's ground and rupture plane** (`src/insights/block.json`, from
-  `scripts/insights-block.ts`, 2026-09-24; nothing shows them yet). The ground is GEBCO 2020 every
+  `scripts/insights-block.ts`, 2026-09-24; drawn by the "En 3D" tab from 2026-09-25). The ground is GEBCO 2020 every
   0.05° over the Slab2 box, the same source and rounding as the cuts: where Chocó's cut (4.65° N)
   meets it, every shared point is equal, and a test holds that. The 0.05° spacing (~5.5 km) steps
   over peaks: the grid's highest node is 4,610 m, 3 km west of the Nevado del Ruiz's 5,321 m summit. The plane is USGS's
@@ -315,6 +315,19 @@ the reader's own questions). Everything above still applies to it; this section 
     above the plate's top at one end and ~8 km inside it at the other, both within Slab2's ~24 km
     uncertainty. The model's top is set by its hypocentre and width. Do not draw or describe the
     rupture as starting at the plate's surface.
+- **The 3D tab's rules** (from 2026-09-25):
+  - **One exaggeration for everything vertical**, ground and depth alike, always written on the block
+    ("A escala real" at ×1). It opens at ×2; at ×1 the relief of 4–5 km barely shows against 240 km.
+  - **The rupture is named in plain words**: "donde se rompió la roca", "la zona naranja", never
+    "ruptura" alone (the owner, not a seismologist, could not tell what the orange slice was). Its
+    key states its length, depth range and largest slip from `block.json`, and the offset between
+    USGS's hypocentre and SGC's from the data (`blockModel`: 23 km east and 22 km deeper on the
+    fixture). The stronger the orange, the larger the slip; the key says it is USGS's model.
+  - **Events are drawn through the plate**, so where a group sits against the plate is read from its
+    position in the side views, not from being hidden; the page's own plate rule still decides
+    "above/inside/close" in words, on the story's cuts.
+  - **The key names the snapped depths** (`commonDepths`, at least 20 events at one exact depth; 60 at
+    42.9 km, 54 at 39.9 and 32 at 45.9 on the fixture), because in 3D they look like layers.
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.
