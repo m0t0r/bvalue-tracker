@@ -10,11 +10,11 @@ import { line } from "d3-shape";
 import { useMemo, type CSSProperties } from "react";
 import { energyRatio } from "@bvalue/seismo";
 import type { Lang } from "@/lib/i18n";
-import { fmtDate, fmtDay } from "@/lib/format";
+import { fmtDateTime, fmtDay } from "@/lib/format";
 import { arrivalSeconds, ratesSince, strongDays, type Insights, type Source } from "../claims";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
-import { rankLayout, quakeYear, type Compared } from "../history";
+import { rankLayout, type Compared } from "../history";
 import { fmt, fmtKm, fmtMag, fmtTimes, medianHorizontalErrorKm } from "../shared";
 import { FILL, STROKE } from "../tones";
 import { useProgress } from "./hooks";
@@ -127,14 +127,14 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
     id: main.id,
     mag: main.mag,
     main: true,
-    line1: fill(c.historyMain, { date: fmtDate(main.t, lang) }),
+    line1: fill(c.historyMain, { date: fmtDateTime(main.t, lang) }),
     line2: fmtMag(main.mag),
   };
   const item = (r: Compared): RankItem => ({
     id: r.quake.id,
     mag: r.quake.mag,
     main: false,
-    line1: fill(c.historyRow, { name: r.quake.name[lang], year: String(quakeYear(r.quake)) }),
+    line1: fill(c.historyRow, { name: r.quake.name[lang], date: fmtDateTime(r.quake.time, lang) }),
     line2: fill(c.historyTimes(r.relation), { mag: fmtMag(r.quake.mag), x: fmtTimes(r.times) }),
   });
   const below = h.smaller.map(item);

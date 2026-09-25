@@ -200,7 +200,11 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   past earthquakes in `muted-foreground`. Squares are right-aligned so each label sits beside its own
   square; left-aligned, the small ones' labels floated ~250 px from them. A row is never shorter than
   its two lines of text, and the labels step down a pixel at a time (to 9 px) until every row fits:
-  at 320 × 640 the second part's nine rows did not fit at 11 px and the drawing came out empty. The
+  at 320 × 640 the second part's nine rows did not fit at 11 px and the drawing came out empty.
+  Every row gives the day and time in Colombian time, like the M7.4's (`fmtDateTime`, 2026-09-25);
+  1906 reads 10:39, Bogotá's mean solar time, since Colombia had no standard time until 1914. With
+  the time added, "Costa de Ecuador y Colombia" ran 7 px past the right edge at 320 px, so the 1906
+  row is "Costa Ecuador–Colombia"; the tightest label (Armenia, first part) keeps 2–3 px. The
   drawing's title names the M7.4 ("frente al M7.4"), because every row's ratio is against it. The
   text alternative lists every row with its label. Both layouts, the first part's and the second's,
   stay mounted so the step change cross-fades; drawing only the active one was suggested in review

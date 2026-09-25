@@ -34,7 +34,7 @@ const ISCGEM_FROM = 1904;
 
 /** ISC-GEM ids and the day each happened (UTC), with the names the page shows. */
 const PICKED = [
-  { id: "iscgem16957884", day: "1906-01-31", es: "Costa de Ecuador y Colombia", en: "Ecuador–Colombia coast" },
+  { id: "iscgem16957884", day: "1906-01-31", es: "Costa Ecuador–Colombia", en: "Ecuador–Colombia coast" },
   { id: "iscgem654039", day: "1979-12-12", es: "Tumaco (Nariño)", en: "Tumaco (Nariño)" },
   { id: "iscgem656068", day: "1979-11-23", es: "Eje Cafetero", en: "Coffee region" },
   { id: "iscgem167996", day: "1994-06-06", es: "Páez (Cauca)", en: "Páez (Cauca)" },

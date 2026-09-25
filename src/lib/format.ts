@@ -38,7 +38,7 @@ export const sgcEventUrl = (id: string) => `https://www.sgc.gov.co/detallesismo/
 export const fmtRegion = (region: string) => region.replace(/,\s*Colombia$/, "");
 
 /** "18 sept 2026, 17:43", Colombian time. Unlabelled: the footer says so once for the whole page. */
-export const fmtDateTime = (iso: string, lang: Lang) => DATE_TIME[lang].format(new Date(iso));
+export const fmtDateTime = (at: string | number, lang: Lang) => DATE_TIME[lang].format(new Date(at));
 /** "18 sept 2026" */
 export const fmtDate = (ms: number, lang: Lang) => DATE[lang].format(ms);
 const YEAR = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, year: "numeric" });

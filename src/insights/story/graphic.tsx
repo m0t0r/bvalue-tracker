@@ -7,14 +7,14 @@ import { geoCircle, geoMercator, geoPath, type GeoProjection } from "d3-geo";
 import { quantileSorted } from "d3-array";
 import { useId, useMemo, type CSSProperties } from "react";
 import type { Lang } from "@/lib/i18n";
-import { fmtDate, fmtDay } from "@/lib/format";
+import { fmtDateTime, fmtDay } from "@/lib/format";
 import { SOURCES, type Insights, type Source } from "../claims";
 import { PEREIRA } from "../../../core/places";
 import { CUTS, groundAt } from "../plate";
 import { REGION, TOWNS, onCut } from "../region";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
-import { quakeYear, type Compared } from "../history";
+import type { Compared } from "../history";
 import { fmtKm, fmtMag, fmtTimes, roundSig } from "../shared";
 import { FILL, STROKE } from "../tones";
 import { Layer, SceneTitle, radius, star } from "./marks";
@@ -37,11 +37,11 @@ function historyAria(model: StoryModel, withLarger: boolean, lang: Lang) {
   const main = model.main;
   if (!h || !main) return "";
   const row = (r: Compared) =>
-    `${fill(c.historyRow, { name: r.quake.name[lang], year: String(quakeYear(r.quake)) })}, ${fill(
+    `${fill(c.historyRow, { name: r.quake.name[lang], date: fmtDateTime(r.quake.time, lang) })}, ${fill(
       c.historyTimes(r.relation),
       { mag: fmtMag(r.quake.mag), x: fmtTimes(r.times) },
     )}`;
-  const mainRow = `${fill(c.historyMain, { date: fmtDate(main.t, lang) })}, ${fmtMag(main.mag)}`;
+  const mainRow = `${fill(c.historyMain, { date: fmtDateTime(main.t, lang) })}, ${fmtMag(main.mag)}`;
   const list = [...(withLarger ? h.larger.map(row) : []), mainRow, ...h.smaller.map(row)];
   return fill(c.historyAria, { list: list.join("; ") });
 }

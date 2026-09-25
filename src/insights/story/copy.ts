@@ -313,7 +313,7 @@ const es = {
     historyTitle: "Energía frente al {magLabel} · área proporcional",
     historyAria: "Cuadrados cuya área representa la energía de cada sismo, del mayor al menor: {list}.",
     historyMain: "Chocó · {date}",
-    historyRow: "{name} · {year}",
+    historyRow: "{name} · {date}",
     /** Keyed on how the mainshock compares with the row's event. */
     historyTimes: (relation: Relation): string =>
       relation === "more"
@@ -614,7 +614,7 @@ const en: StoryCopy = {
     historyTitle: "Energy against the {magLabel} · area to scale",
     historyAria: "Squares whose area is each earthquake's energy, largest first: {list}.",
     historyMain: "Chocó · {date}",
-    historyRow: "{name} · {year}",
+    historyRow: "{name} · {date}",
     historyTimes: (relation) =>
       relation === "more"
         ? "{mag} · {x} times less energy"
