@@ -75,6 +75,10 @@ practices stayed at 100.
     (24.1 → 28.9 kB gzipped) on 2026-09-24, `vite build`. Nothing else moved. Chaparral's cut and the
     two locator maps took it to 99.9 kB (30.4 kB gzipped) the same day; its data was already in
     `section.json`.
+  - The 3D tab (2026-09-25, `vite build`) is its own chunk, 110.9 kB (36.7 kB gzipped: OGL, the
+    scene and `block.json`), plus one map image by theme (201 kB light, 116 kB dark), all loaded only
+    when the tab opens. The shell went from 26.18 kB to 26.19 kB (the tab's name). three.js would have
+    been 575 kB (144.9 kB gzipped) for the same scene; see [the page](frontend.md#the-3d-tab-en-3d-srcinsightsblock3d-from-2026-09-25).
   - The felt-intensity question (2026-09-25, `vite build`) took the questions chunk from 66.9 kB to
     72.2 kB (22.2 → 23.9 kB gzipped), and the shell from 21.3 kB to 25.6 kB (8.5 → 10.0 kB gzipped):
     its rule and its sentences are in `claims.ts` and `copy.ts`, which the shell already loads. One

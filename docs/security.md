@@ -71,6 +71,10 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   Re-check the map and the chart axis labels if you touch it. `test/headers.test.ts` fails
   if `event-map.tsx` names a tile host the CSP does not allow: `pnpm dev` ignores
   `_headers`, so a missing host would only show in production, as a map without that layer.
+  The 3D tab (`src/insights/block3d`) needs nothing more: WebGL is not a CSP directive, and its map
+  is a same-origin image baked in advance, so it never reaches OpenFreeMap or Mapterhorn from a
+  reader's browser. Only the dev-only bake page does (`bake-basemap.html`, not in the build). Its
+  labels and pins are DOM built with `textContent`; the one `innerHTML` is the pin's fixed SVG.
 - **The response headers are the two files below, and nothing else sets them**
   (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
 
