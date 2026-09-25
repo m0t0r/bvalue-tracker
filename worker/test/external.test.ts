@@ -252,8 +252,9 @@ describe("the daily USGS job", () => {
     });
     await expect(runProducts()).rejects.toThrow(/503/);
 
-    expect((await context("choco")).dyfi).toBeNull();
-    expect((await context("tolima")).dyfi?.sgcEventId).toBe("SGC2026tolbig");
+    // Chaparral goes first, so it meets the 503; Chocó still gets its digest.
+    expect((await context("tolima")).dyfi).toBeNull();
+    expect((await context("choco")).dyfi?.sgcEventId).toBe("SGC2026pqqmro");
   });
 
   it("asks USGS nothing for a zone with no clear mainshock", async () => {

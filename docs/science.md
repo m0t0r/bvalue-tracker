@@ -143,7 +143,7 @@
   events are missed right after the mainshock. All read one answer, computed over the zone's whole
   catalogue, never over the filtered view.
 - **Renaming a zone is not automatic.** "Enjambre" → "secuencia" is a scientific claim and SGC's
-  wording should lead it; `SHARE_META` is also baked into `tolima.html` at build time, so no runtime
+  wording should lead it; `SHARE_META` is also baked into `index.html` at build time, so no runtime
   rename could reach a link preview. It is a code change made by a person. Until then, while
   something stands clear or awaits review on the Tolima tab, its caveats swap SGC's swarm line for
   "Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre."

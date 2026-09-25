@@ -5,6 +5,7 @@ import {
   dueNow,
   REFRESH_MIN_INTERVAL_S,
   TRAILING_DAYS,
+  type Caller,
   type IngestHistory,
   type IngestPlan,
   type SgcHealth,
@@ -36,6 +37,12 @@ const NOW = new Date("2026-09-19T12:05:00Z");
 const cron = (minute: number) => ({ kind: "cron" as const, scheduledTime: Date.UTC(2026, 8, 19, 12, minute) });
 const MANUAL = { kind: "manual" } as const;
 
+/**
+ * Chaparral has every lane, so the lane rules are checked on it; what differs for Chocó, on the wide
+ * ticks only, is at the end. Every call names its zone: `dueNow` has no default to fall back on.
+ */
+const chaparral = (caller: Caller, now: Date, h: IngestHistory) => dueNow(caller, now, h, "tolima");
+
 /** A finished, successful run — all the plan reads of it is when it ended. */
 const finishedAt = (d: Date): IngestRun => ({
   id: 1,
@@ -60,7 +67,7 @@ const rateLimited = (retryAfterS: number | null) =>
 
 describe("cron lanes", () => {
   it("gives the fast lane one trailing day and never lets it retire an event", () => {
-    expect(dueNow(cron(15), NOW, history()).steps).toEqual([
+    expect(chaparral(cron(15), NOW, history()).steps).toEqual([
       { lane: "fast", trigger: "cron", days: 1, allowRemovals: false },
     ]);
   });
@@ -68,7 +75,7 @@ describe("cron lanes", () => {
   // An HTTP status is no weaker a signal than a timeout, so both wait for a success.
   it("stands the fast lane down while the last finished run failed", () => {
     expect(
-      dueNow(
+      chaparral(
         cron(15),
         NOW,
         history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }),
@@ -80,12 +87,12 @@ describe("cron lanes", () => {
   // which is also the only way to observe it — until a run succeeds the rule above applies.
   it("keeps the fast lane down for Retry-After after a 429, then lets it back in", () => {
     const limited = rateLimited(600);
-    expect(dueNow(cron(15), at(599), limited).steps).toEqual([]);
-    expect(dueNow(cron(15), at(601), limited).steps).toHaveLength(1);
+    expect(chaparral(cron(15), at(599), limited).steps).toEqual([]);
+    expect(chaparral(cron(15), at(601), limited).steps).toHaveLength(1);
   });
 
   it("runs the fast lane when no run has ever finished", () => {
-    expect(dueNow(cron(15), NOW, history({ health: healthy({ lastOk: null }) })).steps).toHaveLength(1);
+    expect(chaparral(cron(15), NOW, history({ health: healthy({ lastOk: null }) })).steps).toHaveLength(1);
   });
 
   // Both ends of the clamp are load-bearing. Retry-After: 0 — which an already-elapsed HTTP
@@ -97,20 +104,20 @@ describe("cron lanes", () => {
     ["caps an absurd Retry-After at six hours", 1e9, 21_600],
   ])("%s", (_name, retryAfterS, waitS) => {
     const limited = rateLimited(retryAfterS);
-    expect(dueNow(cron(15), at(waitS - 1), limited).steps).toEqual([]);
-    expect(dueNow(cron(15), at(waitS + 1), limited).steps).toHaveLength(1);
+    expect(chaparral(cron(15), at(waitS - 1), limited).steps).toEqual([]);
+    expect(chaparral(cron(15), at(waitS + 1), limited).steps).toHaveLength(1);
   });
 
-  it("gives the wide tick three trailing days, with removals", () => {
-    expect(dueNow(cron(30), NOW, history()).steps).toEqual([
-      { lane: "wide", trigger: "cron", days: 3, allowRemovals: true },
+  it("gives the wide tick its trailing day, with removals", () => {
+    expect(chaparral(cron(30), NOW, history()).steps).toEqual([
+      { lane: "wide", trigger: "cron", days: 1, allowRemovals: true },
     ]);
   });
 
   // The wide tick is what probes SGC while the fast lane waits, so it is what lets it back in.
   it("keeps the wide tick running while the fast lane is standing down", () => {
     expect(
-      dueNow(
+      chaparral(
         cron(30),
         NOW,
         history({ health: healthy({ lastOk: false, failing: { since: NOW.toISOString(), status: 500 } }) }),
@@ -119,22 +126,22 @@ describe("cron lanes", () => {
   });
 
   it("adds one history chunk on the hour, and on no other quarter", () => {
-    expect(dueNow(cron(0), NOW, history()).steps.at(-1)).toEqual({ lane: "sweep" });
-    expect(dueNow(cron(30), NOW, history()).steps.at(-1)).not.toEqual({ lane: "sweep" });
+    expect(chaparral(cron(0), NOW, history()).steps.at(-1)).toEqual({ lane: "sweep" });
+    expect(chaparral(cron(30), NOW, history()).steps.at(-1)).not.toEqual({ lane: "sweep" });
   });
 
   // Rather than waiting an hour per week of back-fill.
   it("adds a history chunk to every wide tick while the back-fill is unfinished", () => {
     const partial = history({ backfill: { done: 2, total: 6 } });
-    expect(dueNow(cron(30), NOW, partial).steps.at(-1)).toEqual({ lane: "sweep" });
+    expect(chaparral(cron(30), NOW, partial).steps.at(-1)).toEqual({ lane: "sweep" });
   });
 
   // A boundary landing at :14:59.9 must not read as minute 14 and quietly demote the wide
   // tick to a fast one, which would skip that tick's removals and its back-fill chunk.
   it("reads a tick that landed a tenth of a second early as the minute it was meant for", () => {
     const early = { kind: "cron" as const, scheduledTime: Date.UTC(2026, 8, 19, 12, 30) - 100 };
-    expect(dueNow(early, NOW, history()).steps).toEqual([
-      { lane: "wide", trigger: "cron", days: 3, allowRemovals: true },
+    expect(chaparral(early, NOW, history()).steps).toEqual([
+      { lane: "wide", trigger: "cron", days: 1, allowRemovals: true },
     ]);
   });
 
@@ -150,9 +157,9 @@ describe("cron lanes", () => {
     const MINUTES = [0, 15, 30, 45];
     const plansFor = (h: IngestHistory) =>
       MINUTES.map((m) =>
-        dueNow({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, h),
+        chaparral({ kind: "cron", scheduledTime: Date.UTC(2026, 8, 19, 12, m) + offsetS * 1000 }, NOW, h),
       );
-    const isWide = (p: IngestPlan) => p.steps.some((s) => s.lane === "wide" && s.days === TRAILING_DAYS);
+    const isWide = (p: IngestPlan) => p.steps.some((s) => s.lane === "wide");
     const hasSweep = (p: IngestPlan) => p.steps.some((s) => s.lane === "sweep");
 
     it("alternates wide and narrow, and sweeps on the hour", () => {
@@ -210,7 +217,7 @@ describe("while SGC is refusing us", () => {
 
   it("keeps the wide tick at full rate while the refusal is still young", () => {
     // One 410 can be a proxy having a moment; an hour of staleness is too much to spend on it.
-    expect(dueNow(cron(30), NOW, refused(600, 300)).steps).toHaveLength(1);
+    expect(chaparral(cron(30), NOW, refused(600, 300)).steps).toHaveLength(1);
   });
 
   /**
@@ -230,8 +237,8 @@ describe("while SGC is refusing us", () => {
       lastRun: { ...finishedAt(new Date(T)), ok: false },
     });
     const at = (min: number) =>
-      dueNow({ kind: "cron", scheduledTime: T + min * 60_000 }, new Date(T + min * 60_000), oneFailure).steps.length >
-      0;
+      chaparral({ kind: "cron", scheduledTime: T + min * 60_000 }, new Date(T + min * 60_000), oneFailure).steps
+        .length > 0;
 
     expect(at(15)).toBe(false); // narrow lane: down on the failure alone, as it always was
     expect(at(30)).toBe(true); // the wide tick still goes — this is the grace
@@ -240,48 +247,52 @@ describe("while SGC is refusing us", () => {
   });
 
   it("drops the wide tick to hourly once the refusal has persisted", () => {
-    expect(dueNow(cron(30), NOW, refused(3600, 300)).steps).toEqual([]);
-    expect(dueNow(cron(30), NOW, refused(3600, 900)).steps).toEqual([]);
+    expect(chaparral(cron(30), NOW, refused(3600, 300)).steps).toEqual([]);
+    expect(chaparral(cron(30), NOW, refused(3600, 900)).steps).toEqual([]);
   });
 
   it("never stops probing: the hour's tick still goes", () => {
-    const plan = dueNow(cron(30), NOW, refused(7200, 3601));
-    expect(plan.steps).toEqual([{ lane: "wide", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true }]);
+    const plan = chaparral(cron(30), NOW, refused(7200, 3601));
+    expect(plan.steps).toEqual([
+      { lane: "wide", trigger: "cron", days: CADENCE.tolima.trailingDays, allowRemovals: true },
+    ]);
   });
 
   // A 5xx is their bad day, not a door: the probe is what recovers from it, at full rate.
   it.each([500, 502, 504])("leaves the wide tick alone for a run of HTTP %i", (status) => {
-    expect(dueNow(cron(30), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
+    expect(chaparral(cron(30), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
   });
 
   // 429 and 503 have their own cooldown, which SGC itself names; they must not be pulled
   // into a rule that would ignore Retry-After.
   it.each([429, 503])("leaves HTTP %i to the Retry-After cooldown", (status) => {
-    expect(dueNow(cron(30), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
+    expect(chaparral(cron(30), NOW, refused(7200, 300, status)).steps).toHaveLength(1);
   });
 
   it("does not slow anything on a failure with no status at all", () => {
     // A timeout, or a run the Worker was killed in the middle of: no door, just silence.
-    expect(dueNow(cron(30), NOW, refused(7200, 300, null as unknown as number)).steps).toHaveLength(1);
+    expect(chaparral(cron(30), NOW, refused(7200, 300, null as unknown as number)).steps).toHaveLength(1);
   });
 
   // The rule lives once, in this module. The button is the same request from the same
   // address, so letting it through twelve times an hour would undo the back-off.
   it("makes the button wait the same hour, and says how long is left", () => {
-    const plan = dueNow(MANUAL, NOW, refused(3600, 600));
+    const plan = chaparral(MANUAL, NOW, refused(3600, 600));
     expect(plan.steps).toEqual([]);
     expect(plan.retryAfterS).toBe(3000);
   });
 
   it("lets the button through once that hour has passed, and holds the claim to it", () => {
-    const plan = dueNow(MANUAL, NOW, refused(7200, 3601));
-    expect(plan.steps).toEqual([{ lane: "wide", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true }]);
+    const plan = chaparral(MANUAL, NOW, refused(7200, 3601));
+    expect(plan.steps).toEqual([
+      { lane: "wide", trigger: "manual", days: CADENCE.tolima.trailingDays, allowRemovals: true },
+    ]);
     expect(plan.minIntervalS).toBe(3600);
   });
 
   // The fast lane was already down on `lastOk === false`; this must not quietly open it.
   it("keeps the fast lane shut throughout", () => {
-    expect(dueNow(cron(15), NOW, refused(7200, 3601)).steps).toEqual([]);
+    expect(chaparral(cron(15), NOW, refused(7200, 3601)).steps).toEqual([]);
   });
 });
 
@@ -289,7 +300,7 @@ describe("the visitor's refresh", () => {
   // The claim inside ingest() is the guard that actually holds; this one is here to answer
   // with a useful retryAfterS instead of a silent stand-down.
   it("stands down while another run is already talking to SGC", () => {
-    const plan = dueNow(MANUAL, NOW, history({ inFlight: true }));
+    const plan = chaparral(MANUAL, NOW, history({ inFlight: true }));
     expect(plan.steps).toEqual([]);
     expect(plan.retryAfterS).toBe(5);
   });
@@ -299,19 +310,19 @@ describe("the visitor's refresh", () => {
   // Written off REFRESH_MIN_INTERVAL_S, not off the number it happens to hold: the throttle
   // is tied to the cron's period and has moved once already.
   it("counts down the throttle since the last run, whoever started it", () => {
-    const plan = dueNow(MANUAL, at(120), history({ lastRun: finishedAt(NOW) }));
+    const plan = chaparral(MANUAL, at(120), history({ lastRun: finishedAt(NOW) }));
     expect(plan.steps).toEqual([]);
     expect(plan.retryAfterS).toBe(REFRESH_MIN_INTERVAL_S - 120);
   });
 
   it("re-reads the trailing window once the wait has elapsed, and keeps the throttle on the claim", () => {
-    const plan = dueNow(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), history({ lastRun: finishedAt(NOW) }));
-    expect(plan.steps).toEqual([{ lane: "wide", trigger: "manual", days: 3, allowRemovals: true }]);
+    const plan = chaparral(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), history({ lastRun: finishedAt(NOW) }));
+    expect(plan.steps).toEqual([{ lane: "wide", trigger: "manual", days: 1, allowRemovals: true }]);
     expect(plan.minIntervalS).toBe(REFRESH_MIN_INTERVAL_S);
   });
 
   it("loads one missing history chunk per press, without the usual wait", () => {
-    const plan = dueNow(MANUAL, at(1), history({ backfill: { done: 2, total: 6 }, lastRun: finishedAt(NOW) }));
+    const plan = chaparral(MANUAL, at(1), history({ backfill: { done: 2, total: 6 }, lastRun: finishedAt(NOW) }));
     expect(plan.steps).toEqual([{ lane: "sweep" }]);
     expect(plan.minIntervalS).toBeNull();
   });
@@ -320,7 +331,7 @@ describe("the visitor's refresh", () => {
   // lane on "the last run succeeded" alone, which ignores the cooldown a 429 or 503 asks for.
   // After a rate limit and a later success it reached SGC with no wait while the cron's own
   // fast lane was standing down. Both now read sgcUnwell, so the button falls back to the
-  // ordinary five minutes — the lane is closed, the button is not.
+  // ordinary fifteen minutes — the lane is closed, the button is not.
   it("closes the back-fill fast lane during a cooldown, even once SGC is answering again", () => {
     // The cooldown has to outlast the throttle, or the second half below measures the
     // throttle expiring rather than the cooldown still holding the fast lane shut.
@@ -331,38 +342,40 @@ describe("the visitor's refresh", () => {
     };
     expect(limited.health.lastOk).toBe(true); // a later run succeeded: only the cooldown holds
 
-    const during = dueNow(MANUAL, at(1), limited);
+    const during = chaparral(MANUAL, at(1), limited);
     expect(during.steps).toEqual([]);
     expect(during.retryAfterS).toBe(REFRESH_MIN_INTERVAL_S - 1);
 
     // The wait is all it costs. The sweep is what lets the fast lane back in, so it still runs.
-    const after = dueNow(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), limited);
+    const after = chaparral(MANUAL, at(REFRESH_MIN_INTERVAL_S + 1), limited);
     expect(after.steps).toEqual([{ lane: "sweep" }]);
     expect(after.minIntervalS).toBe(REFRESH_MIN_INTERVAL_S);
   });
 });
 
 /**
- * The second zone. Chaparral runs on the wide ticks only, so adding it costs two trailing
- * requests and one sweep an hour instead of five: SGC refused us on 2026-09-20 after ~20 hours
- * at twelve an hour, and two zones on every lane would have put us back at ten.
+ * The second zone. Chocó runs on the wide ticks only, so it costs two trailing requests and one
+ * sweep an hour instead of five: SGC refused us on 2026-09-20 after ~20 hours at twelve an hour,
+ * and two zones on every lane would have put us back at ten. It had every lane until 2026-09-25,
+ * when the activity had moved to Chaparral.
  */
-describe("the Tolima zone", () => {
-  const tolima = (caller: Parameters<typeof dueNow>[0], h = history(), now = NOW) => dueNow(caller, now, h, "tolima");
+describe("the Chocó zone", () => {
+  const choco = (caller: Parameters<typeof dueNow>[0], h = history(), now = NOW) => dueNow(caller, now, h, "choco");
 
   it("sits out the ticks between the wide ones", () => {
-    expect(tolima(cron(15)).steps).toEqual([]);
-    expect(tolima(cron(45)).steps).toEqual([]);
+    expect(choco(cron(15)).steps).toEqual([]);
+    expect(choco(cron(45)).steps).toEqual([]);
   });
 
-  // A swarm's day holds far more than the ten events MAX_REMOVAL_SHARE needs to engage, which
-  // is the only reason the fast lane may not retire anything.
-  it("re-reads one trailing day on the wide tick, with removals", () => {
-    expect(tolima(cron(30)).steps).toEqual([{ lane: "wide", trigger: "cron", days: 1, allowRemovals: true }]);
+  it("re-reads three trailing days on the wide tick, with removals", () => {
+    expect(choco(cron(30)).steps).toEqual([
+      { lane: "wide", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true },
+    ]);
+    expect(TRAILING_DAYS).toBe(3);
   });
 
-  it("sweeps on the hour, like Chocó", () => {
-    expect(tolima(cron(0)).steps.at(-1)).toEqual({ lane: "sweep" });
+  it("sweeps on the hour, like Chaparral", () => {
+    expect(choco(cron(0)).steps.at(-1)).toEqual({ lane: "sweep" });
   });
 
   describe.each([0, 45, 449, -449])("dispatched %i s from the tick", (offsetS) => {
@@ -375,28 +388,28 @@ describe("the Tolima zone", () => {
 
     // The budget docs/sgc-data-source.md quotes: 5 + 3 = 8 requests an hour, ~192 a day.
     it("sends three requests an hour, and the two zones eight", () => {
-      expect(hour("tolima")).toHaveLength(3);
-      expect(hour("tolima").filter((s) => s.lane === "sweep")).toHaveLength(1);
+      expect(hour("choco")).toHaveLength(3);
+      expect(hour("choco").filter((s) => s.lane === "sweep")).toHaveLength(1);
       expect(hour("choco").length + hour("tolima").length).toBe(8);
     });
   });
 
   // Its throttle is its own period, so a press lands on a run that was happening anyway.
   it("holds the button to its own thirty minutes, counted from its own last run", () => {
-    const wait = CADENCE.tolima.refreshMinIntervalS;
+    const wait = CADENCE.choco.refreshMinIntervalS;
     expect(wait).toBe(1800);
     const h = history({ lastRun: finishedAt(NOW), lastSent: NOW.toISOString() });
-    expect(tolima(MANUAL, h, at(wait - 60)).retryAfterS).toBe(60);
-    expect(tolima(MANUAL, h, at(wait + 1)).steps).toEqual([
-      { lane: "wide", trigger: "manual", days: 1, allowRemovals: true },
+    expect(choco(MANUAL, h, at(wait - 60)).retryAfterS).toBe(60);
+    expect(choco(MANUAL, h, at(wait + 1)).steps).toEqual([
+      { lane: "wide", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true },
     ]);
   });
 
   /**
-   * Both zones probed the tick the refusal was still in its grace, Chaparral seconds after Chocó,
-   * so the newest request is a few seconds past the tick. Counted exactly, the next hour's probe
-   * then lands seconds short of 3600 and stands down, and the first contact slips to +120 — the
-   * 90-minute freeze the single-zone timeline above guards against, back through the second zone.
+   * Both zones probed the tick the refusal was still in its grace, the second seconds after the
+   * first, so the newest request is a few seconds past the tick. Counted exactly, the next hour's
+   * probe then lands seconds short of 3600 and stands down, and the first contact slips to +120 —
+   * the 90-minute freeze the single-zone timeline above guards against, back through the second zone.
    */
   it("still probes on the hour when the other zone's request left seconds after the tick", () => {
     const T = Date.UTC(2026, 8, 19, 12, 0);
@@ -406,8 +419,7 @@ describe("the Tolima zone", () => {
       lastRun: { ...finishedAt(new Date(T + 30 * 60_000)), ok: false },
     });
     const at = (min: number) =>
-      dueNow({ kind: "cron", scheduledTime: T + min * 60_000 }, new Date(T + min * 60_000), bothProbed).steps.length >
-      0;
+      choco({ kind: "cron", scheduledTime: T + min * 60_000 }, bothProbed, new Date(T + min * 60_000)).steps.length > 0;
     expect(at(60)).toBe(false);
     expect(at(90)).toBe(true);
   });
@@ -415,18 +427,18 @@ describe("the Tolima zone", () => {
   // Another zone having just run says nothing about how fresh this catalogue is.
   it("does not stand the button down because the other zone ran a moment ago", () => {
     const h = history({ lastRun: finishedAt(at(-3600)), lastSent: at(-60).toISOString() });
-    expect(tolima(MANUAL, h).steps).toHaveLength(1);
+    expect(choco(MANUAL, h).steps).toHaveLength(1);
   });
 
   // But SGC is one door: while it refuses us, one knock an hour is the whole budget, whoever
-  // knocked. Chocó's probe at the top of the hour stands Chaparral's down.
+  // knocked. Chaparral goes first on every tick, so its probe at the top of the hour stands Chocó's down.
   it("counts the refusal's hour from the last request of any zone", () => {
     const refused = history({
       health: failingSince(at(-7200), 410),
       lastSent: at(-60).toISOString(),
       lastRun: finishedAt(at(-3700)),
     });
-    expect(tolima(cron(30), refused).steps).toEqual([]);
-    expect(tolima(MANUAL, refused).steps).toEqual([]);
+    expect(choco(cron(30), refused).steps).toEqual([]);
+    expect(choco(MANUAL, refused).steps).toEqual([]);
   });
 });

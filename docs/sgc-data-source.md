@@ -113,17 +113,24 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
 
 - We send an identifying `user-agent` (`sgc-swarm-research/0.1`) and query with the
   bounding box and the narrowest window that answers the question.
-- **With the Tolima zone (2026-09-23) the budget is ~192 requests/day**: Chocó's 120 below,
-  plus Chaparral's 48 wide ticks and 24 sweeps — **8 an hour**, under the 12 an hour that ran for
-  ~20 h before the 2026-09-20 refusal, but not by a wide margin. That is why Chaparral has no fast
-  lane: on every lane the two zones would send 10 an hour. `plan.test.ts` counts the hour for both.
-  Chaparral's responses are larger per request than Chocó's while the swarm runs at ~130 events a
-  day. The padding is a day each side and the end date is inclusive, so a window of N days fetches
-  about N + 3: its wide tick (1 trailing day, from midnight) fetches ~2–3 days, ~330 rows, and a
-  1-day sweep chunk fetches 4, ~520 rows. At that rate that is ~48·0.33 + 24·0.53 ≈ **28 MB/day**
-  on top of Chocó's ~13, and it falls as the swarm does. Re-derive it if the rate changes.
-- Chocó's own budget: **~120 SGC requests/day, ~13 MB/day** — 48 narrow ticks, 48 wide ticks and
-  24 sweeps. Measured, not guessed: a response is 7.7 KB of page chrome plus 1.00 KB per row
+- **With two zones the budget is ~192 requests/day, 8 an hour**: one zone on every lane (120),
+  the other on the wide ticks and the hourly sweep (48 + 24) — under the 12 an hour that ran for
+  ~20 h before the 2026-09-20 refusal, but not by a wide margin. That is why only one zone has a
+  fast lane: on every lane the two would send 10 an hour. **Which one has it follows the
+  activity**: Chocó from 2026-09-23, when Tolima was added; **Chaparral from 2026-09-25**, when the
+  swarm was where the events were. The swap changes no count. `plan.test.ts` counts the hour for
+  both.
+- **Chaparral's bytes, on every lane since 2026-09-25.** Its responses are larger per request than
+  Chocó's while the swarm runs at ~130 events a day. The padding is a day each side and the end
+  date is inclusive, so a window of N days fetches about N + 3: its fast and wide ticks (1 trailing
+  day, from midnight) fetch ~2–3 days, ~330 rows, and a 1-day sweep chunk fetches 4, ~520 rows.
+  At that rate that is ~96·0.33 + 24·0.53 ≈ **44 MB/day**, and it falls as the swarm does.
+  Re-derive it if the rate changes.
+- **Chocó's, on the wide ticks since 2026-09-25: ~72 requests/day, ~10 MB/day** — 48 wide ticks
+  (~117 KB) and 24 sweeps (~182 KB). With Chaparral's that is ~54 MB/day, up from ~41 before the
+  swap; the request count, which is what the refusal tracked, is unchanged.
+- Chocó's budget while it had every lane: **~120 SGC requests/day, ~13 MB/day** — 48 narrow ticks,
+  48 wide ticks and 24 sweeps. Measured, not guessed: a response is 7.7 KB of page chrome plus 1.00 KB per row
   (the two fixtures), and at the September 2026 rate the narrow span holds ~59 rows against
   the wide span's ~109 and a sweep chunk's ~173 — so ~67, ~117 and ~182 KB per request, and
   48·67 + 48·117 + 24·182 ≈ 13.2 MB. It is **not** the 16 MB/day of the original 15-minute

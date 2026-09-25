@@ -6,7 +6,7 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-20",
   "compatibility_flags": ["nodejs_compat"],
-  // Every page is a real file (index.html, and tolima.html served at /tolima; see
+  // Every page is a real file (index.html, and choco.html served at /choco; see
   // core/zone-pages.ts), so the single-page-application fallback only
   // meant that every wrong path — /robots.txt, /favicon.ico, a crawler's guess — answered 200
   // with the whole app. "none" sends an asset miss to the Worker, which answers a plain 404.
@@ -44,11 +44,11 @@
     "LOG_LEVEL": "info",
   },
   "triggers": {
-    // Every 15 min: the trailing 1 day, insert/update only. Every second tick widens to the
-    // trailing 3 days and does removals; on the hour it also re-checks one older 7-day chunk
-    // for revisions. ~120 SGC requests/day for Chocó. The Tolima zone (the Chaparral swarm) runs
-    // on the wide ticks only, in the same invocation after Chocó, plus its own hourly sweep: ~72
-    // more, ~192/day.
+    // Every 15 min, for the Tolima zone (the Chaparral swarm): the trailing 1 day, insert/update
+    // only. Every second tick re-reads that day with removals; on the hour it also re-checks one
+    // older 1-day chunk for revisions. ~120 SGC requests/day. Chocó runs on the wide ticks only
+    // (trailing 3 days, with removals), in the same invocation after Chaparral, plus its own
+    // hourly 7-day sweep: ~72 more, ~192/day.
     // Deliberately ONE pattern: the old config had a second, `5 * * * *`, for the sweep, and
     // at five-minute spacing a second pattern lands within 120 s of the first — inside the
     // 150 s in-flight window — and the two steal each other's claim. One pattern with the

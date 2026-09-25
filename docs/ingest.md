@@ -4,24 +4,33 @@ There are two zones (`core/zones.ts`), each its own bounding box, start date and
 **Chocó** sequence since the M7.4 of 2026-08-10, and the **Tolima** zone — the Chaparral swarm —
 since 2026-09-20. Zones are named by department, as SGC's daily bulletin names the pair; the Tolima
 box covers only the swarm near Chaparral, which is why its heading names the town. Below,
-"Chaparral" is the swarm and `tolima` the zone id. Every event and every run carries its zone. The table below is Chocó's; Chaparral
-differs as follows (`CADENCE` in `worker/plan.ts`, `SWEEP_CHUNK_DAYS` in `worker/ingest.ts`):
+"Chaparral" is the swarm and `tolima` the zone id. Every event and every run carries its zone.
 
-- **No fast lane.** It runs on the wide ticks only, :00 and :30, re-reading the trailing **1**
-  day *with* removals — the fast lane forbids removals only because a quiet day holds too few
-  events for `MAX_REMOVAL_SHARE`, and the swarm has run ~130 a day. It sweeps on the hour like
-  Chocó, in **1-day** chunks from 2026-09-20.
-- **Its button throttle is 30 minutes**, its own period, for the same reason Chocó's is 15.
-- **Both zones run in the same cron invocation, one after the other** (Chocó first), each reading
-  the history afresh. Still one cron pattern, never two requests to SGC at once.
+**Which zone gets every lane follows the activity** (`CADENCE` in `worker/plan.ts`). Until
+2026-09-25 it was Chocó, with Chaparral on the wide ticks only; that day the two swapped, because
+the Chocó sequence had quietened six weeks after its M7.4 and the swarm had not. The swap moved no
+request: one zone on every lane and one on the wide ticks is 5 + 3 = 8 an hour either way (see
+[the request budget](sgc-data-source.md#sgc-rate-limits-and-the-request-budget)). The table
+below is Chaparral's; Chocó differs as follows (`SWEEP_CHUNK_DAYS` in `worker/ingest.ts`):
+
+- **Chaparral's windows are one day.** Its fast lane and its wide tick both re-read the trailing
+  **1** day, the wide one *with* removals — the fast lane forbids removals only because a quiet
+  day holds too few events for `MAX_REMOVAL_SHARE`, and the swarm has run ~130 a day. It sweeps in
+  **1-day** chunks from 2026-09-20.
+- **Chocó has no fast lane.** It runs on the wide ticks only, :00 and :30, re-reading the trailing
+  **3** days with removals, and sweeps on the hour in **7-day** chunks from the M7.4.
+- **Its button throttle is 30 minutes**, its own period, for the same reason Chaparral's is 15.
+- **Both zones run in the same cron invocation, one after the other** (Chaparral first, the order
+  of `ZONE_IDS`), each reading the history afresh. Still one cron pattern, never two requests to
+  SGC at once.
 - **What is shared and what is not** (`IngestHistory` in `worker/plan.ts`): a refusal streak, a
   429/503 cooldown, the in-flight guard and the refusal probe's hour are across zones, because SGC
   is one server answering one address — a 410 to Chocó's request is a 410 to Chaparral's, and once
   one zone has probed a refusing SGC this hour the other stands down. The probe allows five minutes
   of slack (`PROBE_SLACK_S`), because the second zone's request leaves seconds after the tick and
   an exact hour then lands just short. Whether the **last run failed** is per zone, as are the
-  back-fill and the button's ordinary throttle: a timeout on Chaparral's larger response must not
-  shut Chocó's fast lane.
+  back-fill and the button's ordinary throttle: a timeout on Chocó's wider window must not shut
+  Chaparral's fast lane.
 - **Removal only ever considers the zone's own events** (`eventsBetween` takes the zone). A
   Chaparral response lacks every Chocó event; without that, the 20% guard would be the only thing
   standing between it and retiring the whole of Chocó, and the guard would only log a note.
@@ -29,9 +38,9 @@ differs as follows (`CADENCE` in `worker/plan.ts`, `SWEEP_CHUNK_DAYS` in `worker
 | Trigger | What it does |
 |---|---|
 | Cron `*/15 * * * *`, tick minute not divisible by 30 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](sgc-data-source.md#sgc-rate-limits-and-the-request-budget). |
-| Cron `*/15 * * * *`, tick minute divisible by 30 | Re-reads the trailing 3 days, with removals. |
-| Cron `*/15 * * * *`, tick minute 0 | The above, then re-reads the least recently *attempted* 7-day chunk since the mainshock, to catch late revisions. While history is incomplete this sweep runs on **every** wide tick instead of hourly. |
-| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: trailing 3 days, at most once per 15 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. Since the throttle is the cron's own period and counts *any* run, a press usually stands down; that is the intended outcome and `refreshWait` says the reader already has the newest data rather than counting down. |
+| Cron `*/15 * * * *`, tick minute divisible by 30 | Re-reads the trailing day, with removals. |
+| Cron `*/15 * * * *`, tick minute 0 | The above, then re-reads the least recently *attempted* 1-day chunk since the swarm began, to catch late revisions. While history is incomplete this sweep runs on **every** wide tick instead of hourly. |
+| `POST /api/refresh` (the button) | While history is incomplete: loads one missing chunk per call. Otherwise: the trailing day, at most once per 15 minutes. Stands down if another run is in flight — the claim is atomic, so a burst of concurrent calls still produces one SGC request. Since the throttle is the cron's own period and counts *any* run, a press usually stands down; that is the intended outcome and `refreshWait` says the reader already has the newest data rather than counting down. |
 | Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than the throttle. The Worker's own limit is what protects SGC, whatever the number of visitors. |
 | The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
 
@@ -232,6 +241,11 @@ every tick already does — and frequency is what the only kills tracked. The si
 not what was measured: 170 ms was tolerated, and nothing says where the ceiling is. **Read
 `pnpm logs cpu --since 24h` a day after this ships.** The knobs, in the order to reach for them:
 Chaparral's sweep off the hour or less often, then its padding, then the swarm cooling down.
+
+**The swap of 2026-09-25 grows the :15 and :45 ticks** (not yet measured). Their one request is
+now Chaparral's trailing day, ~330 rows at ~130 events a day, where it was Chocó's ~59. The wide
+ticks are unchanged, and so is how often a tick runs. Same instruction: read `pnpm logs cpu` a day
+after it ships.
 
 The fetch side is fine: `/api/status`, the route the open page polls every minute, is 3 ms
 median and 16 ms max, and `/api/refresh` is 6 ms median.

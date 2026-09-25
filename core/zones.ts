@@ -9,7 +9,7 @@
 import { CHOCO_SWARM_BBOX, MAINSHOCK_DATE } from "./seiscomp.ts";
 import type { BBox } from "./types.ts";
 
-export const ZONE_IDS = ["choco", "tolima"] as const;
+export const ZONE_IDS = ["tolima", "choco"] as const;
 export type ZoneId = (typeof ZONE_IDS)[number];
 /** The zone a request that names none gets: every URL and script from before there were two. */
 export const DEFAULT_ZONE: ZoneId = "choco";
