@@ -468,6 +468,26 @@ colour, motion). Keep to them:
   the depth ramp disappears. `--chart-2` is the one token in `index.css` written as hex
   for the same reason — `event-map.tsx` reads it through `getComputedStyle` for the
   mainshock ring. Everything else in that file is `oklch`; keep it that way.
+- **The monitor's map has relief shading** (a `hillshade` layer over Mapterhorn's elevation
+  tiles, 2026-09-24), so the Western and Central Cordilleras read under the dots. What was
+  decided, checked on both zones in both themes at 1280 and 320 px:
+  - It sits **over the basemap's land fills and under its first line**, and the basemap's
+    `water` is moved back over it, so the sea hides the sea floor's relief and every road,
+    border and label stays on top. The event dots draw over all of it. Just under `water` was
+    tried first and was wrong: OpenFreeMap draws wood, towns, parks and ice after `water`, and
+    its wood fades in from z8 to opaque at z12, so in forest (most of Chocó) the relief washed
+    out as the reader zoomed in.
+  - **The shading is tuned; the dots are not recoloured.** Exaggeration runs from 0.35 at z7 to
+    0.22 at z11, so about 0.33 where Chocó's map opens (z7.6) and 0.25 at Chaparral's (z10):
+    at a flat 0.35 the relief behind Chaparral's swarm turned busy.
+    In dark mode the highlight carries the relief (`#5a5a56`); a shadow on a near-black
+    basemap has nothing darker to fall to, and at `#3a3a38` the cordillera barely showed.
+  - The tiles are 512 px but **declared 1024**, so MapLibre fetches one zoom coarser and
+    stretches them: a quarter of the tiles for a soft background that looked the same (the
+    weight is under [Performance](performance.md)). Colombia's data ends at z12.
+  - Flat, no tilt: MapLibre cannot draw dots below the ground, and 3D is the insights plan's own unit.
+  - "© Mapterhorn" joins the attribution, which at 320 px makes the open attribution box one
+    line taller over the map's bottom edge. It collapses once the reader moves the map.
 - **The two clusters must differ in lightness, not only in hue** (colour review,
   2026-09-19). Shallow blue and deep grey were both mid-lightness — `oklch(0.575)`
   against `oklch(0.556)`, a measured 1.07:1 — and the one place they touch is the

@@ -30,6 +30,15 @@ const DEPTH_STOPS: [number, string][] = [
 ];
 
 /**
+ * Relief shading per theme, hex for the same reason. On the dark basemap a shadow has nothing
+ * darker to fall to, so the highlight carries the relief.
+ */
+const RELIEF_COLOURS = {
+  light: { shadow: "#5c5c58", highlight: "#ffffff" },
+  dark: { shadow: "#000000", highlight: "#5a5a56" },
+};
+
+/**
  * Where each zone's map opens. Chocó's two groups sit ~50 km apart and need the wider view;
  * Chaparral's swarm fits in ~20 km, and at Chocó's zoom it would be one blot.
  */
@@ -95,6 +104,40 @@ export default function EventMap({
     m.on("error", (e) => console.error("map:", e.error?.message ?? e));
 
     m.on("load", () => {
+      // Relief from Mapterhorn: terrarium-encoded 512 px WebP. Colombia's data ends at z12 (z13
+      // answers 404, checked 2026-09-24), so MapLibre overzooms past it. Declared 1024, so MapLibre
+      // fetches one zoom coarser and stretches them: a quarter of the tiles for a soft background
+      // that looked the same (the weights are in docs/performance.md).
+      m.addSource("relief", {
+        type: "raster-dem",
+        tiles: ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"],
+        tileSize: 1024,
+        encoding: "terrarium",
+        maxzoom: 12,
+        attribution: '<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a>',
+      });
+      // Over the basemap's land fills (wood, towns, parks, ice), which would otherwise wash it out
+      // from z10, and under its first line, so every road, border and label stays on top. Then
+      // the water goes back over it, so the sea hides the sea floor's relief. Both OpenFreeMap
+      // styles draw all their fills first; a style that lost `water` fails loudly in `error`.
+      const colours = RELIEF_COLOURS[dark ? "dark" : "light"];
+      const firstLine = m.getStyle().layers.find((l) => l.type !== "background" && l.type !== "fill")?.id;
+      m.addLayer(
+        {
+          id: "relief",
+          type: "hillshade",
+          source: "relief",
+          paint: {
+            // Chaparral's map opens at z10, where the same strength turned busy behind the swarm.
+            "hillshade-exaggeration": ["interpolate", ["linear"], ["zoom"], 7, 0.35, 11, 0.22],
+            "hillshade-shadow-color": colours.shadow,
+            "hillshade-highlight-color": colours.highlight,
+            "hillshade-accent-color": colours.shadow,
+          },
+        },
+        firstLine,
+      );
+      m.moveLayer("water", firstLine);
       m.addSource("events", { type: "geojson", data: toGeoJson(latest.current.events, latest.current.mainshockId) });
       m.addLayer({
         id: "events",

@@ -86,6 +86,14 @@ practices stayed at 100.
   and compare medians. The load-error state is not reachable this way — Lighthouse ends the trace
   before the retries do — so check it in `agent-browser` with `network route '**/api/*' --abort`
   and a buffered `layout-shift` `PerformanceObserver` read after ~10 s.
+- **The map's relief shading is its heaviest download, and none of it is on the first load**
+  (2026-09-24, `pnpm preview`). One map load fetches, for relief against basemap (vector tiles,
+  style, sprites, glyphs): Chocó at 1280 px, 2 tiles, 391 kB against 189 kB; Chaparral, 1 tile,
+  245 kB against 145 kB. Declared at their real 512 px, the same views took 6 tiles (985 kB) and
+  4 (778 kB); see [the page](frontend.md#interface-conventions) for the 1024 declaration. Mapterhorn
+  sends `max-age=604800`, so a repeat visit within the week fetches none. Opened without scrolling
+  at Lighthouse's two viewports (412 × 823 and 1350 × 940), the map had not mounted after 10 s and
+  no tile of either host had been requested, so the relief cannot move a Lighthouse score on `/`.
 - The console must stay empty. The basemap style names sprite images OpenFreeMap does not
   ship (`circle-11`), which MapLibre warns about twice per load, so `event-map.tsx` answers
   `styleimagemissing` with an empty pixel. Real map errors still reach `console.error`.
