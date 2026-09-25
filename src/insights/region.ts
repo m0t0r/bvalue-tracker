@@ -2,11 +2,11 @@
  * What both tabs' maps are drawn on: country outlines (Natural Earth 1:50m, public domain, cut to
  * the four countries around the zones by `scripts/insights-region.ts`) and the towns the text
  * names. Towns are centres rounded to ~1 km; Pereira is the reader's, and every distance on the
- * page is measured from it (`PEREIRA` in `claims.ts`).
+ * page is measured from it (`PEREIRA` in `core/places.ts`, shared with the Worker).
  */
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import raw from "./region.geo.json";
-import { PEREIRA } from "./claims";
+import { PEREIRA } from "../../core/places";
 
 export const REGION = raw as FeatureCollection<Polygon | MultiPolygon, { name: string }>;
 

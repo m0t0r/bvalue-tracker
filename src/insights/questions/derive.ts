@@ -5,7 +5,8 @@
  */
 import { energyRatio, epicentralKm, hypocentralKm } from "@bvalue/seismo";
 import { dayStart } from "@/lib/format";
-import { PEREIRA, sourceOf, type Insights, type QuakeLike, type Source } from "../claims";
+import { sourceOf, type Insights, type QuakeLike, type Source } from "../claims";
+import { PEREIRA } from "../../../core/places";
 import { fmtInt, roundSig } from "../shared";
 
 const DAY = 86_400_000;

@@ -1,7 +1,10 @@
 # Deployment
 
 The app is one Cloudflare Worker (`choco`) with a D1 database (`sgc-swarm`), an Analytics
-Engine dataset (`sgc_ingest`) and one Cron Trigger. It runs on the Workers **free plan**.
+Engine dataset (`sgc_ingest`) and two Cron Triggers: the ingest every 15 minutes and the daily USGS
+job ([Ingest](ingest.md#the-daily-usgs-job)). It runs on the Workers **free plan**, which allows 5
+Cron Triggers **per account**, so a fork sharing an account with other Workers should count them
+first (the Workers dashboard lists each Worker's triggers).
 The `sgc-swarm` names predate the project's rename to bvalue-tracker and are kept, because
 renaming a D1 database means migrating its data.
 

@@ -1,3 +1,4 @@
+import { mainshockId, zoneMainshock } from "../core/mainshock.ts";
 import type { SeismicEvent } from "../core/types.ts";
 import type { ZoneId } from "../core/zones.ts";
 import type { IngestRun, StoredEvent } from "./api-types.ts";
@@ -338,4 +339,32 @@ export async function lastRun(db: D1Database, onlyOk: boolean, zone: ZoneId | nu
     .bind(...(zone === null ? [] : [zone]))
     .first<RunRow>();
   return row ? toRun(row) : null;
+}
+
+/** The fields of a zone's mainshock that the Worker's callers need. */
+export interface MainshockRow {
+  id: string;
+  time: string;
+  lat: number;
+  lon: number;
+  mag: number;
+  status: string;
+}
+
+/**
+ * The zone's mainshock, detected over its whole catalogue — never over the range a request asked
+ * for, which would drop "the largest of this range" (docs/ingest.md) — or null unless one is found.
+ * Only the two largest events decide it (`zoneMainshock`), so this reads two rows' worth of answer.
+ * Unindexed on `mag`, it walks the zone's rows to find them. Its callers are `excludeMainshock=1`,
+ * which the page never sends, and the daily USGS job, once a day, so it is not worth an index.
+ */
+export async function zoneMainshockRow(db: D1Database, zone: ZoneId): Promise<MainshockRow | null> {
+  const { results } = await db
+    .prepare(
+      "SELECT id, time, lat, lon, mag, status FROM events WHERE zone = ? AND removed_at IS NULL ORDER BY mag DESC LIMIT 2",
+    )
+    .bind(zone)
+    .all<MainshockRow>();
+  const id = mainshockId(zoneMainshock(results));
+  return results.find((e) => e.id === id) ?? null;
 }

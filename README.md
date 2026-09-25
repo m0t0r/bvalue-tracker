@@ -46,16 +46,20 @@ terms in plain words.
 ```mermaid
 flowchart LR
   sgc["SGC “Consulta Experta” form"]
+  usgs["USGS event products"]
   d1[("D1")]
   page["React page"]
   subgraph worker["Cloudflare Worker (Hono)"]
     direction TB
     cron["Cron Trigger<br/>every 15 min"]
+    daily["Cron Trigger<br/>daily"]
     api["Same-origin JSON API"]
   end
 
   sgc <-- "POST / HTML" --> cron
   cron -- "parsed events" --> d1
+  usgs -- "GeoJSON / JSON" --> daily
+  daily -- "digests" --> d1
   d1 --> api
   api -- JSON --> page
 ```
@@ -64,6 +68,9 @@ flowchart LR
   a date range and bounding box, with id, time, location, depth, magnitude and type,
   phases, RMS, GAP, hypocentral errors and review status. The response is HTML; there
   is no official API, so it is parsed.
+- **Context from USGS:** once a day the Worker finds each zone's mainshock in USGS's catalogue and
+  keeps a digest of what USGS publishes about it: felt reports ("Did You Feel It?"), modelled
+  shaking (PAGER) and the aftershock forecast. See [Ingest](docs/ingest.md#the-daily-usgs-job).
 - **Backend:** one Cloudflare Worker ([Hono](https://hono.dev)) serves the page and
   a JSON API, stores events in D1, and runs the ingest on a Cron Trigger. It fits the
   Workers free plan.
@@ -149,7 +156,9 @@ code itself. Read the relevant document before changing that area.
 ## Data and disclaimer
 
 All earthquake data comes from the [Servicio Geológico Colombiano](https://www.sgc.gov.co),
-which is the authority for seismic information in Colombia. This project is independent
+which is the authority for seismic information in Colombia. Felt reports, modelled shaking and the
+aftershock forecast for a mainshock come from the [USGS](https://earthquake.usgs.gov) (public
+domain) and are credited to it wherever they appear. This project is independent
 and is not affiliated with or endorsed by SGC. SGC revises events after publication, so
 figures here change over time.
 

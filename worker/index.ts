@@ -5,13 +5,13 @@ import { secureHeaders } from "hono/secure-headers";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
 import { computeStats, type CatalogStats } from "@bvalue/seismo";
-import { mainshockId, zoneMainshock } from "../core/mainshock.ts";
 import { DEFAULT_ZONE, ZONE_IDS, isZoneId, type ZoneId } from "../core/zones.ts";
-import type { HealthResponse, StatusResponse, StoredEvent, ZoneHealth } from "./api-types.ts";
-import { lastRun, toStored, type EventRow } from "./db.ts";
+import type { ContextResponse, HealthResponse, StatusResponse, StoredEvent, ZoneHealth } from "./api-types.ts";
+import { lastRun, toStored, zoneMainshockRow, type EventRow } from "./db.ts";
+import { PRODUCTS_CRON, readContext, refreshProducts } from "./external.ts";
 import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
 import { asLevel, logger, type Logger } from "./log.ts";
-import { dueNow, sgcUnwell, tickMinute } from "./plan.ts";
+import { INGEST_CRON, dueNow, sgcUnwell, tickMinute } from "./plan.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -199,23 +199,8 @@ async function queryEvents(db: D1Database, f: EventFilter, zone: ZoneId): Promis
     .all<EventRow>();
   const events = results.map(toStored);
   if (!f.excludeMainshock) return events;
-  const mainshock = await zoneMainshockId(db, zone);
-  return mainshock === null ? events : events.filter((e) => e.id !== mainshock);
-}
-
-/**
- * The zone's mainshock, detected over its whole catalogue — never over the range a request asked
- * for, which would drop "the largest of this range" (docs/ingest.md). Only the two largest events
- * decide it (`zoneMainshock`), so this reads two rows' worth of answer. Unindexed on `mag`, it walks
- * the zone's rows to find them; only `excludeMainshock=1` asks, which the page never sends (it
- * detects on the catalogue it already holds), so it is not worth an index on the hot path.
- */
-async function zoneMainshockId(db: D1Database, zone: ZoneId): Promise<string | null> {
-  const { results } = await db
-    .prepare("SELECT id, mag, status FROM events WHERE zone = ? AND removed_at IS NULL ORDER BY mag DESC LIMIT 2")
-    .bind(zone)
-    .all<{ id: string; mag: number; status: string }>();
-  return mainshockId(zoneMainshock(results));
+  const mainshock = await zoneMainshockRow(db, zone);
+  return mainshock === null ? events : events.filter((e) => e.id !== mainshock.id);
 }
 
 async function status(db: D1Database, zone: ZoneId): Promise<StatusResponse> {
@@ -303,6 +288,18 @@ app.get("/api/b-windows.csv", async (c) => {
     "content-disposition": `attachment; filename="sgc-${parseZone(q)}-b-windows.csv"`,
     "cache-control": "no-cache",
   });
+});
+
+/**
+ * What USGS publishes about the zone's mainshock, as the daily job last stored it: felt reports,
+ * modelled shaking and the aftershock forecast, each with its source times. Never fetched on a
+ * request; one primary-key read. A digest carries the SGC mainshock it was matched from, and the page
+ * shows it only while that is still the zone's detected mainshock.
+ */
+app.get("/api/context", async (c) => {
+  const zone = parseZone(c.req.query());
+  c.header("cache-control", "no-cache");
+  return c.json((await readContext(c.env.DB, zone)) satisfies ContextResponse);
 });
 
 app.post("/api/refresh", async (c) => {
@@ -435,6 +432,21 @@ export default {
    * sequence in one invocation is race-free by construction.
    */
   async scheduled(controller, env) {
+    // The daily USGS job is its own invocation with its own CPU, and never touches SGC.
+    if (controller.cron === PRODUCTS_CRON) {
+      await refreshProducts({
+        db: env.DB,
+        log: log(env, { trigger: "usgs" }),
+        now: new Date(controller.scheduledTime),
+      });
+      return;
+    }
+    if (controller.cron !== INGEST_CRON) {
+      // A pattern in wrangler.jsonc that no branch here answers. Running the ingest for it would
+      // be an unplanned request to SGC, at a minute the lanes were never designed for.
+      log(env, { trigger: "cron" }).error({ cron: controller.cron }, "unknown cron pattern");
+      return;
+    }
     const minute = tickMinute(controller.scheduledTime);
     const l = log(env, { trigger: "cron", tickMinute: minute });
     // The zones one after another, in this one invocation: never two requests to SGC at once,

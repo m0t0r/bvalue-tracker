@@ -14,6 +14,7 @@ import { median } from "d3-array";
 import { dayStart } from "@/lib/format";
 import { clusterOf } from "../../core/clusters";
 import { zoneMainshock } from "../../core/mainshock";
+import { PEREIRA } from "../../core/places";
 import { medianHorizontalErrorKm } from "./shared";
 
 const HOUR = 3_600_000;
@@ -59,10 +60,7 @@ export function bySource<E extends QuakeLike>(cat: Catalogues<E>): Record<Source
 }
 
 // ---------------------------------------------------------------------------------------------
-// Places
-
-/** Town centres, rounded to ~1 km. Pereira is where the reader is; the page measures from it. */
-export const PEREIRA = { lat: 4.8133, lon: -75.6961 } as const satisfies LatLon;
+// Places (Pereira's own point is `PEREIRA` in core/places.ts, shared with the Worker)
 
 /**
  * Wave speeds for "how long the waves took to reach you", rounded: P ≈ 6.5 km/s and S ≈ 3.7 km/s

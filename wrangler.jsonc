@@ -53,9 +53,13 @@
     // at five-minute spacing a second pattern lands within 120 s of the first — inside the
     // 150 s in-flight window — and the two steal each other's claim. One pattern with the
     // lane chosen from the tick has no such spacing to get wrong. See worker/plan.ts.
-    // TICK_MS in worker/plan.ts must equal this period, and the page copy in
+    // TICK_MS in worker/plan.ts must equal this period (INGEST_CRON is derived from it, and
+    // worker/test/external.test.ts holds it to this list), and the page copy in
     // src/lib/i18n.tsx says "15 minutos"; change all three together.
-    "crons": ["*/15 * * * *"],
+    // The second pattern is the daily USGS job (worker/external.ts, PRODUCTS_CRON): its own
+    // invocation, its own CPU, and never a request to SGC, so the claim-window rule above does not
+    // apply to it. scheduled() branches on the pattern and runs nothing for one it does not know.
+    "crons": ["*/15 * * * *", "7 11 * * *"],
   },
   // Workers Logs. Free plan: 200,000 events a day, kept 3 days. `head_sampling_rate` is
   // stated rather than defaulted so that turning it down is an edit to a number that is

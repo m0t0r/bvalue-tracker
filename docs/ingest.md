@@ -109,7 +109,9 @@ Each of these was a real bug in production or in review:
   atomic claim that actually holds.
 - The sweep orders chunks by last **attempt**, not last success. Otherwise one
   chunk that keeps failing is retried forever and starves the rest.
-- **There is exactly one cron pattern, and a second one cannot be added safely.** Every
+- **There is exactly one *ingest* cron pattern, and a second one cannot be added safely.** (The
+  daily USGS job has a pattern of its own, `7 11 * * *`, which is safe because it never claims a
+  run or talks to SGC; see [the daily USGS job](#the-daily-usgs-job).) Every
   lane hangs off the one cron and is chosen by `scheduledTime`'s minute. At the 5-minute
   cadence a second pattern lands at
   best 120 s from this one — the furthest a non-multiple-of-5 minute can sit from a tick —
@@ -259,3 +261,63 @@ sweep is the lane worth isolating, since it is the one with a `SWEEP_CHUNK_DAYS`
 Note that nothing inside the Worker can measure this: `Date.now()` does not advance between
 I/O operations in workerd, so a span with no `await` in it always reads 0 ms. Wall time we
 can measure and do (`durationMs`, `sgcMs`); CPU time only the runtime can see.
+
+<a id="the-daily-usgs-job"></a>
+## The daily USGS job (from 2026-09-24)
+
+`worker/external.ts` fetches what USGS publishes about each zone's mainshock and stores a small
+digest in D1 (`external_products`, `migrations/0007`) for `GET /api/context`
+([API](api.md)). It exists for the insights page's felt-intensity card and the USGS aftershock
+forecast (plan Parts A and D); nothing shows it until those ship.
+
+- **Its own cron, `7 11 * * *`, once a day, and its own invocation.** `scheduled()` branches on
+  `controller.cron`: `INGEST_CRON` (`worker/plan.ts`) runs the ingest, `PRODUCTS_CRON` runs this,
+  and any other pattern is logged as `unknown cron pattern` and runs **nothing**. Without that
+  guard a mistyped pattern would have been an extra ingest, and so an extra request to SGC, at a
+  minute the lanes were never designed for. `worker/test/external.test.ts` holds both constants to
+  `triggers.crons` in `wrangler.jsonc`. The claim-window rule above does not apply: this job claims
+  no ingest run and never talks to SGC. Minute 7 keeps it off the quarter hours anyway.
+- **Once a day is enough.** Six weeks after the M7.4 its felt reports grow slowly, and the forecast
+  is updated about weekly (`nextForecastTime` in the file).
+- **Which USGS event: matched, never pinned.** For each zone whose mainshock is **found**
+  (`zoneMainshock`, the rule in [the science](science.md#the-mainshock-detected-from-the-catalogue-never-pinned-from-2026-09-24)),
+  one FDSN search within ±60 s, 100 km and one magnitude unit below SGC's own time, place and size.
+  Exactly one result is the event; none or several stores nothing and logs `usgs: no single match`
+  with the candidates. A zone with no found mainshock (Chaparral today) asks USGS nothing.
+- **Per run**: the search, the event's detail GeoJSON, then only the product files that changed:
+  DYFI `dyfi_geo_10km.geojson`, PAGER `json/cities.json` and OAF `forecast.json` (the names as
+  published for us6000tjl2 on 2026-09-24). USGS versions its product URLs, so a URL equal to the
+  stored one is not downloaded again; the row's `checked_at` moves and nothing else. USGS lists a
+  product's preferred version first, and that is the one taken. Five subrequests at most per zone
+  against the 50 allowed.
+- **Only USGS's host is ever fetched.** The detail and product URLs come out of USGS's own answer;
+  each must be `https://earthquake.usgs.gov/…` or it is refused (`usgsUrl`), and a redirect is a
+  failure, never followed (`redirect: "manual"`), since the check holds for the first hop only.
+- **A failure keeps what was there.** USGS down, a product missing, or a file a digest cannot read
+  leaves that row as it was, with its old `checked_at`, and the other products and zones still run.
+  Each digest throws rather than guessing: a DYFI cell that is not a `Polygon`, or a PAGER city
+  without numeric coordinates, would otherwise read as "nobody in Pereira answered" and overwrite a
+  real figure. **Then the first error is rethrown**, as the ingest's `scheduled()` does, so
+  Cloudflare records the invocation as failed; a job that swallowed its errors would look "ok" for
+  weeks. Every outcome is also a log line ([Operations](operations.md)).
+- **A digest leaves with its mainshock.** Each row names the SGC mainshock it was matched from
+  (`sgc_event_id`), and every run first deletes the zone's rows matched from any other event, or all
+  of them when the zone has no found mainshock, so no reader can show the M7.4's felt reports or
+  forecast for a later, larger event. That happens before anything that can fail. Within the day
+  before the next run the page still checks `sgcEventId` against the mainshock it detects itself.
+- **A change to a digest reaches stored rows.** Each row carries `digest_version`
+  (`DIGEST_VERSION` in `worker/usgs.ts`); a row from older code is rebuilt although USGS's URL has not
+  changed. Bump it whenever a digest's shape or rules change: PAGER for the M7.4 is final, so its URL
+  may never change again.
+- **CPU, measured 2026-09-24** in Node's V8 on the captured files (workerd cannot time a span with
+  no I/O in it, see [the CPU budget](#the-cpu-budget)): parsing and digesting everything, cold, as
+  on a day when every product changed, **3–4 ms**; warm 0.7 ms. An ordinary day parses only the
+  search and the 70 kB detail, **~0.2 ms**, and its unchanged rows' `checked_at` move in one batch. The largest file is DYFI's 208 kB of 10 km cells.
+  Production's `pnpm logs cpu` after the first run is the real check.
+- **Cost**: one cron invocation a day, up to five subrequests, a few D1 rows written, and one read
+  of at most three rows per `/api/context` call. Against the free plan's allowances above, nothing.
+- **Tests**: `worker/test/usgs.test.ts` (each digest against the captured files, figures recomputed
+  in Python) and `worker/test/external.test.ts` (the cron and the route end to end, USGS stubbed by
+  MSW: one, none and several matches, the unchanged-URL skip, a row from older digest code, USGS
+  down, a redirect, a malformed file, one zone failing before the next, a mainshock replaced, a zone
+  with no mainshock, an unknown cron pattern).

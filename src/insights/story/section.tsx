@@ -6,7 +6,7 @@
 import { geoMercator, geoPath } from "d3-geo";
 import { useId, useMemo } from "react";
 import type { Lang } from "@/lib/i18n";
-import { PEREIRA } from "../claims";
+import { PEREIRA } from "../../../core/places";
 import { CONVERGENCE_CM_PER_YEAR, plateAlong, type Cut, type Plate } from "../plate";
 import { REGION } from "../region";
 import { fmtKm } from "../shared";
