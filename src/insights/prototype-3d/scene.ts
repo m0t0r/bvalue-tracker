@@ -440,8 +440,10 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   const fitDistance = (dir: Vector3) => {
     const ex = vertical.scale.y;
     // The block's corners, seen along `dir`: how far back the camera must be for all of them to fit.
-    const half = [(EAST - WEST) / 2, (FLOOR_KM * ex) / 2, (SOUTH - NORTH) / 2];
-    const centre = new Vector3(0, (-FLOOR_KM * ex) / 2, 0);
+    // From the floor to the tops of the town pins and their names (~40 km over the ground on screen).
+    const headroom = 40;
+    const half = [(EAST - WEST) / 2, (FLOOR_KM * ex + headroom) / 2, (SOUTH - NORTH) / 2];
+    const centre = new Vector3(0, (headroom - FLOOR_KM * ex) / 2, 0);
     const vf = (camera.fov * Math.PI) / 360;
     const hf = Math.atan(Math.tan(vf) * camera.aspect);
     const right = new Vector3().crossVectors(new Vector3(0, 1, 0), dir).normalize();

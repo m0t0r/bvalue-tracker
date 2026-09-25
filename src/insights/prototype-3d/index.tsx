@@ -7,6 +7,8 @@
  *   B: the block inline in the page, one finger scrolls the page, two fingers turn it, with views
  *      picked by buttons;
  *   C: a guided tour, the block pinned while the reader scrolls steps; no gestures at all.
+ *   D: A's preview and full-screen viewer, with B's view buttons inside the viewer (the owner's pick
+ *      after seeing A–C, 2026-09-25).
  * Spanish only: this is the reader's language, and the owner judges the look, not the copy.
  */
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
@@ -18,6 +20,7 @@ import { useReducedMotion } from "../use-reduced-motion";
 import { ALL_LAYERS, createScene, webglAvailable, type Layer, type Preset, type SceneHandle, type View } from "./scene";
 
 const VARIANTS = {
+  D: "A con las vistas de B",
   A: "Visor a pantalla completa",
   B: "Bloque en la página",
   C: "Recorrido guiado",
@@ -26,7 +29,7 @@ type Variant = keyof typeof VARIANTS;
 
 const readVariant = (): Variant => {
   const v = new URLSearchParams(location.search).get("variant");
-  return v === "B" || v === "C" ? v : "A";
+  return v === "A" || v === "B" || v === "C" ? v : "D";
 };
 
 export default function Prototype3D({ data }: { data: Insights }) {
@@ -40,6 +43,7 @@ export default function Prototype3D({ data }: { data: Insights }) {
   return (
     <>
       {variant === "A" && <VariantA data={data} />}
+      {variant === "D" && <VariantA data={data} withViews />}
       {variant === "B" && <VariantB data={data} />}
       {variant === "C" && <VariantC data={data} />}
       {import.meta.env.DEV && <Switcher current={variant} onChange={setVariant} />}
@@ -214,11 +218,19 @@ function TimeRow({ h, view, setView }: { h: SceneHandle | null; view: View; setV
 
 // --- A: full-screen viewer ---------------------------------------------------------------------
 
-function VariantA({ data }: { data: Insights }) {
+function VariantA({ data, withViews = false }: { data: Insights; withViews?: boolean }) {
   const reduced = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>({ exaggeration: 2, layers: ALL_LAYERS, until: null });
   const [h, setH] = useState<SceneHandle | null>(null);
+  // The view last picked; cleared as soon as the reader turns the block by hand.
+  const [preset, setPreset] = useState<Preset | null>("oblique");
+  const caption = B_VIEWS.find(([p]) => p === preset)?.[2];
+  const ready = (s: SceneHandle) => {
+    s.controls.addEventListener("start", () => setPreset(null));
+    setPreset("oblique");
+    setH(s);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -262,12 +274,35 @@ function VariantA({ data }: { data: Insights }) {
           className="fixed inset-0 z-50 flex flex-col bg-background"
         >
           <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-            <p className="text-sm font-medium">Arrastra para girar · pellizca o usa la rueda para acercar</p>
+            <p className="text-sm font-medium">Arrastra para girar · pellizca para acercar</p>
             <Button size="icon-sm-touch" variant="ghost" aria-label="Cerrar" onClick={() => setOpen(false)}>
               <XIcon />
             </Button>
           </div>
-          <Block data={data} view={view} className="min-h-0 flex-1" onReady={setH} />
+          {withViews && (
+            <div role="group" aria-label="Vistas" className="flex gap-1 overflow-x-auto border-b px-3 py-2">
+              {B_VIEWS.map(([p, name]) => (
+                <Button
+                  key={p}
+                  size="sm-touch"
+                  className="shrink-0"
+                  variant={p === preset ? "default" : "outline"}
+                  onClick={() => {
+                    setPreset(p);
+                    h?.goTo(p, !reduced);
+                  }}
+                >
+                  {name}
+                </Button>
+              ))}
+            </div>
+          )}
+          <Block data={data} view={view} className="min-h-0 flex-1" onReady={ready} />
+          {withViews && (
+            <p aria-live="polite" className="min-h-10 border-t px-3 py-2 text-sm text-pretty">
+              {caption ?? "Vista libre: arrastra para girar, o elige una vista arriba."}
+            </p>
+          )}
           <details className="border-t px-3 py-2">
             <summary className="cursor-pointer text-sm font-medium">Capas, escala y tiempo</summary>
             <div className="flex max-h-[40svh] flex-col gap-3 overflow-y-auto pt-3">
