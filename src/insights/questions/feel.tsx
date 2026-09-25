@@ -7,7 +7,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { P_WAVE_KMS, PEREIRA, S_WAVE_KMS, SOURCES, arrivalSeconds, type Insights, type Source } from "../claims";
+import { P_WAVE_KMS, S_WAVE_KMS, SOURCES, arrivalSeconds, type Insights, type Source } from "../claims";
+import { PEREIRA } from "../../../core/places";
 import { REGION, TOWNS } from "../region";
 import { questionsCopy, type Named } from "./copy";
 import { fmtInt, fmtKm } from "../shared";

@@ -1,7 +1,7 @@
 # API
 
 `GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/b-windows.csv` (b over time, one
-row per window), `/api/status`, `POST /api/refresh`, `POST /api/client-error`.
+row per window), `/api/status`, `/api/context`, `POST /api/refresh`, `POST /api/client-error`.
 Every route but `/api/health` takes `zone=choco|tolima` (`core/zones.ts`). No `zone` is
 Chocó, so every URL and script from before there were two zones keeps its meaning; any other value
 is a 400. The downloaded CSVs are named after the zone (`sgc-tolima-events.csv`).
@@ -52,6 +52,17 @@ open endpoint — it is under `/api/*`, so the same-origin check and the rate li
 front of it exactly as they do for `/api/events` — and it reads only those four fields, out
 of a body capped at 4 KB before anything is buffered. See
 [the page's own failures](operations.md#the-pages-own-failures).
+
+`GET /api/context?zone=` serves what USGS publishes about the zone's mainshock, as the daily job
+last stored it ([the daily USGS job](ingest.md#the-daily-usgs-job)): `{ dyfi, pager, forecast }`,
+each `null` or `{ source, sgcEventId, sourceEventId, productUrl, sourceUpdatedAt, checkedAt,
+digest }` (`ContextResponse` in `worker/api-types.ts`). It never fetches USGS itself; it is one
+primary-key read of at most three rows, `no-cache` like the rest. The daily job deletes rows matched
+from any event other than the zone's mainshock, but only once a day, so **a consumer shows a digest
+only while `sgcEventId` is the zone's detected mainshock**. The route itself does not filter: that
+would read the zone's events, unindexed on `mag`, on every load. `checkedAt` is when the job last saw
+USGS's current version; an old one means USGS or the job has been failing, and the page decides
+what that hides (plan Parts A and D). Credit "USGS" beside any figure from it (US public domain).
 
 CSV headers are the stable machine names (`id,time,lat,…`) by default. `?lang=es` on
 either CSV endpoint, and the page's download buttons while the page is in Spanish,

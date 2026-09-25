@@ -48,7 +48,8 @@ pnpm exec wrangler tail choco --format json  # live, for something happening now
 ### Every line the Worker writes
 
 One JSON object per line. `level`, `time` and `msg` are always there; a line about a run
-also carries `lane`, `trigger` and `zone`. A cron tick writes one `tick planned` / `tick stood
+also carries `lane`, `trigger` and `zone`. The daily USGS job's lines carry `trigger: "usgs"`, and
+its invocation is the one at 11:07 UTC, so `pnpm logs cpu` counts it among the scheduled ones. A cron tick writes one `tick planned` / `tick stood
 down` line **per zone** — Chaparral's says `stood down` with `lanes: []` on the :15 and :45 ticks,
 which is its cadence, not a fault. The Analytics Engine point carries the zone in `blob7`.
 
@@ -63,6 +64,12 @@ which is its cadence, not a fault. The Analytics Engine point carries the zone i
 | `unhandled error` | error | a route threw | `err.stack`, `method`, `path` |
 | `page error` | warn | the reader's browser threw | `page.message`, `page.stack`, `page.userAgent` |
 | `ingest stood down: claim held` | debug | two runs raced for the same window | — |
+| `unknown cron pattern` | error | a pattern in `wrangler.jsonc` that `scheduled()` has no branch for; it ran nothing | `cron` |
+| `usgs: product stored` | info | the daily USGS job stored a new version of a product | `zone`, `kind`, `sgcEventId`, `sourceEventId`, `productUrl`, `sourceUpdatedAt` |
+| `usgs: no mainshock to match` | info | a zone with no found mainshock; USGS was not asked | `zone` |
+| `usgs: product not published` | info | USGS has no such product (or file) for the event yet | `zone`, `kind` |
+| `usgs: no single match` | warn | USGS's search found none or several events near the mainshock; nothing stored | `sgcEventId`, `candidates` |
+| `usgs: product failed` / `usgs: zone failed` | warn | USGS refused, redirected, timed out or sent a file a digest could not read; the stored digest stays, the rest still runs, and the invocation then fails with the first error | `err` |
 
 ### Symptom → what to ask
 

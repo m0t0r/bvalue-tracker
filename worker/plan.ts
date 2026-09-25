@@ -18,6 +18,13 @@ export const IN_FLIGHT_MS = 150_000;
 const TICK_MS = 900_000;
 
 /**
+ * The ingest's cron pattern, as `wrangler.jsonc` declares it: the period above. `scheduled()` runs
+ * the ingest only for this pattern, so a pattern it does not know never becomes an extra request
+ * to SGC. `worker/test/external.test.ts` holds it and the daily USGS job's to `triggers.crons`.
+ */
+export const INGEST_CRON = `*/${TICK_MS / 60_000} * * * *`;
+
+/**
  * Which tick this is, as a minute of the hour — snapped to the nearest scheduled tick,
  * never to the nearest minute.
  *

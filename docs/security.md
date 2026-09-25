@@ -108,6 +108,14 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   also made Lighthouse call robots.txt invalid. An asset miss now falls through to the Worker,
   whose `notFound` handler answers `404 not found` as `text/plain`, with the headers above.
 
+- **The daily USGS job fetches only `https://earthquake.usgs.gov/`.** Its detail and product URLs
+  are read out of USGS's own answer, so each is checked against that origin before it is fetched
+  (`usgsUrl` in `worker/external.ts`), and a redirect is treated as a failure rather than followed,
+  because that check holds for the first hop only; a response can never point the Worker anywhere
+  else. It runs
+  server-side, so the page's CSP is unchanged. Each fetch has a 20 s timeout, and each digest reads
+  only the fields it names and throws on anything else, so a malformed file stores nothing.
+
 Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
 regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use
 `textContent` and the chart's `dangerouslySetInnerHTML` takes only source literals; `onError`

@@ -293,3 +293,18 @@ the reader's own questions). Everything above still applies to it; this section 
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.
+- **USGS's products for the M7.4, as the daily job reads them** (re-fetched 2026-09-24 for
+  us6000tjl2; `worker/usgs.ts`, [the daily USGS job](ingest.md#the-daily-usgs-job)). Stored now, shown
+  by nothing until the plan's Parts A and D. The facts they will need:
+  - *DYFI*: the 10 km cell that contains Pereira's point has **CDI 8 from 41 responses**, of 1,249
+    in total. DYFI labels that cell **"Dos Quebradas"**, not Pereira; the two cells it labels
+    "Pereira" lie just west of the city (CDI 7.7 from 10, 7.3 from 2). The page's point decides the
+    cell, not DYFI's label, and copy must not name the cell by DYFI's label as if it were the city.
+  - *PAGER*: its own Pereira, 0.2 km from the page's point, has a modelled **MMI 8.43**. The
+    product's `review-status` is `automatic`. That is modelled shaking, not a report.
+  - *The forecast* (OAF, `review-status` `reviewed`): issued 2026-09-21 18:03 UTC, next update due
+    **2026-09-28 16:00 UTC** (`nextForecastTime`). Its `expireTime` is **a year** after issue, so it
+    is no guide to staleness; the staleness rule reads `nextForecastTime`. Figures as the plan
+    quoted them: P(M ≥ 5) 2.65% in a day, 14.78% in a week, 43.47% in a month, 89.37% in a year;
+    P(M ≥ 6) 6.09% in a month, 26.23% in a year. The model's own b = 1.0 on Mc 4.45, in a 125.4 km
+    circle around 4.57° N, 76.69° W.

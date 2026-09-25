@@ -6,7 +6,8 @@
  * Pure, so it can be tested without a renderer.
  */
 import { energyRatio, epicentralKm, hypocentralKm, seismicMoment } from "@bvalue/seismo";
-import { PEREIRA, SOURCES, type Insights, type QuakeLike, type Source } from "../claims";
+import { SOURCES, type Insights, type QuakeLike, type Source } from "../claims";
+import { PEREIRA } from "../../../core/places";
 import { plateAt, plateSide } from "../plate";
 import { commonDepths, median, medianHorizontalErrorKm, timeWindows } from "../shared";
 
