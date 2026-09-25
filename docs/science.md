@@ -294,8 +294,8 @@ the reader's own questions). Everything above still applies to it; this section 
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.
 - **USGS's products for the M7.4, as the daily job reads them** (re-fetched 2026-09-24 for
-  us6000tjl2; `worker/usgs.ts`, [the daily USGS job](ingest.md#the-daily-usgs-job)). Stored now, shown
-  by nothing until the plan's Parts A and D. The facts they will need:
+  us6000tjl2; `worker/usgs.ts`, [the daily USGS job](ingest.md#the-daily-usgs-job)). DYFI and PAGER
+  are on the questions tab (below); the forecast is shown by nothing until the plan's Part D. The facts:
   - *DYFI*: the 10 km cell that contains Pereira's point has **CDI 8 from 41 responses**, of 1,249
     in total. DYFI labels that cell **"Dos Quebradas"**, not Pereira; the two cells it labels
     "Pereira" lie just west of the city (CDI 7.7 from 10, 7.3 from 2). The page's point decides the
@@ -308,3 +308,37 @@ the reader's own questions). Everything above still applies to it; this section 
     quoted them: P(M ≥ 5) 2.65% in a day, 14.78% in a week, 43.47% in a month, 89.37% in a year;
     P(M ≥ 6) 6.09% in a month, 26.23% in a year. The model's own b = 1.0 on Mc 4.45, in a 125.4 km
     circle around 4.57° N, 76.69° W.
+- **"¿Qué tan fuerte se sintió?": USGS's intensities for Pereira, relayed, never computed** (question 2
+  on the questions tab, from 2026-09-25; `feltInPereira` in `src/insights/claims.ts`). It answers
+  for one real event what "Why do I feel it?" only explains, so it predicts nothing and the rule
+  above against turning magnitude and distance into intensity stands. The rules:
+  - **Only for the mainshock the page detects.** Each digest shows only while its `sgcEventId` is
+    the zone's `found` mainshock (`mainshockId`); awaiting review or none, the question is not asked.
+    A later, larger mainshock never shows the M7.4's figures in the day before the job drops them.
+  - **Two figures, each said for what it is**: what people reported (DYFI's CDI for the 10 km cell
+    holding Pereira's point, with its number of responses) and what PAGER's model estimates for the
+    city (its MMI). The model's sentence says it "estima que … sacudió Pereira", never that it was
+    felt: a model reports nothing. DYFI's label for the cell ("Dos Quebradas") is never shown, and
+    no other USGS string is either.
+  - **Written as USGS writes them**: the level is the whole number, as a Roman numeral, with USGS's
+    perceived-shaking term from its ShakeMap and PAGER legends (not felt, weak, weak, light,
+    moderate, strong, very strong, severe, violent, extreme; I to X+). **The Spanish terms ("no
+    sentido … extremo") are the page's translation**, so the Spanish never puts them in quotes and
+    the caption says so; the English quotes USGS's. The decimals are in the caption, to one place,
+    and **the level is rounded from that shown decimal** (`intensityLevel`): a 7.46 shown as 7.5 is
+    VIII, never a VII beside "7.5". Levels are kept to I–X+ before anything compares them, since PAGER
+    can pass X and the page draws every such level as X+.
+  - **Agree or differ is decided on the numerals the reader sees**, not on the decimals: the same
+    numeral, one apart ("casi coinciden"), or N apart with who is higher, and a sentence saying
+    why that is common (the model gives typical shaking at the distance; a report depends on the
+    ground, the building and the floor). On 2026-09-24 both are VIII.
+  - **A cell answered by fewer than 5 people is not shown** (`FELT_MIN_RESPONSES`). **DYFI publishes
+    no such threshold** (checked 2026-09-25: its scientific background page and USGS's 20-year review of
+    DYFI, doi:10.3389/feart.2020.00120, give none, and its 10 km file keeps single-response
+    cells, 149 of 260 for the M7.4), so 5 is the page's own rule, and the tile says "fewer than 5
+    answered" in the figure's place. With neither figure, the question is not asked.
+  - **Credited to USGS in every sentence that states a figure** (the comparison as "los reportes y el
+    modelo del USGS"), dated from the product's own
+    update time, and linked to USGS's event page. The question also points to SGC as the
+    authority and to its form for reporting a felt earthquake.
+

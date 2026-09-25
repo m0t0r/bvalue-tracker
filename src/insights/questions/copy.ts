@@ -6,6 +6,7 @@
 import type { MainshockState } from "@bvalue/seismo";
 import type { Decay } from "../claims";
 import type { Lang } from "@/lib/i18n";
+import { fmtInt } from "../shared";
 
 const f0 = (v: number) => Math.round(v).toString();
 const f1 = (v: number) => v.toFixed(1);
@@ -91,6 +92,33 @@ const es = {
         : `Primero llega la onda P, que suele sentirse como un empujón o un golpe seco. Unos ${f0(gap)} segundos después llega la onda S, que suele ser el vaivén más fuerte.`,
     caption: (vp: number, vs: number) =>
       `Es una simplificación, no un modelo de sacudida: solo supone que la amplitud de las ondas crece 10 veces por cada unidad de magnitud y que disminuye al alejarse (1/distancia). Deja por fuera factores que en la realidad pesan mucho: cuánto absorbe la roca, hacia dónde se rompió la falla y el suelo bajo cada casa. Velocidades típicas redondeadas: ondas P ≈ ${vp}\u00A0km/s, ondas S ≈ ${vs}\u00A0km/s; los tiempos son aproximados.`,
+  },
+
+  shaking: {
+    short: "¿Qué tan fuerte se sintió?",
+    q: (ref: Named) => `¿Qué tan fuerte se sintió en Pereira el ${mag(ref.mag)} del ${ref.date}?`,
+    p1: "La magnitud mide el sismo donde se origina; la intensidad mide cuánto se sacudió el suelo en un lugar. Esta página no calcula intensidades: las cifras de abajo las publica el Servicio Geológico de Estados Unidos (USGS).",
+    reportedTitle: "Lo que reportó la gente",
+    reportedDetail: (n: string) =>
+      `${n} personas lo contaron en la encuesta «Did You Feel It?» del USGS, en el cuadro de 10\u00A0km que incluye Pereira.`,
+    reportedFew: (min: number) =>
+      `En el cuadro de 10\u00A0km que incluye Pereira respondieron menos de ${min} personas: muy pocas para dar una cifra.`,
+    modelledTitle: "Lo que estima el modelo",
+    modelledDetail: "La calcula el modelo PAGER del USGS para la ciudad: es una estimación, no un reporte.",
+    figureAria: "Intensidad del sismo en Pereira según el USGS",
+    total: (n: number) =>
+      n === 1
+        ? "En total, 1 persona le contó al USGS cómo sintió este sismo."
+        : `En total, ${fmtInt(n)} personas le contaron al USGS cómo sintieron este sismo, en Pereira y en otros lugares.`,
+    sgc: "En Colombia, la autoridad sísmica es el Servicio Geológico Colombiano, que también recoge los reportes de quienes sienten un sismo.",
+    sgcLink: "Reportar al SGC un sismo que sentiste",
+    caption: (decimals: string, dates: string) =>
+      `Intensidad en la escala de Mercalli Modificada, en números romanos y con el término del USGS para cada grado, traducido por esta página. En decimales, son ${decimals}. ${dates}`,
+    decimalReported: (v: number) => `${f1(v)} según los reportes`,
+    decimalModelled: (v: number) => `${f1(v)} según el modelo`,
+    dateReported: (d: string) => `El USGS actualizó los reportes el ${d}.`,
+    dateModelled: (d: string) => `El modelo es del ${d}.`,
+    usgsLink: "Ver el sismo en el sitio del USGS",
   },
 
   big: {
@@ -321,6 +349,33 @@ const en: Copy = {
         : `The P wave arrives first, often felt as a push or a sharp jolt. About ${f0(gap)} seconds later the S wave arrives, usually the stronger swaying.`,
     caption: (vp, vs) =>
       `A simplification, not a shaking model: it only uses that wave amplitude grows 10 times per magnitude unit and spreads out with distance (1/distance). It leaves out how much the rock absorbs, which way the fault broke and the ground under each house, which matter a lot in reality. Typical wave speeds, rounded: P waves ≈ ${vp}\u00A0km/s, S waves ≈ ${vs}\u00A0km/s; the times are approximate.`,
+  },
+
+  shaking: {
+    short: "How strongly was it felt?",
+    q: (ref) => `How strongly was the ${mag(ref.mag)} of ${ref.date} felt in Pereira?`,
+    p1: "Magnitude measures the earthquake where it starts; intensity measures how hard the ground shook in one place. This page does not work out intensities: the figures below are published by the United States Geological Survey (USGS).",
+    reportedTitle: "What people reported",
+    reportedDetail: (n) =>
+      `${n} people answered USGS's "Did You Feel It?" survey in the 10\u00A0km cell that includes Pereira.`,
+    reportedFew: (min) =>
+      `Fewer than ${min} people answered in the 10\u00A0km cell that includes Pereira: too few for a figure.`,
+    modelledTitle: "What the model estimates",
+    modelledDetail: "USGS's PAGER model works it out for the city: it is an estimate, not a report.",
+    figureAria: "Intensity of the earthquake in Pereira according to USGS",
+    total: (n) =>
+      n === 1
+        ? "In all, 1 person told USGS how they felt this earthquake."
+        : `In all, ${fmtInt(n)} people told USGS how they felt this earthquake, in Pereira and elsewhere.`,
+    sgc: "In Colombia the authority on earthquakes is the Servicio Geológico Colombiano, which also collects reports from people who feel one.",
+    sgcLink: "Report an earthquake you felt to SGC",
+    caption: (decimals, dates) =>
+      `Intensity on the Modified Mercalli scale, in Roman numerals and with the word USGS uses for each level. In decimals, they are ${decimals}. ${dates}`,
+    decimalReported: (v) => `${f1(v)} from the reports`,
+    decimalModelled: (v) => `${f1(v)} from the model`,
+    dateReported: (d) => `Reports last updated by USGS on ${d}.`,
+    dateModelled: (d) => `The model is from ${d}.`,
+    usgsLink: "See the earthquake on USGS's site",
   },
 
   big: {

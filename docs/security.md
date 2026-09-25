@@ -120,6 +120,11 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   else. It runs
   server-side, so the page's CSP is unchanged. Each fetch has a 20 s timeout, and each digest reads
   only the fields it names and throws on anything else, so a malformed file stores nothing.
+- **The page shows USGS's numbers and none of its strings.** The felt-intensity question renders
+  intensities and counts as React text, never DYFI's cell label or PAGER's city name, and its link
+  to USGS is built from `sourceEventId` only when it matches `^[a-z]{2}[a-z0-9]{1,20}$`
+  (`feltInPereira`), so a stored id cannot turn the link into another path or scheme. The link to
+  SGC's felt-report form is a fixed constant. Both are navigations, so the CSP is unchanged.
 
 Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
 regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use

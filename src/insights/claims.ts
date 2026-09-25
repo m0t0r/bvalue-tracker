@@ -13,8 +13,9 @@ import { bearingDeg, computeStats, epicentralKm, hypocentralKm, largestMomentSha
 import { median } from "d3-array";
 import { dayStart } from "@/lib/format";
 import { clusterOf } from "../../core/clusters";
-import { zoneMainshock } from "../../core/mainshock";
+import { mainshockId, zoneMainshock, type ZoneMainshock } from "../../core/mainshock";
 import { PEREIRA } from "../../core/places";
+import type { ContextResponse } from "../../worker/api-types";
 import { medianHorizontalErrorKm } from "./shared";
 
 const HOUR = 3_600_000;
@@ -379,6 +380,75 @@ export function drift(events: readonly QuakeLike[], now: number): Drift {
 /** The eight compass points, for "moved about 3 km west-northwest" said as "hacia el oeste" etc. */
 export const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
 export const compassPoint = (deg: number) => COMPASS[Math.round(deg / 45) % 8]!;
+
+// ---------------------------------------------------------------------------------------------
+// How strongly the mainshock was felt in Pereira: USGS's figures, relayed, never computed here
+
+/**
+ * An intensity as its level on the Modified Mercalli scale, the whole number USGS writes as a Roman
+ * numeral: DYFI's CDI and PAGER's MMI are both decimals on that scale. Rounded from the one-decimal
+ * figure the caption shows, so a 7.46 shown as 7.5 is VIII, not VII; and kept to I–X+, the levels the
+ * page can draw, so two readings compared are the two the reader sees (PAGER can pass X).
+ */
+export const intensityLevel = (v: number) => Math.min(Math.max(Math.round(Math.round(v * 10) / 10), 1), 10);
+
+/**
+ * A DYFI cell answered by fewer people than this is not shown. DYFI publishes no such threshold (its
+ * 10 km file keeps single-response cells: 149 of 260 for the M7.4), so this is the page's own rule:
+ * one or two answers say more about who answered than about the shaking. See docs/science.md.
+ */
+export const FELT_MIN_RESPONSES = 5;
+
+/**
+ * What USGS says about how the zone's mainshock was felt in Pereira: what people there reported to
+ * "Did You Feel It?" (the 10 km cell holding Pereira's point) and what its PAGER model estimates for
+ * the city. `agreement` compares the two levels when both are shown: `same`, `within-one` (the
+ * page's "agree"), or reports `higher`/`lower` than the model by `levels`.
+ */
+export interface Felt {
+  reported: { level: number; cdi: number; responses: number; updatedAt: string } | null;
+  modelled: { level: number; mmi: number; updatedAt: string } | null;
+  /** Everyone who answered DYFI about the event, anywhere. */
+  totalResponses: number | null;
+  agreement: { case: "same" | "within-one" | "higher" | "lower"; levels: number } | null;
+  /** USGS's page for the event, the credit's link; null for an id that is not shaped like USGS's. */
+  usgsEventUrl: string | null;
+}
+
+/** A USGS event id: network code and code, letters and digits only ("us6000tjl2"). */
+const USGS_EVENT_ID = /^[a-z]{2}[a-z0-9]{1,20}$/;
+
+export function feltInPereira(context: ContextResponse, mainshock: ZoneMainshock<QuakeLike>): Felt | null {
+  // A digest is about the event it was matched from. The daily job drops the others, but only once a
+  // day, so a later, larger mainshock must never show the old one's figures in between.
+  const id = mainshockId(mainshock);
+  if (id === null) return null;
+  const dyfi = context.dyfi?.sgcEventId === id ? context.dyfi : null;
+  const pager = context.pager?.sgcEventId === id ? context.pager : null;
+  const cell = dyfi?.digest.pereira ?? null;
+  const city = pager?.digest.pereira ?? null;
+  const reported =
+    dyfi && cell && cell.responses >= FELT_MIN_RESPONSES
+      ? { level: intensityLevel(cell.cdi), cdi: cell.cdi, responses: cell.responses, updatedAt: dyfi.sourceUpdatedAt }
+      : null;
+  const modelled =
+    pager && city ? { level: intensityLevel(city.mmi), mmi: city.mmi, updatedAt: pager.sourceUpdatedAt } : null;
+  if (!reported && !modelled) return null;
+  let agreement: Felt["agreement"] = null;
+  if (reported && modelled) {
+    const d = reported.level - modelled.level;
+    const levels = Math.abs(d);
+    agreement = { case: levels === 0 ? "same" : levels === 1 ? "within-one" : d > 0 ? "higher" : "lower", levels };
+  }
+  const eventId = (dyfi ?? pager)!.sourceEventId;
+  return {
+    reported,
+    modelled,
+    totalResponses: dyfi?.digest.responses ?? null,
+    agreement,
+    usgsEventUrl: USGS_EVENT_ID.test(eventId) ? `https://earthquake.usgs.gov/earthquakes/eventpage/${eventId}` : null,
+  };
+}
 
 // ---------------------------------------------------------------------------------------------
 // Everything at once

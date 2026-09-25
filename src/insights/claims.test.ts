@@ -1,10 +1,18 @@
 import captured from "../../test/fixtures/api-events-2026-09-24.json";
+import DETAIL from "../../test/fixtures/usgs-us6000tjl2-detail-2026-09-24.json?raw";
+import DYFI_10KM from "../../test/fixtures/usgs-us6000tjl2-dyfi-geo-10km-2026-09-24.json?raw";
+import PAGER_CITIES from "../../test/fixtures/usgs-us6000tjl2-pager-cities-2026-09-24.json?raw";
 import { describe, expect, it } from "vitest";
+import type { ContextResponse, ExternalProduct } from "../../worker/api-types";
+import { digestDyfi, digestPager } from "../../worker/usgs";
 import {
   bySource,
   compassPoint,
   decay,
   drift,
+  FELT_MIN_RESPONSES,
+  feltInPereira,
+  intensityLevel,
   insights,
   lastStrong,
   pace,
@@ -251,5 +259,124 @@ describe("the mixed strongMix sentence", () => {
       7,
     );
     expect(en).toContain("8 from Chocó's shallow group and 17 from Chaparral");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// How strongly the mainshock was felt in Pereira, from what USGS publishes about it
+
+/**
+ * `/api/context` as the daily job would have stored it on 2026-09-24: the captured USGS files, run
+ * through the Worker's own digests. Every figure asserted below was read off those files by hand
+ * (and in Python): DYFI's cell holding Pereira, CDI 8.0 from 41 responses, of 1,249; PAGER's
+ * Pereira, MMI 8.43.
+ */
+const product = <D>(digest: D, sourceUpdatedAt: string): ExternalProduct<D> => ({
+  source: "usgs",
+  sgcEventId: "SGC2026pqqmro",
+  sourceEventId: "us6000tjl2",
+  productUrl: "https://earthquake.usgs.gov/product/example",
+  sourceUpdatedAt,
+  checkedAt: "2026-09-24T11:07:00.000Z",
+  digest,
+});
+const detailProps = (kind: string) =>
+  (JSON.parse(DETAIL) as { properties: { products: Record<string, { properties: Record<string, string> }[]> } })
+    .properties.products[kind]![0]!.properties;
+const CONTEXT: ContextResponse = {
+  dyfi: product(digestDyfi(JSON.parse(DYFI_10KM), detailProps("dyfi")), "2026-09-23T20:15:00.000Z"),
+  pager: product(digestPager(JSON.parse(PAGER_CITIES)), "2026-08-12T02:00:00.000Z"),
+  forecast: null,
+};
+
+describe("feltInPereira", () => {
+  const found = insights(fixture, NOW).mainshock.choco;
+
+  it("on 2026-09-24: people reported VIII and USGS's model gives VIII, from 41 of 1,249 responses", () => {
+    const f = feltInPereira(CONTEXT, found)!;
+    expect(f.reported).toEqual({ level: 8, cdi: 8, responses: 41, updatedAt: "2026-09-23T20:15:00.000Z" });
+    expect(f.modelled).toMatchObject({ level: 8, updatedAt: "2026-08-12T02:00:00.000Z" });
+    expect(f.modelled!.mmi).toBeCloseTo(8.43, 2);
+    expect(f.totalResponses).toBe(1249);
+    expect(f.agreement).toEqual({ case: "same", levels: 0 });
+  });
+
+  it("says nothing while the zone has no found mainshock: none, or one still awaiting review", () => {
+    const m74 = fixture.choco.find((e) => e.id === "SGC2026pqqmro")!;
+    const next = { ...m74, id: "other", mag: 6.9 };
+    expect(feltInPereira(CONTEXT, { state: "none", largest: m74, runnerUp: next, gap: 0.5 })).toBeNull();
+    expect(feltInPereira(CONTEXT, { state: "awaiting-review", largest: m74, runnerUp: next, gap: 1.5 })).toBeNull();
+  });
+
+  it("drops a digest matched from another event: a later, larger mainshock is not the M7.4", () => {
+    const bigger = { ...fixture.choco[0]!, id: "SGC2027later", mag: 7.8 };
+    expect(feltInPereira(CONTEXT, { ...found, largest: bigger } as typeof found)).toBeNull();
+    const pagerOnly = { ...CONTEXT, dyfi: { ...CONTEXT.dyfi!, sgcEventId: "SGC2027later" } };
+    const f = feltInPereira(pagerOnly, found)!;
+    expect(f.reported).toBeNull();
+    expect(f.totalResponses).toBeNull();
+    expect(f.modelled?.level).toBe(8);
+    expect(f.agreement).toBeNull();
+  });
+
+  /** CONTEXT with Pereira's DYFI cell and PAGER city replaced. */
+  const withPereira = (cell: { cdi: number; responses: number } | null, mmi: number | null): ContextResponse => ({
+    ...CONTEXT,
+    dyfi: {
+      ...CONTEXT.dyfi!,
+      digest: { responses: 1249, pereira: cell && { cell: "UTM:(x)", placeName: "Somewhere", ...cell } },
+    },
+    pager: { ...CONTEXT.pager!, digest: { pereira: mmi === null ? null : { name: "Pereira", mmi, distanceKm: 0.2 } } },
+  });
+
+  it(`hides Pereira's reports below ${FELT_MIN_RESPONSES} responses, and keeps the model and the total`, () => {
+    expect(FELT_MIN_RESPONSES).toBe(5);
+    const few = feltInPereira(withPereira({ cdi: 6.1, responses: 4 }, 8.43), found)!;
+    expect(few.reported).toBeNull();
+    expect(few.agreement).toBeNull();
+    expect(few.modelled?.level).toBe(8);
+    expect(few.totalResponses).toBe(1249);
+    expect(feltInPereira(withPereira({ cdi: 6.1, responses: 5 }, 8.43), found)!.reported?.responses).toBe(5);
+  });
+
+  it("says nothing when neither the reports nor the model reach Pereira", () => {
+    expect(feltInPereira(withPereira({ cdi: 6.1, responses: 2 }, null), found)).toBeNull();
+    expect(feltInPereira(withPereira(null, null), found)).toBeNull();
+    expect(feltInPereira({ dyfi: null, pager: null, forecast: null }, found)).toBeNull();
+  });
+
+  it("compares the two as the Roman numerals the reader sees, not as decimals", () => {
+    const agreement = (cdi: number, mmi: number) =>
+      feltInPereira(withPereira({ cdi, responses: 20 }, mmi), found)!.agreement;
+    // 7.5 is VIII, as 8.44 (shown 8.4) is: the same level although 0.94 apart.
+    expect(agreement(7.5, 8.44)).toEqual({ case: "same", levels: 0 });
+    // 7.4 is VII and 7.6 is VIII: one level, although 0.2 apart.
+    expect(agreement(7.4, 7.6)).toEqual({ case: "within-one", levels: 1 });
+    expect(agreement(6, 8.43)).toEqual({ case: "lower", levels: 2 });
+    expect(agreement(9, 5.2)).toEqual({ case: "higher", levels: 4 });
+  });
+
+  it("links to USGS's own page for the event, and only for an id shaped like one of USGS's", () => {
+    expect(feltInPereira(CONTEXT, found)!.usgsEventUrl).toBe(
+      "https://earthquake.usgs.gov/earthquakes/eventpage/us6000tjl2",
+    );
+    const odd = (sourceEventId: string) =>
+      feltInPereira({ ...CONTEXT, pager: null, dyfi: { ...CONTEXT.dyfi!, sourceEventId } }, found)!.usgsEventUrl;
+    expect(odd("../../evil")).toBeNull();
+    expect(odd("us6000tjl2?x=1")).toBeNull();
+    expect(odd("")).toBeNull();
+  });
+
+  it("keeps every level on the scale the page draws, I to X+, before comparing: 11 and 10 are both X+", () => {
+    const f = feltInPereira(withPereira({ cdi: 9.6, responses: 20 }, 11.2), found)!;
+    expect([f.reported!.level, f.modelled!.level]).toEqual([10, 10]);
+    expect(f.agreement).toEqual({ case: "same", levels: 0 });
+  });
+
+  it("takes the level from the one-decimal figure the caption shows: 7.46 is shown 7.5, so VIII", () => {
+    expect(intensityLevel(7.46)).toBe(8);
+    expect(intensityLevel(7.44)).toBe(7);
+    expect(intensityLevel(8.4326534271)).toBe(8);
+    expect(intensityLevel(0.2)).toBe(1);
   });
 });

@@ -172,6 +172,20 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
 - **SVG text is sized in screen pixels.** A drawing that scales with its column (the questions tab's
   map, `viewBox` 400) multiplies its font sizes by viewBox units per pixel; in viewBox units alone
   its town names were 7 px on a 320 px phone.
+- **"¿Qué tan fuerte se sintió?" is question 2** (`questions/shaking.tsx`, 2026-09-25), right after
+  the distance question it answers for one real event. It appears only when `feltInPereira` has a
+  figure (see [the science](science.md#the-insights-page-insights-from-2026-09-24)), so it is in the
+  index or not at all. **Because a question can appear or not, the page waits for `/api/context`**:
+  `useInsights` asks for it beside the catalogues and counts it in `isPending`, with no retry and no
+  refetch while the page is open (`staleTime: Infinity`). A late answer, a retried 5xx or a refetch
+  on focus after the daily job dropped a digest would each have inserted or removed a question above
+  the reader and renumbered the rest (code review, 2026-09-25). It is a few hundred bytes and goes
+  out with the much larger catalogues, so the wait costs nothing measurable; a failure settles at
+  once and only hides the question, never the page's load error.
+  - The readings sit side by side in a `Figure` (stacked on a phone), each a large numeral with the
+    perceived-shaking term beside it. A reading USGS has not published has no tile; one hidden by the
+    fewer-than-5 rule keeps its tile with a dash and the reason, because there USGS does have
+    reports and the reader should know why they are not shown.
 - **Back to top is a round button that appears only near the end of a tab** (`back-to-top.tsx`,
   2026-09-24). One `IntersectionObserver` on the footer shows it within half a window of it, so it is
   never over the text during the read; on a phone the story's drawing already takes the top half of

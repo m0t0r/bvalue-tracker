@@ -1,7 +1,7 @@
 import type { ZoneId } from "../../core/zones";
-import type { StatusResponse, StoredEvent } from "../../worker/api-types";
+import type { ContextResponse, StatusResponse, StoredEvent } from "../../worker/api-types";
 
-export type { IngestRun, StatusResponse, StoredEvent } from "../../worker/api-types";
+export type { ContextResponse, IngestRun, StatusResponse, StoredEvent } from "../../worker/api-types";
 
 /** A response the Worker answered with an error status, as opposed to a request that never got one. */
 export class HttpError extends Error {
@@ -31,5 +31,6 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 }
 
 export const getEvents = (zone: ZoneId) => json<StoredEvent[]>(`/api/events?zone=${zone}`);
+export const getContext = (zone: ZoneId) => json<ContextResponse>(`/api/context?zone=${zone}`);
 export const getStatus = (zone: ZoneId) => json<StatusResponse>(`/api/status?zone=${zone}`);
 export const postRefresh = (zone: ZoneId) => json<StatusResponse>(`/api/refresh?zone=${zone}`, { method: "POST" });
