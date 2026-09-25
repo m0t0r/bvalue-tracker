@@ -152,6 +152,11 @@ function gridSurface(
       const a = j * nx + i;
       const [b, c, d] = [a + 1, a + nx, a + nx + 1];
       if (ok[a] && ok[b] && ok[c] && ok[d]) index.push(a, c, b, b, c, d);
+      // Three corners of four: one triangle, so an edge (the trench) runs diagonally, not in steps.
+      else if (ok[a] && ok[b] && ok[d]) index.push(a, d, b);
+      else if (ok[a] && ok[c] && ok[d]) index.push(a, c, d);
+      else if (ok[a] && ok[b] && ok[c]) index.push(a, c, b);
+      else if (ok[b] && ok[c] && ok[d]) index.push(b, c, d);
     }
   }
   const g = new BufferGeometry();
@@ -223,6 +228,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   scene.add(vertical);
 
   // --- Ground: GEBCO 2020 every 0.05° -------------------------------------------------------
+  const groundMat = new MeshLambertMaterial({ vertexColors: true, side: DoubleSide, transparent: true });
   const ground = new Mesh(
     gridSurface(
       GROUND.nx,
@@ -233,7 +239,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       },
       (i, j) => groundColour(GROUND.elevationM[j * GROUND.nx + i]!, pal.dark),
     ),
-    new MeshLambertMaterial({ vertexColors: true, side: DoubleSide }),
+    groundMat,
   );
   vertical.add(ground);
 
@@ -246,6 +252,11 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       : ([x(SLAB2.lon0 + i * SLAB2.step), -d, z(SLAB2.lat0 + j * SLAB2.step)] as [number, number, number]);
   };
   const top = (k: number) => SLAB2.topKm[k] ?? null;
+  /** Depth of the ground or sea floor at a Slab2 node (every other GEBCO node), km, down positive. */
+  const surfaceKm = (k: number) => {
+    const [i, j] = [k % SLAB2.nx, Math.floor(k / SLAB2.nx)];
+    return -(GROUND.elevationM[2 * j * GROUND.nx + 2 * i] ?? 0) / 1000;
+  };
   const plateMat = (opacity: number) =>
     new MeshLambertMaterial({
       color: pal.muted,
@@ -275,7 +286,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
         gridSurface(
           SLAB2.nx,
           SLAB2.ny,
-          slabAt((k) => (top(k) === null ? null : Math.max(0, top(k)! + sign * SLAB2.uncertaintyKm[k]!))),
+          slabAt((k) => (top(k) === null ? null : Math.max(surfaceKm(k), top(k)! + sign * SLAB2.uncertaintyKm[k]!))),
         ),
         plateMat(0.08),
       ),
@@ -356,10 +367,13 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   vertical.add(box);
   const labelGroup = new Group();
   vertical.add(labelGroup);
+  // Only from the side: looking straight down, a depth scale means nothing.
+  const ticks = new Group();
+  labelGroup.add(ticks);
   for (let d = 0; d <= 200; d += 50) {
     const l = label(d === 0 ? "0 km" : `${d} km`, LABEL_MUTED);
     l.position.set(EAST + 6, -d, SOUTH);
-    labelGroup.add(l);
+    ticks.add(l);
   }
   const pins: { town: (typeof TOWNS)[number]; line: LineSegments; tag: CSS2DObject }[] = [];
   for (const t of TOWNS) {
@@ -509,6 +523,17 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       if (t === 1) tween = null;
     }
     controls.update();
+    // Looking down, the ground turns see-through so the events under it show, as on a map, and
+    // what only makes sense from the side (depth ticks, the underground labels, the uncertainty) goes.
+    const down = -new Vector3().subVectors(controls.target, camera.position).normalize().y;
+    const fromAbove = Math.min(1, Math.max(0, (down - 0.6) / 0.3));
+    groundMat.opacity = 1 - 0.65 * fromAbove;
+    groundMat.depthWrite = fromAbove === 0;
+    ticks.visible = fromAbove < 0.5;
+    plate.visible = view.layers.plate && fromAbove < 0.5;
+    box.visible = fromAbove < 0.5;
+    for (const tag of [plateTag, ruptureTag]) tag.visible = fromAbove < 0.5;
+    uncertainty.visible = view.layers.plate && view.layers.uncertainty && fromAbove < 0.5;
     renderer.render(scene, camera);
     labels.render(scene, camera);
     frames++;
