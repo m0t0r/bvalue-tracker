@@ -44,12 +44,13 @@ interface Step {
 
 const DAY = 86_400_000;
 
-export function Story({ data }: { data: Insights }) {
+/** `forecastShown`: whether the questions tab shows USGS's forecast, which scene 7 then points to. */
+export function Story({ data, forecastShown }: { data: Insights; forecastShown: boolean }) {
   const { lang } = useI18n();
   const model = useMemo(() => storyModel(data), [data]);
   const [threshold, setThreshold] = useState(4);
   const wide = useWide();
-  const steps = useSteps(data, model, lang, threshold, setThreshold);
+  const steps = useSteps(data, model, lang, threshold, setThreshold, forecastShown);
   const { active, register } = useActiveStep(steps.length, wide);
   const [graphicRef, size] = useSize<HTMLDivElement>();
   const current = steps[active] ?? steps[0]!;
@@ -231,6 +232,7 @@ function useSteps(
   lang: Lang,
   threshold: number,
   setThreshold: (n: number) => void,
+  forecastShown: boolean,
 ): Step[] {
   const c = storyCopy[lang];
   const claims = insightsCopy[lang].claims;
@@ -834,6 +836,9 @@ function useSteps(
             c.unknown.items[0]!,
             c.unknown.shallowNext(pace?.case ?? null),
             ...c.unknown.items.slice(1),
+            // The questions tab shows USGS's forecast under the same conditions (`usgsForecast`).
+            forecastShown ? `${c.unknown.bigger} ${c.unknown.forecast}` : c.unknown.bigger,
+            c.unknown.floor,
           ].map((t) => (
             <li key={t} className="flex gap-3">
               <span aria-hidden className="mt-3 inline-block size-1.5 shrink-0 rounded-full bg-muted-foreground" />

@@ -128,7 +128,10 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   intensities and counts as React text, never DYFI's cell label or PAGER's city name, and its link
   to USGS is built from `sourceEventId` only when it matches `^[a-z]{2}[a-z0-9]{1,20}$`
   (`feltInPereira`), so a stored id cannot turn the link into another path or scheme. The link to
-  SGC's felt-report form is a fixed constant. Both are navigations, so the CSP is unchanged.
+  SGC's felt-report form is a fixed constant. Both are navigations, so the CSP is unchanged. The
+  forecast box (`usgsForecast`) is held to the same: USGS's probabilities, counts and dates as text,
+  none of the file's strings (its `injectableText` and window labels are never shown; the labels only
+  select windows), and its link to `/oaf/forecast` built from `sourceEventId` under the same pattern.
 
 Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
 regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use

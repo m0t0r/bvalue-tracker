@@ -1,13 +1,16 @@
 import captured from "../../test/fixtures/api-events-2026-09-24.json";
 import DETAIL from "../../test/fixtures/usgs-us6000tjl2-detail-2026-09-24.json?raw";
 import DYFI_10KM from "../../test/fixtures/usgs-us6000tjl2-dyfi-geo-10km-2026-09-24.json?raw";
+import OAF_FORECAST from "../../test/fixtures/usgs-us6000tjl2-oaf-forecast-2026-09-24.json?raw";
 import PAGER_CITIES from "../../test/fixtures/usgs-us6000tjl2-pager-cities-2026-09-24.json?raw";
 import { describe, expect, it } from "vitest";
-import type { ContextResponse, ExternalProduct } from "../../worker/api-types";
-import { digestDyfi, digestPager } from "../../worker/usgs";
+import type { ContextResponse, ExternalProduct, ForecastDigest } from "../../worker/api-types";
+import { digestDyfi, digestForecast, digestPager } from "../../worker/usgs";
 import {
   bySource,
+  chocoReach,
   compassPoint,
+  FAR_FROM_KM,
   decay,
   drift,
   FELT_MIN_RESPONSES,
@@ -17,8 +20,10 @@ import {
   lastStrong,
   pace,
   ratesSince,
+  usgsForecast,
   recentStrong,
   type Catalogues,
+  type Insights,
   type QuakeLike,
 } from "./claims";
 
@@ -286,7 +291,7 @@ const detailProps = (kind: string) =>
 const CONTEXT: ContextResponse = {
   dyfi: product(digestDyfi(JSON.parse(DYFI_10KM), detailProps("dyfi")), "2026-09-23T20:15:00.000Z"),
   pager: product(digestPager(JSON.parse(PAGER_CITIES)), "2026-08-12T02:00:00.000Z"),
-  forecast: null,
+  forecast: product(digestForecast(JSON.parse(OAF_FORECAST), detailProps("oaf")), "2026-09-21T18:03:11.563Z"),
 };
 
 describe("feltInPereira", () => {
@@ -378,5 +383,158 @@ describe("feltInPereira", () => {
     expect(intensityLevel(7.44)).toBe(7);
     expect(intensityLevel(8.4326534271)).toBe(8);
     expect(intensityLevel(0.2)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// USGS's aftershock forecast for the mainshock, relayed and never computed here
+
+/**
+ * The forecast on CONTEXT is the captured `forecast.json` (issued 2026-09-21 18:03 UTC, `reviewed`,
+ * next update due 2026-09-28 16:00:31 UTC). Every figure below was read off that file in Python: the
+ * week and the month both start 2026-09-21 16:00:31.849 UTC and end on 28 September and 22 October;
+ * P(M ≥ 5) is 0.1478 and 0.4347, P(M ≥ 6) 0.0173 and 0.0609, and P(≥ M7.4) 0.0033 in the month.
+ */
+describe("usgsForecast", () => {
+  const data = insights(fixture, NOW);
+  const START = "2026-09-21T16:00:31.849Z";
+  const WEEK_END = "2026-09-28T16:00:31.849Z";
+  const MONTH_END = "2026-10-22T16:00:31.849Z";
+
+  it("on 2026-09-24: the week and the month, at M5 and M6, in USGS's own figures", () => {
+    const f = usgsForecast(CONTEXT, data)!;
+    expect(f.issuedAt).toBe("2026-09-21T18:03:11.563Z");
+    expect(f.nextUpdateAt).toBe(WEEK_END);
+    expect(f.windows.map((w) => [w.start, w.end])).toEqual([
+      [START, WEEK_END],
+      [START, MONTH_END],
+    ]);
+    const rows = f.windows.map((w) => w.rows.map((r) => [r.magnitude, r.probability, r.median, r.p95Min, r.p95Max]));
+    expect(rows).toEqual([
+      [
+        [5, 0.1478, 0, 0, 1],
+        [6, 0.0173, 0, 0, 0],
+      ],
+      [
+        [5, 0.4347, 0, 0, 3],
+        [6, 0.0609, 0, 0, 1],
+      ],
+    ]);
+  });
+
+  const at = (iso: string) => ({ ...data, now: Date.parse(iso) });
+  const withDigest = (over: Partial<ForecastDigest>): ContextResponse => ({
+    ...CONTEXT,
+    forecast: { ...CONTEXT.forecast!, digest: { ...CONTEXT.forecast!.digest, ...over } },
+  });
+
+  it("is hidden from the moment USGS's next update is due: a stale probability is worse than none", () => {
+    expect(usgsForecast(CONTEXT, at("2026-09-28T16:00:31.848Z"))).not.toBeNull();
+    expect(usgsForecast(CONTEXT, at(WEEK_END))).toBeNull();
+    // Even with the month still open and the file's own expiry a year away.
+    expect(CONTEXT.forecast!.digest.expiresAt! > MONTH_END).toBe(true);
+  });
+
+  it("without a next update, is hidden 14 days after it was issued (two missed weekly updates)", () => {
+    const noNext = withDigest({ nextUpdateAt: null });
+    expect(usgsForecast(noNext, at("2026-10-05T18:03:11.562Z"))).not.toBeNull();
+    expect(usgsForecast(noNext, at("2026-10-05T18:03:11.563Z"))).toBeNull();
+  });
+
+  it("drops a window that has ended, and says nothing once none is left", () => {
+    const late = withDigest({ nextUpdateAt: null, issuedAt: "2026-09-27T00:00:00.000Z" });
+    expect(usgsForecast(late, at("2026-09-29T00:00:00.000Z"))!.windows.map((w) => w.end)).toEqual([MONTH_END]);
+    const yearOnly = withDigest({
+      windows: CONTEXT.forecast!.digest.windows.filter((w) => w.label === "1 Year" || w.label === "1 Day"),
+    });
+    expect(usgsForecast(yearOnly, data)).toBeNull();
+  });
+
+  it("is shown only once a USGS seismologist has reviewed it (owner, 2026-09-25)", () => {
+    expect(CONTEXT.forecast!.digest.reviewStatus).toBe("reviewed");
+    expect(usgsForecast(withDigest({ reviewStatus: "automatic" }), data)).toBeNull();
+    expect(usgsForecast(withDigest({ reviewStatus: null }), data)).toBeNull();
+  });
+
+  it("is shown only while its event is the mainshock the page detects", () => {
+    const m74 = fixture.choco.find((e) => e.id === "SGC2026pqqmro")!;
+    const next = { ...m74, id: "other", mag: 6.9 };
+    const withMainshock = (mainshock: Insights["mainshock"]["choco"]) =>
+      usgsForecast(CONTEXT, { ...data, mainshock: { ...data.mainshock, choco: mainshock } });
+    expect(withMainshock({ state: "awaiting-review", largest: m74, runnerUp: next, gap: 1.5 })).toBeNull();
+    expect(withMainshock({ state: "none", largest: m74, runnerUp: next, gap: 0.5 })).toBeNull();
+    const later = { ...m74, id: "SGC2027later", mag: 7.8 };
+    expect(withMainshock({ ...data.mainshock.choco, largest: later } as Insights["mainshock"]["choco"])).toBeNull();
+  });
+
+  it("gives the chance of one as large as the mainshock or larger for the month only", () => {
+    expect(usgsForecast(CONTEXT, data)!.aboveMainshock).toEqual({
+      magnitude: 7.4,
+      probability: 0.0033,
+      start: START,
+      end: MONTH_END,
+    });
+    const weekOnly = withDigest({ windows: CONTEXT.forecast!.digest.windows.filter((w) => w.label !== "1 Month") });
+    expect(usgsForecast(weekOnly, data)!.aboveMainshock).toBeNull();
+    // Never under a window the box does not show: here the month has no M5 or M6 row.
+    const bare = withDigest({
+      windows: CONTEXT.forecast!.digest.windows.map((w) =>
+        w.label === "1 Month" ? { ...w, bins: w.bins.filter((b) => b.magnitude < 5) } : w,
+      ),
+    });
+    expect(usgsForecast(bare, data)!.windows.map((w) => w.end)).toEqual([WEEK_END]);
+    expect(usgsForecast(bare, data)!.aboveMainshock).toBeNull();
+  });
+
+  // In Python on the fixture: the shallow group's median epicentre is 10.5 km from USGS's circle's
+  // centre and the deep group's 42.0 km; 95.9% of Chocó's 834 events are over 110 km from Pereira in
+  // a straight line and 76.6% over 120 km; the page's b at Mc 2.3 is 0.735 from 566 events.
+  it("carries what its limits compare: USGS's model beside the page's own b, and how far Chocó is", () => {
+    const f = usgsForecast(CONTEXT, data)!;
+    expect(f.model).toEqual({ b: 1, mc: 4.45, radiusKm: 125.4, holdsBothGroups: true });
+    expect(f.page.mc).toBe(2.3);
+    expect(f.page.b).toBeCloseTo(0.735, 3);
+    expect(f.page.farKm).toBe(110);
+    const small = withDigest({ model: { ...CONTEXT.forecast!.digest.model, regionRadiusKm: 30 } });
+    expect(usgsForecast(small, data)!.model.holdsBothGroups).toBe(false);
+  });
+
+  it("says Chocó is far only from 100 km: nearer, an M5's waves are not bound to arrive much weakened", () => {
+    expect(FAR_FROM_KM).toBe(100);
+    const reach = (beyondKm: number) => ({ ...data, chocoReach: { ...data.chocoReach, beyondKm } });
+    expect(usgsForecast(CONTEXT, reach(100))!.page.farKm).toBe(100);
+    expect(usgsForecast(CONTEXT, reach(90))!.page.farKm).toBeNull();
+    expect(usgsForecast(CONTEXT, reach(0))!.page.farKm).toBeNull();
+  });
+
+  it("goes stale at the exact due time, not at the next minute of the page's rounded clock", () => {
+    const minute = at("2026-09-28T16:00:00Z");
+    expect(usgsForecast(CONTEXT, minute, Date.parse("2026-09-28T16:00:31.848Z"))).not.toBeNull();
+    expect(usgsForecast(CONTEXT, minute, Date.parse(WEEK_END))).toBeNull();
+  });
+  it("links to USGS's forecast for the event, and only for an id shaped like one of USGS's", () => {
+    expect(usgsForecast(CONTEXT, data)!.usgsUrl).toBe(
+      "https://earthquake.usgs.gov/earthquakes/eventpage/us6000tjl2/oaf/forecast",
+    );
+    const odd = { ...CONTEXT, forecast: { ...CONTEXT.forecast!, sourceEventId: "../evil" } };
+    expect(usgsForecast(odd, data)!.usgsUrl).toBeNull();
+  });
+});
+
+describe("chocoReach", () => {
+  it("says how far almost all of Chocó's events are, not its groups' medians", () => {
+    // 10 events 55 km under Pereira and 90 events 200 km under it: the median is 200 km, but only a
+    // tenth is nearer than 55 km, so "almost all" (at least 95%) are beyond 50 km and no further.
+    const under = (depthKm: number) =>
+      quake(Date.parse("2026-09-01T00:00:00Z"), { lat: 4.8133, lon: -75.6961, depthKm });
+    const near = Array.from({ length: 10 }, () => under(55));
+    const far = Array.from({ length: 90 }, () => under(200));
+    expect(chocoReach(near, far).beyondKm).toBe(50);
+  });
+
+  it("is worked out once per catalogue, not on every minute the page's clock ticks", () => {
+    const a = insights(fixture, NOW).chocoReach;
+    expect(a.beyondKm).toBe(110);
+    expect(insights(fixture, NOW + 60_000).chocoReach).toBe(a);
   });
 });

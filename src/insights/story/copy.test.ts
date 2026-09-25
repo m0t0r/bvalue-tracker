@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { insightsCopy } from "../copy";
+import { questionsCopy } from "../questions/copy";
 import { storyCopy } from "./copy";
 import { placeholders } from "./rich";
 
@@ -51,6 +53,13 @@ describe("the story's copy", () => {
 
   it("gives each sentence the same placeholders in both languages", () => {
     for (const [path, text] of es) expect([path, placeholders(en.get(path)!)]).toEqual([path, placeholders(text)]);
+  });
+
+  it("points to USGS's forecast by the question's and the tab's own names, so a rename cannot strand it", () => {
+    expect(storyCopy.es.unknown.forecast).toContain(`«${questionsCopy.es.bigger.q}»`);
+    expect(storyCopy.es.unknown.forecast).toContain(`«${insightsCopy.es.tabs.questions}»`);
+    expect(storyCopy.en.unknown.forecast).toContain(`"${questionsCopy.en.bigger.q}"`);
+    expect(storyCopy.en.unknown.forecast).toContain(`"${insightsCopy.en.tabs.questions}"`);
   });
 
   it("writes every number with a decimal point, never a decimal comma", () => {

@@ -28,8 +28,9 @@ import { DIGEST_VERSION, digestDyfi, digestForecast, digestPager } from "./usgs.
  * Once a day, at 11:07 UTC: off the ingest's quarter hours, so the two never share an invocation
  * and this one has its own CPU. Felt reports grow slowly six weeks after the M7.4 and the forecast
  * is updated about weekly, so a day is soon enough. Must match `triggers.crons` in wrangler.jsonc.
+ * Defined in `core/products.ts`, because the insights page times its forecast rechecks by it.
  */
-export const PRODUCTS_CRON = "7 11 * * *";
+export { PRODUCTS_CRON } from "../core/products.ts";
 
 export const USGS_SEARCH = "https://earthquake.usgs.gov/fdsnws/event/1/query";
 const USGS_HOST = "earthquake.usgs.gov";

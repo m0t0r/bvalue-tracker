@@ -258,6 +258,41 @@ const es = {
     ],
     takeaway:
       "Nadie puede anunciar el próximo sismo; lo útil es estar preparado siempre y seguir la información del SGC.",
+    /** USGS's aftershock forecast, relayed. Its sentences with figures are `../copy.ts`'s claims. */
+    forecast: {
+      lede: (date: string) =>
+        `Lo que sí existe es un pronóstico de probabilidades. El Servicio Geológico de Estados Unidos (USGS) lo calcula para las réplicas del sismo del ${date} y lo hace público. Esta página no lo calcula: lo mostramos tal como lo publica el USGS.`,
+      heading: "El USGS publica este pronóstico",
+      byline: (issued: string, next: string | null) =>
+        `Publicado por el USGS el ${issued} y revisado por uno de sus sismólogos.${next ? ` La próxima actualización está prevista para el ${next}.` : ""}`,
+      window: (start: string, end: string) => `Entre el ${start} y el ${end}`,
+      magnitude: (m: number) => `${mag(m)} o más`,
+      /** Always shown: a magnitude is not shaking in Pereira (the plan's rule 4). */
+      notShaking: "Una magnitud describe el sismo en su origen, no cuánto se mueve el suelo aquí.",
+      /** Only from `FAR_FROM_KM`: how far Chocó is, and what that does to an M5's waves. */
+      far: (km: number) =>
+        `Casi todos los eventos del Chocó ocurren a más de ${f0(km)}\u00A0km de Pereira en línea recta, contando la profundidad, y a esa distancia las ondas de un M5 llegan muy atenuadas.`,
+      pereiraFelt: (date: string) => `Para saber cómo se sintió de verdad el sismo del ${date}, mira la pregunta`,
+      limitsTitle: (n: number) =>
+        n === 1
+          ? "Algo que conviene saber"
+          : `${WORDS_ES[n]![0]!.toUpperCase()}${WORDS_ES[n]!.slice(1)} cosas que conviene saber`,
+      area: (radiusKm: number) => ({
+        title: "Una zona, dos grupos.",
+        body: `El USGS cuenta los eventos en un círculo de ${f0(radiusKm)}\u00A0km de radio que incluye los dos grupos del Chocó, el profundo y el de Istmina–Sipí. El pronóstico dice qué tan probable es un sismo en esa zona, no en cuál de los dos grupos ocurriría.`,
+      }),
+      catalogue: (mc: string) => ({
+        title: "Otro catálogo.",
+        body: `Se basa en los eventos de M${mc} o más del catálogo del USGS, no en los del SGC. Por eso sus cifras no se pueden comparar con los conteos de esta página.`,
+      }),
+      bValue: (b: string, mc: string, ourB: string, ourMc: string) => ({
+        title: "Otro valor b.",
+        body: `Su modelo usa b = ${b} para los sismos desde M${mc}; el de esta página, unos ${ourB}, se calcula con sismos desde M${ourMc}. Cada uno vale para lo que describe.`,
+      }),
+      sgc: "La autoridad en Colombia es el Servicio Geológico Colombiano: para información oficial y para saber qué hacer, consulta sus boletines (sgc.gov.co).",
+      source: "Fuente: pronóstico de réplicas del USGS.",
+      sourceLink: "Ver el pronóstico en el sitio del USGS",
+    },
   },
 
   unknown: {
@@ -511,6 +546,38 @@ const en: Copy = {
       "Get information from official sources: the Servicio Geológico Colombiano's bulletins (sgc.gov.co).",
     ],
     takeaway: "No one can announce the next earthquake; what helps is being prepared at all times and following SGC.",
+    forecast: {
+      lede: (date) =>
+        `What does exist is a forecast of probabilities. The United States Geological Survey (USGS) computes one for the aftershocks of the ${date} earthquake and makes it public. This page does not compute it: we show it as USGS publishes it.`,
+      heading: "USGS publishes this forecast",
+      byline: (issued, next) =>
+        `Issued by USGS on ${issued} and reviewed by one of its seismologists.${next ? ` The next update is due on ${next}.` : ""}`,
+      window: (start, end) => `From ${start} to ${end}`,
+      magnitude: (m) => `${mag(m)} or larger`,
+      notShaking: "A magnitude describes an earthquake at its source, not how much the ground moves here.",
+      far: (km) =>
+        `Almost all of Chocó's events happen over ${f0(km)}\u00A0km from Pereira in a straight line, counting their depth, and at that distance the waves of an M5 arrive much weakened.`,
+      pereiraFelt: (date) => `For how the ${date} earthquake was actually felt, see the question`,
+      limitsTitle: (n) =>
+        n === 1
+          ? "One thing worth knowing"
+          : `${WORDS_EN[n]![0]!.toUpperCase()}${WORDS_EN[n]!.slice(1)} things worth knowing`,
+      area: (radiusKm) => ({
+        title: "One area, two groups.",
+        body: `USGS counts the events in a circle of ${f0(radiusKm)}\u00A0km radius that takes in both of Chocó's groups, the deep one and Istmina–Sipí. The forecast says how likely an earthquake is in that area, not in which of the two groups it would happen.`,
+      }),
+      catalogue: (mc) => ({
+        title: "Another catalogue.",
+        body: `It is based on the M${mc} and larger events in USGS's catalogue, not SGC's. That is why its figures cannot be compared with this page's counts.`,
+      }),
+      bValue: (b, mc, ourB, ourMc) => ({
+        title: "Another b-value.",
+        body: `Its model uses b = ${b} for earthquakes from M${mc} up; this page's, about ${ourB}, is computed from earthquakes of M${ourMc} and up. Each is right for what it describes.`,
+      }),
+      sgc: "The authority in Colombia is the Servicio Geológico Colombiano: for official information and for what to do, see its bulletins (sgc.gov.co).",
+      source: "Source: USGS's aftershock forecast.",
+      sourceLink: "See the forecast on USGS's site",
+    },
   },
 
   unknown: {

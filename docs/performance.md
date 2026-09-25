@@ -85,6 +85,13 @@ practices stayed at 100.
     more same-origin request, `/api/context`, a few hundred bytes, goes out with the catalogues.
   - The history step (2026-09-25, `vite build`) took the story chunk from 88.4 kB to 93.7 kB (27.2 →
     28.8 kB gzipped): `history.json` and its rules. The shell did not move.
+  - USGS's forecast box (2026-09-25, `vite build`, against the same commit built without it) took the
+    shell from 26.26 kB to 32.17 kB (10.17 → 12.22 kB gzipped), since its rule and sentences are in
+    `claims.ts` and `copy.ts`, and the recheck rule (`context-refresh.ts`) is in `useInsights`; the
+    questions chunk from 72.36 kB to 79.53 kB (23.95 → 25.86 kB gzipped) and the story chunk from
+    93.78 kB to 94.23 kB (measured on top of the history step). The monitor did not move. No new request on load: the forecast was already
+    in `/api/context`. On an open page, one more `/api/context` (a few hundred bytes) per daily job
+    run after the forecast is due, on a return to the tab, for two days at most.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

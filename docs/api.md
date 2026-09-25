@@ -63,7 +63,10 @@ only while `sgcEventId` is the zone's detected mainshock**. The route itself doe
 would read the zone's events, unindexed on `mag`, on every load. `checkedAt` is when the job last saw
 USGS's current version; an old one means USGS or the job has been failing, and the page decides
 what that hides. The questions tab (`feltInPereira`) hides nothing on age: each figure it shows
-carries its product's own date, and it drops a digest whose `sgcEventId` is not the detected mainshock. Credit "USGS" beside any figure from it (US public domain).
+carries its product's own date, and it drops a digest whose `sgcEventId` is not the detected mainshock.
+The forecast (`usgsForecast`) does hide on age: from USGS's `nextUpdateAt`, or 14 days after issue
+without one, and whenever it is not `reviewed` ([the science](science.md#the-insights-page-insights-from-2026-09-24)).
+Credit "USGS" beside any figure from it (US public domain).
 
 CSV headers are the stable machine names (`id,time,lat,…`) by default. `?lang=es` on
 either CSV endpoint, and the page's download buttons while the page is in Spanish,

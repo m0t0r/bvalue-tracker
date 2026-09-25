@@ -1,9 +1,10 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useQuery, useQueryClient, type Query } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getContext, getEvents, getStatus } from "@/lib/api";
 import type { ContextResponse, StatusResponse } from "@/lib/api";
 import { useNow } from "@/lib/use-now";
-import { insights, type Insights } from "./claims";
+import { forecastStaleAt, insights, usgsForecast, type Forecast, type Insights } from "./claims";
+import { contextRecheckDue, keepFeltFromFirst } from "./context-refresh";
 
 /**
  * Both zones' catalogues from `/api/events`, the same endpoint the monitor reads, and every claim
@@ -15,6 +16,7 @@ import { insights, type Insights } from "./claims";
 export function useInsights(): {
   data: Insights | null;
   context: ContextResponse | null;
+  forecast: Forecast | null;
   isPending: boolean;
   isError: boolean;
   incomplete: boolean;
@@ -33,17 +35,48 @@ export function useInsights(): {
     ...statusOptions,
   });
   // What USGS publishes about Chocó's mainshock (docs/api.md), asked for with the catalogues. The
-  // page waits for it to settle, answered or failed, before drawing a tab, and never asks again
-  // while it is open: question 2 exists only when it has an answer, so a late answer, a retry or a
-  // refetch on focus would insert or remove a whole question above the reader and renumber the rest.
-  // It changes once a day at most. A failure hides that question and is never the load error.
+  // page waits for it to settle, answered or failed, before drawing a tab: question 2 exists only
+  // when it has an answer, so a late answer or a retry would insert a whole question above the
+  // reader and renumber the rest. A failure on load hides those questions and is never the load
+  // error. It is asked again only on a return to the tab (or the network) once the stored forecast
+  // is due (`contextRecheckDue`), so a page left open picks up USGS's next forecast; a later answer
+  // changes only the forecast, a box inside question 8, and never question 2 (`keepFeltFromFirst`).
+  const recheck = (query: Query<ContextResponse>) =>
+    contextRecheckDue(
+      query.state.data,
+      query.state.dataUpdatedAt,
+      Math.max(query.state.dataUpdatedAt, query.state.errorUpdatedAt),
+      Date.now(),
+    )
+      ? ("always" as const)
+      : false;
   const context = useQuery({
     queryKey: ["context", "choco"],
     queryFn: () => getContext("choco"),
     retry: false,
     staleTime: Infinity,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: recheck,
+    refetchOnReconnect: recheck,
   });
+  // The first settled answer, null if it failed: what question 2 is decided from, for good. Set
+  // during render (React's "information from previous renders"), so no extra commit, and no second
+  // skeleton frame, follows the answer.
+  const [firstContext, setFirstContext] = useState<ContextResponse | null | undefined>(undefined);
+  if (firstContext === undefined && !context.isPending) setFirstContext(context.data ?? null);
+  const shownContext = useMemo(
+    () => (firstContext === undefined ? null : keepFeltFromFirst(firstContext, context.data)),
+    [firstContext, context.data],
+  );
+  // The forecast leaves at its due time to the millisecond: the page's clock below is rounded to the
+  // minute and would keep a replaced forecast on screen up to a minute and a half longer.
+  const dueAt = shownContext?.forecast ? forecastStaleAt(shownContext.forecast.digest) : null;
+  const [exactNow, setExactNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (dueAt === null || dueAt <= Date.now()) return;
+    // setTimeout holds at most ~24.8 days; a later due time is left to the rounded clock.
+    const id = setTimeout(() => setExactNow(Date.now()), Math.min(dueAt - Date.now(), 2 ** 31 - 1));
+    return () => clearTimeout(id);
+  }, [dueAt]);
   useRefetchOnIngest(qc, "choco", chocoStatus.data);
   useRefetchOnIngest(qc, "tolima", tolimaStatus.data);
   const incomplete = [chocoStatus.data, tolimaStatus.data].some((s) => !!s && s.backfill.done < s.backfill.total);
@@ -55,10 +88,16 @@ export function useInsights(): {
     () => (choco.data && tolima.data ? insights({ choco: choco.data, tolima: tolima.data }, now) : null),
     [choco.data, tolima.data, now],
   );
+  // USGS's forecast, decided once for both tabs: the questions tab shows it, the story points to it.
+  const forecast = useMemo(
+    () => (data && shownContext ? usgsForecast(shownContext, data, Math.max(data.now, exactNow)) : null),
+    [data, shownContext, exactNow],
+  );
   return {
     data,
-    context: context.data ?? null,
-    isPending: choco.isPending || tolima.isPending || context.isPending,
+    context: shownContext,
+    forecast,
+    isPending: choco.isPending || tolima.isPending || firstContext === undefined,
     isError: choco.isError || tolima.isError,
     incomplete,
   };
