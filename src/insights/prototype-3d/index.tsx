@@ -17,7 +17,19 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import type { Insights } from "../claims";
 import { useReducedMotion } from "../use-reduced-motion";
-import { ALL_LAYERS, createScene, webglAvailable, type Layer, type Preset, type SceneHandle, type View } from "./scene";
+import {
+  ALL_LAYERS,
+  webglAvailable,
+  type Engine,
+  type Layer,
+  type Preset,
+  type SceneHandle,
+  type View,
+} from "./common";
+
+/** `?engine=ogl` draws the same scene with OGL instead of three.js; each is its own chunk. */
+const ENGINE: Engine = new URLSearchParams(location.search).get("engine") === "ogl" ? "ogl" : "three";
+const loadEngine = () => (ENGINE === "ogl" ? import("./scene-ogl") : import("./scene"));
 
 const VARIANTS = {
   D: "A con las vistas de B",
@@ -70,14 +82,23 @@ function Block({
   const box = useRef<HTMLDivElement>(null);
   const handle = useRef<SceneHandle | null>(null);
   const [fps, setFps] = useState(0);
+  const latest = useRef(view);
+  latest.current = view;
   useEffect(() => {
-    const h = createScene(box.current!, data, view);
-    handle.current = h;
-    onReady?.(h);
-    const id = setInterval(() => setFps(h.fps()), 1000);
+    let h: SceneHandle | null = null;
+    let id = 0;
+    let gone = false;
+    void loadEngine().then(({ createScene }) => {
+      if (gone) return;
+      h = createScene(box.current!, data, latest.current);
+      handle.current = h;
+      onReady?.(h);
+      id = window.setInterval(() => setFps(h!.fps()), 1000);
+    });
     return () => {
+      gone = true;
       clearInterval(id);
-      h.dispose();
+      h?.dispose();
       handle.current = null;
     };
     // The scene is built once per mount; `view` changes go through setView below.
@@ -94,7 +115,7 @@ function Block({
         Mapa: © OpenStreetMap · OpenFreeMap · © Mapterhorn
       </span>
       <span className="absolute top-1 right-1 z-10 rounded bg-background/80 px-1 font-mono text-2xs text-muted-foreground">
-        {fps} fps
+        {ENGINE} · {fps} fps
       </span>
     </div>
   );
@@ -230,7 +251,7 @@ function VariantA({ data, withViews = false }: { data: Insights; withViews?: boo
   const [preset, setPreset] = useState<Preset | null>("oblique");
   const caption = B_VIEWS.find(([p]) => p === preset)?.[2];
   const ready = (s: SceneHandle) => {
-    s.controls.addEventListener("start", () => setPreset(null));
+    s.onInteract(() => setPreset(null));
     setPreset("oblique");
     setH(s);
   };
@@ -351,12 +372,7 @@ function VariantB({ data }: { data: Insights }) {
   const caption = B_VIEWS.find(([p]) => p === preset)![2];
 
   const ready = (s: SceneHandle) => {
-    // One finger scrolls the page; two fingers turn and zoom. The wheel scrolls the page too.
-    s.controls.touches = { ONE: null, TWO: 2 /* TOUCH.DOLLY_ROTATE */ };
-    s.controls.enableZoom = true;
-    s.controls.zoomToCursor = false;
-    s.canvas.style.touchAction = "pan-y";
-    s.canvas.addEventListener("wheel", (e) => e.stopImmediatePropagation(), { capture: true });
+    s.inlineGestures();
     setH(s);
   };
 

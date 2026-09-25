@@ -20,6 +20,7 @@ import {
   EdgesGeometry,
   Group,
   InstancedMesh,
+  Line,
   LineBasicMaterial,
   LineSegments,
   Mesh,
@@ -48,39 +49,23 @@ import { USGS_ASSESSED } from "../story/model";
 import basemapDark from "./basemap-dark.webp?url";
 import basemapLight from "./basemap-light.webp?url";
 
-const LON0 = -76.75;
-const LAT0 = 4.4;
-const KM_LAT = 111.195;
-const KM_LON = KM_LAT * Math.cos((LAT0 * Math.PI) / 180);
-/** The block's floor: deep enough for the plate under Pereira (~160 km) and its body. */
-export const FLOOR_KM = 240;
-
-export const x = (lon: number) => (lon - LON0) * KM_LON;
-export const z = (lat: number) => -(lat - LAT0) * KM_LAT;
-const WEST = x(GROUND.lon0);
-const EAST = x(GROUND.lon0 + (GROUND.nx - 1) * GROUND.step);
-const SOUTH = z(GROUND.lat0);
-const NORTH = z(GROUND.lat0 + (GROUND.ny - 1) * GROUND.step);
-
-export type Layer = "ground" | "plate" | "uncertainty" | "rupture" | "events" | "labels" | "snapped";
-export type Preset = "oblique" | "south" | "above" | "rupture" | "chaparral" | "pereira";
-
-export interface View {
-  exaggeration: number;
-  layers: Record<Layer, boolean>;
-  /** Show events up to this time (ms); null shows all. */
-  until: number | null;
-}
-
-export const ALL_LAYERS: Record<Layer, boolean> = {
-  ground: true,
-  plate: true,
-  uncertainty: true,
-  rupture: true,
-  events: true,
-  labels: true,
-  snapped: false,
-};
+import {
+  ALL_LAYERS,
+  EAST,
+  FLOOR_KM,
+  NORTH,
+  SOUTH,
+  WEST,
+  webglAvailable,
+  x,
+  z,
+  type Layer,
+  type Preset,
+  type SceneHandle,
+  type View,
+} from "./common";
+export { ALL_LAYERS, FLOOR_KM, webglAvailable, x, z };
+export type { Layer, Preset, SceneHandle, View };
 
 /** A colour the page's CSS defines, as the sRGB the screen shows (getComputedStyle gives oklch). */
 function cssColour(expr: string) {
@@ -108,14 +93,6 @@ export function palette() {
     place: cssColour("var(--place)"),
     dark: document.documentElement.classList.contains("dark"),
   };
-}
-
-export function webglAvailable() {
-  try {
-    return !!document.createElement("canvas").getContext("webgl2");
-  } catch {
-    return false;
-  }
 }
 
 /** A hypsometric tint, muted so the events stay the only saturated colour in the block. */
@@ -183,21 +160,6 @@ const LABEL_MUTED = "pointer-events-none text-2xs leading-tight text-muted-foreg
 interface Ev extends QuakeLike {
   source: Source | "mainshock";
   t: number;
-}
-
-export interface SceneHandle {
-  controls: OrbitControls;
-  canvas: HTMLCanvasElement;
-  setView(v: View): void;
-  goTo(p: Preset, animate: boolean): void;
-  setAutoRotate(on: boolean): void;
-  resize(): void;
-  /** Frames drawn in the last second, for the phone test. */
-  fps(): number;
-  /** The events in time order, for a replay slider. */
-  times: { first: number; last: number };
-  snapped: { depthKm: number; count: number }[];
-  dispose(): void;
 }
 
 export function createScene(container: HTMLElement, data: Insights, initial: View): SceneHandle {
@@ -370,7 +332,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     const edge = new BufferGeometry().setFromPoints(
       [ts, te, be, bs, ts].map(([lon, lat, d]) => new Vector3(x(lon), -d, z(lat))),
     );
-    rupture.add(new LineSegments(edge, new LineBasicMaterial({ color: pal.mainshock })));
+    rupture.add(new Line(edge, new LineBasicMaterial({ color: pal.mainshock })));
   }
   vertical.add(rupture);
 
@@ -615,8 +577,17 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   raf = requestAnimationFrame(loop);
 
   return {
-    controls,
+    engine: "three",
     canvas: renderer.domElement,
+    onInteract(cb) {
+      controls.addEventListener("start", cb);
+    },
+    inlineGestures() {
+      // One finger scrolls the page; two fingers turn and zoom. The wheel scrolls the page too.
+      controls.touches = { ONE: null, TWO: 2 /* TOUCH.DOLLY_ROTATE */ };
+      renderer.domElement.style.touchAction = "pan-y";
+      renderer.domElement.addEventListener("wheel", (e) => e.stopImmediatePropagation(), { capture: true });
+    },
     setView,
     goTo,
     setAutoRotate(on) {
