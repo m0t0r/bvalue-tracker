@@ -27,8 +27,11 @@ import {
   type View,
 } from "./common";
 
-/** `?engine=ogl` draws the same scene with OGL instead of three.js; each is its own chunk. */
-const ENGINE: Engine = new URLSearchParams(location.search).get("engine") === "ogl" ? "ogl" : "three";
+/**
+ * OGL by default (the owner's choice, 2026-09-25); `?engine=three` draws the same scene with three.js
+ * for comparison. Each is its own chunk.
+ */
+const ENGINE: Engine = new URLSearchParams(location.search).get("engine") === "three" ? "three" : "ogl";
 const loadEngine = () => (ENGINE === "ogl" ? import("./scene-ogl") : import("./scene"));
 
 const VARIANTS = {
