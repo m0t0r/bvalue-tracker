@@ -118,8 +118,40 @@ function insightsPage(): Plugin {
   };
 }
 
+/**
+ * PROTOTYPE (branch prototype/3d): `pnpm prototype:3d` serves production's catalogue of 2026-09-24
+ * from the test fixture, so the 3D tab has data and nothing reaches the Worker, D1 or SGC.
+ */
+function prototypeFixtures(): Plugin {
+  return {
+    name: "sgc-prototype-fixtures",
+    apply: "serve",
+    enforce: "pre",
+    configureServer(server) {
+      if (!process.env.PROTOTYPE_FIXTURES) return;
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url ?? "/", "http://x");
+        const zone = url.searchParams.get("zone") === "tolima" ? "tolima" : "choco";
+        let body: string | null = null;
+        if (url.pathname === "/api/events") {
+          const all = JSON.parse(await readFile("test/fixtures/api-events-2026-09-24.json", "utf8"));
+          body = JSON.stringify(all[zone]);
+        } else if (url.pathname === "/api/status") {
+          body = JSON.stringify({ backfill: { done: 1, total: 1 }, lastSuccessfulRun: null });
+        } else if (url.pathname.startsWith("/api/")) {
+          res.statusCode = 404;
+          return res.end("{}");
+        }
+        if (body === null) return next();
+        res.setHeader("content-type", "application/json");
+        res.end(body);
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont(), zonePages(), insightsPage()],
+  plugins: [prototypeFixtures(), react(), tailwindcss(), cloudflare(), preloadLatinFont(), zonePages(), insightsPage()],
   worker: { format: "es" },
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   environments: {

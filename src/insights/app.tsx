@@ -14,8 +14,10 @@ import { useInsights } from "./use-insights";
 // pulls in its drawings.
 const Story = lazy(() => import("./story").then((m) => ({ default: m.Story })));
 const Questions = lazy(() => import("./questions").then((m) => ({ default: m.Questions })));
+// PROTOTYPE (unit E1, branch prototype/3d): the 3D tab, in its own chunk with three.js.
+const Prototype3D = lazy(() => import("./prototype-3d"));
 
-const TABS = ["story", "questions"] as const;
+const TABS = ["story", "questions", "3d"] as const;
 type Tab = (typeof TABS)[number];
 
 /**
@@ -23,7 +25,10 @@ type Tab = (typeof TABS)[number];
  * The story is the bare URL. Switching replaces the entry rather than pushing one: the back button
  * should leave the page, not step between two views of it.
  */
-const readTab = (): Tab => (new URLSearchParams(location.search).get("tab") === "questions" ? "questions" : "story");
+const readTab = (): Tab => {
+  const t = new URLSearchParams(location.search).get("tab");
+  return t === "questions" || t === "3d" ? t : "story";
+};
 
 export function InsightsApp() {
   const { lang, setLang } = useI18n();
@@ -47,7 +52,7 @@ export function InsightsApp() {
 
   return (
     <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
-      <Tabs value={tab} onValueChange={(v) => setTab(v === "questions" ? "questions" : "story")} className="gap-8">
+      <Tabs value={tab} onValueChange={(v) => setTab(v === "questions" || v === "3d" ? v : "story")} className="gap-8">
         <header className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* Pulled out by its own inline padding, so the arrow lines up with the title below it. */}
@@ -115,6 +120,11 @@ export function InsightsApp() {
               <TabsContent value="questions">
                 <Suspense fallback={<PageSkeleton label={c.loading} />}>
                   <Questions data={data} context={context} />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="3d">
+                <Suspense fallback={<PageSkeleton label={c.loading} />}>
+                  <Prototype3D data={data} />
                 </Suspense>
               </TabsContent>
             </>
