@@ -328,6 +328,52 @@ the reader's own questions). Everything above still applies to it; this section 
     "above/inside/close" in words, on the story's cuts.
   - **The key names the snapped depths** (`commonDepths`, at least 20 events at one exact depth; 60 at
     42.9 km, 54 at 39.9 and 32 at 45.9 on the fixture), because in 3D they look like layers.
+- **"¿Qué tan grande?": the M7.4 against past Colombian earthquakes** (story step 2, from 2026-09-25;
+  it replaced "Un solo sismo liberó casi toda la energía", the M7.4 against its own aftershocks, at the
+  owner's request: readers measure it against the earthquakes they remember, Armenia 1999 and 1995).
+  Committed data, `src/insights/history.json`, from `scripts/insights-history.ts`; the rules are in
+  `src/insights/history.ts`. Checked on 2026-09-25:
+  - **The magnitudes are ISC-GEM's** (doi:10.31905/D808B825, CC BY-SA 3.0, so `history.json` is too),
+    read through ComCat's `catalog=iscgem`. ComCat's preferred magnitudes mix types: its 1979 Eje
+    Cafetero event is an mb 6.4, while ISC-GEM recomputes it as **Mw 7.2**. Only ISC-GEM puts 1906 and
+    1999 on one scale. ISC-GEM through ComCat ends on 2021-12-31.
+  - **Compared in whole tenths, like the mainshock rule.** The script rounds ISC-GEM's hundredths half
+    up on the written decimal (6.35 → 6.4, 8.45 → 8.5; `toFixed(1)` gives 6.3 and 8.4) and keeps the
+    published value beside it. Every ratio the page states comes from the tenth the reader sees: the
+    first version showed "M6.3" beside a ratio computed from 6.35.
+  - **The picked events are a person's choice, and the page says so** ("una selección de los
+    conocidos"): 1906 Ecuador–Colombia coast Mw 8.45, 1979 Tumaco 8.09, 1979 Eje Cafetero 7.2, 1994 Páez
+    6.78, 1995 Neira 6.53, 1995 Calima 6.35, 1999 Armenia 6.14, 1983 Popayán 5.64. Against the M7.4, in
+    shown tenths: Armenia 89×, Calima 32×, Neira 22×, Páez 8×, Eje Cafetero 2×, Popayán 500× less
+    energy; Tumaco 11× and 1906 45× more.
+  - **"The largest in the region" is a separate claim, against the whole record, never the list**:
+    everything of M ≥ 6.5 within 250 km of Pereira in ISC-GEM, then ComCat's own catalogue after 2021,
+    the M7.4 (us6000tjl2) left out. The maximum is the **1979 Eje Cafetero event, Mw 7.2**; next are
+    2004 (7.19) and 1991 (7.18), both offshore Chocó. The M7.4 is 0.2 above it, so the title says
+    "el más grande de la región en {years} años de registros" only while the detected mainshock is
+    SGC2026pqqmro and stands at least a tenth clear (`largestInRegion`). The owner's estimate was that
+    the M7.4 was much bigger than anything before: true against the remembered events, and **not**
+    against 1979, which was also intermediate-depth (110 km) and ~30 km from it. The step says both.
+  - **Colombia has had far larger earthquakes, and the step shows them** (its second part, the two
+    larger events drawn at one scale with the rest). Leaving them out would have let "the largest"
+    read as the largest in Colombia.
+  - **History is context, not a forecast**: the note says so, and the second part says their having
+    happened says nothing about when another will. No recurrence interval, no "due".
+  - The 1979 location (ISC-GEM 4.73° N, 76.16° W) is ~32 km from SGC's M7.4 and ~18 km from USGS's;
+    the older locations carry errors of that order, which the note states. "Near the same place and
+    depth" is within 50 km and 30 km (`HISTORY_NEAR_KM`, `HISTORY_NEAR_DEPTH_KM`).
+  - **What code review changed (2026-09-25)**, each held by a test:
+    - "The largest in the region" also needs the mainshock rule to have **found** it (reviewed), as
+      the old "Un solo sismo…" title did: an unreviewed magnitude may move.
+    - The years count to the **mainshock's** year (122), not to the reader's clock. Otherwise the
+      title would grow a year every January with no new data behind it.
+    - The mainshock's magnitude is taken to the tenth too, so both sides of every ratio are what the
+      reader sees.
+    - Ratios below 3 keep one decimal (`fmtTimes`): a one-tenth gap is 1.4×, which "unas 1 veces" hid.
+    - The record's span in the note comes from `history.json`, not from the copy.
+    - Years go through `fmtYear` (America/Bogota), because Colombia ran on UTC−4 in 1992–93.
+    - The second part's lead sentence names no place, because a revised mainshock can move an inland
+      event (1979 Eje Cafetero, at M7.1) into the "larger" list. Each item names its own place.
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.

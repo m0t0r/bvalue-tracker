@@ -10,16 +10,17 @@ import { line } from "d3-shape";
 import { useMemo, type CSSProperties } from "react";
 import { energyRatio } from "@bvalue/seismo";
 import type { Lang } from "@/lib/i18n";
-import { fmtDay } from "@/lib/format";
+import { fmtDate, fmtDay } from "@/lib/format";
 import { arrivalSeconds, ratesSince, strongDays, type Insights, type Source } from "../claims";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
-import { fmt, fmtKm, fmtMag, medianHorizontalErrorKm } from "../shared";
+import { rankLayout, quakeYear, type Compared } from "../history";
+import { fmt, fmtKm, fmtMag, fmtTimes, medianHorizontalErrorKm } from "../shared";
 import { FILL, STROKE } from "../tones";
 import { useProgress } from "./hooks";
 import { SceneTitle, diamond, radius } from "./marks";
 import type { StoryModel } from "./model";
-import { Rich } from "./rich";
+import { Rich, fill } from "./rich";
 
 const DAY = 86_400_000;
 
@@ -34,22 +35,111 @@ interface SceneProps {
 }
 
 // =============================================================================================
-// Energy: the largest event's square against everything else, then the ×32 ladder.
+// Energy: the largest event's square against past Colombian earthquakes, then the ×32 ladder.
+
+interface RankItem {
+  id: string;
+  mag: number;
+  main: boolean;
+  line1: string;
+  line2: string;
+}
+
+/** Squares true to energy, largest first, one per row, right-aligned, with two lines of text beside each. */
+function Ranks({
+  items,
+  width,
+  top,
+  height,
+  small,
+}: {
+  items: RankItem[];
+  width: number;
+  top: number;
+  height: number;
+  small: boolean;
+}) {
+  const gap = small ? 10 : 16;
+  const left = small ? 12 : 24;
+  // Labels step down a pixel at a time until every row fits: a short phone holds nine rows only at 9 px.
+  const fit = (fs: number) => ({
+    fs,
+    ...rankLayout(
+      items.map((i) => i.mag),
+      {
+        height: height - top - (small ? 10 : 24),
+        maxSide: Math.max(20, width - left * 2 - gap - fs * 13),
+        minRow: 2 * fs + (small ? 5 : 8),
+        gap: small ? 3 : 8,
+      },
+    ),
+  });
+  let layout = fit(small ? 11 : 13);
+  while (!layout.rows.length && layout.fs > 9) layout = fit(layout.fs - 1);
+  const { fs, rows } = layout;
+  if (!rows.length) return null;
+  // The largest square, which is not always the first: a mainshock in the same tenth as a past event
+  // is listed first and may be the smaller of the two.
+  const S = Math.max(...rows.map((r) => r.side));
+  const tx = left + S + gap;
+  return (
+    <g>
+      {items.map((it, i) => {
+        const r = rows[i]!;
+        return (
+          <g key={it.id}>
+            {/* Right-aligned, so each label sits beside its own square. */}
+            <rect
+              x={left + S - Math.max(1, r.side)}
+              y={top + r.y}
+              width={Math.max(1, r.side)}
+              height={Math.max(1, r.side)}
+              rx={Math.min(3, r.side / 6)}
+              className={it.main ? "fill-chart-2" : "fill-muted-foreground"}
+            />
+            <text x={tx} y={top + r.y + fs} fontSize={fs} fontWeight={600} className="fill-foreground">
+              {it.line1}
+            </text>
+            <text
+              x={tx}
+              y={top + r.y + 2 * fs + (small ? 2 : 4)}
+              fontSize={fs}
+              className="fill-muted-foreground tabular-nums"
+            >
+              {it.line2}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
 
 export function EnergyScene({ model, width, height, sub, small, lang }: SceneProps) {
   const c = storyCopy[lang].graphic;
-  const share = insightsCopy[lang].claims.share;
   const main = model.main;
-  const mainShare = model.energy.choco[0];
-  if (!main || mainShare === undefined) return null;
+  const h = model.history;
+  if (!main || !h) return null;
   const fs = small ? 11 : 13;
   const top = small ? 36 : 64;
 
-  // Areas true to energy: the others' square has (1 − s) / s of the largest one's area.
-  const S = Math.max(40, Math.min(width - (small ? 70 : 160), height - top - (small ? 80 : 110)));
-  const bx = (width - S) / 2 - (small ? 12 : 24);
-  const by = top + (height - top - S) / 2 - (small ? 20 : 26);
-  const s = S * Math.sqrt((1 - mainShare) / mainShare);
+  const mainItem: RankItem = {
+    id: main.id,
+    mag: main.mag,
+    main: true,
+    line1: fill(c.historyMain, { date: fmtDate(main.t, lang) }),
+    line2: fmtMag(main.mag),
+  };
+  const item = (r: Compared): RankItem => ({
+    id: r.quake.id,
+    mag: r.quake.mag,
+    main: false,
+    line1: fill(c.historyRow, { name: r.quake.name[lang], year: String(quakeYear(r.quake)) }),
+    line2: fill(c.historyTimes(r.relation), { mag: fmtMag(r.quake.mag), x: fmtTimes(r.times) }),
+  });
+  const below = h.smaller.map(item);
+  const smaller = [mainItem, ...below];
+  const everything = [...h.larger.map(item), mainItem, ...below];
 
   // The ladder: M4, M5, M6 side by side, each ~31.6× the area of the one before.
   const step = energyRatio(5, 4);
@@ -68,50 +158,22 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
 
   return (
     <g>
-      <SceneTitle small={small}>{c.energyTitle}</SceneTitle>
+      <SceneTitle small={small}>
+        {sub === "ladder" ? c.energyTitle : fill(c.historyTitle, { magLabel: fmtMag(main.mag) })}
+      </SceneTitle>
       <g
-        data-on={sub === "share" || undefined}
+        data-on={sub === "history" || undefined}
+        aria-hidden={sub !== "history"}
         className="opacity-0 transition-opacity duration-500 data-on:opacity-100 motion-reduce:transition-none"
       >
-        <rect x={bx} y={by} width={S} height={S} rx={3} className="fill-chart-2" />
-        <text
-          x={bx + (small ? 14 : 24)}
-          y={by + (small ? 34 : 54)}
-          fontSize={small ? 24 : 38}
-          fontWeight={650}
-          className="fill-background"
-        >
-          {fmtMag(main.mag)}
-        </text>
-        <text x={bx} y={by + S + (small ? 18 : 24)} fontSize={fs} className="fill-foreground">
-          <Rich text={c.energyMain} parts={{ date: fmtDay(main.t, lang), share: share(mainShare) }} />
-        </text>
-        <rect
-          x={bx + S + 6}
-          y={by + S - s}
-          width={Math.max(1, s)}
-          height={Math.max(1, s)}
-          rx={1}
-          className="fill-foreground"
-        />
-        {/* Under the small square, right-aligned to it: beside the big one's label on a wide
-            screen, on the line below it on a phone. */}
-        <line
-          x1={bx + S + 6 + s / 2}
-          x2={bx + S + 6 + s / 2}
-          y1={by + S + 3}
-          y2={by + S + (small ? 22 : 10)}
-          className="stroke-foreground"
-        />
-        <text
-          x={bx + S + 6 + s}
-          y={by + S + (small ? 36 : 24)}
-          textAnchor="end"
-          fontSize={fs}
-          className="fill-foreground"
-        >
-          <Rich text={c.energyOthers} parts={{ n: fmt(model.choco.length - 1) }} />
-        </text>
+        <Ranks items={smaller} width={width} top={top} height={height} small={small} />
+      </g>
+      <g
+        data-on={sub === "larger" || undefined}
+        aria-hidden={sub !== "larger"}
+        className="opacity-0 transition-opacity duration-500 data-on:opacity-100 motion-reduce:transition-none"
+      >
+        <Ranks items={everything} width={width} top={top} height={height} small={small} />
       </g>
       <g
         data-on={sub === "ladder" || undefined}

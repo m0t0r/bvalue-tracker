@@ -1,0 +1,122 @@
+{
+  "source": {
+    "catalogue": "ISC-GEM, through USGS ComCat",
+    "doi": "10.31905/D808B825",
+    "licence": "CC BY-SA 3.0",
+    "retrieved": "2026-09-25",
+    "iscgemEnd": "2021-12-31"
+  },
+  "region": {
+    "radiusKm": 250,
+    "from": 1904,
+    "maxMag": 7.2,
+    "maxId": "iscgem656068",
+    "excluded": "us6000tjl2"
+  },
+  "quakes": [
+    {
+      "id": "iscgem16957884",
+      "time": "1906-01-31T15:36:11.160Z",
+      "lat": 0.99,
+      "lon": -79.35,
+      "depthKm": 20,
+      "mag": 8.5,
+      "publishedMag": 8.45,
+      "name": {
+        "es": "Costa de Ecuador y Colombia",
+        "en": "Ecuador–Colombia coast"
+      }
+    },
+    {
+      "id": "iscgem654039",
+      "time": "1979-12-12T07:59:05.140Z",
+      "lat": 1.56,
+      "lon": -79.31,
+      "depthKm": 24,
+      "mag": 8.1,
+      "publishedMag": 8.09,
+      "name": {
+        "es": "Tumaco (Nariño)",
+        "en": "Tumaco (Nariño)"
+      }
+    },
+    {
+      "id": "iscgem656068",
+      "time": "1979-11-23T23:40:31.130Z",
+      "lat": 4.73,
+      "lon": -76.16,
+      "depthKm": 110,
+      "mag": 7.2,
+      "publishedMag": 7.2,
+      "name": {
+        "es": "Eje Cafetero",
+        "en": "Coffee region"
+      }
+    },
+    {
+      "id": "iscgem167996",
+      "time": "1994-06-06T20:47:41.670Z",
+      "lat": 2.89,
+      "lon": -75.95,
+      "depthKm": 10,
+      "mag": 6.8,
+      "publishedMag": 6.78,
+      "name": {
+        "es": "Páez (Cauca)",
+        "en": "Páez (Cauca)"
+      }
+    },
+    {
+      "id": "iscgem89834",
+      "time": "1995-08-19T21:43:32.550Z",
+      "lat": 5.06,
+      "lon": -75.6,
+      "depthKm": 120,
+      "mag": 6.5,
+      "publishedMag": 6.53,
+      "name": {
+        "es": "Neira (Caldas)",
+        "en": "Neira (Caldas)"
+      }
+    },
+    {
+      "id": "iscgem118073",
+      "time": "1995-02-08T18:40:25.860Z",
+      "lat": 4.06,
+      "lon": -76.56,
+      "depthKm": 71,
+      "mag": 6.4,
+      "publishedMag": 6.35,
+      "name": {
+        "es": "Calima (Valle)",
+        "en": "Calima (Valle)"
+      }
+    },
+    {
+      "id": "iscgem1443400",
+      "time": "1999-01-25T18:19:18.490Z",
+      "lat": 4.37,
+      "lon": -75.66,
+      "depthKm": 22,
+      "mag": 6.1,
+      "publishedMag": 6.14,
+      "name": {
+        "es": "Armenia (Quindío)",
+        "en": "Armenia (Quindío)"
+      }
+    },
+    {
+      "id": "iscgem581906",
+      "time": "1983-03-31T13:12:53.000Z",
+      "lat": 2.36,
+      "lon": -76.7,
+      "depthKm": 15,
+      "mag": 5.6,
+      "publishedMag": 5.64,
+      "name": {
+        "es": "Popayán (Cauca)",
+        "en": "Popayán (Cauca)"
+      }
+    }
+  ]
+}

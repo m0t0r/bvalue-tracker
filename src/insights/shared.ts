@@ -44,6 +44,15 @@ export const roundSig = (v: number, sig = 2) => {
 };
 
 /**
+ * "How many times" as an energy ratio: two significant figures, and a decimal below 3, so a gap of one
+ * tenth (1.41) reads "1.4" rather than "1", while "2.0" stays "2" and 7.9 is "8".
+ */
+export const fmtTimes = (v: number) => {
+  const r = roundSig(v);
+  return r < 3 && !Number.isInteger(r) ? fmt(r, 1) : fmt(r);
+};
+
+/**
  * An event's horizontal location error in km: SGC's latitude and longitude errors taken together
  * (their hypotenuse). The one measure the page uses, so the `drift` claim, the error circles and the
  * captions can never quote two different "typical errors".

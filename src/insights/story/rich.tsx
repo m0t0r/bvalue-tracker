@@ -23,3 +23,6 @@ export function Rich({ text, parts = {} }: { text: string; parts?: Record<string
 
 /** The placeholder names in a template, for the test that holds both languages to the same ones. */
 export const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).sort();
+
+/** Plain text from a template, for the SVG's labels and text alternatives: no elements, only strings. */
+export const fill = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? "");
