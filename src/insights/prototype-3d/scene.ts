@@ -33,6 +33,7 @@ import {
   Scene,
   SphereGeometry,
   SRGBColorSpace,
+  TextureLoader,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -44,6 +45,8 @@ import { SLAB2 } from "../plate";
 import { TOWNS } from "../region";
 import { commonDepths } from "../shared";
 import { USGS_ASSESSED } from "../story/model";
+import basemapDark from "./basemap-dark.webp?url";
+import basemapLight from "./basemap-light.webp?url";
 
 const LON0 = -76.75;
 const LAT0 = 4.4;
@@ -242,6 +245,25 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     groundMat,
   );
   vertical.add(ground);
+  // The block's top: the monitor's own map (OpenFreeMap + Mapterhorn relief), baked once at the
+  // block's bounds by `bake-basemap.ts`. The image is Web Mercator, so v follows Mercator's y.
+  {
+    const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+    const lat1 = GROUND.lat0 + (GROUND.ny - 1) * GROUND.step;
+    const uv = new Float32Array(GROUND.nx * GROUND.ny * 2);
+    for (let j = 0; j < GROUND.ny; j++) {
+      const v = (merc(GROUND.lat0 + j * GROUND.step) - merc(GROUND.lat0)) / (merc(lat1) - merc(GROUND.lat0));
+      for (let i = 0; i < GROUND.nx; i++) uv.set([i / (GROUND.nx - 1), v], (j * GROUND.nx + i) * 2);
+    }
+    ground.geometry.setAttribute("uv", new BufferAttribute(uv, 2));
+    new TextureLoader().load(pal.dark ? basemapDark : basemapLight, (tex) => {
+      tex.colorSpace = SRGBColorSpace;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      groundMat.map = tex;
+      groundMat.vertexColors = false;
+      groundMat.needsUpdate = true;
+    });
+  }
 
   // --- The plate: Slab2's top, its body and its stated uncertainty ---------------------------
   const slabAt = (off: (k: number) => number | null) => (i: number, j: number) => {
@@ -257,9 +279,13 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     const [i, j] = [k % SLAB2.nx, Math.floor(k / SLAB2.nx)];
     return -(GROUND.elevationM[2 * j * GROUND.nx + 2 * i] ?? 0) / 1000;
   };
+  // A quarter of the way from the page's background to its text: light grey on the light page, dark
+  // grey on the dark one, so the events' colours (dark on light, light on dark) stand out on it.
+  // (Less in dark mode: the lights brighten a dark grey more than they do the page.)
+  const plateColour = pal.background.clone().lerp(pal.foreground, pal.dark ? 0.05 : 0.28);
   const plateMat = (opacity: number) =>
     new MeshLambertMaterial({
-      color: pal.muted,
+      color: plateColour,
       transparent: true,
       opacity,
       side: DoubleSide,
@@ -267,7 +293,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       clippingPlanes: [floor],
     });
   const plate = new Group();
-  plate.add(new Mesh(gridSurface(SLAB2.nx, SLAB2.ny, slabAt(top)), plateMat(0.5)));
+  plate.add(new Mesh(gridSurface(SLAB2.nx, SLAB2.ny, slabAt(top)), plateMat(0.6)));
   plate.add(
     new Mesh(
       gridSurface(
@@ -275,9 +301,26 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
         SLAB2.ny,
         slabAt((k) => (top(k) === null ? null : top(k)! + SLAB2.thicknessKm[k]!)),
       ),
-      plateMat(0.18),
+      plateMat(0.32),
     ),
   );
+  // The slab's cut faces on the block's north and south sides, so it reads as one thick plate
+  // rather than two sheets.
+  for (const j of [0, SLAB2.ny - 1]) {
+    const pos: number[] = [];
+    for (let i = 0; i < SLAB2.nx - 1; i++) {
+      const [k0, k1] = [j * SLAB2.nx + i, j * SLAB2.nx + i + 1];
+      if (top(k0) === null || top(k1) === null) continue;
+      const at = (i2: number, d: number) => [x(SLAB2.lon0 + i2 * SLAB2.step), -d, z(SLAB2.lat0 + j * SLAB2.step)];
+      const [a, b] = [at(i, top(k0)!), at(i + 1, top(k1)!)];
+      const [c, d] = [at(i, top(k0)! + SLAB2.thicknessKm[k0]!), at(i + 1, top(k1)! + SLAB2.thicknessKm[k1]!)];
+      pos.push(...a, ...c, ...b, ...b, ...c, ...d);
+    }
+    const g = new BufferGeometry();
+    g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
+    g.computeVertexNormals();
+    plate.add(new Mesh(g, plateMat(0.45)));
+  }
   vertical.add(plate);
   const uncertainty = new Group();
   for (const sign of [-1, 1]) {
@@ -288,7 +331,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
           SLAB2.ny,
           slabAt((k) => (top(k) === null ? null : Math.max(surfaceKm(k), top(k)! + sign * SLAB2.uncertaintyKm[k]!))),
         ),
-        plateMat(0.08),
+        plateMat(0.1),
       ),
     );
   }
@@ -319,7 +362,10 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     tex.flipY = false;
     tex.needsUpdate = true;
     rupture.add(
-      new Mesh(g, new MeshBasicMaterial({ map: tex, transparent: true, side: DoubleSide, depthWrite: false })),
+      Object.assign(
+        new Mesh(g, new MeshBasicMaterial({ map: tex, transparent: true, side: DoubleSide, depthWrite: false })),
+        { renderOrder: 1 },
+      ),
     );
     const edge = new BufferGeometry().setFromPoints(
       [ts, te, be, bs, ts].map(([lon, lat, d]) => new Vector3(x(lon), -d, z(lat))),
@@ -338,7 +384,11 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   const snapped = commonDepths(data.sources.shallow, 3).filter((d) => d.count >= 20);
   const snappedSet = new Set(snapped.map((d) => d.depthKm));
   const sphere = new SphereGeometry(1, 14, 10);
-  const dots = new InstancedMesh(sphere, new MeshLambertMaterial(), events.length);
+  // Drawn after the plate and through it ("x-ray"): the plate is context, the events are the data,
+  // and a solid plate would otherwise hide the deep group. Their place against the plate still
+  // reads from the side, by position. The ground (opaque, depth-writing) still hides them.
+  const dots = new InstancedMesh(sphere, new MeshLambertMaterial({ transparent: true, opacity: 1 }), events.length);
+  dots.renderOrder = 2;
   const colourOf = (e: Ev, highlightSnapped: boolean) =>
     highlightSnapped && e.source === "shallow" && snappedSet.has(Math.round(e.depthKm * 10) / 10)
       ? pal.foreground
@@ -375,21 +425,28 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     l.position.set(EAST + 6, -d, SOUTH);
     ticks.add(l);
   }
-  const pins: { town: (typeof TOWNS)[number]; line: LineSegments; tag: CSS2DObject }[] = [];
+  // A map pin whose tip is the town: the element has no size of its own, so CSS2DRenderer's
+  // centring puts its origin on the point, and the pin and its name hang above it.
+  const pins: { town: (typeof TOWNS)[number]; tag: CSS2DObject }[] = [];
   for (const t of TOWNS) {
     if (!["pereira", "chaparral", "istmina", "buenaventura"].includes(t.id)) continue;
     const home = t.kind === "home";
-    const line = new LineSegments(
-      new BufferGeometry().setFromPoints([new Vector3(0, 0, 0), new Vector3(0, 1, 0)]),
-      new LineBasicMaterial({ color: home ? pal.place : pal.foreground }),
-    );
-    const tag = label(t.name, home ? `${LABEL} text-place` : LABEL);
-    labelGroup.add(line, tag);
-    pins.push({ town: t, line, tag });
+    const el = document.createElement("div");
+    el.className = "pointer-events-none relative size-0";
+    el.innerHTML = `<svg viewBox="0 0 24 32" aria-hidden="true" class="absolute -top-8 -left-3 h-8 w-6 drop-shadow ${
+      home ? "text-place" : "text-foreground"
+    }"><path fill="currentColor" d="M12 0C5.4 0 0 5.2 0 11.6 0 20.3 12 32 12 32s12-11.7 12-20.4C24 5.2 18.6 0 12 0z"/><circle cx="12" cy="11.5" r="4.6" class="fill-background"/></svg>`;
+    const name = document.createElement("span");
+    name.className = `absolute -top-14 left-0 -translate-x-1/2 whitespace-nowrap ${LABEL} ${home ? "text-place" : ""}`;
+    name.textContent = t.name;
+    el.append(name);
+    const tag = new CSS2DObject(el);
+    labelGroup.add(tag);
+    pins.push({ town: t, tag });
   }
   const trench = label("fosa del Pacífico", LABEL_MUTED);
   labelGroup.add(trench);
-  const plateTag = label("placa de Nazca · modelo USGS Slab2", LABEL_MUTED);
+  const plateTag = label("placa de Nazca · modelo USGS Slab2", LABEL);
   plate.add(plateTag);
   plateTag.position.set(x(-77.3), -40, z(3.6));
   const ruptureTag = label("ruptura del M7.4 · modelo del USGS", `${LABEL} text-chart-2`);
@@ -420,10 +477,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     dots.count = v.until === null ? events.length : events.filter((e) => e.t <= v.until!).length;
     for (const p of pins) {
       const h = groundAtTown(p.town.lat, p.town.lon);
-      // The pin stands 25 km tall on screen, whatever the exaggeration, so it clears the relief.
-      p.line.position.set(x(p.town.lon), h, z(p.town.lat));
-      p.line.scale.y = 25 / ex;
-      p.tag.position.set(x(p.town.lon), h + 27 / ex, z(p.town.lat));
+      p.tag.position.set(x(p.town.lon), h, z(p.town.lat));
       for (const el of [p.tag.element]) el.style.display = v.layers.labels ? "" : "none";
     }
     trench.position.set(x(-78.05), 8 / ex, z(4.2));
@@ -527,7 +581,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     // what only makes sense from the side (depth ticks, the underground labels, the uncertainty) goes.
     const down = -new Vector3().subVectors(controls.target, camera.position).normalize().y;
     const fromAbove = Math.min(1, Math.max(0, (down - 0.6) / 0.3));
-    groundMat.opacity = 1 - 0.65 * fromAbove;
+    groundMat.opacity = 1 - 0.45 * fromAbove;
     groundMat.depthWrite = fromAbove === 0;
     ticks.visible = fromAbove < 0.5;
     plate.visible = view.layers.plate && fromAbove < 0.5;

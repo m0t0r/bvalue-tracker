@@ -90,6 +90,9 @@ function Block({
       <span className="absolute bottom-1 left-1 z-10 rounded bg-background/80 px-1 text-2xs text-muted-foreground">
         {view.exaggeration === 1 ? "Sin exagerar: escala real" : `Exageración vertical ×${view.exaggeration}`}
       </span>
+      <span className="absolute right-1 bottom-1 z-10 rounded bg-background/80 px-1 text-2xs text-muted-foreground">
+        Mapa: © OpenStreetMap · OpenFreeMap · © Mapterhorn
+      </span>
       <span className="absolute top-1 right-1 z-10 rounded bg-background/80 px-1 font-mono text-2xs text-muted-foreground">
         {fps} fps
       </span>
