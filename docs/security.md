@@ -63,9 +63,14 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
 - Static assets bypass the Worker (`run_worker_first: ["/api/*"]`), so page headers come
   from `public/_headers`, not from Hono.
   The CSP there is narrow and was checked against the running page: MapLibre needs
-  `blob:` for its worker, the shadcn chart needs `style-src 'unsafe-inline'`, and the
-  basemap needs `tiles.openfreemap.org`. Re-check the map and the chart axis labels if
-  you touch it.
+  `blob:` for its worker, the shadcn chart needs `style-src 'unsafe-inline'`, the
+  basemap needs `tiles.openfreemap.org`, and the map's relief shading needs
+  `tiles.mapterhorn.com` in `connect-src` only: MapLibre fetches elevation tiles and decodes
+  them with `createImageBitmap` (or, where that is missing, through a `blob:` URL, which
+  `img-src` already allows), never from the host through an `<img>`.
+  Re-check the map and the chart axis labels if you touch it. `test/headers.test.ts` fails
+  if `event-map.tsx` names a tile host the CSP does not allow: `pnpm dev` ignores
+  `_headers`, so a missing host would only show in production, as a map without that layer.
 - **The response headers are the two files below, and nothing else sets them**
   (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
 
@@ -94,8 +99,8 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   `includeSubDomains`; the `preload` token is there for the grader's sake and is inert —
   `workers.dev` is a public suffix, so this name cannot be submitted to the browser
   preload list. `Cross-Origin-Embedder-Policy` is deliberately **absent**:
-  `tiles.openfreemap.org` sends no `Cross-Origin-Resource-Policy`, so `require-corp`
-  would blank the map.
+  neither `tiles.openfreemap.org` nor `tiles.mapterhorn.com` sends
+  `Cross-Origin-Resource-Policy`, so `require-corp` would blank the map.
   This is what takes securityheaders.com from B to A+; it was B because HSTS and
   `Permissions-Policy` were missing (2026-09-19).
   `_headers` does **not** apply under `pnpm dev` — Vite serves the assets itself there,

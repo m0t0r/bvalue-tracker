@@ -26,6 +26,21 @@ describe("public/_headers", () => {
     expect(value("Cross-Origin-Resource-Policy")).toBe("same-origin");
   });
 
+  it("lets the map reach every tile host it names", () => {
+    // A host missing here fails silently in production only: `pnpm dev` does not apply
+    // _headers, and the map just draws without that layer.
+    // Every URL the map fetches from; an attribution's `href` is a link, not a fetch.
+    const map = readFileSync(new URL("../src/components/event-map.tsx", import.meta.url), "utf8");
+    const hosts = new Set([...map.matchAll(/(?<!href=")https:\/\/([a-z0-9.-]+)/g)].map((m) => m[1]!));
+    expect([...hosts].sort()).toEqual(["tiles.mapterhorn.com", "tiles.openfreemap.org"]);
+    // MapLibre fetches its style, tiles and sprites, so connect-src is the directive that must allow them.
+    const connect = value("Content-Security-Policy")
+      .split(";")
+      .map((d) => d.trim().split(/\s+/))
+      .find(([name]) => name === "connect-src");
+    for (const host of hosts) expect(connect, `${host} in connect-src`).toContain(`https://${host}`);
+  });
+
   it("promises HSTS for at least a year", () => {
     const hsts = value("Strict-Transport-Security");
     expect(Number(/max-age=(\d+)/.exec(hsts)?.[1])).toBeGreaterThanOrEqual(31_536_000);
