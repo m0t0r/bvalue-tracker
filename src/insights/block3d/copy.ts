@@ -31,7 +31,8 @@ const es = {
   lede: (width: string, depth: string) =>
     `Imagina que cortamos un bloque de tierra de ${width} de ancho y ${depth} de profundidad, desde el océano Pacífico hasta más allá de Pereira. Dentro, cada sismo está donde ocurrió, a su profundidad real, junto a la placa que se hunde debajo de nosotros.`,
   explore: "Explorar en 3D",
-  hint: "Arrastra para girar · pellizca o usa la rueda para acercar",
+  /** One per input: a phone has no wheel, a mouse cannot pinch. */
+  hint: { touch: "Arrastra para girar · pellizca para acercar", pointer: "Arrastra para girar · rueda para acercar" },
   close: "Cerrar",
   dialog: "El bloque en 3D",
   canvas:
@@ -56,8 +57,11 @@ const es = {
     chaparral: ["Chaparral", "El enjambre de Chaparral ocurre cerca de la superficie, muy por encima de la placa."],
   } satisfies Record<Preset, [string, string]>,
   freeView: "Estás girando el bloque a tu manera. Para volver a una vista, elígela arriba.",
-  more: "Capas, escala y tiempo",
+  panel: "Leyenda y ajustes",
+  tabs: { key: "Leyenda", settings: "Ajustes" },
   exaggeration: "Exageración vertical",
+  exaggerationHelp: "Estira la altura para separar mejor las profundidades. Con ×1, el bloque está a escala real.",
+  layersTitle: "Capas",
   exaggerationOption: (n: number) => (n === 1 ? "×1 (real)" : `×${n}`),
   exaggerationTag: (n: number) => (n === 1 ? "A escala real" : `Exageración vertical ×${n}`),
   layers: {
@@ -66,10 +70,13 @@ const es = {
     uncertainty: "Margen de error de la placa",
     rupture: "Donde se rompió",
     events: "Sismos",
-    labels: "Nombres",
+    labels: "Nombres de lugares",
     snapped: "Resaltar profundidades fijas",
   },
-  replay: "Reproducir las semanas",
+  timeTitle: "Tiempo",
+  timeHelp: (seconds: number) =>
+    `Los sismos aparecen en el orden en que ocurrieron, en unos ${seconds} segundos. También puedes mover la fecha a mano.`,
+  replay: "Reproducir",
   stop: "Detener",
   until: (date: string) => `hasta el ${date}`,
   date: "Fecha",
@@ -138,7 +145,7 @@ const en: Copy = {
   lede: (width, depth) =>
     `Picture a block of earth cut out, ${width} wide and ${depth} deep, from the Pacific Ocean to beyond Pereira. Inside it, each earthquake sits where it happened, at its true depth, beside the plate sinking beneath us.`,
   explore: "Explore in 3D",
-  hint: "Drag to turn · pinch or scroll to zoom",
+  hint: { touch: "Drag to turn · pinch to zoom", pointer: "Drag to turn · scroll to zoom" },
   close: "Close",
   dialog: "The block in 3D",
   canvas:
@@ -162,8 +169,11 @@ const en: Copy = {
     chaparral: ["Chaparral", "The Chaparral swarm happens near the surface, far above the plate."],
   },
   freeView: "You are turning the block your own way. To go back to a view, pick it above.",
-  more: "Layers, scale and time",
+  panel: "Key and settings",
+  tabs: { key: "Key", settings: "Settings" },
   exaggeration: "Vertical exaggeration",
+  exaggerationHelp: "Stretches the height so the depths separate better. At ×1 the block is true to scale.",
+  layersTitle: "Layers",
   exaggerationOption: (n) => (n === 1 ? "×1 (true)" : `×${n}`),
   exaggerationTag: (n) => (n === 1 ? "True to scale" : `Vertical exaggeration ×${n}`),
   layers: {
@@ -172,10 +182,13 @@ const en: Copy = {
     uncertainty: "Plate's margin of error",
     rupture: "Where it broke",
     events: "Earthquakes",
-    labels: "Names",
+    labels: "Place names",
     snapped: "Highlight fixed depths",
   },
-  replay: "Replay the weeks",
+  timeTitle: "Time",
+  timeHelp: (seconds) =>
+    `The earthquakes appear in the order they happened, over about ${seconds} seconds. You can also move the date by hand.`,
+  replay: "Replay",
   stop: "Stop",
   until: (date) => `up to ${date}`,
   date: "Date",

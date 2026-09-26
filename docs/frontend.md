@@ -363,6 +363,24 @@ full-screen viewer with five views to jump to.
   it and returns focus to "Explorar en 3D", and the page behind does not scroll. Reduced motion stops
   the preview's rotation and makes the views jump instead of glide. Without WebGL 2 the tab says so
   and points to the story's cuts, which remain the text alternative.
+- **The viewer's explanation and settings are one panel with two tabs, "Leyenda" and "Ajustes"**
+  (`Panel`, 2026-09-26). It replaced a hand-rolled `<details>` ("Capas, escala y tiempo") that, open
+  on a phone, shrank the block to a third of the screen and piled the layers, the scale, the replay
+  and the whole key into one unlabelled 45svh scroll. From 1024 px (`useWide`) the panel is a
+  24rem column beside the block. Below that, two buttons under the caption open it as a shadcn `Sheet`
+  from the bottom (4/5 of the screen), on the tab pressed, and the block keeps its full height.
+  - **The sheet is a real modal, on purpose.** An always-open peek sheet on shadcn's `Drawer` was
+    built first and failed verification: vaul 1.1.2 never passes `modal={false}` to Radix, so the
+    "non-modal" sheet `aria-hid` the viewer's header, Close button, views and block from screen
+    readers and trapped keyboard focus inside itself. It also cost ~17 kB gzipped. A drag sheet of our
+    own was declined: its gestures could not be checked without a physical touch device.
+  - While the sheet is open the viewer's own key handler stands aside (`sheetOpen`), and it ignores an
+    Escape Radix has already handled (`defaultPrevented`): otherwise one Escape closed both the sheet
+    and the viewer. Escape closes one layer at a time, and focus goes back to the button that opened
+    it.
+- The explanation comes first: the reader is not a specialist. Layers are `Switch`es named for their on
+  state; the views and the exaggeration are `ToggleGroup`s. The hint names the reader's input (a phone
+  pinches, a mouse scrolls). The views row fades at its edge on a phone, where it is cut mid-word.
 - **Checked at 390 px and 1440 px, both themes, both languages** (2026-09-25): the side-length label
   ends at the block's edge (a centred one ran off a phone's screen), and the exaggeration note sits top
   left, clear of the credit.
@@ -710,6 +728,8 @@ a pointer to this section. What they ask, and how this page answers them:
     `inline` is a link-button inside running text, with no box of its own; `inline-touch` is
     `inline` growing like `sm-touch`. Variant `link-muted` is the "Detalle técnico" trigger.
   - `Table` takes `size="sm"`: 4 px cell sides, for the events table.
+  - `Toggle`/`ToggleGroup` size `sm-touch` grows like `Button`'s. `ToggleGroup`'s gap is a class per
+    `spacing` (0–2), not shadcn's inline `--gap`, which `no-inline-styles` rejects.
   - `TechnicalDetail` takes `size` rather than a `className`; `Deferred` takes `height="map"`
     rather than a class. A class string built at runtime cannot be checked.
 - **Containers may be spaced by the page.** One `no-restyle` contract lets `Alert`,
