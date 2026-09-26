@@ -7,6 +7,9 @@ description: Run the page locally with data and drive it in agent-browser, witho
 
 Full background: "Checking the page headlessly" in `docs/development.md`.
 
+Load the project `agent-browser` skill (`.claude/skills/agent-browser`) before driving the browser;
+it is the guide for every `agent-browser` command below.
+
 1. Data: copy a populated `.wrangler/` from another checkout into this one (and delete it when
    done). Cron Triggers do not fire under `pnpm dev`; `POST /api/refresh` is the only path to SGC.
 2. `pnpm dev --port <free port>` in the background; wait until `curl localhost:<port>/insights` answers.
@@ -79,5 +82,29 @@ surface the change opens:
 The 3D legend sheet bug (2026-09-26: sheet taller than the screen, no scroll, close button
 off-screen) is the kind of issue this pass exists to catch before handover.
 
-Put each of these three in the report, each with its own evidence (trace numbers, component
+### 4. Error handling (every page the change touches)
+
+Drive each case, screenshot it, and note whether the page says something useful in Spanish and
+whether the reader can recover without a reload (retry, back online, next refetch).
+
+| Case | How |
+|---|---|
+| Request fails on the network | `network route '**/api/<route>*' --abort` |
+| Server answers 5xx or 429 | `test/browser/fault.js`: `{ match: "/api/<route>", status: 503 }` |
+| Slow answer: a loading state, no layout shift | `fault.js` `{ match, delay: 5000 }` + DevTools MCP `emulate` (Slow 4G, CPU 4×) |
+| Body that is not the expected JSON | `fault.js` `{ match, status: 200, body: "<html>" }` |
+| Offline, then back online | `agent-browser offline on` / `off` |
+| A failed last run, an unfinished back-fill | `network route '**/api/status*' --body <json>` (`docs/development.md`) |
+
+`fault.js` is an init script, so start the session with it before the first `open`:
+`agent-browser --session v --init-script test/browser/fault.js ...`; its header says how to set
+rules (`localStorage.fault`, then `reload`). Keep the `/api/refresh` stub on throughout.
+
+### Before/after screenshots (UI changes)
+
+Take each "after" screenshot again on `main` (a worktree at `origin/main`, same viewport, same
+steps, same theme and language) so the pair matches. Keep both in the scratchpad; the PR gets them
+through the `before-and-after` skill (see `CLAUDE.md`).
+
+Put each of these checks in the report, each with its own evidence (trace numbers, component
 names, screenshots), even when the result is "held".
