@@ -18,7 +18,9 @@ import type { Compared } from "../history";
 import { fmtKm, fmtMag, fmtTimes, roundSig } from "../shared";
 import { shakingParts } from "../durations";
 import { FILL, STROKE } from "../tones";
+import { flowRow } from "./layout";
 import { Layer, SceneTitle, radius, star } from "./marks";
+import { textWidth } from "./measure";
 import type { Ev, StoryModel } from "./model";
 import { Rich, fill } from "./rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
@@ -223,7 +225,7 @@ export function Graphic({
               r={radius(e.mag, k)}
               data-on={shown(e) || undefined}
               data-dim={scene === "unknown" || undefined}
-              className={`${FILL[e.source]} translate-x-(--x) translate-y-(--y) opacity-0 transition delay-(--d) duration-1000 ease-(--ease-move) data-on:opacity-60 data-on:data-dim:opacity-25 motion-reduce:transition-none`}
+              className={`${FILL[e.source]} translate-x-(--x) translate-y-(--y) opacity-0 transition-move delay-(--d) duration-1000 ease-(--ease-move) data-on:opacity-60 data-on:data-dim:opacity-25 motion-reduce:transition-none`}
               style={{ "--x": `${x}px`, "--y": `${y}px`, "--d": `${Math.min(400, e.depthKm * 3)}ms` } as CSSProperties}
             />
           );
@@ -232,7 +234,7 @@ export function Graphic({
           <path
             d={star(small ? 9 : 12)}
             data-on={onMap || onSec || undefined}
-            className="translate-x-(--x) translate-y-(--y) fill-chart-2 stroke-background opacity-0 transition delay-300 duration-1000 ease-(--ease-move) data-on:opacity-100 motion-reduce:transition-none"
+            className="translate-x-(--x) translate-y-(--y) fill-chart-2 stroke-background opacity-0 transition-move delay-300 duration-1000 ease-(--ease-move) data-on:opacity-100 motion-reduce:transition-none"
             strokeWidth={1.5}
             style={{ "--x": `${pos(main)[0]}px`, "--y": `${pos(main)[1]}px` } as CSSProperties}
           />
@@ -240,7 +242,16 @@ export function Graphic({
       </g>
 
       <Layer on={scene === "where"}>
-        <WhereOverlay data={data} model={model} proj={map.proj} small={small} lang={lang} top={map.top} width={width} />
+        <WhereOverlay
+          data={data}
+          model={model}
+          proj={map.proj}
+          small={small}
+          lang={lang}
+          top={map.top}
+          width={width}
+          height={height}
+        />
       </Layer>
       <Layer on={scene === "unknown"}>
         <UnknownOverlay model={model} proj={map.proj} small={small} />
@@ -257,6 +268,7 @@ export function Graphic({
         </SceneTitle>
         <GroupLegend
           small={small}
+          width={width}
           lang={lang}
           sources={onSec ? ["shallow", "deep"] : onSecT ? ["tolima"] : SOURCES}
           mainLabel={main && !onSecT ? `M${main.mag.toFixed(1)}` : null}
@@ -336,11 +348,13 @@ function OceanLabel({
 
 function GroupLegend({
   small,
+  width,
   lang,
   sources,
   mainLabel,
 }: {
   small: boolean;
+  width: number;
   lang: Lang;
   sources: readonly Source[];
   mainLabel: string | null;
@@ -350,17 +364,24 @@ function GroupLegend({
     ...sources.map((s) => ({ key: s, label: l[s], source: s })),
     ...(mainLabel ? [{ key: "main", label: mainLabel }] : []),
   ];
-  const fs = small ? 10 : 11.5;
-  let x = 0;
-  const laid = items.map((it) => {
-    const at = x;
-    x += 14 + it.label.length * fs * 0.55 + (small ? 8 : 14);
-    return { ...it, at };
-  });
+  const x0 = small ? 4 : 8;
+  // Spaced by the labels' measured widths, a pixel smaller at a time (to 9 px) until one row fits:
+  // at 320 px the four entries ran 37 px past the edge at 10 px.
+  const place = (fs: number) => {
+    const at = flowRow(
+      items.map((it) => 12 + textWidth(it.label, fs)),
+      small ? 8 : 14,
+      width - 2 * x0,
+    );
+    return { fs, at, rows: Math.max(...at.map((a) => a.row)) + 1 };
+  };
+  let laid = place(small ? 10 : 11.5);
+  while (laid.rows > 1 && laid.fs > 9) laid = place(Math.max(9, laid.fs - 1));
+  const { fs } = laid;
   return (
-    <g transform={`translate(${small ? 4 : 8}, ${small ? 30 : 46})`}>
-      {laid.map((it) => (
-        <g key={it.key} transform={`translate(${it.at}, 0)`}>
+    <g transform={`translate(${x0}, ${small ? 30 : 46})`}>
+      {items.map((it, i) => (
+        <g key={it.key} transform={`translate(${laid.at[i]!.x}, ${laid.at[i]!.row * (fs + 4)})`}>
           {it.source ? (
             <circle cx={4} cy={-4} r={4} className={FILL[it.source]} />
           ) : (
@@ -442,6 +463,7 @@ function WhereOverlay({
   lang,
   top,
   width,
+  height,
 }: {
   data: Insights;
   model: StoryModel;
@@ -450,6 +472,7 @@ function WhereOverlay({
   lang: Lang;
   top: number;
   width: number;
+  height: number;
 }) {
   const c = storyCopy[lang];
   const P = proj([PEREIRA.lon, PEREIRA.lat]);
@@ -476,7 +499,8 @@ function WhereOverlay({
       />
       {TOWNS.filter((t) => t.kind === "city").map((t) => {
         const xy = proj([t.lon, t.lat]);
-        if (!xy || xy[0] < 4 || xy[1] < top || xy[0] > width - 60) return null;
+        // A town whose name would cross the drawing's edge is left off.
+        if (!xy || xy[0] < 4 || xy[1] < top || xy[0] > width - 60 || xy[1] > height - fs) return null;
         return <TownMark key={t.id} x={xy[0]} y={xy[1]} name={t.name} fontSize={fs - 1.5} />;
       })}
       {SOURCES.map((s, i) => {

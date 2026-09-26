@@ -10,15 +10,17 @@ import { line } from "d3-shape";
 import { useMemo, type CSSProperties } from "react";
 import { energyRatio } from "@bvalue/seismo";
 import type { Lang } from "@/lib/i18n";
-import { fmtDateTime, fmtDay } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtDay } from "@/lib/format";
 import { arrivalSeconds, ratesSince, strongDays, type Insights, type Source } from "../claims";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
 import { shakingParts } from "../durations";
-import { rankLayout, type Compared } from "../history";
+import type { Compared } from "../history";
 import { fmt, fmtKm, fmtMag, fmtTimes, medianHorizontalErrorKm } from "../shared";
 import { FILL, STROKE } from "../tones";
 import { useProgress } from "./hooks";
+import { fitRanks, flowRow, type RankItem } from "./layout";
+import { textWidth } from "./measure";
 import { SceneTitle, diamond, radius } from "./marks";
 import type { StoryModel } from "./model";
 import { Rich, fill } from "./rich";
@@ -38,15 +40,10 @@ interface SceneProps {
 // =============================================================================================
 // Energy: the largest event's square against past Colombian earthquakes, then the ×32 ladder.
 
-interface RankItem {
-  id: string;
-  mag: number;
-  main: boolean;
-  line1: string;
-  line2: string;
-}
-
-/** Squares true to energy, largest first, one per row, right-aligned, with two lines of text beside each. */
+/**
+ * Squares true to energy, largest first, one per row, right-aligned, with two lines of text beside
+ * each. `fitRanks` measures the labels and gives the squares what they leave.
+ */
 function Ranks({
   items,
   width,
@@ -60,25 +57,9 @@ function Ranks({
   height: number;
   small: boolean;
 }) {
-  const gap = small ? 10 : 16;
-  const left = small ? 12 : 24;
-  // Labels step down a pixel at a time until every row fits: a short phone holds nine rows only at 9 px.
-  const fit = (fs: number) => ({
-    fs,
-    ...rankLayout(
-      items.map((i) => i.mag),
-      {
-        height: height - top - (small ? 10 : 24),
-        maxSide: Math.max(20, width - left * 2 - gap - fs * 13),
-        minRow: 2 * fs + (small ? 5 : 8),
-        gap: small ? 3 : 8,
-      },
-    ),
-  });
-  let layout = fit(small ? 11 : 13);
-  while (!layout.rows.length && layout.fs > 9) layout = fit(layout.fs - 1);
-  const { fs, rows } = layout;
-  if (!rows.length) return null;
+  const fit = fitRanks(items, { width, height: height - top - (small ? 10 : 24), small });
+  if (!fit) return null;
+  const { fs, rows, short, left, gap } = fit;
   // The largest square, which is not always the first: a mainshock in the same tenth as a past event
   // is listed first and may be the smaller of the two.
   const S = Math.max(...rows.map((r) => r.side));
@@ -98,7 +79,14 @@ function Ranks({
               rx={Math.min(3, r.side / 6)}
               className={it.main ? "fill-chart-2" : "fill-muted-foreground"}
             />
-            <RowLabel x={tx} y={top + r.y} fs={fs} small={small} line1={it.line1} line2={it.line2} />
+            <RowLabel
+              x={tx}
+              y={top + r.y}
+              fs={fs}
+              small={small}
+              line1={short ? it.line1Short : it.line1}
+              line2={it.line2}
+            />
           </g>
         );
       })}
@@ -272,6 +260,7 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
     mag: main.mag,
     main: true,
     line1: fill(c.historyMain, { date: fmtDateTime(main.t, lang) }),
+    line1Short: fill(c.historyMain, { date: fmtDate(main.t, lang) }),
     line2: fmtMag(main.mag),
   };
   const item = (r: Compared): RankItem => ({
@@ -279,6 +268,7 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
     mag: r.quake.mag,
     main: false,
     line1: fill(c.historyRow, { name: r.quake.name[lang], date: fmtDateTime(r.quake.time, lang) }),
+    line1Short: fill(c.historyRow, { name: r.quake.name[lang], date: fmtDate(Date.parse(r.quake.time), lang) }),
     line2: fill(c.historyTimes(r.relation), { mag: fmtMag(r.quake.mag), x: fmtTimes(r.times) }),
   });
   const below = h ? h.smaller.map(item) : [];
@@ -304,7 +294,6 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
     lx += side + gap;
     return { side, at, m: 4 + i };
   });
-  const tint = ["opacity-40", "opacity-70", "opacity-100"];
 
   const bars = durationRows(model, lang);
 
@@ -353,7 +342,7 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
               width={r.side}
               height={r.side}
               rx={Math.min(3, r.side / 6)}
-              className={`fill-chart-1 ${tint[i]}`}
+              className="fill-muted-foreground"
             />
             <text
               x={r.at + r.side / 2}
@@ -705,7 +694,9 @@ export function TolimaScene({
 
   const t0 = tolima[0]?.t ?? 0;
   const tSpan = Math.max(1, (tolima.at(-1)?.t ?? 0) - t0);
-  const age = ["opacity-30", "opacity-50", "opacity-70", "opacity-95"];
+  // Age by colour, not by opacity: faded dots fell to 1.3:1 against the page. Each step keeps 3:1
+  // (index.css), greyer and fainter in light mode, greyer and dimmer in dark, towards the oldest.
+  const age = ["fill-chart-5-age-1", "fill-chart-5-age-2", "fill-chart-5-age-3", "fill-chart-5-age-4"];
   const moved = data.tolimaDrift.case === "moved";
   const trackPts =
     proj && moved
@@ -750,7 +741,7 @@ export function TolimaScene({
           />
         </text>
       )}
-      {strip(model.energy.tolima, "fill-chart-5", "fill-chart-5 opacity-50", y2)}
+      {strip(model.energy.tolima, "fill-chart-5", "fill-muted-foreground", y2)}
       <text x={padX} y={y2 + stripH + (small ? 14 : 18)} fontSize={fs - 1.5} className="fill-muted-foreground">
         {c.stripNote}
       </text>
@@ -761,9 +752,9 @@ export function TolimaScene({
         fontSize={fs - 0.5}
         fontWeight={500}
         className="fill-muted-foreground uppercase"
-        letterSpacing="0.06em"
+        letterSpacing="0.05em"
       >
-        {c.closeUp}
+        {small ? c.closeUpShort : c.closeUp}
       </text>
       {proj && (
         <g>
@@ -787,7 +778,7 @@ export function TolimaScene({
                   cx={xy[0]}
                   cy={xy[1]}
                   r={radius(e.mag, small ? 0.8 : 1)}
-                  className={`fill-chart-5 ${visible ? age[Math.min(3, Math.floor(frac * 4))] : "opacity-0"}`}
+                  className={visible ? age[Math.min(3, Math.floor(frac * 4))] : "fill-chart-5 opacity-0"}
                 />
               );
             })}
@@ -846,7 +837,10 @@ export function TolimaScene({
                 x={err * kmPx}
                 textAnchor="end"
                 fontSize={fs - 1.5}
-                className="fill-muted-foreground"
+                // The page's halo: on a phone the label crosses the swarm's dots.
+                className="fill-muted-foreground stroke-background"
+                paintOrder="stroke"
+                strokeWidth={3}
               >
                 <Rich text={c.errorCircle} parts={{ km: fmtKm(err, 1) }} />
               </text>
@@ -956,6 +950,14 @@ function Calendar({
   const gy = top + cell * 0.5;
   const mainDay = model.main ? days.find((d) => model.main!.t >= d.start && model.main!.t < d.start + DAY) : undefined;
   const order: Source[] = ["shallow", "deep", "tolima"];
+  // Spaced by the names' measured widths, wrapping if the grid is narrower than the three of them.
+  const legend = flowRow(
+    order.map((s) => 15 + textWidth(storyCopy[lang].legend[s], fs)),
+    small ? 12 : 20,
+    width - gx - (small ? 4 : 8),
+  );
+  const pad = small ? 4 : 7;
+  const labelFs = fs - 1;
 
   return (
     <g>
@@ -1015,13 +1017,18 @@ function Calendar({
             )}
             {cell >= 30 && (
               <text
-                x={small ? 4 : 7}
+                x={pad}
                 y={small ? 12 : 16}
-                fontSize={fs - 1}
+                fontSize={labelFs}
                 className={leader ? TILE_TEXT[leader][tintStep(n)] : "fill-muted-foreground"}
                 fontWeight={dom === 1 ? 700 : 400}
               >
-                {dom === 1 || i === 0 ? fmtDay(d.start, lang) : dom}
+                {/* The month goes with the first day and each 1st, when the tile has room for it; the
+                    range over the grid names both months either way. */}
+                {(dom === 1 || i === 0) &&
+                textWidth(fmtDay(d.start, lang), labelFs, { weight: dom === 1 ? 700 : 400 }) <= cell - 4 - 2 * pad
+                  ? fmtDay(d.start, lang)
+                  : dom}
               </text>
             )}
             {leader && cell >= 22 && (
@@ -1041,7 +1048,7 @@ function Calendar({
       })}
       <g transform={`translate(${gx}, ${gy + rows * cell + (small ? 16 : 22)})`}>
         {order.map((s, i) => (
-          <g key={s} transform={`translate(${i * (small ? 112 : 150)}, 0)`}>
+          <g key={s} transform={`translate(${legend[i]!.x}, ${legend[i]!.row * (fs + 6)})`}>
             <rect width={10} height={10} y={-9} rx={2} className={FILL[s]} />
             <text x={15} fontSize={fs} className="fill-muted-foreground">
               {storyCopy[lang].legend[s]}
@@ -1096,7 +1103,8 @@ function Waves({
   const maxS = Math.max(10, ...rows.map((r) => arrivalSeconds(r.km).s));
   const axisMax = Math.ceil((maxS + 4) / 10) * 10;
   const progress = useProgress(on, (axisMax * 1000) / WAVE_SPEEDUP);
-  const wl = small ? 6 : 170;
+  // On a phone the axis starts far enough in for its centred "0 s" to stay inside the drawing.
+  const wl = small ? 12 : 170;
   const wr = small ? 18 : 40;
   const tx = scaleLinear()
     .domain([0, axisMax])
@@ -1122,7 +1130,8 @@ function Waves({
           s={first.s}
           until={axisMax}
           fs={fs}
-          label={c.seismogram}
+          // On a phone the label ran into the scene's title; the aside beside the drawing says it is schematic.
+          label={small ? null : c.seismogram}
         />
       )}
       {ticks.map((s) => (
@@ -1196,15 +1205,18 @@ function Waves({
           </g>
         );
       })}
-      <text
-        x={width - wr}
-        y={wTop + rowH * rows.length + (small ? 18 : 24)}
-        textAnchor="end"
-        fontSize={fs - 1}
-        className="fill-muted-foreground"
-      >
-        {c.wavesNote}
-      </text>
+      {/* On a phone it fell off the drawing's bottom edge; the aside beside the drawing says both things. */}
+      {!small && (
+        <text
+          x={width - wr}
+          y={wTop + rowH * rows.length + 24}
+          textAnchor="end"
+          fontSize={fs - 1}
+          className="fill-muted-foreground"
+        >
+          {c.wavesNote}
+        </text>
+      )}
     </g>
   );
 }
@@ -1240,7 +1252,7 @@ function Seismogram({
   s: number;
   until: number;
   fs: number;
-  label: string;
+  label: string | null;
 }) {
   const d = useMemo(() => {
     const rnd = lcg(7);
@@ -1256,9 +1268,11 @@ function Seismogram({
   }, [tx, y, amp, p, s, until]);
   return (
     <g>
-      <text x={x0} y={y - amp - 16} fontSize={fs - 1} className="fill-muted-foreground">
-        {label}
-      </text>
+      {label && (
+        <text x={x0} y={y - amp - 16} fontSize={fs - 1} className="fill-muted-foreground">
+          {label}
+        </text>
+      )}
       <line x1={x0} x2={x1} y1={y} y2={y} className="stroke-border" />
       <path d={d} fill="none" className="stroke-foreground" strokeWidth={1} />
       {[

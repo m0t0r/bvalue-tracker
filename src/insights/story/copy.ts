@@ -44,9 +44,7 @@ const es = {
     chapter: "1 · Dónde estás",
     /** Keyed on whether the three straight-line distances are within a third of each other. */
     title: (similar: boolean): string =>
-      similar
-        ? "Tres lugares a distancias similares desde tu ubicación"
-        : "Tres lugares a distancias distintas desde tu ubicación",
+      similar ? "Tres lugares a distancias similares de Pereira" : "Tres lugares a distancias distintas de Pereira",
     p1: "Esta página sigue los eventos de tres lugares. Dos están en el Chocó, al occidente: un {shallow} cerca de Istmina y Sipí, y un {deep} alrededor del {main} del {date}. El tercero es el {tolima}, en el sur del Tolima.",
     p2: "Cada punto del mapa es un evento del catálogo del Servicio Geológico Colombiano (SGC): {n} desde el {date}.",
     p3: "Todo sismo se origina en un punto bajo tierra, el foco. Medida en línea recta hasta ese punto, la distancia desde Pereira es de unos {shallowKm} al grupo superficial, {deepKm} al grupo profundo y {tolimaKm} a Chaparral.",
@@ -84,7 +82,7 @@ const es = {
     larger2: "Que hayan ocurrido no dice cuándo habrá otro: la historia sirve para comparar, no para pronosticar.",
     durationTitle: "Cerca de Pereira, la parte fuerte duró unos {strong} segundos",
     duration1:
-      "Además de qué tan fuerte fue un sismo, importa cuánto dura la sacudida. Una estación del {sgc} a unos {km} del centro de Pereira registró el {magLabel}: el movimiento llegó unos {arrival} segundos después de que empezó el sismo, fue creciendo hasta su punto más fuerte, hacia los {peak} segundos, y se siguió registrando durante unos {recMin} minutos. La parte fuerte, en la que llegó el 90 % de la energía del movimiento, duró unos {strong} segundos.",
+      "Además de qué tan fuerte fue un sismo, importa cuánto dura la sacudida. Una estación del {sgc} a unos {km} del centro de Pereira registró el {magLabel}: el movimiento llegó unos {arrival} segundos después de que empezó el sismo, fue creciendo hasta su punto más fuerte, hacia los {peak} segundos, y se siguió registrando durante unos {recMin} minutos. La parte fuerte, en la que llegó el 90\u00a0% de la energía del movimiento, duró unos {strong} segundos.",
     durationNear:
       "Más cerca del epicentro, según el {sgc}, sus estaciones registraron entre {from} segundos y {toMin} minutos de movimiento significativo.",
     /** Keyed on Pereira's strongest second coming after the fault's model had stopped (`peakAfterRupture`). */
@@ -101,7 +99,7 @@ const es = {
     durationPast:
       "Para los sismos anteriores de la lista no se ha publicado una duración de la sacudida comparable, así que aquí no se comparan.",
     durationNote:
-      "La estación es {station}, de la red del SGC. Las cifras de Pereira salen de su registro de aceleración y las calcula esta página: la parte fuerte es el tiempo entre el 5 % y el 95 % de la energía del movimiento (la intensidad de Arias) en las dos componentes horizontales, y los tiempos se cuentan desde que empezó el sismo. Lo que sintió cada persona pudo durar más o menos. La cifra de {from} segundos a {toMin} minutos es la que da el SGC para sus estaciones más cercanas al epicentro. La de la falla viene del {usgs}: el tiempo hasta que salió el 95 % de su momento sísmico (la medida del tamaño de la que sale la magnitud), contado desde que empezó a romperse.",
+      "La estación es {station}, de la red del SGC. Las cifras de Pereira salen de su registro de aceleración y las calcula esta página: la parte fuerte es el tiempo entre el 5\u00a0% y el 95\u00a0% de la energía del movimiento (la intensidad de Arias) en las dos componentes horizontales, y los tiempos se cuentan desde que empezó el sismo. Lo que sintió cada persona pudo durar más o menos. La cifra de {from} segundos a {toMin} minutos es la que da el SGC para sus estaciones más cercanas al epicentro. La de la falla viene del {usgs}: el tiempo hasta que salió el 95 % de su momento sísmico (la medida del tamaño de la que sale la magnitud), contado desde que empezó a romperse.",
     durationUsgs: "modelo de falla finita del USGS",
     ladderTitle: "Un punto más de magnitud: unas 32 veces más energía",
     ladder1:
@@ -146,7 +144,7 @@ const es = {
   /** Where each source sits against the plate, from `plateSide` (docs/science.md). */
   plate: {
     title: "¿Dentro de la placa o encima?",
-    p1: "La franja gris es la placa de Nazca según Slab2, el modelo del USGS (Servicio Geológico de EE. UU.) de las placas que se hunden bajo los continentes: dónde está su borde superior y cuánto mide de grueso. La franja clara es el margen de error que el propio modelo declara para ese borde, de unos {unc} bajo estos eventos.",
+    p1: "La franja gris es la placa de Nazca según Slab2, el modelo del USGS (Servicio Geológico de EE. UU.) de las placas que se hunden bajo los continentes: dónde está su borde superior y cuánto mide de grueso. La franja más tenue es el margen de error que el propio modelo declara para ese borde, de unos {unc} bajo estos eventos.",
     p2: "Para decir que un grupo está encima de la placa o dentro de ella, la diferencia tiene que superar ese margen más el error de las propias profundidades.",
     /** Keyed on `plateSide`'s answer for the group or the event named by {who}. */
     side: (side: PlateSide): string =>
@@ -164,7 +162,7 @@ const es = {
     usgsLink: "USGS",
     /** Only with `usgs`: USGS's own words about where the event sits in the subduction zone. */
     usgsNorth:
-      "El USGS añade que este sismo ocurrió cerca del extremo norte del área en que se observan sismos de profundidad intermedia (de 70 a 300 km) en la zona de subducción de Sudamérica.",
+      "El USGS añade que este sismo ocurrió cerca del extremo norte del área en que se observan sismos de profundidad intermedia (de 70 a 300\u00a0km) en la zona de subducción de Sudamérica.",
     note: "El dibujo es un corte a {lat} de latitud, entre los dos grupos. Cada grupo se compara con la placa en su propio lugar, no con el dibujo.",
   },
 
@@ -316,7 +314,7 @@ const es = {
     trench: "fosa",
     plate: "placa de Nazca",
     plateModel: "modelo Slab2 del USGS",
-    plateBand: "franja clara: margen de error",
+    plateBand: "franja tenue: margen de error",
     /** The plate label's second line, which the arrow beside it illustrates; the rate is cited in the prose. */
     plateMotion: "se mete bajo Sudamérica, ~{rate} al año",
     /** The same on a phone, where the longer line would reach the shallow group. */
@@ -367,6 +365,8 @@ const es = {
     stripTolima: "Chaparral · el mayor ({mag}): {share}",
     stripNote: "cada franja es un evento, del mayor al menor",
     closeUp: "Chaparral de cerca · más intenso = más reciente",
+    /** The same on a phone, where the longer title ran off the drawing at 320 px. */
+    closeUpShort: "Chaparral de cerca · intenso = reciente",
     track: "centro cada 12 horas",
     errorCircle: "error de localización: unos {km}",
     calendarTitle: "Días con al menos un evento de {mag} o más",
@@ -404,8 +404,10 @@ const en: StoryCopy = {
   where: {
     chapter: "1 · Where you are",
     title: (similar) =>
-      similar ? "Three places, at a similar distance from you" : "Three places, at different distances from you",
-    p1: "The events this page follows come from three places. Two are in Chocó, to the west: a {shallow} near Istmina and Sipí, and a {deep} around the {main} of {date}. The third is a {tolima}, in southern Tolima.",
+      similar
+        ? "Three places, at a similar distance from Pereira"
+        : "Three places, at different distances from Pereira",
+    p1: "The events this page follows come from three places. Two are in Chocó, to the west: a {shallow} near Istmina and Sipí, and a {deep} around the {main} of {date}. The third is the {tolima}, in southern Tolima.",
     p2: "Each dot on the map is an event in the catalogue of the Servicio Geológico Colombiano (SGC): {n} since {date}.",
     p3: "An earthquake starts at a point underground. Counting that depth, in a straight line the shallow group is about {shallowKm} from Pereira, the deep group {deepKm} and Chaparral {tolimaKm}.",
     note: "Distances: each place's median, in a straight line from Pereira to the point underground where each event began.",
@@ -492,7 +494,7 @@ const en: StoryCopy = {
 
   plate: {
     title: "Inside the plate, or above it?",
-    p1: "The grey band is the Nazca plate according to Slab2, the USGS (United States Geological Survey) model of the plates that sink beneath the continents: where its top is and how thick it is. The light band is the margin of error the model itself states for that top, about {unc} under these events.",
+    p1: "The grey band is the Nazca plate according to Slab2, the USGS (United States Geological Survey) model of the plates that sink beneath the continents: where its top is and how thick it is. The fainter band is the margin of error the model itself states for that top, about {unc} under these events.",
     p2: "To say a group is above the plate or inside it, the difference has to exceed that margin plus the error in the depths themselves.",
     side: (side) =>
       side === "above"
@@ -506,7 +508,7 @@ const en: StoryCopy = {
     same: "The same holds for the {who}.",
     usgsLink: "USGS",
     usgsNorth:
-      "USGS adds that this earthquake occurred near the northernmost extent where intermediate-depth earthquakes (70 to 300 km deep) are observed in the South America subduction zone.",
+      "USGS adds that this earthquake occurred near the northernmost extent where intermediate-depth earthquakes (70 to 300\u00a0km deep) are observed in the South America subduction zone.",
     note: "The drawing is a cut at {lat} latitude, between the two groups. Each group is compared with the plate at its own place, not with the drawing.",
   },
 
@@ -636,7 +638,7 @@ const en: StoryCopy = {
     mapTitle: "Events in SGC's catalogue, {from} – {to}",
     mapAria:
       "Map of the events at the three places and Pereira. The lines give the straight-line distance from Pereira to each place.",
-    mapNote: "Straight-line distance to the point underground · circle: 120 km on the map",
+    mapNote: "Straight line to the point underground · circle: 120 km on the map",
     ocean: "Pacific Ocean",
     unknownAria: "Map of the three places with a question mark on each.",
     sectionTitle: "West–east cut · true to scale",
@@ -647,7 +649,7 @@ const en: StoryCopy = {
     trench: "trench",
     plate: "Nazca plate",
     plateModel: "USGS Slab2 model",
-    plateBand: "light band: margin of error",
+    plateBand: "faint band: margin of error",
     plateMotion: "slides under South America, ~{rate} a year",
     plateMotionShort: "slides under, ~{rate} a year",
     locatorCut: "cut",
@@ -688,13 +690,14 @@ const en: StoryCopy = {
     lines: { shallow: "shallow", deep: "deep" },
     strongRow: "◆ each event of M4 and up",
     lull: "lull",
-    tolimaTitle: "How much of the energy the largest event holds",
+    tolimaTitle: "How much energy the largest event released",
     tolimaAria:
       "Two strips with each event's share of the energy, largest first: in Chocó the largest event holds {choco}; at Chaparral, {tolima}. Below, a close-up map of Chaparral.",
     stripChoco: "Chocó · the largest ({mag}): {share}",
     stripTolima: "Chaparral · the largest ({mag}): {share}",
     stripNote: "each slice is one event, largest first",
     closeUp: "Chaparral close up · stronger = more recent",
+    closeUpShort: "Chaparral up close · stronger = newer",
     track: "centre of each half-day",
     errorCircle: "location error: about {km}",
     calendarTitle: "Days with at least one event of {mag} or more",
