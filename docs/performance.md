@@ -45,11 +45,47 @@ practices stayed at 100.
   get the new body right after a refresh (every API route is `no-cache` for that reason), so
   there would be no way to invalidate a cached copy everywhere. A cached response would also
   be up to 15 minutes stale by design.
-- **The LCP element is the header subtitle**, and it is drawn by React, so LCP can never beat
-  "bundle downloaded and executed" (~1.0 s even unthrottled). Putting a static header in
+- **On a phone the LCP element is the header subtitle**, and it is drawn by React, so LCP can never
+  beat "bundle downloaded and executed" (~1.0 s even unthrottled). Putting a static header in
   `index.html` would fix that, and was left undone on purpose: the CSP has no `'unsafe-inline'`
   for scripts, so the shell could not read the remembered language, and an English reader would
-  see the Spanish header until React mounted.
+  see the Spanish header until React mounted. A way round that without an inline script is issue
+  #69. **On a desktop it is "Valor b en el tiempo"'s description** (the card is on screen at load
+  and its two lines outweigh the one-line subtitle), which is why it is written into the card's
+  placeholder (below).
+- **The 2026-09-26 review** (Chrome DevTools MCP traces, then a Lighthouse A/B against a build of
+  `main`, same data, `--throttling-method=devtools`, three interleaved runs each; the numbers are
+  medians):
+  - **On a wide screen the page's API requests start from the HTML** (`core/page-data.ts`,
+    `preloadPageData` in `vite.config.ts`): `<link rel="preload" as="fetch" crossorigin>` with
+    `media="(min-width: 1024px)"`, the zone's own on each zone page and all five on `/insights`.
+    `src/lib/api.ts` builds its URLs from the same functions, since the browser hands a preload
+    over only to a request for the identical URL. Desktop LCP on `/` went 544 → 173 ms and on
+    `/choco` 512 → 183 ms. **Not on a phone:** preloaded there, the catalogue took the connection
+    the scripts needed, and first paint came 1.0 s later on both zones (5.1 → 6.1 s) and 2.2 s later
+    on `/insights` (4.2 → 6.4 s), for a story 1.3 s sooner. `fetchpriority="low"` did not help.
+    With the `media` query, a phone's first paint is where it was (5.10 s on both builds).
+  - **"Valor b en el tiempo" brings its description into the placeholder**
+    (`b-over-time-description.ts`, `Deferred`'s `description`), so the desktop's LCP text is drawn
+    with the data rather than with the 300 kB chart chunk.
+  - **The status bar is drawn with the page** (see [the page](frontend.md)): CLS on a phone 0.036 →
+    0 on `/`, 0.035 → 0 on `/choco`. The price is the two date stats arriving with the catalogue
+    instead of with `/api/status`: Speed Index on `/choco` on a phone 6.0 → 6.7 s against
+    `preview`'s uncompressed 333 kB catalogue; brotli makes that gap about a fifth in production.
+    Kept by the owner's choice: the shift moved the refresh button under the reader's finger.
+  - **`/insights` fetches the opened tab's chunk at startup and reads it with `use`, not `lazy`.**
+    `lazy` suspended once even on a chunk already downloaded, and React then held the tab back until
+    300 ms after its fallback (`FALLBACK_THROTTLE_MS`): the trace showed the main thread idle from
+    the data's arrival until a timer committed the story. **The tab is drawn from a
+    `useDeferredValue` copy of the data**, which matters twice. The render runs as a transition, so
+    it stays interruptible, as the `lazy` retry had been by accident (with `use` alone, TBT on the
+    questions tab rose 210 → 361 ms). And on a desktop, where the preloaded data is there before the
+    chunk, a transition that meets the unfinished chunk waits for it instead of committing the
+    fallback, so the 300 ms hold does not come back through `use`. LCP, story / questions / 3D: on a
+    phone 9.55 → 8.94 s, 9.71 → 9.07 s, 9.32 → 8.69 s (TBT 157 → 146, 212 → 210, 157 → 176 ms: the 3D
+    scene now builds inside the measured window); on a desktop 425 → 124 ms, 497 → 200 ms, 495 → 167 ms.
+  - What is left is issues #69 (static header), #70 (the story's render cost: 1,261 SVG paths in one
+    group), #71 (a validator for `/api/events`) and #72 (the map at first paint on desktop `/`).
 - **Nothing is drawn under the loading skeleton** (`settled` in `App.tsx`). The skeleton is a
   viewport tall so that nothing below it is on screen when the dashboard replaces it. A failed
   load replaces it with a short alert instead, and whatever sat underneath was pulled up into
@@ -103,6 +139,14 @@ practices stayed at 100.
   and compare medians. The load-error state is not reachable this way — Lighthouse ends the trace
   before the retries do — so check it in `agent-browser` with `network route '**/api/*' --abort`
   and a buffered `layout-shift` `PerformanceObserver` read after ~10 s.
+  **A change to what loads when needs `--throttling-method=devtools` and an A/B.** The default
+  (simulated) mode replays a fast load on a model network and charges every request that started
+  before a paint to that paint, whatever its priority; it scored the preloads above as costing a
+  phone 0.8 s of first paint and could not tell `fetchpriority` apart, and it reads a larger
+  download started after the paint (the map on desktop `/`) as a slower LCP. Devtools throttling
+  really slows the connection. Build `main` in a second worktree with the same `.wrangler/` copy,
+  serve it on another port, and alternate the two builds run by run. Its observed LCP and the
+  trace's own timings (`audits.metrics…observedLargestContentfulPaint`) say what a browser did.
 - **The map's relief shading is its heaviest download, and none of it is on the first load**
   (2026-09-24, `pnpm preview`). One map load fetches, for relief against basemap (vector tiles,
   style, sprites, glyphs): Chocó at 1280 px, 2 tiles, 391 kB against 189 kB; Chaparral, 1 tile,
@@ -110,7 +154,12 @@ practices stayed at 100.
   4 (778 kB); see [the page](frontend.md#interface-conventions) for the 1024 declaration. Mapterhorn
   sends `max-age=604800`, so a repeat visit within the week fetches none. Opened without scrolling
   at Lighthouse's two viewports (412 × 823 and 1350 × 940), the map had not mounted after 10 s and
-  no tile of either host had been requested, so the relief cannot move a Lighthouse score on `/`.
+  no tile of either host had been requested, so the relief could not move a Lighthouse score on `/`.
+  **That was Chocó's page, and no longer holds for `/` on a desktop** (2026-09-26): Tolima's page
+  has no groups card, so its map row is within `Deferred`'s 600 px at 1350 × 940, and MapLibre, the
+  tiles and the relief (~1.5 MB) load at first paint. It does not delay the paint in a browser, but
+  Lighthouse's default simulated mode counts it against LCP: desktop `/` scores 86 there, `/choco`
+  93. Whether to keep it is issue #72.
 - The console must stay empty. The basemap style names sprite images OpenFreeMap does not
   ship (`circle-11`), which MapLibre warns about twice per load, so `event-map.tsx` answers
   `styleimagemissing` with an empty pixel. Real map errors still reach `console.error`.

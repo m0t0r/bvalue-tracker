@@ -4,7 +4,8 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { HOME_ZONE, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
+import { INSIGHTS_LOAD, monitorLoad, preloadTags, swapPreloads } from "./core/page-data.ts";
+import { HOME_ZONE, ZONE_PATHS, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
 import { ZONE_IDS } from "./core/zones.ts";
 
 /**
@@ -27,6 +28,37 @@ function preloadLatinFont(): Plugin {
         // Straight after <meta charset>, which has to stay the first thing in the head.
         const tag = `<link rel="preload" href="/${file}" as="font" type="font/woff2" crossorigin>`;
         return html.replace(/(<meta charset=[^>]*>)/i, `$1\n    ${tag}`);
+      },
+    },
+  };
+}
+
+/**
+ * On a wide screen, start each page's API requests from the HTML, beside its scripts, instead of once
+ * the scripts have run (`core/page-data.ts`, which says why not on a phone). The monitor's figures and
+ * the insights page's drawings all wait on the data, and without this the data waited on the bundle.
+ * At the end of the head, after the
+ * stylesheet, the font and the scripts, which the first paint needs more. In dev the zone comes from
+ * the path; the build writes the home zone's page and `zonePages` swaps in each other zone's.
+ */
+function preloadPageData(): Plugin {
+  return {
+    name: "sgc-preload-page-data",
+    transformIndexHtml: {
+      order: "post",
+      handler(html, ctx) {
+        // A zone's or the insights page's URL when a dev middleware serves it; otherwise the file's
+        // path, which Vite gives in dev as an absolute one ("…/index.html").
+        const route = (ctx.originalUrl ?? ctx.path).split("?")[0]?.replace(/(.)\/+$/, "$1") ?? "/";
+        // Only the pages that make these requests: in dev any other HTML file (the 3D block's
+        // `bake-basemap.html`) would otherwise preload a catalogue it never reads.
+        const monitor = route.endsWith("/index.html") || Object.values(ZONE_PATHS).includes(route);
+        const paths = /^\/insights$|\/insights\.html$/.test(route)
+          ? INSIGHTS_LOAD
+          : monitor
+            ? monitorLoad(ctx.server ? zonePath(route) : HOME_ZONE)
+            : null;
+        return paths === null ? html : html.replace("</head>", `  ${preloadTags(paths)}\n  </head>`);
       },
     },
   };
@@ -81,7 +113,11 @@ function zonePages(): Plugin[] {
         if (index?.type !== "asset") throw new Error("sgc-zone-pages: no index.html in the client bundle");
         for (const zone of ZONE_IDS) {
           if (zone === HOME_ZONE) continue;
-          const source = withZoneMeta(String(index.source), zone);
+          const source = swapPreloads(
+            withZoneMeta(String(index.source), zone),
+            monitorLoad(HOME_ZONE),
+            monitorLoad(zone),
+          );
           this.emitFile({ type: "asset", fileName: zonePageFile(zone), source });
         }
       },
@@ -119,7 +155,7 @@ function insightsPage(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont(), zonePages(), insightsPage()],
+  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont(), preloadPageData(), zonePages(), insightsPage()],
   worker: { format: "es" },
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   environments: {

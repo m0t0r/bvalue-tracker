@@ -181,12 +181,24 @@ the pinned towns change:
   tooltip can be raised with `hover`. The map is a canvas: its popups cannot be reached
   by selector.
   **Give it data without touching SGC.** Copy a populated `.wrangler/` from another
-  checkout, then, in the copy only, set the newest successful `ingest_runs` row's
-  `finished_at` to now. That closes the Worker's refresh guard, so neither the page's
-  focus refresh nor a click on the refresh button reaches the government server. An empty
-  database is the dangerous one: the page back-fills on load, in a loop, with no wait
-  between requests. Check `/api/status` and confirm `backfill.done == backfill.total`
-  before opening a browser on it. Do not click the refresh button in a loop.
+  checkout, then, in the copy only, close the refresh guard and complete the back-fill:
+  - **The guard is two checks, both counted over the zone's `refreshMinIntervalS` (15 min).**
+    `refreshPlan` measures it from the newest run's `started_at`, the claim in `ingest()` from any
+    run's `finished_at`. Setting `finished_at` to now (the old advice here) holds for fifteen
+    minutes and then lets a focus refresh through to SGC. For a session, put both columns of each
+    zone's newest row a month ahead (`started_at` a second before `finished_at`). The status bar
+    then reads "Última consulta al SGC: dentro de N días", which is the copy saying so.
+  - **A copy goes stale by itself.** `backfill.total` counts sweep chunks from the zone's start
+    to *now* (`sweepChunks`; Chaparral's are one day), so a copy that was complete yesterday is
+    `done < total` today, and opening the page starts the back-fill loop against SGC. An empty
+    database is the extreme case: the page back-fills on load, in a loop, with no wait between
+    requests. In the copy, give every missing chunk a successful `sweep` row with no events
+    (`sweepChunks(<a month ahead>, zone)` lists the windows), future-dated like the row above.
+    The page is then missing the days the copy never had, which no layout or timing check cares
+    about.
+  Check `/api/status?zone=` for **every** zone and confirm `backfill.done == backfill.total`
+  before opening a browser on it, and again on another day. Do not click the refresh button in
+  a loop.
   **A state the database will not produce is stubbed at the network, not faked in D1.**
   `agent-browser network route '**/api/status*' --body <json>` puts the page in any state
   — a failed last run, `backfill.done < total` — without touching the Worker. Stub
@@ -194,6 +206,16 @@ the pinned towns change:
   back-fill makes `StatusBar`'s effect start the back-fill loop by itself, up to 40
   `POST /api/refresh` calls with no wait, and that is the one path that reaches SGC. This
   is how the back-fill and failure alerts were finally looked at (2026-09-20).
+  **Profiling: Chrome DevTools MCP and `agent-browser` on one browser** (2026-09-26). The MCP
+  server (`chrome-devtools-mcp`) gives performance traces with DevTools' own insights (LCP
+  breakdown, layout-shift culprits, request chains, forced reflows) that `agent-browser` does not.
+  Start one Chrome with `--remote-debugging-port=9222` and a throwaway `--user-data-dir`, register
+  the server with `--browserUrl http://127.0.0.1:9222`, and `agent-browser connect 9222`: both then
+  drive the same tabs. A newly registered MCP server is only loaded when the agent session starts.
+  The server writes trace files only inside its workspace roots. **`agent-browser network route`
+  covers only its own session's pages**, not tabs the MCP opens, so the D1 guard above is what
+  keeps those away from SGC. Trace against `pnpm build && pnpm preview`, not `pnpm dev`: dev
+  serves unbundled modules and says nothing about the shipped page.
   **`getComputedStyle` returns `oklch()` here, not `rgb()`**, so anything parsing it for
   channel numbers silently reads the lightness as a red channel and reports nonsense
   ratios. Rasterise instead: `ctx.fillStyle = <colour>; ctx.fillRect(0,0,1,1)` on a 1×1

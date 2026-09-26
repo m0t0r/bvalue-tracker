@@ -140,8 +140,11 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   and it links back.
 - **Three tabs, "La historia", "Preguntas" and "En 3D"**, in the query string (`?tab=questions`,
   `?tab=3d`; the story is the bare URL). Switching replaces the history entry rather than pushing
-  one: back leaves the page. Each tab is its own lazy chunk (`src/insights/story`,
-  `src/insights/questions`, `src/insights/block3d`), so the shell and the data arrive first.
+  one: back leaves the page. Each tab is its own chunk (`src/insights/story`,
+  `src/insights/questions`, `src/insights/block3d`). The tab the page opens on is fetched at startup,
+  beside the data, and read with `use`, not `lazy`: `lazy` suspends once even on a chunk that has
+  already arrived, and React then holds the tab back 300 ms (see [Performance](performance.md)).
+  A tab opened later still loads when it is opened.
 - **Live data, kept current like the monitor.** `useInsights` reads `/api/events` for both zones under
   `["events", zone]`, and computes every claim with `insights()` over them and a clock rounded to
   the minute. Status is polled every minute and on returning to the tab, and a zone's events are
@@ -568,7 +571,14 @@ colour, motion). Keep to them:
 - **A chart or the map arrives in its own card, already titled.** They are loaded on approach
   (`Deferred`, see [Performance](performance.md)), so on a slow connection the reader first sees
   the card with its heading and a skeleton the size of the drawing. Never a bare grey box, and
-  never a card that changes height when the drawing lands.
+  never a card that changes height when the drawing lands. "Valor b en el tiempo" also brings its
+  description (`b-over-time-description.ts`), since on a desktop it is on screen at load; the
+  CSV button arrives with the chart and moves one word of that description to the next line.
+- **The status bar appears with the page, not before it** (2026-09-26). Until both `/api/status` and
+  the catalogue have answered, it is one skeleton block with no stats. Its stats wrap by their own
+  width, so each value landing re-wrapped the row: on a phone "Sismo principal"'s hint took it from
+  two lines to three and pushed the refresh button down on every load (0.03 of CLS). A status
+  request that fails is not waited for through its retries.
 - Charts and the map redraw on every filter change, so they do not animate. The
   headline numbers do (`FlowNumber`, wrapping `@number-flow/react`): digits roll to
   the new value in 550 ms with `cubic-bezier(0.2, 0, 0, 1)` so the reader sees which

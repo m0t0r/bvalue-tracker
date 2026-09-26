@@ -1,3 +1,4 @@
+import { contextPath, eventsPath, statusPath } from "../../core/page-data";
 import type { ZoneId } from "../../core/zones";
 import type { ContextResponse, StatusResponse, StoredEvent } from "../../worker/api-types";
 
@@ -30,7 +31,9 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
   return failureCount < 3;
 }
 
-export const getEvents = (zone: ZoneId) => json<StoredEvent[]>(`/api/events?zone=${zone}`);
-export const getContext = (zone: ZoneId) => json<ContextResponse>(`/api/context?zone=${zone}`);
-export const getStatus = (zone: ZoneId) => json<StatusResponse>(`/api/status?zone=${zone}`);
+// The paths come from `core/page-data.ts`, which also writes the pages' preload tags: a preloaded
+// response is handed over only to a request for exactly the same URL.
+export const getEvents = (zone: ZoneId) => json<StoredEvent[]>(eventsPath(zone));
+export const getContext = (zone: ZoneId) => json<ContextResponse>(contextPath(zone));
+export const getStatus = (zone: ZoneId) => json<StatusResponse>(statusPath(zone));
 export const postRefresh = (zone: ZoneId) => json<StatusResponse>(`/api/refresh?zone=${zone}`, { method: "POST" });
