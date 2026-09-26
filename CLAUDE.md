@@ -20,7 +20,7 @@ and interface conventions. Most of it cannot be inferred from the code.
   `pnpm test`. Fix lint errors rather than silencing them; `docs/frontend.md` ("Design-system
   lint") says how the design-system rules are meant to be satisfied and lists the approved
   exceptions.
-- `agent-browser` (a CLI, already on PATH) is always available for looking at the
+- `agent-browser` (a CLI, already on PATH; load the `agent-browser` skill before using it) is always available for looking at the
   real page: UI and copy reviews, accessibility checks, screenshots, before/after
   comparisons. Use it rather than reasoning about the rendered page from source.
   "Checking the page headlessly" in `docs/development.md` says how to run the page with
@@ -30,6 +30,9 @@ and interface conventions. Most of it cannot be inferred from the code.
   first deploy of anything new.
 - The page is for a Spanish-speaking researcher: Spanish is the default UI language
   for this project only. Talk to the repo owner in English.
+- A PR that changes what the page looks like gets a before/after block from the `before-and-after`
+  skill when it is opened, without being asked. Capture the "before" on `main` at the same
+  viewport and state as the "after" (the `verify` skill does this).
 - `src/components/ui/*` is shadcn source with deliberate local modifications; do not
   overwrite it with the shadcn CLI without diffing.
 - Do not loop requests against SGC (`bdrsnc.sgc.gov.co`). It is a government server;
