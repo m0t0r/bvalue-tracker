@@ -339,3 +339,38 @@ forecast (plan Parts A and D). All three are on the insights page's questions ta
   MSW: one, none and several matches, the unchanged-URL skip, a row from older digest code, USGS
   down, a redirect, a malformed file, one zone failing before the next, a mainshock replaced, a zone
   with no mainshock, an unknown cron pattern).
+
+<a id="the-daily-sea-state-job"></a>
+## The daily sea-state job (from 2026-09-26)
+
+`worker/sea.ts` fetches Open-Meteo's marine forecast for one point in the 3D block's Pacific and stores
+it as one row in D1 (`sea_forecast`, `migrations/0008`) for `GET /api/sea` ([API](api.md)). The 3D
+block draws its swell from it ([the science](science.md#the-3d-tabs-rules-from-2026-09-25)).
+
+- **It rides on the daily USGS job's invocation**, after USGS (`PRODUCTS_CRON`, `7 11 * * *`), so it
+  adds no cron pattern and never shares an ingest tick's CPU. Either failing leaves the other to run;
+  then the first failure is rethrown, as the USGS job does. It never talks to SGC.
+- **Once a day, 72 hours ahead.** Météo-France's MFWAM (`models=meteofrance_wave`), which Open-Meteo
+  updates every 12 hours, for 4.3° N, 78.3° W (open sea: the model is poor at the coast), hourly
+  heights, directions and periods of the main swell, the second swell and the wind's waves. The page
+  draws the hour the reader's clock is in; three days of hours mean one missed run still leaves it
+  the current hour, and after that it draws its usual sea and states no figure. The owner asked for
+  sparing requests over precision ("balance"): one request a day serves every reader.
+- **Stored, not cached**: Cloudflare's Cache API does nothing on a `workers.dev` host, so a request-
+  time fetch would have been one per reader.
+- **Only that one URL is fetched** (`SEA_URL`), with a 20 s timeout, and a redirect is a failure.
+  `digestSea` reads only the named columns and throws on a missing or short column, hours out of
+  order, more than a week of hours (72 are asked for, and every one is stored and served), or no wave
+  in any hour; a failure keeps the stored
+  row. A train of no height or period (the wind's waves on a still day) is stored as none, and so is
+  one outside 0–30 m, 0–360° or 0–30 s (code review, 2026-09-26): one bad value dropped that hour's
+  train, not the day's forecast, which a throw would have lost day after day while the model kept it. Each row
+  carries `SEA_DIGEST_VERSION`, and one from older code is not served.
+- **Cost**: one subrequest a day and one row of ~11 kB. The answer is ~7 kB of JSON; parsing it is
+  well under a millisecond.
+- **Licence**: Open-Meteo's data is CC BY 4.0 and needs its link wherever it is shown: the key and
+  the block's credit line both carry it.
+- **Tests**: `worker/test/sea.test.ts` (the digest against the reply captured on 2026-09-26, and the
+  job and route end to end with Open-Meteo stubbed by MSW: a failure, a redirect, an unreadable reply,
+  a row from older code). `external.test.ts` answers Open-Meteo from the same capture, so its runs fail
+  only for USGS's reasons.

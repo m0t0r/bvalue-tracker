@@ -24,6 +24,29 @@ export interface RuptureFacts {
   shallower: boolean;
 }
 
+/** One wave train as the key states it: "0.6 m", the compass word it comes from, "13 s". */
+export interface TrainFacts {
+  height: string;
+  from: string;
+  period: string;
+}
+
+/** The sea-state hour the block draws, as the key states it; null trains are absent from the forecast. */
+export interface SeaFacts {
+  /** "17:00", Colombian time, and the day only when it is not today's ("27 sept"). */
+  time: string;
+  day: string | null;
+  swell: TrainFacts | null;
+  swell2: TrainFacts | null;
+  /** The wind's own waves' height, "0.2 m", or null when the forecast has none. */
+  wind: string | null;
+  /** How many times longer and taller the drawn waves are. */
+  longer: string;
+  taller: string;
+  /** "5 s": waves shorter than this are drawn longer still. */
+  short: string;
+}
+
 type Pair = [string, string];
 
 const es = {
@@ -32,7 +55,7 @@ const es = {
     `Imagina que cortamos un bloque de tierra de ${width} de ancho y ${depth} de profundidad, desde el océano Pacífico hasta más allá de Pereira. Dentro, cada evento está donde ocurrió, a su profundidad real, junto a la placa que se hunde debajo de nosotros.`,
   explore: "Explorar en 3D",
   /** The preview's turning, which the reader can stop (WCAG 2.2.2). */
-  spin: { pause: "Detener el giro", resume: "Reanudar el giro" },
+  spin: { pause: "Detener el movimiento", resume: "Reanudar el movimiento" },
   /** One per input: a phone has no wheel, a mouse cannot pinch. */
   hint: { touch: "Arrastra para girar · pellizca para acercar", pointer: "Arrastra para girar · rueda para acercar" },
   close: "Cerrar",
@@ -78,6 +101,7 @@ const es = {
   reliefOption: { raised: `Realzadas ×${RAISED_LAND}`, true: "A escala real" },
   layers: {
     ground: "Terreno",
+    sea: "Mar",
     plate: "Placa",
     uncertainty: "Margen de error de la placa",
     rupture: "Donde se rompió",
@@ -123,6 +147,28 @@ const es = {
     ],
     snapped: (list: string) =>
       `El catálogo pone a muchos eventos pequeños exactamente a la misma profundidad: ${list}. Por eso ahí se ven «capas», que no son reales.`,
+    sea: (f: SeaFacts | null): [string, string] => {
+      if (!f) {
+        return [
+          "El mar",
+          "Se mueve para que se lea como agua, con un oleaje de ejemplo: ahora no hay a mano una previsión del oleaje real. No tiene nada que ver con los sismos.",
+        ];
+      }
+      const train = (t: TrainFacts) => `de ${t.height} que llega del ${t.from}, una ola cada ${t.period}`;
+      const trains = [f.swell && `mar de fondo ${train(f.swell)}`, f.swell2 && `otro ${train(f.swell2)}`]
+        .filter(Boolean)
+        .join("; ");
+      const wind = f.wind ? `olas de viento de ${f.wind}` : "casi nada de olas de viento";
+      const when = f.day ? `el ${f.day} a las ${f.time}` : `hoy a las ${f.time}`;
+      return [
+        "El mar",
+        `Se mueve con el oleaje previsto para ${when} en mar abierto frente a Buenaventura: ${trains ? `${trains}, y ${wind}` : wind}. Es la previsión del modelo de oleaje de Météo-France, no una medición. Para que se vean, las olas se dibujan unas ${f.longer} veces más largas y ${f.taller} veces más altas que las reales; las de menos de unos ${f.short}, más largas aún, y las de viento, solo como textura, sin altura. De dónde vienen y cada cuánto llegan es lo que dice el modelo. No tienen nada que ver con los sismos.`,
+      ];
+    },
+    seaSource: "Datos de oleaje: Open-Meteo.com",
+    seaColour:
+      "El color del agua es el que ven los satélites (el mes típico de 2021 a 2025): azul en mar abierto y verde grisáceo cerca de la costa, donde los ríos traen sedimentos y hay más plancton.",
+    seaColourSource: "Color: ESA Ocean Colour CCI",
   },
   groups: {
     shallow: "grupo superficial (Istmina–Sipí)",
@@ -157,6 +203,9 @@ const es = {
     NW: "noroeste",
   },
   credit: "Mapa:",
+  creditSea: "Oleaje:",
+  /** The compass's letters: north, east, south, west. */
+  compassPoints: ["N", "E", "S", "O"] as readonly [string, string, string, string],
 };
 
 type Copy = typeof es;
@@ -166,7 +215,7 @@ const en: Copy = {
   lede: (width, depth) =>
     `Picture a block of earth cut out, ${width} wide and ${depth} deep, from the Pacific Ocean to beyond Pereira. Inside it, each event sits where it happened, at its true depth, beside the plate sinking beneath us.`,
   explore: "Explore in 3D",
-  spin: { pause: "Stop the turning", resume: "Resume the turning" },
+  spin: { pause: "Stop the motion", resume: "Resume the motion" },
   hint: { touch: "Drag to turn · pinch to zoom", pointer: "Drag to turn · scroll to zoom" },
   close: "Close",
   dialog: "The block in 3D",
@@ -210,6 +259,7 @@ const en: Copy = {
   reliefOption: { raised: `Raised ×${RAISED_LAND}`, true: "True to scale" },
   layers: {
     ground: "Ground",
+    sea: "Sea",
     plate: "Plate",
     uncertainty: "Plate's margin of error",
     rupture: "Where it broke",
@@ -255,6 +305,28 @@ const en: Copy = {
     ],
     snapped: (list) =>
       `The catalogue puts many small events at exactly the same depth: ${list}. That is why you see "layers" there, and they are not real.`,
+    sea: (f) => {
+      if (!f) {
+        return [
+          "The sea",
+          "It moves so that it reads as water, with an example swell: no forecast of the real sea is at hand right now. It has nothing to do with the earthquakes.",
+        ];
+      }
+      const train = (t: TrainFacts) => `of ${t.height} from the ${t.from}, one wave every ${t.period}`;
+      const trains = [f.swell && `a swell ${train(f.swell)}`, f.swell2 && `another ${train(f.swell2)}`]
+        .filter(Boolean)
+        .join("; ");
+      const wind = f.wind ? `wind waves of ${f.wind}` : "hardly any wind waves";
+      const when = f.day ? `on ${f.day} at ${f.time}` : `today at ${f.time}`;
+      return [
+        "The sea",
+        `It moves with the swell forecast for ${when} in the open sea off Buenaventura: ${trains ? `${trains}, and ${wind}` : wind}. It is Météo-France's wave model's forecast, not a measurement. So that they show, the waves are drawn about ${f.longer} times longer and ${f.taller} times taller than the real ones; those under about ${f.short}, longer still, and the wind's only as texture, with no height. Where they come from and how often they arrive is what the model says. They have nothing to do with the earthquakes.`,
+      ];
+    },
+    seaSource: "Wave data: Open-Meteo.com",
+    seaColour:
+      "The water's colour is what satellites see (the typical month of 2021 to 2025): blue in the open sea and grey-green near the coast, where the rivers bring sediment and there is more plankton.",
+    seaColourSource: "Colour: ESA Ocean Colour CCI",
   },
   groups: {
     shallow: "shallow group (Istmina–Sipí)",
@@ -288,6 +360,8 @@ const en: Copy = {
     NW: "north-west",
   },
   credit: "Map:",
+  creditSea: "Waves:",
+  compassPoints: ["N", "E", "S", "W"],
 };
 
 export const block3dCopy: Record<Lang, Copy> = { es, en };

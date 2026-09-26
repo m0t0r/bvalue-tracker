@@ -6,6 +6,7 @@ import type { SeismicEvent } from "../../core/types.ts";
 import type { ZoneId } from "../../core/zones.ts";
 import DETAIL from "../../test/fixtures/usgs-us6000tjl2-detail-2026-09-24.json?raw";
 import DYFI_10KM from "../../test/fixtures/usgs-us6000tjl2-dyfi-geo-10km-2026-09-24.json?raw";
+import MARINE from "../../test/fixtures/open-meteo-marine-2026-09-26.json?raw";
 import MATCH from "../../test/fixtures/usgs-us6000tjl2-match-2026-09-24.json?raw";
 import OAF_FORECAST from "../../test/fixtures/usgs-us6000tjl2-oaf-forecast-2026-09-24.json?raw";
 import PAGER_CITIES from "../../test/fixtures/usgs-us6000tjl2-pager-cities-2026-09-24.json?raw";
@@ -33,10 +34,15 @@ const FILES: Record<string, string> = {
   "forecast.json": OAF_FORECAST,
 };
 
-/** USGS as it answered on 2026-09-24. `match` stands in for the search's answer; returns every URL asked for. */
+/**
+ * USGS as it answered on 2026-09-24. `match` stands in for the search's answer; returns every URL asked for.
+ * The same daily run also asks Open-Meteo for the sea state (`worker/sea.ts`, tested in `sea.test.ts`);
+ * here it is answered from its captured reply, so a run fails only for USGS's reasons.
+ */
 function usgs({ match = () => HttpResponse.text(MATCH) }: { match?: () => Response } = {}): URL[] {
   const asked: URL[] = [];
   server.use(
+    http.get("https://marine-api.open-meteo.com/v1/marine", () => HttpResponse.text(MARINE)),
     http.get(FDSN, ({ request }) => {
       const url = new URL(request.url);
       asked.push(url);

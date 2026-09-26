@@ -13,6 +13,7 @@ import { compassPoint, type Insights, type QuakeLike, type Source } from "../cla
 import { TOWNS } from "../region";
 import { commonDepths } from "../shared";
 import { USGS_ASSESSED } from "../story/model";
+import type { SeaForecast, SeaHour, WaveTrain } from "../../../worker/api-types";
 
 const LON0 = -76.75;
 const LAT0 = 4.4;
@@ -31,7 +32,7 @@ export const NORTH = z(GROUND.lat0 + (GROUND.ny - 1) * GROUND.step);
 export const WIDTH_KM = Math.round((EAST - WEST) / 10) * 10;
 export const LENGTH_KM = Math.round((SOUTH - NORTH) / 10) * 10;
 
-export type Layer = "ground" | "plate" | "uncertainty" | "rupture" | "events" | "labels" | "snapped";
+export type Layer = "ground" | "sea" | "plate" | "uncertainty" | "rupture" | "events" | "labels" | "snapped";
 export type Preset = "oblique" | "south" | "above" | "rupture" | "chaparral";
 
 export interface View {
@@ -65,6 +66,7 @@ export const landScale = (v: Pick<View, "raised" | "exaggeration">) =>
 
 export const ALL_LAYERS: Record<Layer, boolean> = {
   ground: true,
+  sea: true,
   plate: true,
   uncertainty: true,
   rupture: true,
@@ -72,6 +74,145 @@ export const ALL_LAYERS: Record<Layer, boolean> = {
   labels: true,
   snapped: false,
 };
+
+// --- The sea's surface -------------------------------------------------------------------------
+
+/**
+ * How much longer and taller than the real waves the block draws them. Real ones are a few metres high
+ * and a few hundred metres long: on a 500 km block, at true scale, under a thousandth of a pixel. One
+ * factor for every train, so a longer or higher real sea is a longer or higher drawn one, and the key
+ * states both.
+ */
+export const WAVE_LENGTH_SCALE = 75;
+export const WAVE_HEIGHT_SCALE = 400;
+/**
+ * The shortest drawn wave, km. The wind's own waves (a few seconds, a few tens of metres) would still be
+ * under a pixel at 75×; they are drawn at least this long, as texture, and the key says so.
+ */
+export const MIN_DRAWN_WAVELENGTH_KM = 2.5;
+/** A wind sea this high (m) starts to break into whitecaps, and one this high is covered in them. */
+export const WHITECAPS_FROM_M = 0.3;
+export const WHITECAPS_FULL_M = 1;
+
+/** One train as the scene draws it: where it runs to (x east, z south), its length and height in km. */
+export interface DrawnTrain {
+  dir: [number, number];
+  lengthKm: number;
+  periodS: number;
+  heightKm: number;
+  /** How strongly it is shaded: grows with its real height. */
+  steep: number;
+}
+
+export interface DrawnSea {
+  swell: DrawnTrain;
+  swell2: DrawnTrain;
+  chop: DrawnTrain;
+  /** 0 to 1: how much the wind's waves break. */
+  whitecaps: number;
+}
+
+const G = 9.81;
+/**
+ * The period below which a wave would be drawn shorter than `MIN_DRAWN_WAVELENGTH_KM` at 75×, and so is
+ * drawn longer than 75× (~4.6 s): the key says so.
+ */
+export const SHORT_WAVE_PERIOD_S = Math.sqrt(
+  (2 * Math.PI * ((MIN_DRAWN_WAVELENGTH_KM * 1000) / WAVE_LENGTH_SCALE)) / G,
+);
+const ABSENT: Omit<DrawnTrain, "dir"> = { lengthKm: 20, periodS: 12, heightKm: 0, steep: 0 };
+
+/** Where a train coming from `fromDeg` (0° north, 90° east) runs to, as x east and z south. */
+const runsTo = (fromDeg: number): [number, number] => {
+  const to = ((fromDeg + 180) * Math.PI) / 180;
+  return [Math.sin(to), -Math.cos(to)];
+};
+
+/**
+ * A real train drawn: its length from its period, as deep water sets it (L = gT²/2π), times
+ * `WAVE_LENGTH_SCALE`; its period itself, so each crest takes as long to pass as the real one; its
+ * height times `WAVE_HEIGHT_SCALE`.
+ */
+export function drawnTrain(t: WaveTrain): DrawnTrain {
+  const realLengthM = (G * t.periodS ** 2) / (2 * Math.PI);
+  return {
+    dir: runsTo(t.fromDeg),
+    lengthKm: Math.max(MIN_DRAWN_WAVELENGTH_KM, (realLengthM * WAVE_LENGTH_SCALE) / 1000),
+    periodS: t.periodS,
+    heightKm: (t.heightM * WAVE_HEIGHT_SCALE) / 1000,
+    steep: 0.3 + 0.4 * Math.min(t.heightM / 1.5, 1),
+  };
+}
+
+/**
+ * The sea before any forecast has loaded, or after the stored hours run out: a swell from the south-west
+ * and a lesser one from the west, as the Pacific here usually has, and no figure stated for it.
+ */
+export const USUAL_SEA: Pick<SeaHour, "swell" | "swell2" | "wind"> = {
+  swell: { heightM: 1, fromDeg: 225, periodS: 12 },
+  swell2: { heightM: 0.5, fromDeg: 280, periodS: 9 },
+  wind: null,
+};
+
+/**
+ * The three trains the shader draws from one hour of the forecast. A missing swell is drawn flat. The
+ * wind's waves always leave some fine texture (a real sea is never glassy at this scale); they break
+ * into whitecaps only as high as the data says.
+ */
+export function drawnSea(hour: Pick<SeaHour, "swell" | "swell2" | "wind"> | null): DrawnSea {
+  const h = hour ?? USUAL_SEA;
+  const swell = h.swell ? drawnTrain(h.swell) : { ...ABSENT, dir: runsTo(225) };
+  const swell2 = h.swell2 ? drawnTrain(h.swell2) : { ...ABSENT, dir: swell.dir };
+  const wind = h.wind ? drawnTrain(h.wind) : null;
+  const windM = h.wind?.heightM ?? 0;
+  // With no wind sea, a faint texture across the swell; the wind's own direction when it has one.
+  const [dx, dz] = swell.dir;
+  const chop: DrawnTrain = {
+    dir: wind?.dir ?? [dx * 0.8 - dz * 0.6, dx * 0.6 + dz * 0.8],
+    lengthKm: wind?.lengthKm ?? MIN_DRAWN_WAVELENGTH_KM,
+    periodS: wind?.periodS ?? 4,
+    heightKm: 0,
+    steep: 0.12 + 0.35 * Math.min(windM / WHITECAPS_FULL_M, 1),
+  };
+  const whitecaps = Math.min(1, Math.max(0, (windM - WHITECAPS_FROM_M) / (WHITECAPS_FULL_M - WHITECAPS_FROM_M)));
+  return { swell, swell2, chop, whitecaps };
+}
+
+/**
+ * The water's own colour by how much chlorophyll satellites see in it (`sea-colour.json`, from
+ * `scripts/insights-sea-colour.ts`), sRGB, before any sky or sun. Anchored on this sea's own colours
+ * (2026-09-26): the first three are ESA OC-CCI v6's median reflectance for the box's open sea, shelf
+ * and nearshore water turned into sRGB; the last is the Forel-Ule scale's class 12 (Wernand et al.
+ * 2013, Ocean Science, table 5), the delta front's class, darkened by the same ratio that turns class 6
+ * into the measured nearshore colour. Between anchors, linear in log chlorophyll and in linear light.
+ */
+export const SEA_COLOUR_STOPS: readonly (readonly [chlorophyll: number, hex: string])[] = [
+  [0.22, "#004679"], // open sea, over ~50 km out
+  [0.55, "#255466"], // the shelf, 10–50 km
+  [2.3, "#4e7065"], // nearshore, 0–10 km
+  [7, "#708a47"], // the San Juan's delta front
+];
+
+const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const fromLin = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
+const hexLin = (h: string) => [1, 3, 5].map((i) => toLin(parseInt(h.slice(i, i + 2), 16) / 255));
+
+/** The water's colour at log10 of its chlorophyll (mg/m³), as sRGB 0–1; held at the ends of the stops. */
+const STOPS = SEA_COLOUR_STOPS.map(([chl, hex]) => [Math.log10(chl), hexLin(hex)] as const);
+
+export function seaColour(log10Chl: number): [number, number, number] {
+  const stops = STOPS;
+  const k = stops.findIndex(([at]) => at >= log10Chl);
+  const [a, b] =
+    k === -1 ? [stops.at(-1)!, stops.at(-1)!] : k === 0 ? [stops[0]!, stops[0]!] : [stops[k - 1]!, stops[k]!];
+  const t = a === b ? 0 : (log10Chl - a[0]) / (b[0] - a[0]);
+  return [0, 1, 2].map((i) => fromLin(a[1][i]! + (b[1][i]! - a[1][i]!) * t)) as [number, number, number];
+}
+
+/** The forecast's hour that `now` falls in, or null when the stored hours do not reach it. */
+export function seaHourAt(forecast: SeaForecast | null, now: number): SeaHour | null {
+  return forecast?.hours.find((h) => h.t <= now && now < h.t + 3_600_000) ?? null;
+}
 
 // --- What the block shows ----------------------------------------------------------------------
 

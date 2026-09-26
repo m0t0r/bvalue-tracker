@@ -15,6 +15,14 @@ The page is written for a Spanish-speaking reader who is interested in the scien
 is not a seismologist. It is Spanish first, has an English toggle, and explains its
 terms in plain words.
 
+<a href="https://bvalue-tracker.sgc-swarm.workers.dev/insights?tab=3d">
+  <img src="docs/images/3d-block.webp" width="100%" alt="The 3D block of Colombia's Pacific coast and the Andes, 500 km across and 240 km deep, seen from the south: the Pacific swelling with the day's forecast on the left, the mountains with Istmina, Buenaventura, Pereira and Chaparral pinned on top, and below the ground the sinking Nazca plate, the two groups of Chocó's earthquakes, the orange plane where the rock broke in the M7.4 and the Chaparral swarm near the surface.">
+</a>
+
+<sub>The "En 3D" tab of <code>/insights</code>: every event at its depth over the Slab2 plate, the M7.4's rupture from USGS's
+model, and a sea that swells with Open-Meteo's forecast in the colour satellites see. Map: OpenFreeMap © OpenMapTiles ©
+OpenStreetMap · © Mapterhorn.</sub>
+
 ## Features
 
 - **Two zones, one tab each, named by department.** Chocó (the M7.4 sequence) and Tolima (the
@@ -48,6 +56,7 @@ terms in plain words.
 flowchart LR
   sgc["SGC “Consulta Experta” form"]
   usgs["USGS event products"]
+  meteo["Open-Meteo marine forecast"]
   d1[("D1")]
   page["React page"]
   subgraph worker["Cloudflare Worker (Hono)"]
@@ -60,6 +69,7 @@ flowchart LR
   sgc <-- "POST / HTML" --> cron
   cron -- "parsed events" --> d1
   usgs -- "GeoJSON / JSON" --> daily
+  meteo -- "JSON" --> daily
   daily -- "digests" --> d1
   d1 --> api
   api -- JSON --> page
@@ -72,6 +82,8 @@ flowchart LR
 - **Context from USGS:** once a day the Worker finds each zone's mainshock in USGS's catalogue and
   keeps a digest of what USGS publishes about it: felt reports ("Did You Feel It?"), modelled
   shaking (PAGER) and the aftershock forecast. See [Ingest](docs/ingest.md#the-daily-usgs-job).
+  The same run stores Open-Meteo's three-day marine forecast, which the 3D block's sea swells with.
+  See [Ingest](docs/ingest.md#the-daily-sea-state-job).
 - **Backend:** one Cloudflare Worker ([Hono](https://hono.dev)) serves the page and
   a JSON API, stores events in D1, and runs the ingest on a Cron Trigger. It fits the
   Workers free plan.
@@ -159,7 +171,10 @@ code itself. Read the relevant document before changing that area.
 All earthquake data comes from the [Servicio Geológico Colombiano](https://www.sgc.gov.co),
 which is the authority for seismic information in Colombia. Felt reports, modelled shaking and the
 aftershock forecast for a mainshock come from the [USGS](https://earthquake.usgs.gov) (public
-domain) and are credited to it wherever they appear. This project is independent
+domain) and are credited to it wherever they appear. The 3D block's sea takes its swell from
+[Open-Meteo](https://open-meteo.com/)'s marine forecast (Météo-France's wave model, CC BY 4.0) and its
+colour from ESA's [Ocean Colour CCI](https://esa-oceancolour-cci.org/); both are illustrative and
+credited on the block. This project is independent
 and is not affiliated with or endorsed by SGC. SGC revises events after publication, so
 figures here change over time.
 

@@ -11,13 +11,96 @@ import {
   SOUTH,
   VIEWER_EXAGGERATION,
   WEST,
+  MIN_DRAWN_WAVELENGTH_KM,
+  SEA_COLOUR_STOPS,
+  USUAL_SEA,
+  WAVE_HEIGHT_SCALE,
+  WAVE_LENGTH_SCALE,
   blockModel,
+  drawnSea,
+  drawnTrain,
   framing,
   landScale,
   mapUv,
   pinDistances,
+  seaColour,
+  seaHourAt,
   type Preset,
 } from "./shared";
+
+describe("the sea as drawn from Open-Meteo's forecast", () => {
+  it("draws a train at its deep-water length and its real period, one scale for every train", () => {
+    // 13.2 s: L = 9.81 × 13.2² ÷ 2π = 272.0 m, drawn 75× = 20.4 km; 0.62 m drawn 400× = 0.248 km.
+    const t = drawnTrain({ heightM: 0.62, fromDeg: 236, periodS: 13.2 });
+    expect(t.lengthKm).toBeCloseTo((272.04 * WAVE_LENGTH_SCALE) / 1000, 2);
+    expect(t.periodS).toBe(13.2);
+    expect(t.heightKm).toBeCloseTo((0.62 * WAVE_HEIGHT_SCALE) / 1000, 6);
+  });
+
+  it("runs a train away from where it comes from: x east, z south", () => {
+    const [x, z] = drawnTrain({ heightM: 1, fromDeg: 270, periodS: 10 }).dir;
+    expect(x).toBeCloseTo(1, 6); // from the west: runs east
+    expect(z).toBeCloseTo(0, 6);
+    const [x2, z2] = drawnTrain({ heightM: 1, fromDeg: 180, periodS: 10 }).dir;
+    expect(x2).toBeCloseTo(0, 6); // from the south: runs north, which is −z
+    expect(z2).toBeCloseTo(-1, 6);
+  });
+
+  it("draws the wind's short waves no shorter than the shortest drawn wave", () => {
+    expect(drawnTrain({ heightM: 0.2, fromDeg: 280, periodS: 1.6 }).lengthKm).toBe(MIN_DRAWN_WAVELENGTH_KM);
+  });
+
+  it("breaks the wind's waves into whitecaps only as high as the data says, and a swell alone never", () => {
+    const at = (wind: number | null) =>
+      drawnSea({ ...USUAL_SEA, wind: wind === null ? null : { heightM: wind, fromDeg: 280, periodS: 3 } }).whitecaps;
+    expect(at(null)).toBe(0);
+    expect(at(0.3)).toBe(0);
+    expect(at(0.65)).toBeCloseTo(0.5, 6);
+    expect(at(1.4)).toBe(1);
+  });
+
+  it("draws a missing swell flat, and the usual sea without a forecast", () => {
+    expect(drawnSea({ swell: null, swell2: null, wind: null }).swell.heightKm).toBe(0);
+    expect(drawnSea(null)).toEqual(drawnSea(USUAL_SEA));
+  });
+
+  it("colours the water by its chlorophyll through the measured stops, held at both ends", () => {
+    const hex = (c: number[]) =>
+      `#${c
+        .map((v) =>
+          Math.round(v * 255)
+            .toString(16)
+            .padStart(2, "0"),
+        )
+        .join("")}`;
+    for (const [chl, colour] of SEA_COLOUR_STOPS) expect(hex(seaColour(Math.log10(chl)))).toBe(colour);
+    expect(hex(seaColour(-3))).toBe(SEA_COLOUR_STOPS[0]![1]);
+    expect(hex(seaColour(3))).toBe(SEA_COLOUR_STOPS.at(-1)![1]);
+    // Greener as chlorophyll rises: green over blue grows from the open sea to the delta front.
+    const tint = (chl: number) => {
+      const [, g, b] = seaColour(Math.log10(chl));
+      return g / b;
+    };
+    expect(tint(0.3)).toBeLessThan(tint(1));
+    expect(tint(1)).toBeLessThan(tint(4));
+  });
+
+  it("finds the hour the clock is in, and none once the stored hours have run out", () => {
+    const hour = (t: number) => ({ t, swell: null, swell2: null, wind: null });
+    const f = {
+      source: "open-meteo" as const,
+      model: "meteofrance_wave" as const,
+      lat: 4.3,
+      lon: -78.3,
+      fetchedAt: "",
+      hours: [hour(0), hour(3_600_000)],
+    };
+    expect(seaHourAt(f, 3_599_999)!.t).toBe(0);
+    expect(seaHourAt(f, 3_600_000)!.t).toBe(3_600_000);
+    expect(seaHourAt(f, 7_200_000)).toBeNull();
+    expect(seaHourAt(null, 0)).toBeNull();
+  });
+});
 
 const NOW = Date.parse("2026-09-24T14:44:03Z");
 const data = insights(captured as Catalogues, NOW);
