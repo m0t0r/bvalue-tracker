@@ -22,6 +22,7 @@ import {
   framing,
   landScale,
   mapUv,
+  needleShade,
   pinDistances,
   seaColour,
   seaHourAt,
@@ -262,5 +263,45 @@ describe("the fine ground's file", () => {
   it("round-trips heights across the sea, the coast and the peaks", () => {
     const heights = Int16Array.from([-4080, -3900, -1, 1, 5195, 30, -32768, 32767, 0, 12]);
     expect(decodeHeights(encodeHeights(heights, 5), 5)).toEqual(heights);
+  });
+});
+
+describe("the compass needle's shading", () => {
+  const [northLeft, northRight, southLeft, southRight] = [0, 1, 2, 3];
+  const angles = Array.from({ length: 72 }, (_, k) => (k * Math.PI) / 36);
+
+  it("lights the faces turned to the top left: the left ones with north up", () => {
+    const light = needleShade(0, false);
+    expect(light[northLeft]).toBeLessThan(light[northRight]!); // lit is lighter: less of the dark ink
+    expect(light[southLeft]).toBeLessThan(light[southRight]!);
+    const dark = needleShade(0, true);
+    expect(dark[northLeft]).toBeGreaterThan(dark[northRight]!); // lit is brighter: more of the light ink
+  });
+
+  it("turns the lit side with the rose: pointing east, the upper face of the north half is the lit one", () => {
+    const [upper, lower] = needleShade(Math.PI / 2, true);
+    expect(upper).toBeGreaterThan(lower!);
+  });
+
+  it("lights both sides of a half alike when that half points straight at the light", () => {
+    const [left, right] = needleShade(Math.atan2(-0.6, 0.8), true);
+    expect(left).toBeCloseTo(right!, 6);
+  });
+
+  it("gives a face turned half a circle the shade of the face it replaces", () => {
+    for (const a of angles) {
+      const [now, turned] = [needleShade(a, false), needleShade(a + Math.PI, false)];
+      expect(turned[northLeft]).toBeCloseTo(now[southRight]!, 6);
+      expect(turned[northRight]).toBeCloseTo(now[southLeft]!, 6);
+    }
+  });
+
+  it("keeps every face at 70% or more, so north stays apart from south at any angle", () => {
+    for (const a of angles)
+      for (const dark of [false, true])
+        for (const o of needleShade(a, dark)) {
+          expect(o).toBeGreaterThanOrEqual(0.7 - 1e-9);
+          expect(o).toBeLessThanOrEqual(1 + 1e-9);
+        }
   });
 });

@@ -559,11 +559,28 @@ full-screen viewer with five views to jump to.
     each hour's start rather than on a one-minute tick. The key's sizes say what the drawing does:
     waves under about 5 s (`SHORT_WAVE_PERIOD_S`) are drawn longer than 75×, and the wind's are only
     texture, with no height.
-- **A compass rose in the viewer's top right** (2026-09-26, owner's request): ticks every 45°, a
-  two-tone needle, and N, E, S, O (W in English) on their bearings, kept upright. Every frame it turns
-  to where north lies on screen, by projecting a point 20 km north of the one the camera looks at, so
-  it is right at any tilt. Viewer only: the preview's pause button has that corner. Hidden from screen
-  readers; the views and the key say where things are.
+- **A compass rose in the viewer** (2026-09-26, owner's request): ticks every 45°, a two-tone needle,
+  and N, E, S, O (W in English) on their bearings, kept upright. Every frame it turns to where north
+  lies on screen, by projecting a point 20 km north of the one the camera looks at, so it is right at
+  any tilt. Viewer only: the preview's pause button has the top right. Hidden from screen readers; the
+  views and the key say where things are.
+  - **Top right from 1024 px, bottom left below** (2026-09-26, later that day, owner's request): on
+    a phone the top right is where the pins and their names sit in most views, and the compass
+    covered them; the bottom left is the block's emptiest corner. There the map credit keeps to the
+    compass's right (`pl-16` under `data-compass`) and wraps, rather than run under it; each
+    attribution (a link) stays on one line, or "©" was left at a line's end.
+  - **The needle reads as raised** (the same day, the owner's bonus request): each half is two faces
+    cut along its ridge (`NEEDLE_FACES` in `shared.ts`), each shaded by how squarely it faces a light
+    fixed in the top left of the screen (`needleShade`, tested), so the shading shifts as the rose
+    turns. The lit face is the lighter one in either theme (less opaque over the light background,
+    brighter over the dark). The faces sit on an opaque base and never drop under 70 %: a first
+    version ran them down to 50 % with nothing under them, and the code review found the lit north
+    face as grey as the shaded south one, and the shadow showing through as a band. In the light
+    theme the needle casts a small shadow down and right; in the dark one a shadow would not show.
+    Flat SVG, no gradient, so no `id`s in the page and every colour a token.
+  - **Declined in the code review:** choosing the corner by the block's width rather than the
+    viewport's. From 1024 px the side panel narrows the block, but the pins sat clear of the top
+    right at 1024 and 1280 px, and the owner asked for the phone only.
 - **A pin shows its distance from Pereira** (`pinDistances` in `shared.ts`, 2026-09-26): in the viewer
   the other three pins are buttons; a mouse over one, a tap or the keyboard's focus draws a dashed line
   to Pereira's pin and adds the distance to the pin's own name ("Buenaventura · ~180 km"); a pressed
