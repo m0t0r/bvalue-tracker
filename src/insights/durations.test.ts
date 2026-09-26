@@ -69,6 +69,30 @@ describe("shakingDuration", () => {
     expect(d.ruptureS).toBeLessThan(d.nearEpicentre.fromS);
   });
 
+  it("holds the Pereira station's recording as measured on 2026-09-26", () => {
+    // CBOCA, from SGC's FDSN service; recomputed with ObsPy by scripts/insights-shaking.py.
+    expect(DURATIONS.pereira).toMatchObject({
+      station: "CBOCA",
+      kmFromPereira: 6.6,
+      arrivalS: 19.4,
+      strongFromS: 49.6,
+      strongToS: 99.6,
+      peakS: 97.4,
+      recordedToS: 248.4,
+    });
+  });
+
+  it("tells the arc in Pereira in the round figures the prose says 'unos' to", () => {
+    const p = shakingDuration({ id: HISTORY_FOR }, true)!.pereira;
+    // Arrival and peak to 5 s, the strong part to the second, the recording to the minute.
+    expect(p).toMatchObject({ km: 7, arrival: 20, peak: 95, strong: 50, recordedMin: 4 });
+  });
+
+  it("says the strongest shaking came after the fault stopped only while it did", () => {
+    // 97.4 s against the fault's 53.83 s.
+    expect(shakingDuration({ id: HISTORY_FOR }, true)!.peakAfterRupture).toBe(true);
+  });
+
   it("is shown only for the M7.4, and only once the page's rule has found it", () => {
     expect(shakingDuration({ id: HISTORY_FOR }, false)).toBeNull();
     expect(shakingDuration({ id: "SGC2026zzzzzz" }, true)).toBeNull();

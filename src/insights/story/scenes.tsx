@@ -127,47 +127,49 @@ function RowLabel(p: { x: number; y: number; fs: number; small: boolean; line1: 
 
 interface DurationRow {
   id: string;
-  /** The ground's row, in the mainshock's colour; the fault's is neutral. */
+  /** Pereira's row, in the mainshock's colour; the fault's is neutral. */
   main: boolean;
   line1: string;
   line2: string;
-  /** Seconds the bar is solid to. */
-  seconds: number;
-  /** Where a range ends: the bar runs on, fainter, to here. */
-  upTo?: number;
+  /** Seconds from the origin time where the bar is solid. */
+  solid: readonly [number, number];
+  /** Where the bar runs on, fainter, around the solid part. */
+  faint?: readonly [number, number];
 }
 
 /**
- * The duration drawing's rows, the ground near the epicentre first and the fault under it. Their
- * figures are formatted by `shakingParts`, as the step's prose and the text alternative's are.
+ * The duration drawing's rows on one time axis: Pereira first (faint while its sensor records the
+ * earthquake, solid for the strong part) and the fault under it. Their figures are formatted by
+ * `shakingParts`, as the step's prose and the text alternative's are.
  */
 function durationRows(model: StoryModel, lang: Lang): DurationRow[] {
   const c = storyCopy[lang].graphic;
   const d = model.durations;
   if (!d) return [];
   const parts = shakingParts(d);
+  const rec = d.pereira.record;
   return [
     {
-      id: "ground",
+      id: "pereira",
       main: true,
-      line1: c.durationGround,
-      line2: fill(c.durationGroundValue, parts),
-      seconds: d.nearEpicentre.fromS,
-      upTo: d.nearEpicentre.toS,
+      line1: c.durationPereira,
+      line2: fill(c.durationPereiraValue, parts),
+      solid: [rec.strongFromS, rec.strongToS],
+      faint: [rec.arrivalS, rec.recordedToS],
     },
     {
       id: "fault",
       main: false,
       line1: c.durationFault,
-      line2: fill(c.durationFaultValue, { s: parts.rupture }),
-      seconds: d.ruptureS,
+      line2: fill(c.durationFaultValue, parts),
+      solid: [0, d.ruptureS],
     },
   ];
 }
 
 /**
- * Durations as bars on one axis of seconds, each under its two lines of text; a range runs on fainter
- * to its end. Like `Ranks`, the text steps down a pixel at a time (to 9 px) until the rows, the axis
+ * Bars on one axis of seconds from the origin time, each under its two lines of text, solid where it
+ * matters and fainter around it. Like `Ranks`, the text steps down a pixel at a time (to 9 px) until the rows, the axis
  * and its label fit the height.
  */
 function Durations({
@@ -201,7 +203,7 @@ function Durations({
   const { fs, barH, labelH, rowH } = l;
   // The axis text is a pixel smaller than the labels, but never under the 9 px floor.
   const axisFs = Math.max(9, fs - 1);
-  const longest = Math.max(...rows.map((r) => r.upTo ?? r.seconds));
+  const longest = Math.max(...rows.map((r) => Math.max(r.solid[1], r.faint?.[1] ?? 0)));
   const x = scaleLinear()
     .domain([0, Math.max(10, Math.ceil(longest / 10) * 10)])
     .range([left, width - right]);
@@ -211,25 +213,26 @@ function Durations({
     <g>
       {rows.map((r, i) => {
         const y = top + i * rowH;
+        const tone = r.main ? "fill-chart-2" : "fill-muted-foreground";
         return (
           <g key={r.id}>
             <RowLabel x={left} y={y} fs={fs} small={small} line1={r.line1} line2={r.line2} />
-            <rect
-              x={x(0)}
-              y={y + labelH}
-              width={Math.max(1, x(r.seconds) - x(0))}
-              height={barH}
-              className={r.main ? "fill-chart-2" : "fill-muted-foreground"}
-            />
-            {r.upTo !== undefined && (
+            {r.faint && (
               <rect
-                x={x(r.seconds)}
+                x={x(r.faint[0])}
                 y={y + labelH}
-                width={Math.max(0, x(r.upTo) - x(r.seconds))}
+                width={Math.max(0, x(r.faint[1]) - x(r.faint[0]))}
                 height={barH}
-                className={`${r.main ? "fill-chart-2" : "fill-muted-foreground"} opacity-40`}
+                className={`${tone} opacity-30`}
               />
             )}
+            <rect
+              x={x(r.solid[0])}
+              y={y + labelH}
+              width={Math.max(1, x(r.solid[1]) - x(r.solid[0]))}
+              height={barH}
+              className={tone}
+            />
           </g>
         );
       })}

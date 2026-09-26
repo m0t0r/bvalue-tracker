@@ -7,7 +7,7 @@
  */
 import { HISTORY_FOR } from "./history";
 import raw from "./durations.json";
-import { fmt } from "./shared";
+import { fmt, fmtKm } from "./shared";
 
 export interface Durations {
   source: { retrieved: string };
@@ -17,6 +17,25 @@ export interface Durations {
    * moment was out.
    */
   main: { sgcId: string; usgsId: string; product: string; url: string; t95: number };
+  /**
+   * SGC's accelerometer in Pereira that recorded the M7.4 (`scripts/insights-shaking.py`), with
+   * seconds from the origin time: when the sensor first and last clearly recorded it, the strong part
+   * (5% to 95% of the Arias intensity) and the strongest second.
+   */
+  pereira: {
+    network: string;
+    station: string;
+    location: string;
+    lat: number;
+    lon: number;
+    kmFromPereira: number;
+    retrieved: string;
+    arrivalS: number;
+    strongFromS: number;
+    strongToS: number;
+    peakS: number;
+    recordedToS: number;
+  };
 }
 
 export const DURATIONS: Durations = raw;
@@ -32,25 +51,51 @@ export const SGC_DURATION_URL =
  */
 export const SGC_NEAR_EPICENTRE = { fromS: 90, toS: 120 } as const;
 
+const to5 = (s: number) => Math.round(s / 5) * 5;
+
 /**
- * How long the M7.4 lasted, in the whole seconds the reader sees: the ground near the epicentre
- * (SGC's range) and the fault itself (USGS's model, from its start to 95% of the moment). Only while
- * the page's rule has found the M7.4 as the mainshock: both figures are about that event.
+ * How long the M7.4 lasted, in the round figures the reader sees: in Pereira (SGC's accelerometer),
+ * near the epicentre (SGC's range) and the fault itself (USGS's model, from its start to 95% of the
+ * moment). The Pereira arrival and peak are to 5 s and said with "unos"; the strong part to the second;
+ * the recording to the minute. Only while the page's rule has found the M7.4 as the mainshock: every
+ * figure is about that event.
  */
 export function shakingDuration(main: { id: string }, found: boolean) {
   const m = DURATIONS.main;
+  const p = DURATIONS.pereira;
   if (!found || main.id !== HISTORY_FOR || m.sgcId !== HISTORY_FOR) return null;
-  return { nearEpicentre: { ...SGC_NEAR_EPICENTRE }, ruptureS: Math.round(m.t95) };
+  return {
+    nearEpicentre: { ...SGC_NEAR_EPICENTRE },
+    ruptureS: Math.round(m.t95),
+    pereira: {
+      station: p.station,
+      km: Math.round(p.kmFromPereira),
+      arrival: to5(p.arrivalS),
+      peak: to5(p.peakS),
+      strong: Math.round(p.strongToS - p.strongFromS),
+      recordedMin: Math.round(p.recordedToS / 60),
+      /** The recording as measured, which the drawing places on its time axis. */
+      record: p,
+    },
+    /** Pereira's strongest second came after the fault's model had released 95% of its moment. */
+    peakAfterRupture: p.peakS > m.t95,
+  };
 }
 
 /**
- * The step's figures as the copy's placeholders take them, `{from}` and `{toMin}` for SGC's range and
- * `{rupture}` for the fault: the prose, the drawing and its text alternative all format them here.
+ * The step's figures as the copy's placeholders take them: the prose, the drawing and its text
+ * alternative all format them here.
  */
 export function shakingParts(d: NonNullable<ReturnType<typeof shakingDuration>>) {
   return {
     from: fmt(d.nearEpicentre.fromS),
     toMin: fmt(d.nearEpicentre.toS / 60),
     rupture: fmt(d.ruptureS),
+    km: fmtKm(d.pereira.km),
+    station: d.pereira.station,
+    arrival: fmt(d.pereira.arrival),
+    peak: fmt(d.pereira.peak),
+    strong: fmt(d.pereira.strong),
+    recMin: fmt(d.pereira.recordedMin),
   };
 }

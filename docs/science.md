@@ -377,10 +377,42 @@ the reader's own questions). Everything above still applies to it; this section 
 - **"¿Cuánto duró?": how long the M7.4 shook, with the fault's own time beside it** (story step after
   "Pero Colombia ha tenido sismos más grandes", from 2026-09-26, at the owner's request: a strong but
   short earthquake does less harm than a long one). The rules are in `src/insights/durations.ts`; the
-  fault's figure is committed data, `src/insights/durations.json`, from `scripts/insights-durations.ts`.
-  - **The answer is the shaking: SGC's "entre 90 segundos y 2 minutos"** at its stations nearest the
-    epicentre (`SGC_NEAR_EPICENTRE`), in the title and drawn as a bar that is solid to 90 s and fainter
-    to 120 s. The note says it is not the duration in Pereira.
+  figures are committed data, `src/insights/durations.json`: the fault's from
+  `scripts/insights-durations.ts`, Pereira's from `scripts/insights-shaking.py`.
+  - **The answer is the shaking in Pereira, measured from SGC's own accelerometer** (owner's choice,
+    2026-09-26): **CM.CBOCA.10**, at 4.7817° N, 75.6455° W, 6.6 km from the page's Pereira point
+    (`PEREIRA` in `core/places.ts`), its three HN channels at 200 sps from SGC's open FDSN service
+    (`sismo.sgc.gov.co:8080`), downloaded by the owner in one request (the agent makes none to SGC
+    hosts). **CM.CPER4**, 3 km from the point, has no data for the M7.4 in SGC's archive. Seconds from
+    **12:34:28 UTC, the hypocentral time of USGS's finite-fault model**, not SGC's origin time (12:34:27
+    in its catalogue): the drawing puts Pereira and the model's rupture on one clock, and the model's
+    zero is its own. Every Pereira figure would be 1 s larger from SGC's time; the peak's "unos 95"
+    would then round to "unos 100", which is why the rounding is to 5 s and said with "unos". On both
+    horizontals together, after the pre-event mean, a linear trend and a 0.1 Hz high-pass (ObsPy 1.5.1;
+    the filter changes no figure by 0.1 s, at 0.1 or 0.2 Hz; checked by hand in a second pass):
+    - clearly recorded (1-s RMS over 100× the pre-event noise) from **19.4 s** to **248.4 s**;
+    - **strong part 49.6 → 99.6 s, so 50.0 s**: the significant duration D5–95, 5% to 95% of the
+      Arias intensity (Trifunac & Brady 1975). It is a ratio, so the sensor's calibration does not
+      enter it. D5–75 is 44.4 s. Each horizontal alone gives 48.2 and 50.9 s;
+    - strongest second at **97.4 s**.
+
+    The page says "unos 20" and "unos 95" (to 5 s), "unos 50" and "unos 4 minutos". **The timing
+    checks out against physics**: the first waves at ~19 s fit ~120 km at P speed, and USGS's model
+    releases most of its moment 30–54 s after the start, which with the S waves' ~33 s to Pereira puts
+    the strongest shaking at ~63–90 s; the record peaks at 97 s. So "in Pereira the strongest shaking
+    came after the fault had stopped" (`peakAfterRupture`, 97.4 > 53.83) is said only while it holds.
+    The note says the figures are the page's own, from one station, and that what each person felt may
+    have lasted more or less.
+  - **Not on the page: the peak acceleration.** With the published sensitivity (855,110 counts per
+    m/s²) CBOCA peaked at **0.018 g** after removing a large constant offset (~470,000 counts on HNN; a
+    smooth peak, not a spike). That is far below what USGS's intensity VIII for Pereira (DYFI's reports
+    and PAGER's model) would usually go with, and the same sensor model at CPER4 is listed at 427,554,
+    half CBOCA's, so the calibration could not be checked. Site (firm ground here, amplification where
+    the damage was) may explain part of it. Durations do not depend on it; do not state a PGA from this
+    record without SGC's confirmation of the sensitivity.
+  - **SGC's "entre 90 segundos y 2 minutos"** at its stations nearest the epicentre
+    (`SGC_NEAR_EPICENTRE`) is one sentence, linked to SGC's article. It is not drawn: it is a length
+    with no start time, and the drawing is a time axis.
   - **The fault's own time is one sentence and one grey bar: about 54 s**, USGS's finite-fault model
     (`us6000tjl2_1`, reviewed, its `moment_rate.mr` pinned by URL) from its start to 95% of the moment
     (5% at 30.18 s, 95% at 53.83 s; `releaseTimes` places each crossing inside its sample step). Its tail
@@ -401,8 +433,9 @@ the reader's own questions). Everything above still applies to it; this section 
     put a rupture duration in a bar or a title again.** No shaking duration is published for the past
     earthquakes (it depends on the site; only Armenia 1999 has one, below), so they are not compared,
     and the step says so.
-  - **Whole seconds**, and only while the page's rule has **found** the M7.4 (`shakingDuration`), like
-    `USGS_ASSESSED`: the figures are about that event and no other.
+  - **Rounded as said**: the fault and the strong part to the second, Pereira's arrival and peak to 5 s,
+    the recording to the minute, each with "unos". Only while the page's rule has **found** the M7.4
+    (`shakingDuration`), like `USGS_ASSESSED`: the figures are about that event and no other.
   - **Rupture durations for the past events, checked and not used** (2026-09-26), so nobody researches
     them again: SCARDEC starts in 1992 and lacks Páez 1994 and Armenia
     1999; USGS has no finite-fault model for any of them; the IRIS/EarthScope STF product is Mw 7+.
@@ -432,8 +465,9 @@ the reader's own questions). Everything above still applies to it; this section 
     doi:10.1193/1.2220576), so the step says it is one factor with depth, distance and ground.
   - *Size and duration go together* (Houston 2001, JGR 106, doi:10.1029/2000JB900468: rupture
     durations scale with the cube root of the moment). PR #65 said so; the shaking step does not need it.
-  - Next (owner's choice, 2026-09-26): the M7.4's shaking duration at a station near Pereira, from SGC's
-    open FDSN waveforms, one request the owner runs. It is one station's figure, not the city's.
+  - **Redoing the Pereira figures**: `scripts/insights-shaking.py` says which two requests to run and
+    how; it is Python because ObsPy reads SGC's miniSEED (Steim2), which nothing in the Node toolchain
+    does. The recording is not committed, only the figures.
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.
