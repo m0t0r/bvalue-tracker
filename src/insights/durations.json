@@ -8,5 +8,19 @@
     "product": "us6000tjl2_1",
     "url": "https://earthquake.usgs.gov/product/finite-fault/us6000tjl2_1/us/1786734841617/moment_rate.mr",
     "t95": 53.83
+  },
+  "pereira": {
+    "network": "CM",
+    "station": "CBOCA",
+    "location": "10",
+    "lat": 4.7817,
+    "lon": -75.6455,
+    "kmFromPereira": 6.6,
+    "retrieved": "2026-09-26",
+    "arrivalS": 19.4,
+    "strongFromS": 49.6,
+    "strongToS": 99.6,
+    "peakS": 97.4,
+    "recordedToS": 248.4
   }
 }

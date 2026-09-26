@@ -209,14 +209,18 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   text alternative lists every row with its label. Both layouts, the first part's and the second's,
   stay mounted so the step change cross-fades; drawing only the active one was suggested in review
   and declined, since the two fits cost well under a millisecond.
-- **"¿Cuánto duró?" draws two bars on one axis of seconds** (`Durations` in `story/scenes.tsx`, a
-  sub-state of the energy scene, 2026-09-26): the ground near the epicentre in the mainshock's orange,
-  solid to 90 s and fainter to 2 min (SGC's range), and the fault in `muted-foreground`, about 54 s.
-  Each row's two lines of text sit above its bar (`RowLabel`, shared with the energy squares). The axis
-  runs to the next ten seconds past the longest bar. Like the squares, the text steps down a pixel at a
-  time to 9 px until the rows, the axis and its label fit. PR #65 drew rupture durations of past
-  earthquakes here instead; they read as shaking and were taken out (see the science). Checked at 1280
-  and 375 px, both themes. **On a landscape phone (667 × 375) the story's drawing is
+- **"¿Cuánto duró?" draws two bars on one time axis, seconds since the earthquake began**
+  (`Durations` in `story/scenes.tsx`, a sub-state of the energy scene, 2026-09-26): Pereira in the
+  mainshock's orange, faint from ~19 s to ~248 s while its sensor records the earthquake and solid for
+  the strong part (~50–100 s), and the fault in `muted-foreground`, 0 to ~54 s, so the reader sees the
+  fault stop before Pereira's strongest shaking. The faint span has no key: the row's second line
+  states it ("registrado de 20 s a 4 min · fuerte: unos 50 s"), under "Cerca de Pereira" since CBOCA is 6.6 km from the centre, which also fits at 320 px where a key
+  line would not. SGC's near-epicentre range is not drawn, having no start time. Each row's two lines
+  of text sit above its bar (`RowLabel`, shared with the energy squares). The axis runs to the next ten
+  seconds past the longest bar. Like the squares, the text steps down a pixel at a time to 9 px until
+  the rows, the axis and its label fit. PR #65 drew rupture durations of past earthquakes here
+  instead; they read as shaking and were taken out (see the science). Checked at 1280 and 320 px,
+  both themes. **On a landscape phone (667 × 375) the story's drawing is
   ~170 px tall and holds neither this step nor the energy squares**, which were already empty there;
   that is the story's layout, not this step's.
 - **The ×32 ladder's labels sit on the squares' baseline, in gaps sized to hold them** (2026-09-26,

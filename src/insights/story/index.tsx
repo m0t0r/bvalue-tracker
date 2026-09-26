@@ -435,15 +435,31 @@ function useSteps(
             <Rich
               text={c.energy.duration1}
               parts={{
-                sgc: <ExternalLink href={SGC_DURATION_URL}>SGC</ExternalLink>,
+                sgc: "SGC",
+                km: <Num>{d.km}</Num>,
                 magLabel: <MainName>{magLabel}</MainName>,
+                arrival: <Num>{d.arrival}</Num>,
+                peak: <Num>{d.peak}</Num>,
+                recMin: <Num>{d.recMin}</Num>,
+                strong: <Num>{d.strong}</Num>,
+              }}
+            />
+          </p>
+          <p>
+            <Rich
+              text={c.energy.durationNear}
+              parts={{
+                sgc: <ExternalLink href={SGC_DURATION_URL}>SGC</ExternalLink>,
                 from: <Num>{d.from}</Num>,
                 toMin: <Num>{d.toMin}</Num>,
               }}
             />
           </p>
           <p>
-            <Rich text={c.energy.durationRupture} parts={{ rupture: <Num>{d.rupture}</Num> }} />
+            <Rich
+              text={c.energy.durationRupture(model.durations.peakAfterRupture)}
+              parts={{ rupture: <Num>{d.rupture}</Num> }}
+            />
           </p>
           <p>{c.energy.durationFelt}</p>
           <p>{c.energy.durationDamage}</p>
@@ -452,6 +468,7 @@ function useSteps(
             <Rich
               text={c.energy.durationNote}
               parts={{
+                station: d.station,
                 from: d.from,
                 toMin: d.toMin,
                 usgs: <ExternalLink href={USGS_FINITE_FAULT_URL}>{c.energy.durationUsgs}</ExternalLink>,
