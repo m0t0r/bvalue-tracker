@@ -227,6 +227,25 @@
 @utility band-clip {
   clip-path: inset(0 var(--to) 0 var(--from) round 9999px);
 }
+/* The daily bars take presses, and a mouse can sweep across them. Recharts writes `cursor: default`
+   inline on its wrapper. It merges a chart's `style` prop over that, but the design-system lint allows
+   no inline style, so these rules use `!important` instead: the bars show the pointer, and while a
+   drag lasts the whole page shows the sideways cursor, whatever the mouse is over, so it does not
+   flicker back to the arrow as the drag leaves the chart. */
+[data-day-bars] .recharts-wrapper {
+  cursor: pointer !important;
+}
+[data-drag-days],
+[data-drag-days] * {
+  cursor: col-resize !important;
+}
+/* The daily bars greying around a chosen day: an answer to the reader's own press, so it moves at the
+   speed of a control, not of the data. */
+@utility transition-fill {
+  transition-property: fill;
+  transition-duration: 150ms;
+  transition-timing-function: var(--ease-out);
+}
 @utility transition-clip-path {
   transition-property: clip-path;
   transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));

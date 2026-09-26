@@ -213,6 +213,13 @@ const es = {
   magTimeTitle: "Magnitud en el tiempo",
   magTimeDesc: "Cada punto es un evento.",
   dailyTitle: "Eventos por día",
+  dailyTipPointer: "Haz clic en un día para ver sus eventos en el catálogo, o arrastra para elegir varios.",
+  dailyTipTouch: "Toca un día para ver sus eventos en el catálogo.",
+  dailyKeys:
+    "Con el teclado: las flechas recorren los días, Enter elige uno, Mayúsculas + Enter elige todos hasta ese y Escape vuelve a todos los días.",
+  dailyInCatalogue: (n: string, one: boolean) => `Ver ${one ? "el evento" : `los ${n} eventos`} en el catálogo`,
+  dailyAll: "Ver todos los días",
+  tableDays: (days: string, n: string, of: string) => `Solo ${days}: ${n} de ${of} eventos`,
   magTimeRegion: "Magnitud en el tiempo y eventos por día; gráficos desplazables en horizontal",
   fmdTitle: "Distribución frecuencia–magnitud",
   fmdDesc: "Escala logarítmica. La recta es la ley de Gutenberg–Richter ajustada por encima de Mc.",
@@ -229,6 +236,10 @@ const es = {
   band: "±1σ",
   tableTitle: "Catálogo",
   downloadCsv: "Descargar CSV",
+  // The catalogue's button names how many events the file holds, which is what the table lists: the
+  // page's filters and any days chosen on the bars. It ends in the format, "CSV", which is all a phone
+  // shows beside the icon; the words before it stay the button's name there (owner's call).
+  downloadEventsIn: (n: string, one: boolean) => `Descargar ${n} ${one ? "evento" : "eventos"} en`,
   downloadBCsv: "Descargar CSV del valor b en el tiempo",
   colTime: "Fecha y hora",
   colMag: "Mag.",
@@ -446,6 +457,13 @@ const en: Dict = {
   magTimeTitle: "Magnitude over time",
   magTimeDesc: "Each dot is one event.",
   dailyTitle: "Events per day",
+  dailyTipPointer: "Click a day to see its events in the catalogue, or drag to choose several.",
+  dailyTipTouch: "Tap a day to see its events in the catalogue.",
+  dailyKeys:
+    "With the keyboard: the arrows move between days, Enter chooses one, Shift + Enter chooses every day up to it and Escape goes back to all days.",
+  dailyInCatalogue: (n, one) => `See ${one ? "the event" : `the ${n} events`} in the catalogue`,
+  dailyAll: "Show all days",
+  tableDays: (days, n, of) => `Only ${days}: ${n} of ${of} events`,
   magTimeRegion: "Magnitude over time and events per day; horizontally scrollable charts",
   fmdTitle: "Frequency–magnitude distribution",
   fmdDesc: "Log scale. The line is the Gutenberg–Richter law fitted above Mc.",
@@ -462,6 +480,7 @@ const en: Dict = {
   band: "±1σ",
   tableTitle: "Catalogue",
   downloadCsv: "Download CSV",
+  downloadEventsIn: (n, one) => `Download ${n} ${one ? "event" : "events"} as`,
   downloadBCsv: "Download CSV of b-value over time",
   colTime: "Date-time",
   colMag: "Mag.",

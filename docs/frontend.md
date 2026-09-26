@@ -62,6 +62,95 @@ should only ever reach `format.ts` and this module.
   the same reason, as `src/lib/format.ts`. Its tests are mutation-checked; the figures in them were
   counted independently in Python from the same 786 events.
 
+### Choosing days on the bars (from 2026-09-26)
+
+**The "eventos por día" bars choose which days the catalogue table lists, and nothing else**
+(`src/lib/day-selection.ts`, `DailyLine` in `magnitude-time-legend.tsx`). A b-value, a map or a chart
+of one day's events would read noise as a finding, so the choice is not part of the page's scope:
+it has no chip, "Quitar filtros" leaves it, and every figure keeps counting the whole filtered
+catalogue. Chosen from three prototype variants (branch `prototype/day-bar-filter`, never merged):
+one day per press (A), one day and one depth group with Chocó's bars side by side (B), and a range (C,
+the owner's pick).
+
+- **With a mouse, a press chooses a day and a drag or a shift-press a range; on touch, a press
+  only.** A sideways drag on a phone scrolls the chart, so the range is desktop's alone
+  (`useFinePointer`, `(hover: hover) and (pointer: fine)`), and the tip under the bars names only
+  what works on the reader's device ("Haz clic…, o arrastra…" / "Toca…"). Over the bars the cursor
+  is `pointer`, since a day can be pressed; from the mouse-down and for as long as a drag lasts it is
+  `col-resize` on the whole document, which says the bars take a sideways sweep (owner's call). Both
+  are rules in `index.css` with `!important` (`[data-day-bars]`, `[data-drag-days]`): **Recharts writes
+  `cursor: default` inline on `.recharts-wrapper`**, so a cursor class on any ancestor never reaches
+  the bars. It merges a chart's `style` prop over that, but the design-system lint allows no inline
+  style. A first version put the class on an ancestor and read as working when checked there; check
+  the element under the pointer (`elementFromPoint`).
+- **The day under the pointer is read from the event's own position** (`dayAt` in `DailyBars`: the
+  x scale inverted through `useXAxisInverseScale`), never from Recharts' hover index, and the press
+  handlers sit on a plain element around the chart rather than on Recharts' chart events. That index
+  is set a frame after the mousemove, so a quick press or release landed on the day before; a tap has
+  no move before it at all, so on touch every tap would have chosen the previously tapped day; and
+  off the plot it is null, which `daily[Number(null)]` read as the first day (code review, 2026-09-26).
+  A press on the date labels chooses the day above it.
+- **A drag is followed on the window and can be dropped.** It ends on the window's mouseup, wherever
+  the button is let go, and is dropped, choosing nothing, on window blur, on Escape, and when a move
+  arrives with the button already up: each is a mouseup the page never got (a context menu, a switch
+  of app, a release over another frame), after which the next click anywhere would have chosen a
+  range. A Ctrl-press, a right click on a Mac, starts none. The drag's state lives in `DailyBars`, so
+  sweeping across the days redraws the bars and not the scatter's hundreds of dots; the scatter's
+  band follows the choice once it is made. A mouse press calls `preventDefault`, so it selects no
+  text and leaves no focus ring on the chart.
+- **The way back is three ways**: the chosen day pressed again, Escape in the chart, and "Ver todos
+  los días" in the table's header, which is the visible one. It is the only button: a second one
+  under the bars repeated it a card apart (owner's call, 2026-09-26), so that line names the days
+  and links down to the table ("23 sept · Ver los 107 eventos en el catálogo ↓") instead. Clicking
+  empty space does not clear: on a phone a tap while scrolling would.
+- **The tooltip's content never changes on a press.** It used to gain "Haz clic de nuevo para ver
+  todos los días" on the chosen day. Recharts drew the wider tooltip at its old position first and
+  then slid it back over ~120 ms, so on the rightmost days (Tolima's last, 23 Sept) it ran 106 px past
+  the chart's scroll container, and a horizontal scrollbar flashed on every press (owner's report,
+  2026-09-26; measured frame by frame). The line under the bars already says how to go back.
+- **The keyboard has the same choices.** Recharts' accessibility layer moves between days with the
+  arrows; `ActiveDay` reads the day it is on, Enter chooses it, Shift + Enter chooses every day up to
+  it, Escape lets go. A held Enter's repeats are ignored, or each would undo the last. The chart's
+  `desc` says all of this.
+- **Chosen days are marked three ways**: the other bars turn grey, a band in `foreground` at 7 %
+  sits behind the chosen days in both the bars and the scatter above, and the line under the bars
+  names them. The band was added after review: a chosen day of three events is a bar a few pixels
+  tall.
+  - **The grey is the theme's own `--border`** (owner's call, 2026-09-26: a neutral grey rather than
+    the days' own colours at 22 % opacity, and one of the palette's greys rather than a new token).
+    Measured on the card: 1.26:1 light and 1.32:1 dark, and 3.51:1 and 3.73:1 from the blue, so the
+    chosen days stand clear of it. The mid greys were no use: `--chart-3` and `--muted-foreground` sit
+    at the blue's own lightness (1.07:1 from it in light mode), so a chosen bar would barely have
+    stood out. `--muted` (1.09:1) nearly vanished; `--input` is the same as `--border` in light mode.
+    One grey for both groups also means the stacked split shows only on the chosen days.
+  - **The grey bars are below 3:1 on purpose**: they are context, each keeps its count in the
+    tooltip, and a grey at 3:1 on the card would sit at the blue's lightness, the problem above.
+  - The switch of colour is a 150 ms `fill` transition (`transition-fill`), off under reduced motion.
+- **Why not Chocó's groups side by side (variant B)**: after the first week most deep bars are 1–3 px
+  tall and 10 px wide, too small to hit, and side by side the day's total can no longer be read off
+  the axis. "Ver solo este grupo" in the groups card already narrows to one group, and a day choice
+  then applies within it.
+- **The table lists what was chosen, and its CSV too**, named for the days
+  (`sgc-choco-events-2026-09-12_2026-09-18.csv`).
+  - **The download button says how many events the file holds**: "Descargar 121 eventos en CSV",
+    always, not only while days are chosen (owner's call, 2026-09-26). The file is what the table
+    lists, which the page's filters narrow as well as the days, so a label that switched to a
+    "selected" wording would need a rule per case; the count is true in every one, and matches the
+    "121 de 809" beside it or the scope bar's "Mostrando 639 de 786" above. On a phone the button is
+    the icon and "CSV" (owner's call); the words before it stay in its name (`max-sm:sr-only`), so
+    the name is the whole sentence and still contains what is shown. Checked in the accessibility tree
+    at 320 and 1280 px: "Descargar 121 eventos en CSV".
+- The table returns to page 1 on a new choice, in the same
+  render (the page index is its own state, reset when the days change; an effect painted "Página 4
+  de 1" for a frame first), and its
+  always-mounted sr-only status says "Solo 12–18 sept: 145 de 809 eventos". "Ver los N eventos en el
+  catálogo" scrolls to the table (smoothly unless reduced motion) and focuses its heading.
+- **A choice the filters empty is let go of**, not kept to return when they change back. A refetch
+  that adds events keeps it. `eventsInDays` sits beside `dailyCounts`, so a bar and the rows it lists
+  never disagree about which Colombian day an event belongs to.
+- Checked 2026-09-26 at 1280 and 320 px, both themes, both languages: no horizontal overflow at
+  320 px, keyboard path end to end. Not checked on a physical touch device.
+
 ## Zones
 
 **One tab per zone, and only the chosen zone's page exists** (`App.tsx`, `src/lib/zone.tsx`).

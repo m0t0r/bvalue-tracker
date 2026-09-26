@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
-import { lazy, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { lazy, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
 import { BTimeCsvButton } from "@/components/charts/b-over-time-csv";
 import { bTimeDescription } from "@/components/charts/b-over-time-description";
@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEvents, getStatus } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
+import { useDaySelection } from "@/lib/day-selection";
 import { scopeChips, useScope } from "@/lib/scope";
 import { toggleTheme, useIsDark } from "@/lib/theme";
 import { ZoneProvider, useZoneState } from "@/lib/zone";
@@ -143,6 +144,19 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   const mainshock = mainshockId(view.mainshock);
   const chips = useMemo(() => scopeChips(scope, t, lang, zone, mainshock), [scope, t, lang, zone, mainshock]);
   const incomplete = !!status.data && status.data.backfill.done < status.data.backfill.total;
+  // The days the "Eventos por día" bars have chosen. They narrow the catalogue table and nothing else
+  // (`src/lib/day-selection.ts` says why), over the same deferred events both of them draw.
+  const picked = useDaySelection(deferred.shown);
+  const catalogue = useRef<HTMLHeadingElement>(null);
+  const showPicked = useCallback(() => {
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    catalogue.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    catalogue.current?.focus({ preventScroll: true });
+  }, []);
+  // Stable, so the memoised table skips the page's urgent renders (the rolling digits, the status poll).
+  const { setDays } = picked;
+  const allDays = useCallback(() => setDays(null), [setDays]);
+
   // Nothing is drawn under the loading skeleton. Whatever sat there would be pulled up into view
   // when a failed load swaps the viewport-tall skeleton for a short alert: the caveats note did
   // exactly that, 0.12 of CLS on every failed load, and PageSpeed Insights, whose runner the
@@ -272,11 +286,24 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                     description={t.magTimeDesc}
                     placeholder={<MagnitudeTimePlaceholder />}
                   >
-                    <MagnitudeTimeChart events={deferred.shown} mainshockId={mainshock} />
+                    <MagnitudeTimeChart
+                      events={deferred.shown}
+                      mainshockId={mainshock}
+                      days={picked.days}
+                      picked={picked.events.length}
+                      onDays={picked.setDays}
+                      onShowPicked={showPicked}
+                    />
                   </Deferred>
                 </div>
                 <div className="enter" style={{ "--i": 3 } as CSSProperties}>
-                  <EventsTable events={deferred.shown} />
+                  <EventsTable
+                    events={picked.events}
+                    days={picked.days}
+                    of={deferred.shown.length}
+                    onAllDays={allDays}
+                    titleRef={catalogue}
+                  />
                 </div>
               </>
             )}

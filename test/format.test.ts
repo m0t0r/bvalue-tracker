@@ -5,6 +5,8 @@ import {
   fmtDateTime,
   fmtDay,
   fmtDayLong,
+  fmtDayRange,
+  fmtIsoDay,
   fmtIsoDateTime,
   fmtRegion,
   fmtUtc,
@@ -55,5 +57,27 @@ describe("region names", () => {
     expect(fmtRegion("Sipi - Choco, Colombia")).toBe("Sipi - Choco");
     expect(fmtRegion("San Jose del Palmar - Choco,Colombia")).toBe("San Jose del Palmar - Choco");
     expect(fmtRegion("Colombia, Pacific Ocean")).toBe("Colombia, Pacific Ocean");
+  });
+});
+
+describe("a range of Colombian days", () => {
+  const day = (date: string) => Date.parse(`${date}T05:00:00Z`);
+
+  it("names one day as the day itself", () => {
+    expect(fmtDayRange(day("2026-09-12"), day("2026-09-12"), "es")).toBe("12\u00A0sept");
+  });
+
+  it("writes the month once when both ends share it", () => {
+    expect(fmtDayRange(day("2026-09-12"), day("2026-09-18"), "es")).toBe("12–18\u00A0sept");
+    expect(fmtDayRange(day("2026-09-12"), day("2026-09-18"), "en")).toBe("12–18\u00A0Sept");
+  });
+
+  it("keeps each end whole across a month, and never breaks after the dash", () => {
+    expect(fmtDayRange(day("2026-08-30"), day("2026-09-02"), "es")).toBe("30\u00A0ago –\u2060 2\u00A0sept");
+  });
+
+  it("gives a file name the Colombian date, not the UTC one", () => {
+    expect(fmtIsoDay(day("2026-09-12"))).toBe("2026-09-12");
+    expect(fmtIsoDay(dayStart(LATE))).toBe("2026-08-10");
   });
 });
