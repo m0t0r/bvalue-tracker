@@ -153,8 +153,6 @@ const es = {
   tabsLabel: "Forma de verlo",
   tabs: { story: "La historia", questions: "Preguntas", "3d": "En 3D" },
   loading: "Cargando los catálogos…",
-  loadFailed: "No se pudieron cargar los datos",
-  loadFailedBody: "Revisa tu conexión y recarga la página.",
   incompleteTitle: "Todavía se está cargando el historial",
   incompleteBody:
     "Al catálogo aún le faltan semanas. Hasta que se complete, las cifras y las conclusiones de esta página no son representativas. El monitor se encarga de terminar de cargarlo.",
@@ -299,8 +297,6 @@ const en: Copy = {
   tabsLabel: "How to look at it",
   tabs: { story: "The story", questions: "Questions", "3d": "In 3D" },
   loading: "Loading the catalogues…",
-  loadFailed: "Could not load the data",
-  loadFailedBody: "Check your connection and reload the page.",
   incompleteTitle: "The history is still loading",
   incompleteBody:
     "The catalogue is still missing weeks. Until it is complete, the figures and what is said about them are not representative. The monitor finishes loading it.",

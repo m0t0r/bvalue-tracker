@@ -466,9 +466,10 @@ colour, motion). Keep to them:
     Measured in the browser, light then dark: caution title 4.77 and 10.40, failure title
     8.24 and 6.89, both descriptions 4.56–6.07, borders 1.36 and 2.12 against the page.
   - **The two `-strong` values are a fixed 0.11 apart in lightness**, red the darker in
-    light mode and amber the lighter in dark. Both alerts can stand in the status bar at
-    once, and their hues alone are 0.048 apart in OKLab for a tritanope — under the 0.10
-    that reads as one colour. Lightness is what survives, as it does for the clusters.
+    light mode and amber the lighter in dark. The two alerts used to stand in the status bar at
+    once; they no longer do ("One alert at a time" below), and the separation stays so they
+    remain distinct if they ever meet again. Their hues alone are 0.048 apart in OKLab for a
+    tritanope — under the 0.10 that reads as one colour. Lightness is what survives, as it does for the clusters.
     Colour is not the only channel here (the words and the icon differ), which is why the
     hue pair is allowed to be close where a chart's would not be.
   - Caution is **hue 80**: 52.7° from `--destructive` and 30.3° from the mainshock orange
@@ -586,6 +587,19 @@ colour, motion). Keep to them:
   counter-example directly above — with a pinned y axis, height is a claim about the slope.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
+- **One alert at a time** (`src/lib/page-alert.ts`, 2026-09-26). The monitor used to stack the
+  back-fill notice, the failed-ingest alert and the load error, which left the reader to work out
+  which one was current. It now shows only the most serious: a failed load, then a failed SGC
+  query (which stalls the back-fill), then the back-fill's progress. The b card's "Historial
+  incompleto" badge keeps the incomplete-history caveat when the notice gives way. /insights has
+  only the back-fill notice and the load error, and already shows one or the other.
+- **The load error offers a retry, not a reload** (`load-error.tsx`, both pages). The page cannot tell
+  a dropped connection from a failing server, so the copy blames neither; "Reintentar" refetches
+  only the failed catalogue and reads "Reintentando…" through the query's own retries. On
+  both pages only a catalogue the page never got is an error (`loadFailed`): a background refetch
+  that fails keeps what is drawn, with no alert ("Última consulta al SGC" still dates the data, and
+  the next refetch tries again). The button stays focusable while it retries (`aria-disabled`),
+  and a retry parked offline counts as running.
 - **A chart or the map arrives in its own card, already titled.** They are loaded on approach
   (`Deferred`, see [Performance](performance.md)), so on a slow connection the reader first sees
   the card with its heading and a skeleton the size of the drawing. Never a bare grey box, and

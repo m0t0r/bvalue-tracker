@@ -2,6 +2,7 @@ import { useQuery, useQueryClient, type Query } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getContext, getEvents, getStatus } from "@/lib/api";
 import type { ContextResponse, StatusResponse } from "@/lib/api";
+import { loadError, loadFailed, retrying } from "@/lib/load-failed";
 import { useNow } from "@/lib/use-now";
 import { forecastStaleAt, insights, usgsForecast, type Forecast, type Insights } from "./claims";
 import { contextRecheckDue, keepFeltFromFirst } from "./context-refresh";
@@ -19,6 +20,9 @@ export function useInsights(): {
   forecast: Forecast | null;
   isPending: boolean;
   isError: boolean;
+  error: unknown;
+  retrying: boolean;
+  retry: () => void;
   incomplete: boolean;
 } {
   const qc = useQueryClient();
@@ -93,12 +97,21 @@ export function useInsights(): {
     () => (data && shownContext ? usgsForecast(shownContext, data, Math.max(data.now, exactNow)) : null),
     [data, shownContext, exactNow],
   );
+  const failed = [choco, tolima].filter(loadFailed);
   return {
     data,
     context: shownContext,
     forecast,
     isPending: choco.isPending || tolima.isPending || firstContext === undefined,
-    isError: choco.isError || tolima.isError,
+    // Only a catalogue the page never got is an error. A refetch that fails keeps the claims it
+    // already drew, as the monitor keeps its data (docs/frontend.md). Error, "Reintentando…" and
+    // the retry all follow the catalogue that failed, not the other one's download.
+    isError: failed.length > 0,
+    error: failed[0] ? loadError(failed[0]) : null,
+    retrying: failed.some(retrying),
+    retry: () => {
+      for (const q of failed) void q.refetch();
+    },
     incomplete,
   };
 }

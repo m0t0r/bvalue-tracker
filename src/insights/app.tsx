@@ -11,6 +11,8 @@ import {
   type ComponentType,
   type ReactPromise,
 } from "react";
+import { LoadError } from "@/components/load-error";
+import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,11 +91,11 @@ const readTab = (): Tab => {
 chunks[readTab()]();
 
 export function InsightsApp() {
-  const { lang, setLang } = useI18n();
+  const { lang, setLang, t } = useI18n();
   const c = insightsCopy[lang];
   const dark = useIsDark();
   const [tab, setTab] = useState<Tab>(readTab);
-  const { data, context, forecast, isPending, isError, incomplete } = useInsights();
+  const { data, context, forecast, isPending, isError, error, retrying, retry, incomplete } = useInsights();
   // The tabs are drawn from a deferred copy, so the render the data triggers (hundreds of ms of it
   // on a phone) runs as a transition React can interrupt, not one task that blocks input. It used
   // to be interruptible by accident: `lazy`'s retry after its suspension was (see `chunks`). And a
@@ -172,11 +174,16 @@ export function InsightsApp() {
             </Alert>
           ) : null}
           {isError ? (
-            <Alert variant="destructive">
-              <AlertTriangleIcon />
-              <AlertTitle>{c.loadFailed}</AlertTitle>
-              <AlertDescription>{c.loadFailedBody}</AlertDescription>
-            </Alert>
+            <LoadError
+              title={t.loadFailed}
+              body={t.loadFailedBody}
+              retry={t.loadRetry}
+              retrying={retrying}
+              retryingLabel={t.loadRetrying}
+              onRetry={retry}
+            >
+              <TechnicalDetail>{String(error)}</TechnicalDetail>
+            </LoadError>
           ) : !shown ? (
             <PageSkeleton label={c.loading} />
           ) : (

@@ -8,6 +8,7 @@
 // A rule: `match` (substring of the URL), then any of `status` (default 500), `delay` in ms before
 // answering, `body` (a string; default a JSON error), `once` (only the first match). A rule with
 // only `delay` passes the real response through, late. `localStorage.removeItem("fault")` clears them.
+// Faked answers never reach the network log; `window.faultLog` lists the URLs a rule answered.
 (() => {
   const real = window.fetch.bind(window);
   const used = new Set();
@@ -24,6 +25,7 @@
     if (i < 0) return real(input, init);
     const rule = rules()[i];
     used.add(i);
+    (window.faultLog ??= []).push(url);
     if (rule.delay) await new Promise((done) => setTimeout(done, rule.delay));
     if (rule.status === undefined && rule.body === undefined) return real(input, init);
     const status = rule.status ?? 500;

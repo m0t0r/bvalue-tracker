@@ -12,6 +12,7 @@ import { postRefresh, type StatusResponse, type StoredEvent } from "@/lib/api";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
 import { fmtDateTime, fmtDay, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { pageAlert } from "@/lib/page-alert";
 import { useNow } from "@/lib/use-now";
 import { useZone } from "@/lib/zone";
 import type { ZoneMainshock } from "../../core/mainshock";
@@ -36,9 +37,15 @@ function Stat({ label, value, hint }: { label: string; value: ReactNode | null; 
  * page for the event, like every value on the page that identifies one event, with its UTC time on
  * hover. The rule itself is written out under "Cómo leer estas cifras".
  */
-function MainshockStat({ mainshock: m }: { mainshock: ZoneMainshock<StoredEvent> | null }) {
+function MainshockStat({
+  mainshock: m,
+  catalogueFailed,
+}: {
+  mainshock: ZoneMainshock<StoredEvent> | null;
+  catalogueFailed: boolean;
+}) {
   const { t, lang } = useI18n();
-  if (m === null) return <Stat label={t.mainshock.label} value={null} />;
+  if (m === null) return <Stat label={t.mainshock.label} value={catalogueFailed ? "—" : null} />;
   if (m.largest === null || m.runnerUp === null || m.gap === null) return <Stat label={t.mainshock.label} value="—" />;
   const gap = m.gap.toFixed(1);
   if (m.state === "none")
@@ -69,6 +76,7 @@ export function StatusBar({
   shown,
   mainshock,
   loading,
+  catalogueFailed = false,
 }: {
   /** The page is still waiting for its status or its catalogue: draw a placeholder, not the stats. */
   loading: boolean;
@@ -76,6 +84,11 @@ export function StatusBar({
   shown: number | null;
   /** The zone's mainshock as detected over its whole catalogue; null until the catalogue has loaded. */
   mainshock: ZoneMainshock<StoredEvent> | null;
+  /**
+   * The catalogue's last load failed. Its two stats read "—" rather than a placeholder that never
+   * fills, and the page's load error is the only alert: this bar draws neither of its own.
+   */
+  catalogueFailed?: boolean;
 }) {
   const { t, lang } = useI18n();
   const zone = useZone().id;
@@ -154,6 +167,7 @@ export function StatusBar({
   );
 
   const failed = status?.lastRun && !status.lastRun.ok ? status.lastRun : null;
+  const alert = pageAlert({ catalogueFailed, ingestFailed: failed !== null, incomplete });
   // `stoodDown` sticks until the next press, but the claim it makes — SGC was queried in
   // the last five minutes — stops being true the moment a run fails. The alert below says
   // so; this must not contradict it.
@@ -167,7 +181,11 @@ export function StatusBar({
     : refresh.isError
       ? t.refreshFailed
       : stoodDown && failed
-        ? t.refreshStillFailing
+        ? // It explains itself only beside "La última consulta al SGC falló"; with the load error
+          // shown instead (`pageAlert`), a retry "already on the way" would have no context.
+          alert === "ingest"
+          ? t.refreshStillFailing
+          : ""
         : stoodDown
           ? t.refreshWait(CADENCE[zone].refreshMinIntervalS / 60)
           : "";
@@ -213,7 +231,7 @@ export function StatusBar({
           <div className="flex flex-wrap gap-x-6 gap-y-4 sm:gap-x-10">
             <Stat
               label={t.events}
-              value={shown === null ? null : <FlowNumber value={shown} lang={lang} />}
+              value={shown === null ? catalogueFailed ? "—" : null : <FlowNumber value={shown} lang={lang} />}
               hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined}
             />
             <Stat
@@ -226,7 +244,7 @@ export function StatusBar({
               value={status ? (ok?.finishedAt ? relativeTime(ok.finishedAt, lang, now) : t.never) : null}
               hint={ok?.finishedAt ? fmtDateTime(ok.finishedAt, lang) : undefined}
             />
-            <MainshockStat mainshock={mainshock} />
+            <MainshockStat mainshock={mainshock} catalogueFailed={catalogueFailed} />
           </div>
           {/* Below lg this block wraps onto its own line at the start edge, so it reads from there; beside the stats it hugs the end edge. */}
           <div className="flex flex-col items-start gap-2 lg:items-end">
@@ -237,10 +255,9 @@ export function StatusBar({
             </Button>
             {/* One line is always reserved. The live region announces refresh results; the standing note
                 about automatic updates sits outside it, so it is never read out as if it were news.
-                The note goes quiet while a run has failed: it promises a five-minute cadence that
-                has stopped — the fast lane stands down after a failure — and the alert below says
-                fifteen. Two numbers a few pixels apart read as a contradiction, and the alert is
-                the one telling the truth. The line stays, so nothing moves. */}
+                The note goes quiet while a run has failed: it promises a cadence that has stopped —
+                the fast lane stands down after a failure — whether or not the failed-query alert is
+                the one shown (`pageAlert`). The line stays, so nothing moves. */}
             <span
               aria-live="polite"
               className={message === "" ? "sr-only" : "min-h-4 text-start text-xs text-muted-foreground lg:text-end"}
@@ -255,7 +272,7 @@ export function StatusBar({
           </div>
         </CardContent>
       </Card>
-      {incomplete ? (
+      {alert === "backfill" && status ? (
         <Alert variant="caution" role="status">
           {backfill.isPending ? <Spinner aria-label={t.backfillShort} /> : <AlertTriangleIcon />}
           <AlertTitle>{t.zones[zone].backfillTitle(status.backfill.done, status.backfill.total)}</AlertTitle>
@@ -269,7 +286,7 @@ export function StatusBar({
           </AlertDescription>
         </Alert>
       ) : null}
-      {failed ? (
+      {alert === "ingest" && failed ? (
         <Alert variant="destructive">
           <AlertTriangleIcon />
           <AlertTitle>{t.ingestFailed}</AlertTitle>
