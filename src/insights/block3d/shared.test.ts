@@ -2,7 +2,19 @@ import captured from "../../../test/fixtures/api-events-2026-09-24.json";
 import { describe, expect, it } from "vitest";
 import { GROUND } from "../block";
 import { insights, type Catalogues } from "../claims";
-import { EAST, FLOOR_KM, NORTH, PRESETS, SOUTH, WEST, blockModel, framing, mapUv, type Preset } from "./shared";
+import {
+  EAST,
+  FLOOR_KM,
+  NORTH,
+  PRESETS,
+  SOUTH,
+  VIEWER_EXAGGERATION,
+  WEST,
+  blockModel,
+  framing,
+  mapUv,
+  type Preset,
+} from "./shared";
 
 const NOW = Date.parse("2026-09-24T14:44:03Z");
 const data = insights(captured as Catalogues, NOW);
@@ -46,6 +58,19 @@ describe("framing", () => {
       expect(Math.abs(sx!)).toBeLessThanOrEqual(1);
       expect(Math.abs(sy!)).toBeLessThanOrEqual(1);
     }
+  });
+
+  it("frames the whole block in every fitted view at the exaggeration the viewer opens at, phone to desktop", () => {
+    expect(VIEWER_EXAGGERATION).toBe(1);
+    const fitted = (Object.keys(PRESETS) as Preset[]).filter((p) => PRESETS[p].dist === "fit");
+    for (const preset of fitted)
+      for (const aspect of [0.46, 0.8, 1.7]) {
+        const { position, target } = framing(preset, VIEWER_EXAGGERATION, 32, aspect);
+        for (const c of corners(VIEWER_EXAGGERATION)) {
+          const [sx, sy] = onScreen(c, position, target, 32, aspect);
+          expect(Math.max(Math.abs(sx!), Math.abs(sy!))).toBeLessThanOrEqual(1);
+        }
+      }
   });
 
   it("fills the screen: some corner reaches the edge within the 4 % margin", () => {

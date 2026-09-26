@@ -36,6 +36,14 @@ export interface SceneText {
   trench: string;
   plate: string;
   rupture: string;
+  /**
+   * The plate's, the rupture's and the two sizes' labels without what the key already says (the
+   * model, the date, the directions), for a block narrower than NARROW_PX, where they crowded.
+   */
+  plateShort: string;
+  ruptureShort: string;
+  widthShort: string;
+  lengthShort: string;
   /** The block's size along its south and east top edges: "~500 km, oeste–este". */
   width: string;
   length: string;
@@ -108,7 +116,16 @@ function palette(dark: boolean) {
 // --- Labels and pins ----------------------------------------------------------------------------
 
 const LABEL = "pointer-events-none rounded bg-background/80 px-1 text-xs leading-tight font-medium text-foreground";
-const LABEL_MUTED = "pointer-events-none text-2xs leading-tight text-muted-foreground";
+/**
+ * The quieter labels (depth ticks, the trench, the block's size) differ from `LABEL` by weight and
+ * backing only. They sit on the grey plate and the relief: in `muted-foreground` at 10 px they were
+ * 2.1–2.8:1 in light mode, and even over `LABEL`'s backing 3.7–4.2:1.
+ */
+const LABEL_QUIET = "pointer-events-none whitespace-nowrap text-xs leading-tight text-foreground";
+/** Below this block width the plate's and the rupture's labels drop the model's name. */
+const NARROW_PX = 480;
+/** How close a label may come to the block's edge, px. */
+const LABEL_INSET = 4;
 
 function labelElement(text: string, className: string) {
   const el = document.createElement("div");
@@ -587,20 +604,34 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     shown: () => boolean;
     /** `end`: the label ends at its point, so one on the block's right edge stays on screen. */
     align: "center" | "end";
+    /**
+     * A label is kept inside the block, whatever its point: centred on its point, the plate's and
+     * the rupture's began off a 320 px screen. A pin is not: it marks its town. Its width is read
+     * once per resize, the first time it is shown (0 until then).
+     */
+    clamp: boolean;
+    width: number;
+    /** Its text on a block narrower than NARROW_PX, if it has a shorter one. */
+    narrow?: [full: string, short: string];
   }
   const tags: Tag[] = [];
-  const tag = (el: HTMLElement, at: Tag["at"], shown: Tag["shown"], align: Tag["align"] = "center") => {
+  const tag = (
+    el: HTMLElement,
+    at: Tag["at"],
+    shown: Tag["shown"],
+    { align = "center", clamp = true, narrow }: { align?: Tag["align"]; clamp?: boolean; narrow?: Tag["narrow"] } = {},
+  ) => {
     el.style.position = "absolute";
     el.style.left = "0";
     el.style.top = "0";
     overlay.append(el);
-    tags.push({ el, at, shown, align });
+    tags.push({ el, at, shown, align, clamp, width: 0, narrow });
   };
   let view = initial;
   let fromAbove = 0;
   for (let d = 0; d <= 200; d += 50) {
     tag(
-      labelElement(`${d} km`, LABEL_MUTED),
+      labelElement(`${d} km`, LABEL_QUIET),
       () => [EAST + 6, -d * view.exaggeration, SOUTH],
       () => view.layers.labels && fromAbove < 0.5,
     );
@@ -611,34 +642,40 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       pinElement(t.name, t.kind === "home"),
       () => [x(t.lon), h * view.exaggeration, z(t.lat)],
       () => view.layers.labels,
+      { clamp: false },
     );
   }
   tag(
-    labelElement(text.trench, LABEL_MUTED),
+    labelElement(text.trench, LABEL_QUIET),
     () => [x(-78.05), 8, z(4.2)],
     () => view.layers.labels,
   );
   tag(
     labelElement(text.plate, LABEL),
-    () => [x(-77.3), -40 * view.exaggeration, z(3.6)],
+    // 40 km down, stretched with the rest; at ×1 no shallower than 70, or it sat on the block's
+    // "~500 km" edge label at 320–390 px.
+    () => [x(-77.3), -Math.max(40 * view.exaggeration, 70), z(3.6)],
     () => view.layers.plate && fromAbove < 0.5,
+    { narrow: [text.plate, text.plateShort] },
   );
   tag(
     labelElement(text.rupture, LABEL),
     () => [x(-76.9), -150 * view.exaggeration, z(4.1)],
     () => model.rupture !== null && view.layers.rupture && fromAbove < 0.5,
+    { narrow: [text.rupture, text.ruptureShort] },
   );
   // The block's size along its top edges, so the reader can tell how big the slice is.
   tag(
-    labelElement(text.width, LABEL_MUTED),
+    labelElement(text.width, LABEL_QUIET),
     () => [(EAST + WEST) / 2, 0, SOUTH + 8],
     () => view.layers.labels,
+    { narrow: [text.width, text.widthShort] },
   );
   tag(
-    labelElement(text.length, LABEL_MUTED),
+    labelElement(text.length, LABEL_QUIET),
     () => [EAST, 0, (SOUTH + NORTH) / 2],
     () => view.layers.labels,
-    "end",
+    { align: "end", narrow: [text.length, text.lengthShort] },
   );
 
   // --- View state ------------------------------------------------------------------------------
@@ -739,13 +776,25 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       const cx = (pv[0]! * px + pv[4]! * py + pv[8]! * pz + pv[12]!) / cw;
       const cy = (pv[1]! * px + pv[5]! * py + pv[9]! * pz + pv[13]!) / cw;
       t.el.style.display = "";
-      const shift = t.align === "end" ? "-100%" : "-50%";
-      t.el.style.transform = `translate(${((cx + 1) / 2) * w}px, ${((1 - cy) / 2) * h}px) translate(${shift}, -50%)`;
+      const sx = ((cx + 1) / 2) * w;
+      const sy = ((1 - cy) / 2) * h;
+      if (!t.clamp) {
+        t.el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -50%)`;
+        continue;
+      }
+      if (t.width === 0) t.width = t.el.offsetWidth;
+      const left = sx - (t.align === "end" ? t.width : t.width / 2);
+      const inside = Math.max(LABEL_INSET, Math.min(w - t.width - LABEL_INSET, left));
+      t.el.style.transform = `translate(${inside}px, ${sy}px) translate(0, -50%)`;
     }
   };
   function resize() {
     const { clientWidth: w, clientHeight: h } = container;
     if (!w || !h) return;
+    for (const t of tags) {
+      if (t.narrow) t.el.textContent = t.narrow[w < NARROW_PX ? 1 : 0];
+      t.width = 0;
+    }
     renderer.setSize(w, h);
     camera.perspective({ aspect: w / h });
     if (current && !tween) goTo(current, false);

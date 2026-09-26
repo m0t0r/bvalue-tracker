@@ -4,7 +4,7 @@
  * decides what may be shown, and the sentences are `../copy.ts`'s. Every USGS figure is rendered as
  * text, and no USGS string (a place name, a label) is shown at all.
  */
-import { fmtDay } from "@/lib/format";
+import { fmtDayLong } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { FELT_MIN_RESPONSES, type Felt } from "../claims";
 import { insightsCopy, intensityName } from "../copy";
@@ -19,7 +19,7 @@ export function Shaking({ felt, mag }: { felt: Felt; mag: number }) {
   const { lang } = useI18n();
   const c = questionsCopy[lang].shaking;
   const claims = insightsCopy[lang].claims;
-  const day = (iso: string) => fmtDay(Date.parse(iso), lang);
+  const day = (iso: string) => fmtDayLong(Date.parse(iso), lang);
   const { reported, modelled } = felt;
   // The DYFI product exists but Pereira's cell has too few answers (or none): say so in its place.
   const few = reported === null && felt.totalResponses !== null;
@@ -86,7 +86,7 @@ function Reading({ title, level, detail }: { title: string; level: number | null
   const name = level === null ? null : intensityName(level, lang);
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</dt>
+      <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{title}</dt>
       <dd className="flex items-baseline gap-3">
         <span className="text-4xl font-semibold tracking-tight">{name?.roman ?? "—"}</span>
         {name ? <span className="text-lg font-medium first-letter:uppercase">{name.shaking}</span> : null}

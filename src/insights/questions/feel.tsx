@@ -94,6 +94,7 @@ export function FeelExplorer({
             ]}
           />
           <RangeField
+            name="magnitude"
             label={c.magnitude}
             value={mag}
             display={`M${mag.toFixed(1)}`}
@@ -103,6 +104,7 @@ export function FeelExplorer({
             onChange={custom(setMag)}
           />
           <RangeField
+            name="distance"
             label={c.distance}
             value={epi}
             display={fmtKm(epi)}
@@ -112,6 +114,7 @@ export function FeelExplorer({
             onChange={custom(setEpi)}
           />
           <RangeField
+            name="depth"
             label={c.depth}
             value={depth}
             display={fmtKm(depth)}
@@ -120,13 +123,15 @@ export function FeelExplorer({
             step={1}
             onChange={custom(setDepth)}
           />
+          {/* Each readout spans the rows of a subgrid, so the two values share a line however many
+              lines their labels wrap to, each label sitting on its value. */}
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">{c.straight}</dt>
+            <div className="row-span-2 grid grid-rows-subgrid gap-y-0">
+              <dt className="self-end text-muted-foreground">{c.straight}</dt>
               <dd className="text-lg font-semibold tabular-nums">{fmtKm(km)}</dd>
             </div>
-            <div>
-              <dt className="text-muted-foreground">{c.motion(ref)}</dt>
+            <div className="row-span-2 grid grid-rows-subgrid gap-y-0">
+              <dt className="self-end text-muted-foreground">{c.motion(ref)}</dt>
               <dd className="text-lg font-semibold tabular-nums">{relText}</dd>
             </div>
             <div className="col-span-2">
@@ -223,7 +228,8 @@ function MiniMap({
           ))}
         </g>
         <path d={circle(ringKm)} fill="none" strokeDasharray="4 4" className="stroke-muted-foreground" />
-        <path d={circle(Math.max(1, epi))} fill="none" strokeWidth={1.5} className="stroke-chart-2" />
+        {/* In the text colour: orange is the mainshock's, and the chosen event is often another. */}
+        <path d={circle(Math.max(1, epi))} fill="none" strokeWidth={1.5} className="stroke-foreground" />
         {SOURCES.map((s) => (
           <g key={s} className={cn(FILL[s], "opacity-40")}>
             {dots
@@ -258,10 +264,13 @@ function MiniMap({
         })}
         {labels.map((l) => {
           const [x, y] = project(l.lon, l.lat);
+          // Kept inside the map: centred on its point, "● Istmina–Sipí" began 8 px past the left edge
+          // at 320 px. The width is estimated (Geist semibold runs ~0.6 em a character), with room.
+          const half = ((l.text.length + 2) * 0.62 * 12 * k) / 2;
           return (
             <text
               key={l.s}
-              x={x}
+              x={Math.min(MAP - 4 - half, Math.max(4 + half, x))}
               y={y}
               textAnchor="middle"
               fontSize={12 * k}
@@ -298,7 +307,7 @@ function MiniMap({
           {c.ring(ringKm)}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="inline-block w-5 border-t-2 border-chart-2" />
+          <span aria-hidden className="inline-block w-5 border-t-2 border-foreground" />
           {c.chosen}
         </span>
       </p>
@@ -369,8 +378,10 @@ function AmplitudeScale({
 }
 
 const RACE_SPEED = 4;
+/** Under reduced motion the race goes in steps this far apart: the start, P arrives, S arrives. */
+const RACE_STEP_MS = 900;
 
-/** P and S waves racing from the source to Pereira, sped up. Reduced motion shows the finish. */
+/** P and S waves racing from the source to Pereira, sped up. Reduced motion steps through it. */
 function WaveRace({ km }: { km: number }) {
   const { lang } = useI18n();
   const c = questionsCopy[lang].far;
@@ -379,15 +390,26 @@ function WaveRace({ km }: { km: number }) {
   const { p, s } = arrivalSeconds(km);
   const [elapsed, setElapsed] = useState(s);
   const frame = useRef(0);
-  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  const steps = useRef<number[]>([]);
+  const stop = () => {
+    cancelAnimationFrame(frame.current);
+    for (const id of steps.current) clearTimeout(id);
+    steps.current = [];
+  };
+  useEffect(() => stop, []);
   // A new distance shows its finished race; the button runs it.
   useEffect(() => {
-    cancelAnimationFrame(frame.current);
+    stop();
     setElapsed(s);
   }, [s]);
   const play = () => {
-    cancelAnimationFrame(frame.current);
-    if (reduced) return setElapsed(s);
+    stop();
+    if (reduced) {
+      // No gliding dots: the start, then each wave already at Pereira, one after the other.
+      setElapsed(0);
+      steps.current = [p, s].map((at, i) => window.setTimeout(() => setElapsed(at), RACE_STEP_MS * (i + 1)));
+      return;
+    }
     const t0 = performance.now();
     const tick = (now: number) => {
       const e = ((now - t0) / 1000) * RACE_SPEED;
@@ -407,7 +429,7 @@ function WaveRace({ km }: { km: number }) {
           {c.raceTitle} <span className="tabular-nums">({c.raceSpeed(RACE_SPEED)})</span>
         </p>
         <Button type="button" variant="outline" size="sm-touch" onClick={play}>
-          <PlayIcon />
+          <PlayIcon data-icon="inline-start" />
           {c.race}
         </Button>
       </div>
@@ -450,7 +472,7 @@ function WaveRace({ km }: { km: number }) {
           {c.arrives(s)}
         </text>
       </svg>
-      <p className="mt-2 max-w-prose text-sm text-pretty">{c.raceNote(s - p)}</p>
+      <p className="mt-2 max-w-md text-sm text-pretty">{c.raceNote(s - p)}</p>
     </div>
   );
 }

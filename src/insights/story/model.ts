@@ -6,7 +6,7 @@
  * Pure, so it can be tested without a renderer.
  */
 import { energyRatio, epicentralKm, hypocentralKm, seismicMoment } from "@bvalue/seismo";
-import { SOURCES, type Insights, type QuakeLike, type Source } from "../claims";
+import { CRUSTAL_KM, SOURCES, type Insights, type QuakeLike, type Source } from "../claims";
 import { PEREIRA } from "../../../core/places";
 import { shakingDuration } from "../durations";
 import { compareHistory } from "../history";
@@ -64,8 +64,6 @@ export const SIMILAR_DISTANCE_RATIO = 4 / 3;
 export const NEAR_KM = 40;
 /** Depths "snap to steps" when the three commonest values hold this share of the group. */
 export const SNAPPED_SHARE = 0.2;
-/** Deeper than this, a median depth is not called "inside the crust". */
-export const CRUSTAL_KM = 30;
 /** The swarm is "much further from the plate" than Chocó's sources from this many times their largest gap. */
 export const FAR_FROM_PLATE = 2;
 

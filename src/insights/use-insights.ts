@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, type Query } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getContext, getEvents, getStatus } from "@/lib/api";
 import type { ContextResponse, StatusResponse } from "@/lib/api";
-import { loadError, loadFailed, retrying } from "@/lib/load-failed";
+import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
 import { useNow } from "@/lib/use-now";
 import { forecastStaleAt, insights, usgsForecast, type Forecast, type Insights } from "./claims";
 import { contextRecheckDue, keepFeltFromFirst } from "./context-refresh";
@@ -24,6 +24,11 @@ export function useInsights(): {
   retrying: boolean;
   retry: () => void;
   incomplete: boolean;
+  /**
+   * When the oldest data on screen was fetched, while a refetch over it has failed or waits offline;
+   * else null. The page says so rather than go on counting "the last 7 days" in silence.
+   */
+  staleSince: number | null;
 } {
   const qc = useQueryClient();
   const choco = useQuery({ queryKey: ["events", "choco"], queryFn: () => getEvents("choco") });
@@ -113,6 +118,7 @@ export function useInsights(): {
       for (const q of failed) void q.refetch();
     },
     incomplete,
+    staleSince: staleSince([choco, tolima, chocoStatus, tolimaStatus]),
   };
 }
 

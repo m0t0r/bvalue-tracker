@@ -10,6 +10,8 @@ import {
   bySource,
   chocoReach,
   compassPoint,
+  CRUSTAL_KM,
+  crustal,
   FAR_FROM_KM,
   decay,
   drift,
@@ -198,7 +200,26 @@ describe("drift", () => {
     expect(still.case).toBe("none");
   });
   it("needs enough events at both ends", () => {
-    expect(drift(cloud(t0, 3.85, -75.6).slice(0, 5), t0 + 3 * DAY).case).toBe("too-few");
+    expect(drift(cloud(t0, 3.85, -75.6).slice(0, 5), t0 + 3 * DAY)).toEqual({ case: "too-few", young: false });
+    // A busy first day and a quiet last one: too few at one end is enough.
+    expect(drift(cloud(t0, 3.85, -75.6), t0 + 3 * DAY)).toEqual({ case: "too-few", young: false });
+  });
+  it("says it is too young, not too few, while the two ends still overlap", () => {
+    expect(drift(cloud(t0, 3.85, -75.6), t0 + DAY)).toEqual({ case: "too-few", young: true });
+  });
+});
+
+describe("crustal", () => {
+  const at = (depthKm: number) => ({ count: 1, epicentralKm: 0, hypocentralKm: 0, depthKm, minKm: 0, maxKm: 0 });
+  it("says 'inside the crust' only for a median depth shallower than CRUSTAL_KM", () => {
+    expect(crustal(at(CRUSTAL_KM - 0.1))).toBe(true);
+    expect(crustal(at(CRUSTAL_KM))).toBe(false);
+    expect(crustal(null)).toBe(false);
+  });
+  it("holds for Chaparral on the 2026-09-24 fixture (median 18.9 km), not for Chocó's deep group", () => {
+    const d = insights(fixture, Date.parse("2026-09-24T14:44:00Z")).distances;
+    expect(crustal(d.tolima)).toBe(true);
+    expect(crustal(d.deep)).toBe(false);
   });
 });
 

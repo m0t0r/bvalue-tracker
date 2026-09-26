@@ -83,6 +83,15 @@ export interface SourceDistance {
   maxKm: number;
 }
 
+/**
+ * Deeper than this, a source's median depth is not called "inside the crust": shallower, a source is
+ * certainly in it; deeper, the page leaves the words out rather than guess where the crust ends. The
+ * story's swarm step and the questions tab's question on Chaparral both use it.
+ */
+export const CRUSTAL_KM = 30;
+/** Whether a source may be said to be "inside the crust", from its median depth (`distancesFrom`). */
+export const crustal = (d: SourceDistance | null | undefined) => d != null && d.depthKm < CRUSTAL_KM;
+
 /** How far each source is from a place, as medians over its events. Null for a source with none. */
 export function distancesFrom(sources: Record<Source, readonly QuakeLike[]>, place: LatLon = PEREIRA) {
   const out = {} as Record<Source, SourceDistance | null>;
@@ -340,7 +349,11 @@ export const DRIFT_MIN_KM = 1.5;
  * it cannot see any movement at the catalogue's precision. Even `moved` is a hint, not a finding.
  */
 export type Drift =
-  | { case: "too-few" }
+  /**
+   * Nothing to compare: fewer than DRIFT_MIN_EVENTS on the first day or in the last 24 h, or `young`,
+   * under two days since the first event, when the two windows still overlap.
+   */
+  | { case: "too-few"; young: boolean }
   | {
       case: "none" | "moved";
       km: number;
@@ -352,12 +365,12 @@ export type Drift =
     };
 
 export function drift(events: readonly QuakeLike[], now: number): Drift {
-  if (events.length === 0) return { case: "too-few" };
+  if (events.length === 0) return { case: "too-few", young: false };
   const t0 = Date.parse(events[0]!.time);
+  if (now - t0 < 2 * DAY) return { case: "too-few", young: true };
   const early = events.filter((e) => Date.parse(e.time) < t0 + DAY);
   const late = events.filter((e) => Date.parse(e.time) > now - DAY);
-  if (early.length < DRIFT_MIN_EVENTS || late.length < DRIFT_MIN_EVENTS || now - t0 < 2 * DAY)
-    return { case: "too-few" };
+  if (early.length < DRIFT_MIN_EVENTS || late.length < DRIFT_MIN_EVENTS) return { case: "too-few", young: false };
   const centre = (es: readonly QuakeLike[]) => ({
     lat: median(es.map((e) => e.lat))!,
     lon: median(es.map((e) => e.lon))!,

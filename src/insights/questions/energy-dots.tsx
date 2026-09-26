@@ -115,7 +115,7 @@ export function EnergyDots({ data, reference, refEvent }: { data: Insights; refe
   return (
     <Figure caption={`${c.caption} ${questionsCopy[lang].magTypes}`}>
       <div className="mb-4 flex flex-col gap-3">
-        <p className="max-w-prose text-sm text-pretty text-muted-foreground">{c.intro(fmtInt(roundSig(n)))}</p>
+        <p className="max-w-md text-sm text-pretty text-muted-foreground">{c.intro(fmtInt(roundSig(n)))}</p>
         <Choice label={c.compare} value={compare} onChange={setCompare} options={options} />
       </div>
       <div ref={box} className="aspect-2/1 w-full min-w-0">

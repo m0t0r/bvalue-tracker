@@ -12,7 +12,7 @@ const f0 = (v: number) => Math.round(v).toString();
 const f1 = (v: number) => v.toFixed(1);
 const mag = (m: number) => `M${f1(m)}`;
 /** Seconds for a wave's arrival, never "0 s": under a second is said as such. */
-const secs = (s: number, lt1: string) => (s < 1 ? lt1 : `${f0(s)} s`);
+const secs = (s: number, lt1: string) => (s < 1 ? lt1 : `${f0(s)}\u00A0s`);
 
 const WORDS_ES = ["cero", "una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez"];
 const WORDS_EN = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
@@ -20,7 +20,10 @@ const WORDS_EN = ["zero", "one", "two", "three", "four", "five", "six", "seven",
 /** An event the copy names: its magnitude and its Colombian date, already formatted. */
 export interface Named {
   mag: number;
+  /** For running prose: "10 de agosto", "10 August". */
   date: string;
+  /** For a label or a button: "10 ago", "10 Aug". */
+  short: string;
 }
 
 const es = {
@@ -30,7 +33,7 @@ const es = {
   stats: {
     km: (km: number) => `~${f0(km)}\u00A0km`,
     kmLabel: "de Pereira a las tres fuentes, en línea recta",
-    strongLabel: (ref: Named) => `eventos de M4.0 o más desde el ${mag(ref.mag)}`,
+    strongLabel: (ref: Named) => `eventos de M4.0 o más después del ${mag(ref.mag)}`,
     recentLabel: "de ellos en los últimos 7 días",
   },
   indexTitle: "Preguntas",
@@ -53,7 +56,7 @@ const es = {
         ? `Las tres fuentes están a unos ${f0(km)}\u00A0km en línea recta: un M4 llega hasta aquí muy atenuado, y el ${mag(ref.mag)} se sintió con fuerza por su tamaño, no por estar más cerca.`
         : "Lo que llega a Pereira depende del tamaño del evento y de su distancia en línea recta, contando la profundidad.",
     pick: "Elige un evento",
-    presetReference: (ref: Named) => `El ${mag(ref.mag)} del ${ref.date}`,
+    presetReference: (ref: Named) => `El ${mag(ref.mag)} del ${ref.short}`,
     presetShallow: (m: number) => `${mag(m)} en Istmina–Sipí`,
     presetTolima: (m: number) => `${mag(m)} en Chaparral`,
     custom: "Personalizado",
@@ -72,7 +75,7 @@ const es = {
     scaleTitle: "Amplitud del movimiento en Pereira, simplificada (cada marca es 10 veces la anterior)",
     scaleAria: (x: string) =>
       `Escala de amplitud simplificada, frente a la del sismo de referencia. El evento elegido: ${x}.`,
-    scaleRef: (ref: Named) => `${mag(ref.mag)}, ${ref.date}`,
+    scaleRef: (ref: Named) => `${mag(ref.mag)}, ${ref.short}`,
     mapAria: "Mapa de Pereira, las tres fuentes y la distancia elegida",
     ring: (km: number) => `${f0(km)}\u00A0km alrededor de Pereira`,
     chosen: "la distancia que elegiste",
@@ -85,7 +88,7 @@ const es = {
     raceAria: (p: number, s: number) =>
       `Carrera de ondas: la onda P llega a los ${secs(p, "menos de un segundo")} y la onda S a los ${secs(s, "menos de un segundo")}.`,
     quake: "evento",
-    arrives: (s: number): string => (s < 1 ? "llega en menos de 1 s" : `llega a los ${f0(s)} s`),
+    arrives: (s: number): string => (s < 1 ? "llega en menos de 1\u00A0s" : `llega a los ${f0(s)}\u00A0s`),
     raceNote: (gap: number): string =>
       gap < 1
         ? "A tan poca distancia, las ondas P y S llegan casi a la vez."
@@ -183,8 +186,9 @@ const es = {
   swarm: {
     short: "¿Y Chaparral?",
     q: "¿Qué está pasando en Chaparral? ¿Es lo mismo?",
-    p1: (start: string, depth: number, perDay: number, state: MainshockState): string =>
-      `${state === "none" ? "No. Chaparral es un enjambre (así lo llama también el SGC): muchos eventos, sin uno que domine." : "Chaparral es lo que el SGC llama un enjambre."} Empezó el ${start}, a unos ${f0(depth)}\u00A0km de profundidad, dentro de la corteza, y registra en promedio unos ${f0(perDay)} eventos por día.`,
+    /** `crustal`: the swarm's median depth passes `crustal` in `claims.ts`, the story's rule too. */
+    p1: (start: string, depth: number, crustal: boolean, perDay: number, state: MainshockState): string =>
+      `${state === "none" ? "No. Chaparral es un enjambre (así lo llama también el SGC): muchos eventos, sin uno que domine." : "Chaparral es lo que el SGC llama un enjambre."} Empezó el ${start}, a unos ${f0(depth)}\u00A0km de profundidad${crustal ? ", dentro de la corteza," : ""} y registra en promedio unos ${f0(perDay)} eventos por día.`,
     state: (s: MainshockState, largest: number, gap: number | null) =>
       s === "none"
         ? `Ninguno sobresale: el mayor, ${mag(largest)}, está solo ${gap === null ? "un poco" : f1(gap)} por encima del siguiente. Por eso no tiene sismo principal.`
@@ -324,7 +328,7 @@ const en: Copy = {
   stats: {
     km: (km) => `~${f0(km)}\u00A0km`,
     kmLabel: "from Pereira to the three sources, in a straight line",
-    strongLabel: (ref) => `events of M4.0 or more since the ${mag(ref.mag)}`,
+    strongLabel: (ref) => `events of M4.0 or more after the ${mag(ref.mag)}`,
     recentLabel: "of them in the last 7 days",
   },
   indexTitle: "Questions",
@@ -346,7 +350,7 @@ const en: Copy = {
         ? `All three sources are about ${f0(km)}\u00A0km away in a straight line: an M4 arrives here much weakened, and the ${mag(ref.mag)} arrived with force because of its size, not because it was closer.`
         : "What reaches Pereira depends on the event's size and its straight-line distance, counting depth.",
     pick: "Pick an event",
-    presetReference: (ref) => `The ${mag(ref.mag)} of ${ref.date}`,
+    presetReference: (ref) => `The ${mag(ref.mag)} of ${ref.short}`,
     presetShallow: (m) => `${mag(m)} at Istmina–Sipí`,
     presetTolima: (m) => `${mag(m)} at Chaparral`,
     custom: "Your own",
@@ -364,7 +368,7 @@ const en: Copy = {
     motionLess: (x) => `≈ 1/${x} of it`,
     scaleTitle: "Ground-motion amplitude in Pereira, simplified (each mark is 10 times the previous)",
     scaleAria: (x) => `Simplified amplitude scale, against the reference earthquake's. The chosen event: ${x}.`,
-    scaleRef: (ref) => `${mag(ref.mag)}, ${ref.date}`,
+    scaleRef: (ref) => `${mag(ref.mag)}, ${ref.short}`,
     mapAria: "Map of Pereira, the three sources and the chosen distance",
     ring: (km) => `${f0(km)}\u00A0km around Pereira`,
     chosen: "the distance you chose",
@@ -377,7 +381,7 @@ const en: Copy = {
     raceAria: (p, s) =>
       `Wave race: the P wave arrives after ${secs(p, "less than a second")} and the S wave after ${secs(s, "less than a second")}.`,
     quake: "event",
-    arrives: (s) => (s < 1 ? "arrives in under 1 s" : `arrives at ${f0(s)} s`),
+    arrives: (s) => (s < 1 ? "arrives in under 1\u00A0s" : `arrives at ${f0(s)}\u00A0s`),
     raceNote: (gap) =>
       gap < 1
         ? "At so short a distance, the P and S waves arrive almost together."
@@ -472,8 +476,8 @@ const en: Copy = {
   swarm: {
     short: "And Chaparral?",
     q: "What is happening at Chaparral? Is it the same thing?",
-    p1: (start, depth, perDay, state) =>
-      `${state === "none" ? "No. Chaparral is a swarm, which is also what SGC calls it: many events, none dominant." : "Chaparral is what SGC calls a swarm."} It began on ${start}, about ${f0(depth)}\u00A0km deep inside the crust, and has been running at about ${f0(perDay)} events a day.`,
+    p1: (start, depth, crustal, perDay, state) =>
+      `${state === "none" ? "No. Chaparral is a swarm, which is also what SGC calls it: many events, none dominant." : "Chaparral is what SGC calls a swarm."} It began on ${start}, about ${f0(depth)}\u00A0km deep${crustal ? " inside the crust" : ""}, and has been running at about ${f0(perDay)} events a day.`,
     state: (s, largest, gap) =>
       s === "none"
         ? `None stands out: the largest, ${mag(largest)}, is only ${gap === null ? "slightly" : f1(gap)} above the next. That is why it has no mainshock.`
