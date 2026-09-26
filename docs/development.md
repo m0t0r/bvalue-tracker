@@ -158,10 +158,20 @@ the pinned towns change:
   declared in `worker/test/env.d.ts`): the Workers pool has no filesystem, and this is how
   `external.test.ts` reads `wrangler.jsonc` to hold the cron patterns to the code.
 - Tailwind 4 already wraps `hover:` in `@media (hover: hover)`; do not add that guard.
+- **Tailwind 4's `outline-none` sets `--tw-outline-style: none`**, so a later
+  `focus-visible:outline-2` on the same element draws nothing. Leave `outline-none` off an element
+  that shows focus with an outline.
+- **`scale-*` sets the CSS `scale` property, not `transform`**: a transition must list `scale`, or
+  the press snaps.
+- **MapLibre's stylesheet loads after `index.css`** (it comes with the map's chunk), so overriding a
+  rule of the same specificity needs `.maplibregl-map` in front.
+- tw-animate's `slide-in-from-bottom-10` is 10 % of the element, not 2.5rem.
 - `src/components/ui/*` is shadcn source that we **have modified** (focus rings,
   slider naming, `CardTitle` as `h2`, chart tick selector, legend wrapping, touch hit
   areas, press scale, no `transition-all`, the lint's extra `Button` sizes and variant and
-  `Table`'s `size`, the chart legend's swatch colour through `--color-bg`). Re-adding a
+  `Table`'s `size`, the chart legend's swatch colour through `--color-bg`, focus outlines on charts
+  and tab panels, the Sheet's `motion-safe:` slides, default `name`s on Slider and Switch (#73), the
+  card header's grid). Re-adding a
   component with the shadcn CLI would overwrite those; use `--diff` first. oxfmt formats this
   directory in shadcn's own style (no semicolons, 80 columns) so that diff stays readable.
 - **oxfmt leaves Markdown alone** (`**/*.md` in `.oxfmtrc.json`). It pads every table to its
