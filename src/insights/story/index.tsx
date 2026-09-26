@@ -30,7 +30,7 @@ import { ExternalLink, MainName, Note, Num, SourceName } from "./marks";
 import { RATE } from "./section";
 import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
 import { HISTORY, ISCGEM_URL, quakeYear } from "../history";
-import { SCARDEC_URL, SGC_DURATION_URL, USGS_FINITE_FAULT_URL } from "../durations";
+import { SGC_DURATION_URL, USGS_FINITE_FAULT_URL, shakingParts } from "../durations";
 import { CONVERGENCE_SOURCE, CUTS } from "../plate";
 import { Rich, fill } from "./rich";
 
@@ -422,61 +422,39 @@ function useSteps(
   }
 
   if (main && model.durations) {
-    const d = model.durations;
+    const d = shakingParts(model.durations);
     const magLabel = fmtMag(main.mag);
-    const secs = (v: number) => <Num>{fmt(v)}</Num>;
     steps.push({
       id: "energy-duration",
       scene: "energy",
       sub: "duration",
-      title: fill(c.energy.durationTitle, { core: fmt(d.main.core) }),
+      title: fill(c.energy.durationTitle, d),
       body: (
         <>
           <p>
             <Rich
               text={c.energy.duration1}
-              parts={{ magLabel: <MainName>{magLabel}</MainName>, core: secs(d.main.core) }}
+              parts={{
+                sgc: <ExternalLink href={SGC_DURATION_URL}>SGC</ExternalLink>,
+                magLabel: <MainName>{magLabel}</MainName>,
+                from: <Num>{d.from}</Num>,
+                toMin: <Num>{d.toMin}</Num>,
+              }}
             />
           </p>
           <p>
-            <Rich text={c.energy.durationSlow} parts={{ slow: secs(d.main.slow) }} />
+            <Rich text={c.energy.durationRupture} parts={{ rupture: <Num>{d.rupture}</Num> }} />
           </p>
-          {d.past.length > 0 && (
-            <>
-              <p>{c.energy.durationPast}</p>
-              <ul className="list-disc space-y-2 pl-5">
-                {d.past.map((r) => (
-                  <li key={r.quake.id}>
-                    <Rich
-                      text={c.energy.durationItem}
-                      parts={{
-                        name: r.quake.name[lang],
-                        date: fmtDate(Date.parse(r.quake.time), lang),
-                        pastMag: <Num>{fmtMag(r.quake.mag)}</Num>,
-                        depth: km(r.quake.depthKm),
-                        s: secs(r.core),
-                      }}
-                    />
-                  </li>
-                ))}
-              </ul>
-              <p>{c.energy.durationSize}</p>
-            </>
-          )}
-          <p>
-            <Rich
-              text={c.energy.durationShaking}
-              parts={{ sgc: <ExternalLink href={SGC_DURATION_URL}>SGC</ExternalLink> }}
-            />
-          </p>
+          <p>{c.energy.durationFelt}</p>
           <p>{c.energy.durationDamage}</p>
+          <p>{c.energy.durationPast}</p>
           <Note>
             <Rich
               text={c.energy.durationNote}
               parts={{
-                magLabel,
+                from: d.from,
+                toMin: d.toMin,
                 usgs: <ExternalLink href={USGS_FINITE_FAULT_URL}>{c.energy.durationUsgs}</ExternalLink>,
-                scardec: <ExternalLink href={SCARDEC_URL}>SCARDEC</ExternalLink>,
               }}
             />
           </Note>

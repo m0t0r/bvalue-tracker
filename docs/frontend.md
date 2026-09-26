@@ -209,15 +209,14 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   text alternative lists every row with its label. Both layouts, the first part's and the second's,
   stay mounted so the step change cross-fades; drawing only the active one was suggested in review
   and declined, since the two fits cost well under a millisecond.
-- **"¿Cuánto duró?" draws bars on one axis of seconds** (`Durations` in `story/scenes.tsx`, a sub-state
-  of the energy scene, 2026-09-26): one row per event with a measured duration, longest first, each bar
-  the central 90% of its moment, the M7.4 in the mainshock's orange and past events in
-  `muted-foreground`, each row's two lines of text above its bar (`RowLabel`, shared with the energy
-  squares). The axis runs to the next ten seconds past the longest bar. Like the squares, the text steps
-  down a pixel at a time to 9 px until the rows, the axis and its label fit. The rows come from one
-  function, `durationRows`, which the text alternative lists too. A first version drew the M7.4's slow
-  start as a faint segment; it went with the change of measure (see the science). Checked at 1280, 375
-  and 320 px, both themes, both languages. **On a landscape phone (667 × 375) the story's drawing is
+- **"¿Cuánto duró?" draws two bars on one axis of seconds** (`Durations` in `story/scenes.tsx`, a
+  sub-state of the energy scene, 2026-09-26): the ground near the epicentre in the mainshock's orange,
+  solid to 90 s and fainter to 2 min (SGC's range), and the fault in `muted-foreground`, about 54 s.
+  Each row's two lines of text sit above its bar (`RowLabel`, shared with the energy squares). The axis
+  runs to the next ten seconds past the longest bar. Like the squares, the text steps down a pixel at a
+  time to 9 px until the rows, the axis and its label fit. PR #65 drew rupture durations of past
+  earthquakes here instead; they read as shaking and were taken out (see the science). Checked at 1280
+  and 375 px, both themes. **On a landscape phone (667 × 375) the story's drawing is
   ~170 px tall and holds neither this step nor the energy squares**, which were already empty there;
   that is the story's layout, not this step's.
 - **The ×32 ladder's labels sit on the squares' baseline, in gaps sized to hold them** (2026-09-26,

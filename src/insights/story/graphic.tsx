@@ -16,11 +16,12 @@ import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
 import type { Compared } from "../history";
 import { fmtKm, fmtMag, fmtTimes, roundSig } from "../shared";
+import { shakingParts } from "../durations";
 import { FILL, STROKE } from "../tones";
 import { Layer, SceneTitle, radius, star } from "./marks";
 import type { Ev, StoryModel } from "./model";
 import { Rich, fill } from "./rich";
-import { ClocksScene, EnergyScene, FeltScene, TolimaScene, durationRows } from "./scenes";
+import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
 import { KM_PER_DEG, RATE, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
 
 export type SceneId = "where" | "energy" | "section" | "clocks" | "tolima" | "tolimaSection" | "felt" | "unknown";
@@ -46,11 +47,10 @@ function historyAria(model: StoryModel, withLarger: boolean, lang: Lang) {
   return fill(c.historyAria, { list: list.join("; ") });
 }
 
-/** The duration drawing's text alternative: every bar, longest first, with the label it is drawn with. */
+/** The duration drawing's text alternative: both bars, with the figures the drawing shows. */
 function durationAria(model: StoryModel, lang: Lang) {
-  const rows = durationRows(model, lang);
-  if (!rows.length) return "";
-  return fill(storyCopy[lang].graphic.durationAria, { list: rows.map((r) => `${r.line1}, ${r.line2}`).join("; ") });
+  const d = model.durations;
+  return d ? fill(storyCopy[lang].graphic.durationAria, shakingParts(d)) : "";
 }
 
 export function Graphic({

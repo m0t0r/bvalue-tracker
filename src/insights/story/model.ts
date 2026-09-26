@@ -8,7 +8,7 @@
 import { energyRatio, epicentralKm, hypocentralKm, seismicMoment } from "@bvalue/seismo";
 import { SOURCES, type Insights, type QuakeLike, type Source } from "../claims";
 import { PEREIRA } from "../../../core/places";
-import { compareDurations } from "../durations";
+import { shakingDuration } from "../durations";
 import { compareHistory } from "../history";
 import { plateAt, plateSide } from "../plate";
 import { commonDepths, median, medianHorizontalErrorKm, timeWindows } from "../shared";
@@ -149,8 +149,8 @@ export function storyModel(data: Insights) {
     largestAfter,
     /** The largest event against past Colombian earthquakes (`../history.ts`). */
     history: main ? compareHistory(main, mainFound) : null,
-    /** How long the largest event's fault took to break, against past ones (`../durations.ts`). */
-    durations: main ? compareDurations(main, mainFound) : null,
+    /** How long the largest event lasted: the ground near the epicentre and the fault (`../durations.ts`). */
+    durations: main ? shakingDuration(main, mainFound) : null,
     /** How many events like the largest aftershock, and like an M4.0, it takes to match the largest. */
     equivalents: main
       ? {
