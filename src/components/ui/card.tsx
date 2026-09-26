@@ -37,7 +37,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
     <h2
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        "font-heading text-base leading-snug font-medium text-balance group-data-[size=sm]/card:text-sm",
         className
       )}
       {...props}
@@ -45,12 +45,15 @@ function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
   )
 }
 
+// Local: capped in rem, not `ch`: Geist's "0" is wide, so 75ch ran to ~107 characters of prose.
+// 32rem is ~79 at 14px. It spans the header under the title and the action, so an action never
+// squeezes it into a narrow column on a phone. A full-width subtitle passes `max-w-none`.
 function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
       className={cn(
-        "max-w-[75ch] text-sm text-pretty text-muted-foreground",
+        "col-span-full max-w-lg text-sm text-pretty text-muted-foreground",
         className
       )}
       {...props}
@@ -63,7 +66,7 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-action"
       className={cn(
-        "col-start-2 row-span-2 row-start-1 self-start justify-self-end",
+        "col-start-2 row-start-1 self-start justify-self-end",
         className
       )}
       {...props}

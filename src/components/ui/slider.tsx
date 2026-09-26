@@ -8,6 +8,7 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  name,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledby,
   "aria-valuetext": ariaValueText,
@@ -23,9 +24,14 @@ function Slider({
     [value, defaultValue, min, max]
   )
 
+  // Local: inside a <form>, Radix renders a hidden <input> per thumb that takes only `name`, so
+  // without one Chrome reports a form field with no id or name on every load (#73).
+  const fallbackName = React.useId()
+
   return (
     <SliderPrimitive.Root
       data-slot="slider"
+      name={name ?? fallbackName}
       defaultValue={defaultValue}
       value={value}
       min={min}
