@@ -23,6 +23,7 @@ const DATE_TIME = formatters({
 });
 const DATE = formatters({ day: "numeric", month: "short", year: "numeric" });
 const DAY_MONTH = formatters({ day: "numeric", month: "short" });
+const DAY_MONTH_LONG = formatters({ day: "numeric", month: "long" });
 const DAY_MONTH_TIME = formatters({
   day: "numeric",
   month: "short",
@@ -44,8 +45,10 @@ export const fmtDate = (ms: number, lang: Lang) => DATE[lang].format(ms);
 const YEAR = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, year: "numeric" });
 /** The Colombian calendar year of an instant, by Colombia's own clock then (it ran on UTC−4 in 1992–93). */
 export const fmtYear = (ms: number) => Number(YEAR.format(ms));
-/** Axis tick: "18 sept" */
-export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms);
+/** Axis tick and short label: "18 sept", with a no-break space so the day never parts from its month. */
+export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms).replace(" ", "\u00A0");
+/** A day inside running prose: "10 de agosto", "10 August". Abbreviations stay in labels and ticks. */
+export const fmtDayLong = (ms: number, lang: Lang) => DAY_MONTH_LONG[lang].format(ms);
 /** Axis tick on a range of a few days, where a date alone repeats: "18 sept, 14:00" */
 export const fmtDayTime = (ms: number, lang: Lang) => DAY_MONTH_TIME[lang].format(ms);
 /** Sortable "2026-09-18 17:43" for the table, in Colombian time. */

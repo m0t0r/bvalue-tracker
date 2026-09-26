@@ -31,9 +31,9 @@ describe("the filters a page is narrowed by", () => {
   });
 
   it("writes the dates as Colombian days, whichever ends the reader set", () => {
-    expect(labels({ from: "2026-09-01" })).toEqual(["dates=desde 1 sept"]);
-    expect(labels({ to: "2026-09-10" })).toEqual(["dates=10 ago – 10 sept"]);
-    expect(labels({ from: "2026-09-01", to: "2026-09-10" })).toEqual(["dates=1 sept – 10 sept"]);
+    expect(labels({ from: "2026-09-01" })).toEqual(["dates=desde 1\u00A0sept"]);
+    expect(labels({ to: "2026-09-10" })).toEqual(["dates=10\u00A0ago – 10\u00A0sept"]);
+    expect(labels({ from: "2026-09-01", to: "2026-09-10" })).toEqual(["dates=1\u00A0sept – 10\u00A0sept"]);
     // Clearing the start date is a change too: it widens the page to the whole catalogue.
     expect(labels({ from: "" })).toEqual([`dates=${es.chipAllDates}`]);
   });
