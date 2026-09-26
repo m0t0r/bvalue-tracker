@@ -93,6 +93,15 @@ const es = {
   never: "nunca",
   refresh: "Actualizar ahora",
   autoUpdate: (min: number) => `Se actualiza sola cada ${min} minutos`,
+  /**
+   * Replaces `autoUpdate` while a refetch over data on screen has failed or waits offline
+   * (`staleSince`). The page cannot tell the reader's connection from the server, so it names the
+   * link between them; the time is when the data on screen was fetched, and `day` is set only when
+   * that was not today. No interval and no "recargar": the next poll or the reconnection brings it back.
+   */
+  staleSince: (time: string, day: string | null) =>
+    `Sin conexión con el servidor desde ${day === null ? "las" : `el ${day} a las`} ${time}. Se actualizará sola.`,
+  loading: "Cargando…",
   refreshing: "Consultando al SGC…",
   refreshWait: (min: number) => `Ya tienes los datos más recientes: el SGC se consultó hace menos de ${min} minutos.`,
   refreshFailed: "No se pudo consultar al SGC. Inténtalo de nuevo en unos minutos.",
@@ -134,6 +143,7 @@ const es = {
   mcBackToAuto: "Volver a Mc automática (curvatura máxima)",
   reset: "Restablecer",
   bTitle: "Valor b",
+  bDesc: "Cuánto pesan los eventos grandes frente a los pequeños (Gutenberg–Richter, método de Aki–Utsu).",
   bNone: "Sin datos suficientes para estimar b. Amplía el rango de fechas o baja la magnitud mínima.",
   bFew: "Menos de 50 eventos: valor poco fiable",
   bGft: "Con Mc por bondad de ajuste",
@@ -159,12 +169,12 @@ const es = {
   bScopeNote: (type: string) => `Solo eventos con magnitud ${type}.`,
   clustersTitle: "Dos grupos de eventos",
   clustersDesc: (km: number) =>
-    `La secuencia está formada por dos grupos separados por la profundidad: entre 55 y 75 km casi no hay eventos. El corte está en ${km} km.`,
+    `La secuencia está formada por dos grupos separados por la profundidad: entre 55 y 75\u00A0km casi no hay eventos. El corte está en ${km}\u00A0km.`,
   clusterShort: { shallow: "Superficial", deep: "Profundo" },
   clusterName: { shallow: "Grupo superficial", deep: "Grupo profundo" },
   clusterWhere: {
-    shallow: (km: number) => `menos de ${km} km · bajo Istmina y Sipí`,
-    deep: (km: number) => `${km} km o más · alrededor del sismo principal`,
+    shallow: (km: number) => `menos de ${km}\u00A0km · bajo Istmina y Sipí`,
+    deep: (km: number) => `${km}\u00A0km o más · alrededor del sismo principal`,
   },
   clusterRecentLabel: (days: number) => `eventos en los últimos ${days} días`,
   clusterMax: (mag: string) => `el mayor, M${mag}`,
@@ -245,11 +255,14 @@ const es = {
   zoomIn: "Acercar",
   zoomOut: "Alejar",
   toggleAttribution: "Mostrar u ocultar la atribución",
+  /** Replaces OpenFreeMap's own English "Data from" before its OpenStreetMap link; every credit and link stays. */
+  mapDataFrom: "Datos de",
   gestureMac: "Usa ⌘ + desplazamiento para acercar o alejar el mapa",
   gestureWindows: "Usa Ctrl + desplazamiento para acercar o alejar el mapa",
   gestureMobile: "Usa dos dedos para mover el mapa",
   noEvents: "Ningún evento coincide con los filtros",
-  noEventsBody: "Amplía el rango de fechas o baja la magnitud mínima.",
+  noEventsBody:
+    "Amplía las fechas, baja la magnitud mínima o usa «Quitar filtros», arriba, para volver al catálogo completo.",
   caveatsTitle: "Cómo leer estas cifras",
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
   autoUpdateLong: (min: number) =>
@@ -326,6 +339,9 @@ const en: Dict = {
   never: "never",
   refresh: "Refresh now",
   autoUpdate: (min) => `Updates itself every ${min} minutes`,
+  staleSince: (time, day) =>
+    `No connection to the server since ${time}${day === null ? "" : ` on ${day}`}. It will update by itself.`,
+  loading: "Loading…",
   refreshing: "Querying SGC…",
   refreshWait: (min) => `You already have the latest data: SGC was queried less than ${min} minutes ago.`,
   refreshFailed: "Unable to query SGC. Try again in a few minutes.",
@@ -367,6 +383,7 @@ const en: Dict = {
   mcBackToAuto: "Switch back to automatic Mc (maximum curvature)",
   reset: "Reset",
   bTitle: "b-value",
+  bDesc: "How much the large events weigh against the small ones (Gutenberg–Richter, Aki–Utsu method).",
   bNone: "Not enough data to estimate b. Widen the date range or lower the minimum magnitude.",
   bFew: "Fewer than 50 events: unreliable",
   bGft: "With goodness-of-fit Mc",
@@ -392,12 +409,12 @@ const en: Dict = {
   bScopeNote: (type) => `Only events with ${type} magnitude.`,
   clustersTitle: "Two groups of events",
   clustersDesc: (km) =>
-    `The sequence is two groups separated by depth: there are almost no events between 55 and 75 km. The cut is at ${km} km.`,
+    `The sequence is two groups separated by depth: there are almost no events between 55 and 75\u00A0km. The cut is at ${km}\u00A0km.`,
   clusterShort: { shallow: "Shallow", deep: "Deep" },
   clusterName: { shallow: "Shallow group", deep: "Deep group" },
   clusterWhere: {
-    shallow: (km) => `less than ${km} km · under Istmina and Sipí`,
-    deep: (km) => `${km} km or more · around the mainshock`,
+    shallow: (km) => `less than ${km}\u00A0km · under Istmina and Sipí`,
+    deep: (km) => `${km}\u00A0km or more · around the mainshock`,
   },
   clusterRecentLabel: (days) => `events in the last ${days} days`,
   clusterMax: (mag) => `the largest, M${mag}`,
@@ -470,11 +487,13 @@ const en: Dict = {
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   toggleAttribution: "Toggle attribution",
+  mapDataFrom: "Data from",
   gestureMac: "Use ⌘ + scroll to zoom the map",
   gestureWindows: "Use Ctrl + scroll to zoom the map",
   gestureMobile: "Use two fingers to move the map",
   noEvents: "No events match the filters",
-  noEventsBody: "Widen the date range or lower the minimum magnitude.",
+  noEventsBody:
+    "Widen the dates, lower the minimum magnitude, or use “Clear filters” above to see the whole catalogue.",
   caveatsTitle: "How to read these numbers",
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
   autoUpdateLong: (min) =>

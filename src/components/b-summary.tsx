@@ -132,8 +132,11 @@ export function BSummary({
   const dim = few || incomplete;
   const first = windows[0],
     last = windows.at(-1);
+  // A range wraps whole: "20 sept –" left at a line's end, with "22 sept" under it, read as an open
+  // range. A no-break space before the dash, and a word joiner after it, since a line may break after
+  // a dash even when a no-break space follows.
   const span = (w: { from: string; to: string }) =>
-    `${fmtDay(Date.parse(w.from), lang)} – ${fmtDay(Date.parse(w.to), lang)}`;
+    `${fmtDay(Date.parse(w.from), lang)}\u00A0–\u2060\u00A0${fmtDay(Date.parse(w.to), lang)}`;
   // The fine print under the headline: which magnitudes it used, and what the other Mc estimator says.
   // Collapsed, because open it made this card half again as tall as the chart beside it, which then sat
   // in a card of empty space. Nothing is lost by folding it: "Cómo leer estas cifras" keeps the mixed
@@ -175,13 +178,17 @@ export function BSummary({
           {/* Demoted with the secondary-text token, not opacity: it must stay readable exactly when it is least reliable. */}
           <div
             className={cn(
-              "flex items-baseline gap-2 transition-colors duration-200 ease-out",
+              "flex items-baseline gap-2 transition-colors duration-200 ease-(--ease-out)",
               dim && "text-muted-foreground",
             )}
           >
             <FlowNumber value={fit.b} digits={2} className="text-5xl font-semibold tracking-tight" />
             <FlowNumber value={fit.sigmaB} digits={2} prefix="± " className="text-xl text-muted-foreground" />
           </div>
+          {/* What the number measures, in words, under it rather than in the card's description above
+              it: on a 375×812 phone the figure ends 2 px inside the first screen, and a line above it
+              would push it out (docs/frontend.md). */}
+          <p className="-mt-2 text-sm text-pretty text-muted-foreground">{t.bDesc}</p>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">
               <FlowNumber value={mc} digits={1} prefix="Mc = " />
@@ -238,9 +245,7 @@ export function BSummary({
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.bTitle}</CardTitle>
-        <CardDescription>
-          {cluster !== null ? `${t.clusterName[cluster]} · ` : ""}Gutenberg–Richter · Aki–Utsu
-        </CardDescription>
+        {cluster !== null ? <CardDescription>{t.clusterNote(t.clusterName[cluster])}</CardDescription> : null}
       </CardHeader>
       {magType === null ? (
         <CardContent className={BODY}>{body}</CardContent>
@@ -252,7 +257,9 @@ export function BSummary({
               <TabsTrigger value="type">{t.bScopeOne(magType)}</TabsTrigger>
             </TabsList>
             {/* One panel for both tabs: only the numbers differ, so they roll to the new value instead of remounting. */}
-            <TabsContent value={tabs.value} className={BODY}>
+            {/* Out of the tab order: its first content is focusable (the technical detail), so a stop on
+                the panel itself would be one press that does nothing. */}
+            <TabsContent value={tabs.value} tabIndex={-1} className={BODY}>
               {body}
             </TabsContent>
           </Tabs>

@@ -1,6 +1,6 @@
 import { Suspense, useState, type ReactNode } from "react";
 import { useIntersectionObserver } from "usehooks-ts";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -12,19 +12,26 @@ import { Skeleton } from "@/components/ui/skeleton";
  * loads immediately, one screen after the shell has painted.
  *
  * The placeholder is the same card with the same title, so only the drawing arrives late and
- * nothing below it moves. `height` names the drawing, whose container the skeleton must match.
- * `description`, where it can be written without the chunk, is the card's own, so the text is there
- * with the data rather than with the drawing; without it the placeholder shows a skeleton line.
+ * nothing below it moves. `placeholder` stands in for the drawing and must be exactly its height, at
+ * every width: a key that wraps is drawn for real in it (`MapPlaceholder`, `MagnitudeTimePlaceholder`),
+ * since a skeleton cannot guess how many lines it takes. The default is a chart's h-80.
+ * `action`, where the card has one that works without the chunk, is drawn in the placeholder too.
+ * `description` is the card's own, written without the chunk (`bTimeDescription`, `fmdDescription`,
+ * `mapDescription`), so the text is there with the data rather than with the drawing, and a
+ * description that wraps to four lines on a phone does not leave the placeholder four lines short.
  */
 export function Deferred({
   title,
   description,
-  height = "chart",
+  action,
+  placeholder = <Skeleton className="h-80 w-full" />,
   children,
 }: {
   title: string;
-  description?: string;
-  height?: "chart" | "map";
+  description: string;
+  /** The card's header action, where it works without the chunk (`BTimeCsvButton`). */
+  action?: ReactNode;
+  placeholder?: ReactNode;
   children: ReactNode;
 }) {
   // No observer (an old browser, a test environment): draw it rather than leave a skeleton.
@@ -38,22 +45,20 @@ export function Deferred({
     },
   });
 
-  const placeholder = (
+  const card = (
     <Card className="h-full" aria-busy="true">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{description ?? <Skeleton className="h-4 w-full max-w-md" />}</CardDescription>
+        <CardDescription>{description}</CardDescription>
+        {action ? <CardAction>{action}</CardAction> : null}
       </CardHeader>
-      <CardContent>
-        {/* A chart's h-80, or the map's h-96 canvas plus the depth/magnitude legend under it. */}
-        <Skeleton className={height === "map" ? "h-104 w-full" : "h-80 w-full"} />
-      </CardContent>
+      <CardContent>{placeholder}</CardContent>
     </Card>
   );
 
   return (
     <div ref={slot} className="h-full">
-      {near ? <Suspense fallback={placeholder}>{children}</Suspense> : placeholder}
+      {near ? <Suspense fallback={card}>{children}</Suspense> : card}
     </div>
   );
 }

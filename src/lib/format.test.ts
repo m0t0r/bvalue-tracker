@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { relativeTime } from "@/lib/format";
+import { fmtClock, relativeTime } from "@/lib/format";
 
 const NOW = Date.parse("2026-09-19T12:00:00Z");
 const ago = (seconds: number, lang: "es" | "en" = "es") =>
@@ -34,5 +34,19 @@ describe("how long ago something happened", () => {
     expect(ago(25 * 3600)).toBe("hace 1 día");
     expect(ago(3 * 86_400)).toBe("hace 3 días");
     expect(ago(2 * 86_400, "en")).toBe("2 days ago");
+  });
+});
+
+describe("the time of something earlier, for a sentence", () => {
+  // 12:00 UTC is 07:00 in Colombia; the Colombian day began at 05:00 UTC.
+  it("gives only the time when it was earlier the same Colombian day", () => {
+    expect(fmtClock(Date.parse("2026-09-19T05:00:00Z"), "es", NOW)).toEqual({ time: "00:00", day: null });
+    expect(fmtClock(Date.parse("2026-09-19T11:35:00Z"), "en", NOW)).toEqual({ time: "06:35", day: null });
+  });
+
+  // 04:59 UTC is still the 18th in Colombia, although it is the 19th in UTC.
+  it("adds the day, by Colombia's calendar, when it was another day", () => {
+    expect(fmtClock(Date.parse("2026-09-19T04:59:00Z"), "es", NOW)).toEqual({ time: "23:59", day: "18\u00A0sept" });
+    expect(fmtClock(Date.parse("2026-09-17T17:35:00Z"), "en", NOW)).toEqual({ time: "12:35", day: "17\u00A0Sept" });
   });
 });

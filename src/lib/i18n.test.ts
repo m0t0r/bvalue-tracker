@@ -185,3 +185,46 @@ describe("the load error", () => {
     expect(dicts[lang].loadRetrying).toBeTruthy();
   });
 });
+
+/**
+ * A refetch that fails keeps the figures on screen (`loadFailed`), and this line says how old they
+ * are instead of the standing "Se actualiza sola cada N minutos", which had gone on promising updates
+ * that were not arriving (2026-09-26). It dates the data and says it comes back by itself; the page
+ * cannot tell the reader's connection from the server, so it blames neither, and there is nothing
+ * for the reader to do.
+ */
+describe("the line for data that could not be updated", () => {
+  it.each(langs)("dates the data by its time, and by its day only when that is not today, in %s", (lang) => {
+    const today = dicts[lang].staleSince("12:35", null);
+    const earlier = dicts[lang].staleSince("12:35", "25 sept");
+    expect(today).toContain("12:35");
+    expect(earlier).toContain("12:35");
+    expect(earlier).toContain("25 sept");
+  });
+
+  it.each(langs)("names no interval and never sends the reader to reload, in %s", (lang) => {
+    const s = dicts[lang].staleSince("12:35", null);
+    expect(s).not.toMatch(/\d+\s*(min|minut)/i);
+    expect(s).not.toMatch(/recarg|reload/i);
+  });
+
+  it.each(langs)("says the page picks up again by itself, in the standing note's own words, in %s", (lang) => {
+    expect(dicts[lang].staleSince("12:35", null)).toMatch(/sola|by itself/);
+  });
+});
+
+/** The empty state points at the one control that undoes every filter, by its own label. */
+describe("the empty state", () => {
+  it.each(langs)("names the clear-filters button as it is labelled, in %s", (lang) => {
+    expect(dicts[lang].noEventsBody).toContain(dicts[lang].scopeClear);
+  });
+});
+
+/** Figures and their units never part at a line break (docs/frontend.md): a no-break space before "km". */
+describe("distances in the copy", () => {
+  it.each(langs)("keep every number beside its unit, in %s", (lang) => {
+    const d = dicts[lang];
+    for (const s of [d.clustersDesc(60), d.clusterWhere.shallow(60), d.clusterWhere.deep(60)])
+      expect(s).not.toMatch(/\d km/);
+  });
+});

@@ -17,7 +17,7 @@ export function TechnicalDetail({ children, size = "xs" }: { children: ReactNode
         <Button variant="link-muted" size="inline-touch" className="group">
           <ChevronRightIcon
             data-icon="inline-start"
-            className="transition-transform duration-150 ease-out group-data-[state=open]:rotate-90"
+            className="transition-transform duration-150 ease-(--ease-out) group-data-[state=open]:rotate-90"
           />
           {t.technicalDetail}
         </Button>

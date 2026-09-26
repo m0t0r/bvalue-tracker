@@ -1,21 +1,20 @@
 import { FilterIcon, XIcon } from "lucide-react";
+import { Fragment } from "react";
 import { useIntersectionObserver } from "usehooks-ts";
+import { FILL } from "@/components/clusters-card";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ClusterChoice, FilterChip } from "@/lib/filters";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { CLUSTER_DEPTH_KM, type Cluster } from "../../core/clusters";
-
-/** The clusters' own colours, as everywhere else on the page. */
-const DOT: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-3)" };
+import { CLUSTER_DEPTH_KM } from "../../core/clusters";
 
 function Chip({ chip, className }: { chip: FilterChip; className?: string }) {
   return (
     <Badge variant="outline" className={cn("shrink-0", className)}>
       {/* me-0.5 widens the badge's own gap-1 to 1.5 for the dot alone. */}
-      {chip.cluster ? <span aria-hidden className={cn("me-0.5 size-1.5 rounded-full", DOT[chip.cluster])} /> : null}
+      {chip.cluster ? <span aria-hidden className={cn("me-0.5 size-1.5 rounded-full", FILL[chip.cluster])} /> : null}
       {chip.label}
     </Badge>
   );
@@ -47,26 +46,42 @@ interface Props {
  */
 export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
   const { t, lang } = useI18n();
-  // `entry`, not `isIntersecting`: the notice being out of view is not enough. On a short screen it
+  // Only a notice that has gone off the **top** is one the bar stands in for: on a short screen it
   // starts out of view *below* the fold, and the bar must not pre-empt a notice the reader has yet
-  // to reach. Only a notice that has gone off the **top** is one the bar stands in for. Before the
-  // first callback there is no entry, and the bar stays away, so a load never starts with it on.
-  const { ref: notice, entry } = useIntersectionObserver({ threshold: 0 });
-  const past = entry ? !entry.isIntersecting && entry.boundingClientRect.bottom <= 0 : false;
+  // to reach. So the root runs from the top of the window down without end (the huge bottom margin),
+  // and the notice leaves it only by its bottom edge crossing the top of the window. A notice below
+  // the fold still intersects, which matters for a jump: watched against the window alone, one
+  // going straight from above the window to below the fold (Home, on a short phone) never crossed
+  // it, no callback came, and the bar stayed over the header. Before the first callback there is no
+  // entry, and the bar stays away, so a load never starts with it on.
+  const { ref: notice, entry } = useIntersectionObserver({ threshold: 0, rootMargin: "0px 0px 100000px 0px" });
+  const past = entry ? !entry.isIntersecting : false;
 
-  if (chips.length === 0) return null;
+  const counts = [shown.toLocaleString(lang), total.toLocaleString(lang)] as const;
+  // What a filter change announces: the count, and nothing else. Mounted whether or not anything is
+  // filtered, since a live region inserted with its text already in it is often not read out.
+  const announce = (
+    <span role="status" className="sr-only">
+      {t.scopeTitle(...counts)}
+    </span>
+  );
+
+  if (chips.length === 0) return announce;
 
   const where = cluster === "all" ? null : t.clusterWhere[cluster](CLUSTER_DEPTH_KM);
-  const counts = [shown.toLocaleString(lang), total.toLocaleString(lang)] as const;
 
   return (
     <>
+      {announce}
       {/* One row wherever there is room for one, so that the bar above reads as the same object come
           back rather than a second thing. The group's depth and place take the row below, because
-          only one of the chips has any more to say. */}
+          only one of the chips has any more to say. A named group, not a live region (nor `Alert`'s
+          own role="alert"): it holds the chips and the button, and as a status all of it was read
+          out again on every step of a slider. */}
       <Alert
         ref={notice}
-        role="status"
+        role="group"
+        aria-label={t.scopeAria}
         className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 *:[svg]:translate-y-0"
       >
         <FilterIcon className="text-muted-foreground" />
@@ -115,20 +130,25 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
             <span className="hidden sm:inline">{t.scopeTitle(...counts)}</span>
           </span>
           {/* One line at every width: the bar's height must not change as it slides in. A phone has
-              room for the first chip, which is the cluster whenever one is chosen; the rest are counted. */}
+              room for the first chip, which is the cluster whenever one is chosen; the rest are counted
+              right beside it, so the count reads as more of the same list. */}
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
             {chips.map((c, i) => (
-              <Chip key={c.key} chip={c} className={i > 0 ? "max-sm:hidden" : undefined} />
+              <Fragment key={c.key}>
+                <Chip chip={c} className={i > 0 ? "max-sm:hidden" : undefined} />
+                {i === 0 && chips.length > 1 ? (
+                  <Badge variant="outline" className="sm:hidden">
+                    +{chips.length - 1}
+                  </Badge>
+                ) : null}
+              </Fragment>
             ))}
           </div>
-          {chips.length > 1 ? (
-            <Badge variant="outline" className="shrink-0 sm:hidden">
-              +{chips.length - 1}
-            </Badge>
-          ) : null}
+          {/* Its icon only on a phone, where the words took the room the first chip needed; the words
+              stay its name, as the header's link to the insights page does. */}
           <Button tabIndex={-1} variant="outline" size="sm-touch" className="shrink-0" onClick={onClear}>
             <XIcon data-icon="inline-start" />
-            {t.scopeClear}
+            <span className="max-sm:sr-only">{t.scopeClear}</span>
           </Button>
         </div>
       </div>

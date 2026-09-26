@@ -5,6 +5,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, type Cha
 import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
+import { fmdDescription } from "./fmd-description";
 
 /** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
 export const FmdChart = memo(function FmdChart({
@@ -22,9 +23,11 @@ export const FmdChart = memo(function FmdChart({
   const config = {
     cumulative: { label: t.cumulative, color: "var(--chart-1)" },
     count: { label: t.perBin, color: "var(--chart-3)" },
+    // The text colour, not a chart colour: orange is the mainshock's alone (docs/frontend.md), and the
+    // line must stay apart from the blue curve it is fitted to and the grey squares under it.
     fit: {
       label: fit ? `${t.grFit}: b = ${fit.b.toFixed(2)} ± ${fit.sigmaB.toFixed(2)}` : t.grFit,
-      color: "var(--chart-2)",
+      color: "var(--foreground)",
     },
   } satisfies ChartConfig;
 
@@ -42,21 +45,13 @@ export const FmdChart = memo(function FmdChart({
       })),
     [bins, fit, mc],
   );
-  // The largest event, when nothing lies within a magnitude unit below it: worth naming, or it looks like a stray point.
-  const filled = bins.filter((b) => b.count > 0);
-  const isolated = filled.length > 1 && filled.at(-1)!.mag - filled.at(-2)!.mag >= 1 ? filled.at(-1)!.mag : null;
   const top = Math.max(10, ...bins.map((b) => b.cumulative));
 
   return (
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.fmdTitle}</CardTitle>
-        <CardDescription>
-          {cluster !== null ? `${t.clusterNote(t.clusterName[cluster])} ` : ""}
-          {magType !== null ? `${t.bScopeNote(magType)} ` : ""}
-          {t.fmdDesc}
-          {isolated !== null ? ` ${t.fmdIsolated(isolated.toFixed(1))}` : ""}
-        </CardDescription>
+        <CardDescription>{fmdDescription(t, stats, magType, cluster)}</CardDescription>
       </CardHeader>
       {/* The card is stretched to the map beside it, so the chart takes the leftover height
           rather than leaving it blank under the legend. */}

@@ -16,7 +16,8 @@ import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, type Cluster, type ClusterStats } from "../../core/clusters";
 
-const FILL: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-4)" };
+/** The clusters' own colours, everywhere on the page: shallow the blue, deep the teal (docs/frontend.md). */
+export const FILL: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-4)" };
 
 // Same idea as "Magnitud en el tiempo": squeezed into a phone's width forty days are slivers with no
 // values, so below MIN_BAR of room per day every day gets PX_PER_DAY instead and the strip scrolls
@@ -181,27 +182,30 @@ export function ClustersCard({
                 key={c}
                 aria-labelledby={`cluster-${c}`}
                 className={cn(
-                  "flex min-w-0 flex-col gap-4 rounded-xl border p-4 transition-colors duration-200 ease-out",
+                  "flex min-w-0 flex-col gap-4 rounded-xl border p-4 transition-colors duration-200 ease-(--ease-out)",
                   on && "border-foreground/30 bg-muted/50",
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-0.5">
+                {/* The name and its button share a row; where the group lies takes the full width under
+                    them. Beside the button, at 320 px, it was squeezed into a column of 80 px. */}
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between gap-3">
                     <h3 id={`cluster-${c}`} className="flex items-center gap-2 font-medium">
                       <span aria-hidden className={cn("size-2.5 rounded-full", FILL[c])} />
                       {t.clusterName[c]}
                     </h3>
-                    <p className="text-sm text-muted-foreground">{t.clusterWhere[c](CLUSTER_DEPTH_KM)}</p>
+                    {/* The label says what a press does, "Ver solo este grupo" or "Ver todos", so it
+                        carries no aria-pressed as well: a screen reader read "Ver todos, pressed". */}
+                    <Button
+                      variant={on ? "secondary" : "outline"}
+                      size="sm-touch"
+                      className="shrink-0"
+                      onClick={() => selection.onChange(on ? "all" : c)}
+                    >
+                      {on ? t.clusterClear : t.clusterOnly}
+                    </Button>
                   </div>
-                  <Button
-                    variant={on ? "secondary" : "outline"}
-                    size="sm-touch"
-                    aria-pressed={on}
-                    className="shrink-0"
-                    onClick={() => selection.onChange(on ? "all" : c)}
-                  >
-                    {on ? t.clusterClear : t.clusterOnly}
-                  </Button>
+                  <p className="text-sm text-muted-foreground">{t.clusterWhere[c](CLUSTER_DEPTH_KM)}</p>
                 </div>
 
                 <div className="flex flex-col gap-1">
