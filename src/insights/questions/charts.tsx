@@ -64,6 +64,22 @@ export function TwoClocks({ data, reference }: { data: Insights; reference: Quak
   const top = y.domain()[1]!;
   const every = width < 520 ? 14 : 7;
   const mid = (i: number) => x(i)! + x.bandwidth() / 2;
+  // Each band's label is kept inside the plot (a lull running to today would push it off the right
+  // edge), and dropped where it would run into the previous one: at 320 px two narrow bands' labels
+  // were clamped onto each other. The band still shows; the first one's label names them all.
+  const labelW = c.lull.length * 5.6 + 6;
+  let lastEnd = -Infinity;
+  const lullBands = lulls.flatMap((l) => {
+    const a = dayIndexOf(days, l.from),
+      b = dayIndexOf(days, l.to);
+    if (b < 0 || a >= days.length) return [];
+    const x0 = x(Math.max(0, a))!,
+      x1 = x(Math.min(days.length - 1, b))! + x.bandwidth();
+    const at = Math.min(x0 + 3, width - m.r - labelW);
+    const labelX = at < lastEnd ? null : at;
+    if (labelX !== null) lastEnd = labelX + labelW;
+    return [{ from: l.from, x0, x1, labelX }];
+  });
 
   return (
     <Figure caption={c.caption(mc)}>
@@ -100,27 +116,22 @@ export function TwoClocks({ data, reference }: { data: Insights; reference: Quak
                 className="block"
               >
                 {r.s === "shallow"
-                  ? lulls.map((l) => {
-                      const a = dayIndexOf(days, l.from),
-                        b = dayIndexOf(days, l.to);
-                      if (b < 0 || a >= days.length) return null;
-                      const x0 = x(Math.max(0, a))!,
-                        x1 = x(Math.min(days.length - 1, b))! + x.bandwidth();
-                      return (
-                        <g key={l.from}>
-                          <rect x={x0} y={m.t - 12} width={x1 - x0} height={y(0) - m.t + 12} className="fill-muted" />
-                          {/* Kept inside the plot: a lull running to today would push its label off the right edge. */}
-                          <text
-                            x={Math.min(x0 + 3, width - m.r - 64)}
-                            y={m.t - 2}
-                            fontSize={10}
-                            className="fill-muted-foreground"
-                          >
+                  ? lullBands.map((l) => (
+                      <g key={l.from}>
+                        <rect
+                          x={l.x0}
+                          y={m.t - 12}
+                          width={l.x1 - l.x0}
+                          height={y(0) - m.t + 12}
+                          className="fill-muted"
+                        />
+                        {l.labelX !== null ? (
+                          <text x={l.labelX} y={m.t - 2} fontSize={10} className="fill-muted-foreground">
                             {c.lull}
                           </text>
-                        </g>
-                      );
-                    })
+                        ) : null}
+                      </g>
+                    ))
                   : null}
                 {y.ticks(3).map((t) => (
                   <g key={t} transform={`translate(0,${y(t)})`}>
@@ -309,9 +320,7 @@ export function DriftMultiples({ data }: { data: Insights }) {
                   />
                 ) : null}
               </svg>
-              <p className="mt-1 text-2xs text-muted-foreground tabular-nums">
-                {c.driftPanel(when, win.points.length)}
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground tabular-nums">{c.driftPanel(when, win.points.length)}</p>
             </div>
           );
         })}
@@ -385,8 +394,10 @@ export function BothZonesTimeline({ data, reference }: { data: Insights; referen
                 textAnchor="end"
                 fontSize={11}
                 fontWeight={600}
-                className="fill-chart-5"
+                className="fill-foreground"
               >
+                {/* The band marks it in Chaparral's violet; the words stay in the text colour (3.5:1 in
+                    the violet on a dark card). */}
                 {c.begins(fmtDay(tolimaStart, lang))}
               </text>
             </>
@@ -484,6 +495,7 @@ export function FeltCalendar({
     <Figure caption={c.caption}>
       <div className="mb-5 grid gap-4 sm:grid-cols-2 sm:items-end">
         <RangeField
+          name="threshold"
           label={c.threshold}
           value={threshold}
           display={`M${threshold.toFixed(1)}`}
@@ -504,7 +516,7 @@ export function FeltCalendar({
       </div>
       <div className="mx-auto grid max-w-md grid-cols-7 gap-1.5">
         {c.weekdays.map((d, i) => (
-          <div key={i} aria-hidden className="pb-1 text-center text-2xs text-muted-foreground">
+          <div key={i} aria-hidden className="pb-1 text-center text-xs text-muted-foreground">
             {d}
           </div>
         ))}
@@ -530,11 +542,12 @@ export function FeltCalendar({
               aria-pressed={on}
               aria-label={c.dayAria(fmtDay(d.start, lang), n)}
               className={cn(
-                "flex aspect-square flex-col overflow-hidden rounded-md border bg-background text-left outline-none focus-visible:ring-3 focus-visible:ring-ring",
-                on && "border-foreground",
+                "flex aspect-square flex-col overflow-hidden rounded-md border bg-background text-left transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring",
+                on && "border-foreground ring-2 ring-foreground",
               )}
             >
-              <span className="flex justify-between px-1 pt-0.5 text-2xs text-muted-foreground tabular-nums">
+              {/* 12 px from 360 px up. Below it a cell is ~31 px and "14×6" does not fit at 12 px. */}
+              <span className="flex justify-between px-1 pt-0.5 text-2xs text-muted-foreground tabular-nums min-[360px]:text-xs">
                 <span>{new Date(d.start + TZ_OFFSET_MS).getUTCDate()}</span>
                 {n > 1 ? <span className="font-semibold text-foreground">×{n}</span> : null}
               </span>
@@ -555,7 +568,7 @@ export function FeltCalendar({
           );
         })}
       </div>
-      <p className="mx-auto mt-2 max-w-md text-center text-2xs text-muted-foreground">
+      <p className="mx-auto mt-2 max-w-md text-center text-xs text-muted-foreground">
         {days.length ? `${fmtDay(days[0]!.start, lang)} – ${fmtDay(days.at(-1)!.start, lang)} · ` : ""}
         {c.tapHint}
       </p>

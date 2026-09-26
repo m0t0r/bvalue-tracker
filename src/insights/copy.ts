@@ -8,7 +8,7 @@
  * Decimal point in every number, as on the main page and at SGC ("M4.5", "4.8 al día").
  */
 import type { Lang } from "@/lib/i18n";
-import { fmtDay } from "@/lib/format";
+import { fmtClock, fmtDayLong } from "@/lib/format";
 import { fmtInt, fmtPct } from "./shared";
 import {
   SOURCES,
@@ -29,6 +29,15 @@ import {
 
 const f1 = (v: number) => v.toFixed(1);
 const f0 = (v: number) => Math.round(v).toString();
+
+/**
+ * When the data on screen was fetched, for the stale-data notice: the time, and the day in full only
+ * when it was not today in Colombia (`fmtClock`, which the monitor's own line uses).
+ */
+const since = (ms: number, now: number, lang: Lang) => {
+  const c = fmtClock(ms, lang, now);
+  return { time: c.time, day: c.day === null ? null : fmtDayLong(ms, lang) };
+};
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X+"];
 /**
@@ -155,8 +164,15 @@ const es = {
   loading: "Cargando los catálogos…",
   incompleteTitle: "Todavía se está cargando el historial",
   incompleteBody:
-    "Al catálogo aún le faltan semanas. Hasta que se complete, las cifras y las conclusiones de esta página no son representativas. El monitor se encarga de terminar de cargarlo.",
-  dataUpTo: (ms: number, lang: Lang) => `Datos del SGC hasta el ${fmtDay(ms, lang)}`,
+    "Aún faltan eventos por cargar. Hasta que estén todos, las cifras de esta página y lo que se dice de ellas no son representativas. Se completa solo; no hace falta hacer nada.",
+  /** The monitor's line in its own words (`staleSince` in `src/lib/i18n.tsx`), with what it means here. */
+  staleTitle: "Los datos no se están actualizando",
+  /** `at`: when the oldest data on screen was fetched; the time alone when that was today. */
+  staleBody: (at: number, now: number, lang: Lang) => {
+    const { time, day } = since(at, now, lang);
+    return `Sin conexión con el servidor desde ${day === null ? "las" : `el ${day} a las`} ${time}. Lo que ves es de entonces y se actualizará solo.`;
+  },
+  dataUpTo: (ms: number, lang: Lang) => `Datos del SGC hasta el ${fmtDayLong(ms, lang)}`,
   footer:
     "Página independiente, sin relación con el SGC. Las cifras que calcula esta página describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
   timeNote: "Fechas y horas de Colombia (UTC−5).",
@@ -197,10 +213,10 @@ const es = {
       if (p.case === "young") return "Aún es pronto para saber cuál es su ritmo habitual.";
       const rate = `${f1(p.recentPerDay)} eventos al día en los últimos 5 días, frente a unos ${f0(p.usualPerDay)} en un día típico (contando eventos de M${f1(p.mc)} o más)`;
       if (p.case === "quieter") {
-        const since = p.quietSince === null ? "" : ` desde el ${fmtDay(p.quietSince, lang)}`;
+        const since = p.quietSince === null ? "" : ` desde el ${fmtDayLong(p.quietSince, lang)}`;
         const before = p.pastLulls.find((l) => l.recovered);
         const again = before
-          ? ` Algo así ya ocurrió entre el ${fmtDay(before.from, lang)} y el ${fmtDay(before.to, lang)}, y luego volvió a su ritmo; por eso todavía no se sabe si es una pausa o el final.`
+          ? ` Algo así ya ocurrió entre el ${fmtDayLong(before.from, lang)} y el ${fmtDayLong(before.to, lang)}, y luego volvió a su ritmo; por eso todavía no se sabe si es una pausa o el final.`
           : " Todavía no se sabe si es una pausa o el final.";
         return `Está más tranquilo${since}: ${rate}.${again}`;
       }
@@ -216,14 +232,17 @@ const es = {
     },
     /** The swarm's drift. Always a hint, never a finding. */
     drift: (d: Drift): string => {
-      if (d.case === "too-few") return "Aún hay muy pocos eventos para ver si la actividad se desplaza.";
+      if (d.case === "too-few")
+        return d.young
+          ? "Aún es pronto para ver si la actividad se desplaza."
+          : "No hay suficientes eventos en el primer día del enjambre o en las últimas 24 horas para ver si la actividad se desplaza.";
       if (d.case === "none")
         return `Con la precisión del catálogo (unos ${f1(d.errorKm)}\u00A0km) no se ve que el centro de la actividad se haya movido.`;
       return `El centro de la actividad se ha movido unos ${f1(d.km)}\u00A0km hacia el ${COMPASS_ES[compassPoint(d.bearingDeg)]} en ${f0(d.hours / 24)} días, más que el error de localización (unos ${f1(d.errorKm)}\u00A0km). Es un indicio, no una conclusión.`;
     },
     /** The last strong event from Chocó, when the swarm has taken over. */
     lastChoco: (ms: number, minMag: number, lang: Lang) =>
-      `El último evento de M${f1(minMag)} o más en el Chocó fue el ${fmtDay(ms, lang)}.`,
+      `El último evento de M${f1(minMag)} o más en el Chocó fue el ${fmtDayLong(ms, lang)}.`,
     share: (share: number) => `${share >= 0.999 ? "más del 99.9" : f1(share * 100)}\u00A0%`,
     /** `share` inside a sentence, with the article Spanish wants: "liberó el 12.5 %", "liberó más del 99.9 %". */
     sharePhrase: (share: number) => `${share >= 0.999 ? "más del 99.9" : `el ${f1(share * 100)}`}\u00A0%`,
@@ -293,14 +312,19 @@ const en: Copy = {
   title: "What is happening?",
   subtitle:
     "The earthquakes felt in Colombia's coffee region since 10 August, explained in plain words with data from the Servicio Geológico Colombiano.",
-  back: "Back to the monitor",
+  back: "Back to home",
   tabsLabel: "How to look at it",
   tabs: { story: "The story", questions: "Questions", "3d": "In 3D" },
   loading: "Loading the catalogues…",
   incompleteTitle: "The history is still loading",
   incompleteBody:
-    "The catalogue is still missing weeks. Until it is complete, the figures and what is said about them are not representative. The monitor finishes loading it.",
-  dataUpTo: (ms, lang) => `SGC data up to ${fmtDay(ms, lang)}`,
+    "Some events have not loaded yet. Until they all have, the figures on this page and what is said about them are not representative. It completes by itself; there is nothing you need to do.",
+  staleTitle: "The data is not updating",
+  staleBody: (at, now, lang) => {
+    const { time, day } = since(at, now, lang);
+    return `No connection to the server since ${time}${day === null ? "" : ` on ${day}`}. What you see is from then, and it will update by itself.`;
+  },
+  dataUpTo: (ms, lang) => `SGC data up to ${fmtDayLong(ms, lang)}`,
   footer:
     "An independent page, not affiliated with SGC. The figures this page computes describe what has already happened and are not a forecast. For official information, consult the Servicio Geológico Colombiano.",
   timeNote: "Dates and times are Colombia time (UTC−5).",
@@ -336,10 +360,10 @@ const en: Copy = {
       if (p.case === "young") return "It is too recent to know what its usual pace is.";
       const rate = `${f1(p.recentPerDay)} events a day over the last 5 days, against about ${f0(p.usualPerDay)} on a typical day (counting from M${f1(p.mc)})`;
       if (p.case === "quieter") {
-        const since = p.quietSince === null ? "" : ` since ${fmtDay(p.quietSince, lang)}`;
+        const since = p.quietSince === null ? "" : ` since ${fmtDayLong(p.quietSince, lang)}`;
         const before = p.pastLulls.find((l) => l.recovered);
         const again = before
-          ? ` It did this once before, from ${fmtDay(before.from, lang)} to ${fmtDay(before.to, lang)}, and then picked up again, so it is too early to tell a pause from an end.`
+          ? ` It did this once before, from ${fmtDayLong(before.from, lang)} to ${fmtDayLong(before.to, lang)}, and then picked up again, so it is too early to tell a pause from an end.`
           : " It is too early to tell a pause from an end.";
         return `It has been quieter${since}: ${rate}.${again}`;
       }
@@ -353,12 +377,15 @@ const en: Copy = {
       return `It has not faded like ordinary aftershocks: ${f1(d.firstWeekPerDay)} events a day in the first week and ${f1(d.lastWeekPerDay)} in the last.`;
     },
     drift: (d) => {
-      if (d.case === "too-few") return "There are still too few events to see whether the activity is moving.";
+      if (d.case === "too-few")
+        return d.young
+          ? "It is still too early to see whether the activity is moving."
+          : "There are not enough events on the swarm's first day or in the last 24 hours to see whether the activity is moving.";
       if (d.case === "none")
         return `At the catalogue's precision (about ${f1(d.errorKm)}\u00A0km) the centre of the activity has not visibly moved.`;
       return `The centre of the activity has moved about ${f1(d.km)}\u00A0km ${COMPASS_EN[compassPoint(d.bearingDeg)]} in ${f0(d.hours / 24)} days, more than the location error (about ${f1(d.errorKm)}\u00A0km). A hint, not a conclusion.`;
     },
-    lastChoco: (ms, minMag, lang) => `Chocó's last event of M${f1(minMag)} or more was on ${fmtDay(ms, lang)}.`,
+    lastChoco: (ms, minMag, lang) => `Chocó's last event of M${f1(minMag)} or more was on ${fmtDayLong(ms, lang)}.`,
     share: (share) => `${share >= 0.999 ? "over 99.9" : f1(share * 100)}%`,
     sharePhrase: (share) => `${share >= 0.999 ? "over 99.9" : f1(share * 100)}%`,
     feltAgreement: (f) => {

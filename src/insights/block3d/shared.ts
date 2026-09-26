@@ -40,6 +40,14 @@ export interface View {
   until: number | null;
 }
 
+/**
+ * The vertical exaggeration each surface opens at: the turning preview at ×2, where the relief and the
+ * depths separate, as a showcase; the viewer at ×1, true to scale (owner's call, 2026-09-26), with ×2
+ * and ×4 one press away. The viewer keeps the reader's choice while the tab stays open.
+ */
+export const PREVIEW_EXAGGERATION = 2;
+export const VIEWER_EXAGGERATION = 1;
+
 export const ALL_LAYERS: Record<Layer, boolean> = {
   ground: true,
   plate: true,

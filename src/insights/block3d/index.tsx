@@ -4,8 +4,9 @@
  * picks a view (the owner's choice after the E1 prototype, 2026-09-25). The copy is `copy.ts`; the
  * logic without a DOM is `shared.ts`; the drawing is `scene.ts`.
  */
-import { InfoIcon, PlayIcon, SlidersHorizontalIcon, SquareIcon, XIcon } from "lucide-react";
+import { InfoIcon, PauseIcon, PlayIcon, SlidersHorizontalIcon, SquareIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { VisuallyHidden } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -36,6 +37,8 @@ import {
   ALL_LAYERS,
   FLOOR_KM,
   LENGTH_KM,
+  PREVIEW_EXAGGERATION,
+  VIEWER_EXAGGERATION,
   WIDTH_KM,
   blockModel,
   type BlockModel,
@@ -57,10 +60,14 @@ export function Block3D({ data }: { data: Insights }) {
   const [open, setOpen] = useState(false);
   const explore = useRef<HTMLButtonElement>(null);
   const reduced = useReducedMotion();
-  const [view, setView] = useState<View>({ exaggeration: 2, layers: ALL_LAYERS, until: null });
+  // The viewer's view. The preview shares its layers but always turns at ×2 over the whole catalogue.
+  const [view, setView] = useState<View>({ exaggeration: VIEWER_EXAGGERATION, layers: ALL_LAYERS, until: null });
+  const previewView = useMemo(() => ({ ...view, exaggeration: PREVIEW_EXAGGERATION, until: null }), [view]);
   const [preview, setPreview] = useState<SceneHandle | null>(null);
-  // Follows a change of the setting while the tab is open, not only the one at mount.
-  useEffect(() => preview?.setAutoRotate(!reduced), [preview, reduced]);
+  // The reader can stop the turning (WCAG 2.2.2); reduced motion never starts it. Follows a change of
+  // the setting while the tab is open, not only the one at mount.
+  const [spin, setSpin] = useState(true);
+  useEffect(() => preview?.setAutoRotate(spin && !reduced), [preview, spin, reduced]);
   // Stable, so the viewer's setup (focus, scroll lock, keys) runs once per opening.
   const close = useRef(() => {
     setOpen(false);
@@ -70,11 +77,11 @@ export function Block3D({ data }: { data: Insights }) {
     requestAnimationFrame(() => explore.current?.focus());
   });
 
-  if (!WEBGL) return <p className="max-w-prose text-muted-foreground text-pretty">{c.noWebgl}</p>;
+  if (!WEBGL) return <p className="max-w-lg text-muted-foreground text-pretty">{c.noWebgl}</p>;
 
   return (
     <section className="flex flex-col gap-6">
-      <div className="flex max-w-prose flex-col gap-3">
+      <div className="flex max-w-xl flex-col gap-3">
         <h2 className="text-2xl font-semibold tracking-tight text-balance">{c.title}</h2>
         <p className="text-lg text-pretty text-muted-foreground">{c.lede(fmtKm(WIDTH_KM), fmtKm(FLOOR_KM))}</p>
       </div>
@@ -82,7 +89,7 @@ export function Block3D({ data }: { data: Insights }) {
         <div className="relative">
           <Block
             data={data}
-            view={view}
+            view={previewView}
             lang={lang}
             className="pointer-events-none h-[45svh] rounded-lg border md:h-[55svh]"
             onReady={setPreview}
@@ -92,10 +99,26 @@ export function Block3D({ data }: { data: Insights }) {
               {c.explore}
             </Button>
           </div>
+          {reduced ? null : (
+            <Button
+              variant="outline"
+              size="icon-sm-touch"
+              aria-label={spin ? c.spin.pause : c.spin.resume}
+              onClick={() => setSpin(!spin)}
+              className="absolute top-2 right-2"
+            >
+              {spin ? <PauseIcon /> : <PlayIcon />}
+            </Button>
+          )}
         </div>
       )}
       <Key model={model} data={data} lang={lang} />
-      {open && <Viewer data={data} model={model} view={view} setView={setView} lang={lang} onClose={close.current} />}
+      {/* On the body, beside the page rather than inside it, so the page can be made inert under it. */}
+      {open &&
+        createPortal(
+          <Viewer data={data} model={model} view={view} setView={setView} lang={lang} onClose={close.current} />,
+          document.body,
+        )}
     </section>
   );
 }
@@ -137,6 +160,10 @@ function Block({
       trench: t.scene.trench,
       plate: t.scene.plate,
       rupture: t.scene.rupture(main ? fmtDay(Date.parse(main.time), lang) : ""),
+      plateShort: t.scene.plateShort,
+      ruptureShort: t.scene.ruptureShort,
+      widthShort: t.scene.widthShort(fmtKm(WIDTH_KM)),
+      lengthShort: t.scene.widthShort(fmtKm(LENGTH_KM)),
       width: t.scene.width(fmtKm(WIDTH_KM)),
       length: t.scene.length(fmtKm(LENGTH_KM)),
       dark,
@@ -238,6 +265,7 @@ function Viewer({
   const [sheet, setSheet] = useState(false);
   const sheetOpen = useRef(false);
   sheetOpen.current = sheet;
+  const opener = useRef<HTMLButtonElement | null>(null);
   // Widening past the breakpoint unmounts the sheet without closing it; left open, the viewer's keys
   // would stay off, and narrowing again would bring the sheet back unasked.
   if (wide && sheet) setSheet(false);
@@ -246,15 +274,22 @@ function Viewer({
     close.current?.focus();
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // The page behind is out of reach while the viewer is open: no focus, no clicks, not read out.
+    const page = document.getElementById("root");
+    if (page) page.inert = true;
     const key = (e: KeyboardEvent) => {
       // The sheet's own Escape reaches here after it has closed it, already handled.
       if (sheetOpen.current || e.defaultPrevented) return;
       if (e.key === "Escape") onClose();
-      // Keep Tab inside the dialog.
+      // Keep Tab inside the dialog, looping. Everything Tab can stop on: the panel's tab content
+      // (tabindex 0) was left out once, and Tab went from it to the page behind. A roving group's
+      // other items (tabindex -1) are not stops.
       if (e.key !== "Tab" || !dialog.current) return;
-      const focusable = [...dialog.current.querySelectorAll<HTMLElement>("button, a[href], [role=slider]")].filter(
-        (el) => el.offsetParent !== null,
-      );
+      const focusable = [
+        ...dialog.current.querySelectorAll<HTMLElement>(
+          'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ].filter((el) => el.tabIndex >= 0 && !el.hasAttribute("disabled") && el.offsetParent !== null);
       const [first, last] = [focusable[0], focusable.at(-1)];
       // Dragging the block leaves focus on the page's body, outside the dialog: bring it back in.
       if (!dialog.current.contains(document.activeElement)) {
@@ -271,6 +306,7 @@ function Viewer({
     addEventListener("keydown", key);
     return () => {
       document.body.style.overflow = prev;
+      if (page) page.inert = false;
       removeEventListener("keydown", key);
     };
   }, [onClose]);
@@ -361,7 +397,15 @@ function Viewer({
                 <div className="flex gap-2 border-t px-3 py-2">
                   {(["key", "settings"] as const).map((t) => (
                     <SheetTrigger key={t} asChild>
-                      <Button size="sm-touch" variant="outline" className="flex-1" onClick={() => setTab(t)}>
+                      <Button
+                        size="sm-touch"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={(e) => {
+                          opener.current = e.currentTarget;
+                          setTab(t);
+                        }}
+                      >
                         {t === "key" ? (
                           <InfoIcon data-icon="inline-start" />
                         ) : (
@@ -376,6 +420,12 @@ function Viewer({
                   side="bottom"
                   showCloseButton={false}
                   aria-describedby={undefined}
+                  // Radix returns focus to its one trigger, the last mounted ("Ajustes") whichever
+                  // opened it: back to the button that did instead.
+                  onCloseAutoFocus={(e) => {
+                    e.preventDefault();
+                    opener.current?.focus();
+                  }}
                   className="data-[side=bottom]:h-4/5"
                 >
                   <VisuallyHidden.Root asChild>
@@ -459,7 +509,8 @@ function Panel({
           <FieldSeparator />
           <FieldSet>
             <FieldLegend>{c.layersTitle}</FieldLegend>
-            <FieldGroup className="gap-3">
+            {/* On touch a switch's hit area is 46 px tall: rows 31 px apart overlapped the next one's. */}
+            <FieldGroup className="gap-3 pointer-coarse:gap-7">
               {layers.map((k) => (
                 <Field key={k} orientation="horizontal">
                   <FieldLabel htmlFor={`layer-${k}`}>{c.layers[k]}</FieldLabel>
@@ -518,6 +569,7 @@ function Replay({
     return () => cancelAnimationFrame(raf);
   }, [playing]);
   const at = view.until ?? last;
+  const shown = c.until(fmtDay(at, lang));
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -525,9 +577,12 @@ function Replay({
           {playing ? <SquareIcon data-icon="inline-start" /> : <PlayIcon data-icon="inline-start" />}
           {playing ? c.stop : c.replay}
         </Button>
-        <span className="text-xs text-muted-foreground tabular-nums">{c.until(fmtDay(at, lang))}</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{shown}</span>
       </div>
       <Slider
+        name="until"
+        // The date as shown, not the milliseconds the slider runs on.
+        aria-valuetext={shown}
         min={first}
         max={last}
         step={3_600_000}
@@ -605,7 +660,7 @@ function Key({
   const snapped = model.snapped.map((s) => c.snappedItem(s.count, fmtKm(s.depthKm, 1)));
   const list = snapped.length > 1 ? `${snapped.slice(0, -1).join(", ")}${c.and}${snapped.at(-1)}` : snapped[0];
   return (
-    <section aria-labelledby={heading ? id : undefined} className="flex max-w-prose flex-col gap-3">
+    <section aria-labelledby={heading ? id : undefined} className="flex max-w-md flex-col gap-3">
       {heading && (
         <h3 id={id} className="text-lg font-semibold tracking-tight">
           {c.keyTitle}

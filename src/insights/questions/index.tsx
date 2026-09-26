@@ -8,12 +8,13 @@
  */
 import { energyRatio, epicentralKm } from "@bvalue/seismo";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { dayStart, fmtDay } from "@/lib/format";
+import { dayStart, fmtDay, fmtDayLong } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ContextResponse } from "@/lib/api";
 import {
   SOURCES,
+  crustal,
   decay,
   feltInPereira,
   lastStrong,
@@ -58,7 +59,8 @@ export function Questions({
   const ref = data.mainshock.choco.largest;
   const [threshold, setThreshold] = useState(4);
   if (!ref) return null;
-  const named: Named = { mag: ref.mag, date: fmtDay(Date.parse(ref.time), lang) };
+  const t = Date.parse(ref.time);
+  const named: Named = { mag: ref.mag, date: fmtDayLong(t, lang), short: fmtDay(t, lang) };
   const weeks = Math.floor((data.now - Date.parse(ref.time)) / WEEK);
   const still = chocoStillActive(data);
   // USGS's figures for the mainshock, only while they are about the mainshock the page detects.
@@ -128,6 +130,7 @@ function Layout({
   const active = useActiveSection(sections.map((s) => s.id));
   const stats = useMemo(() => {
     const kms = SOURCES.flatMap((s) => (data.distances[s] ? [data.distances[s].hypocentralKm] : []));
+    // "After the M7.4": every M4.0+ in both zones but the mainshock itself, which Chocó's catalogue opens with.
     const strong = SOURCES.reduce((n, s) => n + data.sources[s].filter((e) => e.mag >= 4 && e !== reference).length, 0);
     return {
       km: Math.round(kms.reduce((a, b) => a + b, 0) / Math.max(1, kms.length) / 5) * 5,
@@ -139,7 +142,7 @@ function Layout({
   return (
     <div className="lg:flex lg:gap-12">
       <aside className="hidden lg:sticky lg:top-6 lg:block lg:w-56 lg:shrink-0 lg:self-start">
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{q.indexTitle}</p>
+        <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{q.indexTitle}</p>
         <QuestionIndex sections={sections} active={active} />
       </aside>
 
@@ -147,15 +150,15 @@ function Layout({
         <header className="pb-6">
           <p className="text-sm font-medium text-muted-foreground">{q.kicker}</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">{q.title}</h2>
-          <p className="mt-4 max-w-prose text-lg text-pretty text-muted-foreground">{q.lede}</p>
-          <dl className="mt-8 grid grid-cols-3 gap-4 border-y py-5">
+          <p className="mt-4 max-w-xl text-lg text-pretty text-muted-foreground">{q.lede}</p>
+          <dl className="mt-8 flex flex-wrap gap-x-6 gap-y-4 border-y py-5">
             <Stat value={q.stats.km(stats.km)} label={q.stats.kmLabel} />
             <Stat value={fmtInt(stats.strong)} label={q.stats.strongLabel(named)} />
             <Stat value={fmtInt(stats.recent)} label={q.stats.recentLabel} />
           </dl>
         </header>
         <nav aria-label={q.indexTitleMobile} className="lg:hidden">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{q.indexTitleMobile}</p>
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{q.indexTitleMobile}</p>
           <QuestionIndex sections={sections} active={null} />
         </nav>
 
@@ -166,14 +169,16 @@ function Layout({
             aria-labelledby={`${s.id}-h`}
             className="scroll-mt-6 border-b py-12 last:border-0"
           >
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{q.question(i + 1)}</p>
+            <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{q.question(i + 1)}</p>
             <h3
               id={`${s.id}-h`}
-              className="mt-2 max-w-prose text-xl font-semibold tracking-tight text-balance sm:text-2xl"
+              className="mt-2 max-w-xl text-xl font-semibold tracking-tight text-balance sm:text-2xl"
             >
-              <span aria-hidden>“</span>
+              {/* The reader's own words, in the marks each language's prose uses: «» in Spanish, as the
+                  body does. `<q>` was tried: Chrome draws “” for Spanish too. */}
+              <span aria-hidden>{lang === "es" ? "«" : "“"}</span>
               {s.q}
-              <span aria-hidden>”</span>
+              <span aria-hidden>{lang === "es" ? "»" : "”"}</span>
             </h3>
             <div className="mt-5">{s.body}</div>
           </section>
@@ -209,10 +214,12 @@ function QuestionIndex({ sections, active }: { sections: { id: string; short: st
 }
 
 // The figure is drawn above its label, so the reversed column is packed from its end, the top: the
-// three figures then share one line however many lines each label wraps to.
+// figures on a line share it however many lines each label wraps to. A wrapping row, not three equal
+// columns: at 320 px "~120 km" is wider than a third. From 8rem each, two share a phone's line and
+// the third takes the next whole; the three share one from ~420 px.
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="flex min-w-0 flex-col-reverse justify-end gap-1">
+    <div className="flex min-w-0 grow basis-32 flex-col-reverse justify-end gap-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{value}</dd>
     </div>
@@ -338,7 +345,15 @@ function Swarm({ data }: { data: Insights }) {
   const perDay = tolima.length / Math.max(1, (data.now - start) / DAY);
   return (
     <>
-      <P>{c.p1(fmtDay(start, lang), data.distances.tolima?.depthKm ?? 0, perDay, assessment.state)}</P>
+      <P>
+        {c.p1(
+          fmtDayLong(start, lang),
+          data.distances.tolima?.depthKm ?? 0,
+          crustal(data.distances.tolima),
+          perDay,
+          assessment.state,
+        )}
+      </P>
       {assessment.largest ? <P>{c.state(assessment.state, assessment.largest.mag, assessment.gap)}</P> : null}
       <EnergyShare data={data} />
       <P>{c.driftIntro}</P>
@@ -432,7 +447,7 @@ function Bigger({ forecast, named, feltShown }: { forecast: Forecast | null; nam
       <P>{c.p1}</P>
       <P>{c.p2}</P>
       {forecast ? <ForecastBox forecast={forecast} named={named} feltShown={feltShown} /> : null}
-      <div className="mt-6 max-w-prose rounded-xl bg-muted p-5">
+      <div className="mt-6 max-w-lg rounded-xl bg-muted p-5">
         <p className="text-sm font-semibold">{c.helpTitle}</p>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5 text-base/7">
           {c.help.map((h) => (
@@ -466,7 +481,7 @@ function Unknown({ data }: { data: Insights }) {
   return (
     <>
       <P>{c.p1}</P>
-      <ul className="mt-5 flex max-w-prose list-disc flex-col gap-3 pl-5 text-base/7">
+      <ul className="mt-5 flex max-w-lg list-disc flex-col gap-3 pl-5 text-base/7">
         {items.map((t) => (
           <li key={t}>{t}</li>
         ))}

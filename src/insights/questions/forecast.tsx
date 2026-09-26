@@ -5,7 +5,7 @@
  * Nothing of the page's own is drawn inside the box, and it points to SGC as the authority.
  */
 import { useId } from "react";
-import { fmtDay, fmtNum } from "@/lib/format";
+import { fmtDay, fmtDayLong, fmtNum } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type { Forecast } from "../claims";
 import { insightsCopy } from "../copy";
@@ -23,7 +23,9 @@ export function ForecastBox({ forecast, named, feltShown }: { forecast: Forecast
   const c = questionsCopy[lang].bigger.forecast;
   const claims = insightsCopy[lang].claims;
   const headingId = useId();
-  const day = (iso: string) => fmtDay(Date.parse(iso), lang);
+  // Long in a sentence, short in the windows' small-caps headings.
+  const day = (iso: string) => fmtDayLong(Date.parse(iso), lang);
+  const short = (iso: string) => fmtDay(Date.parse(iso), lang);
   const { model, page } = forecast;
   const limits = [
     ...(model.holdsBothGroups ? [c.area(model.radiusKm)] : []),
@@ -37,7 +39,7 @@ export function ForecastBox({ forecast, named, feltShown }: { forecast: Forecast
   return (
     <>
       <P>{c.lede(named.date)}</P>
-      <section aria-labelledby={headingId} className="my-8 max-w-prose rounded-xl border bg-card p-4 sm:p-6">
+      <section aria-labelledby={headingId} className="my-8 max-w-xl rounded-xl border bg-card p-4 sm:p-6">
         <h4 id={headingId} className="text-lg font-semibold tracking-tight">
           {c.heading}
         </h4>
@@ -47,8 +49,8 @@ export function ForecastBox({ forecast, named, feltShown }: { forecast: Forecast
 
         {forecast.windows.map((w) => (
           <div key={w.end} className="mt-6">
-            <h5 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {c.window(day(w.start), day(w.end))}
+            <h5 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              {c.window(short(w.start), short(w.end))}
             </h5>
             <dl className="mt-3 flex flex-col gap-4">
               {w.rows.map((r) => (

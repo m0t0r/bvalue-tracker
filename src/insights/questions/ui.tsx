@@ -1,8 +1,8 @@
 /** Small building blocks the "Preguntas" tab's answers share. */
 import { useCallback, useId, useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Slider } from "@/components/ui/slider";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { Source } from "../claims";
 import { BG } from "../tones";
@@ -28,19 +28,22 @@ export function Figure({ children, caption }: { children: ReactNode; caption?: R
   return (
     <figure className="my-8 rounded-xl border bg-card p-4 text-card-foreground sm:p-6">
       {children}
-      {caption ? <figcaption className="mt-4 text-xs text-pretty text-muted-foreground">{caption}</figcaption> : null}
+      {caption ? (
+        <figcaption className="mt-4 max-w-md text-xs text-pretty text-muted-foreground">{caption}</figcaption>
+      ) : null}
     </figure>
   );
 }
 
 export function P({ children }: { children: ReactNode }) {
-  return <p className="mt-4 max-w-prose text-base/7 text-pretty first:mt-0">{children}</p>;
+  // A cap in pixels, not `ch`: Geist's narrow letters put 65ch at ~95 characters a line. 32rem is ~70.
+  return <p className="mt-4 max-w-lg text-base/7 text-pretty first:mt-0">{children}</p>;
 }
 
 export function Takeaway({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="mt-8 max-w-prose border-l-2 border-foreground pl-4">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
+    <div className="mt-8 max-w-lg border-l-2 border-foreground pl-4">
+      <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{label}</p>
       <p className="mt-1 text-base/7 font-medium text-balance">{children}</p>
     </div>
   );
@@ -55,7 +58,7 @@ export function Swatch({ source, square = false }: { source: Source | "mainshock
   );
 }
 
-/** A row of mutually exclusive choices, as pressed buttons. */
+/** A row of mutually exclusive choices, the 3D tab's toggles: one tab stop, arrows move within it. */
 export function Choice<K extends string>({
   label,
   value,
@@ -68,25 +71,30 @@ export function Choice<K extends string>({
   options: readonly { key: K; label: ReactNode }[];
 }) {
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+    <ToggleGroup
+      type="single"
+      variant="outline"
+      size="sm-touch"
+      spacing={1}
+      aria-label={label}
+      value={value}
+      // Empty when the chosen one is pressed again: one is always chosen.
+      onValueChange={(v) => v && onChange(v as K)}
+      className="flex-wrap"
+    >
       {options.map((o) => (
-        <Button
-          key={o.key}
-          type="button"
-          size="sm-touch"
-          variant={o.key === value ? "default" : "outline"}
-          aria-pressed={o.key === value}
-          onClick={() => onChange(o.key)}
-        >
+        <ToggleGroupItem key={o.key} value={o.key}>
           {o.label}
-        </Button>
+        </ToggleGroupItem>
       ))}
-    </div>
+    </ToggleGroup>
   );
 }
 
 /** A labelled slider with its value read out beside the label. The thumb is named by the label. */
 export function RangeField(props: {
+  /** The form name of Radix's hidden input (#73). */
+  name: string;
   label: string;
   value: number;
   display: string;
@@ -105,6 +113,7 @@ export function RangeField(props: {
         <span className="font-semibold tabular-nums">{props.display}</span>
       </FieldLabel>
       <Slider
+        name={props.name}
         aria-labelledby={id}
         aria-valuetext={props.display}
         min={props.min}

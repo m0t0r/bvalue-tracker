@@ -29,27 +29,29 @@ type Pair = [string, string];
 const es = {
   title: "Debajo de nuestros pies, en 3D",
   lede: (width: string, depth: string) =>
-    `Imagina que cortamos un bloque de tierra de ${width} de ancho y ${depth} de profundidad, desde el océano Pacífico hasta más allá de Pereira. Dentro, cada sismo está donde ocurrió, a su profundidad real, junto a la placa que se hunde debajo de nosotros.`,
+    `Imagina que cortamos un bloque de tierra de ${width} de ancho y ${depth} de profundidad, desde el océano Pacífico hasta más allá de Pereira. Dentro, cada evento está donde ocurrió, a su profundidad real, junto a la placa que se hunde debajo de nosotros.`,
   explore: "Explorar en 3D",
+  /** The preview's turning, which the reader can stop (WCAG 2.2.2). */
+  spin: { pause: "Detener el giro", resume: "Reanudar el giro" },
   /** One per input: a phone has no wheel, a mouse cannot pinch. */
   hint: { touch: "Arrastra para girar · pellizca para acercar", pointer: "Arrastra para girar · rueda para acercar" },
   close: "Cerrar",
   dialog: "El bloque en 3D",
   canvas:
-    "Bloque en 3D con los sismos a su profundidad, la placa de Nazca y el lugar donde se rompió la roca en el sismo grande. Los cortes de «La historia» muestran lo mismo en dos dimensiones.",
+    "Bloque en 3D con los eventos a su profundidad, la placa de Nazca y el lugar donde se rompió la roca en el sismo grande. Los cortes de «La historia» muestran lo mismo en dos dimensiones.",
   noWebgl:
     "Este navegador no puede mostrar gráficos en 3D. Los cortes de «La historia» muestran lo mismo en dos dimensiones.",
   views: "Vistas",
   view: {
     oblique: [
       "En diagonal",
-      "El bloque visto desde el sureste: el terreno arriba y, debajo, los sismos a su profundidad real.",
+      "El bloque visto desde el sureste: el terreno arriba y, debajo, los eventos a su profundidad real.",
     ],
     south: [
       "Desde el sur",
       "De perfil, como los cortes de «La historia»: la placa baja hacia el este, y los dos grupos del Chocó quedan a distinta profundidad.",
     ],
-    above: ["Desde arriba", "Como en un mapa: dónde ocurrieron los sismos, sin su profundidad."],
+    above: ["Desde arriba", "Como en un mapa: dónde ocurrieron los eventos, sin su profundidad."],
     rupture: [
       "Donde se rompió",
       "De cerca, la zona naranja: la parte de la roca que se rompió en el sismo grande. Cuanto más intenso el naranja, más se deslizó.",
@@ -69,13 +71,13 @@ const es = {
     plate: "Placa",
     uncertainty: "Margen de error de la placa",
     rupture: "Donde se rompió",
-    events: "Sismos",
+    events: "Eventos",
     labels: "Nombres de lugares",
     snapped: "Resaltar profundidades fijas",
   },
   timeTitle: "Tiempo",
   timeHelp: (seconds: number) =>
-    `Los sismos aparecen en el orden en que ocurrieron, en unos ${seconds} segundos. También puedes mover la fecha a mano.`,
+    `Los eventos aparecen en el orden en que ocurrieron, en unos ${seconds} segundos. También puedes mover la fecha a mano.`,
   replay: "Reproducir",
   stop: "Detener",
   until: (date: string) => `hasta el ${date}`,
@@ -89,7 +91,7 @@ const es = {
     ] as Pair,
     dots: [
       "Los puntos",
-      "Cada punto es un sismo del catálogo del SGC, en el lugar y a la profundidad donde ocurrió. Cuanto más grande el punto, mayor la magnitud.",
+      "Cada punto es un evento del catálogo del SGC, en el lugar y a la profundidad donde ocurrió. Cuanto más grande el punto, mayor la magnitud.",
     ] as Pair,
     plate: (rate: string): [string, string] => [
       "La franja gris",
@@ -107,7 +109,7 @@ const es = {
       `El bloque mide unos ${w} de oeste a este, ${l} de sur a norte y ${d} de alto. Los números del costado marcan cuántos kilómetros hay bajo la superficie. Para que se vea mejor, lo vertical se puede estirar: con «×1», el bloque está a escala real y las montañas casi no se notan.`,
     ],
     snapped: (list: string) =>
-      `El catálogo pone a muchos sismos pequeños exactamente a la misma profundidad: ${list}. Por eso ahí se ven «capas», que no son reales.`,
+      `El catálogo pone a muchos eventos pequeños exactamente a la misma profundidad: ${list}. Por eso ahí se ven «capas», que no son reales.`,
   },
   groups: {
     shallow: "grupo superficial (Istmina–Sipí)",
@@ -124,6 +126,10 @@ const es = {
     trench: "fosa del Pacífico",
     plate: "placa de Nazca · modelo Slab2 del USGS",
     rupture: (date: string) => `donde se rompió la roca el ${date} · modelo del USGS`,
+    /** On a narrow block, the same without what the key says already (the model, the date, the directions). */
+    plateShort: "placa de Nazca",
+    ruptureShort: "donde se rompió la roca",
+    widthShort: (km: string) => `~${km}`,
   },
   compass: {
     N: "norte",
@@ -143,25 +149,26 @@ type Copy = typeof es;
 const en: Copy = {
   title: "Beneath our feet, in 3D",
   lede: (width, depth) =>
-    `Picture a block of earth cut out, ${width} wide and ${depth} deep, from the Pacific Ocean to beyond Pereira. Inside it, each earthquake sits where it happened, at its true depth, beside the plate sinking beneath us.`,
+    `Picture a block of earth cut out, ${width} wide and ${depth} deep, from the Pacific Ocean to beyond Pereira. Inside it, each event sits where it happened, at its true depth, beside the plate sinking beneath us.`,
   explore: "Explore in 3D",
+  spin: { pause: "Stop the turning", resume: "Resume the turning" },
   hint: { touch: "Drag to turn · pinch to zoom", pointer: "Drag to turn · scroll to zoom" },
   close: "Close",
   dialog: "The block in 3D",
   canvas:
-    "A 3D block with the earthquakes at their depths, the Nazca plate and where the rock broke in the large earthquake. The story's cross-sections show the same in two dimensions.",
+    "A 3D block with the events at their depths, the Nazca plate and where the rock broke in the large earthquake. The story's cross-sections show the same in two dimensions.",
   noWebgl: "This browser cannot show 3D graphics. The story's cross-sections show the same in two dimensions.",
   views: "Views",
   view: {
     oblique: [
       "Diagonal",
-      "The block from the south-east: the ground on top and, below it, the earthquakes at their true depths.",
+      "The block from the south-east: the ground on top and, below it, the events at their true depths.",
     ],
     south: [
       "From the south",
       "Side on, like the story's cross-sections: the plate sinks towards the east, and Chocó's two groups sit at different depths.",
     ],
-    above: ["From above", "As on a map: where the earthquakes happened, without their depth."],
+    above: ["From above", "As on a map: where the events happened, without their depth."],
     rupture: [
       "Where it broke",
       "Close up on the orange patch: the part of the rock that broke in the large earthquake. The stronger the orange, the further it slid.",
@@ -181,13 +188,13 @@ const en: Copy = {
     plate: "Plate",
     uncertainty: "Plate's margin of error",
     rupture: "Where it broke",
-    events: "Earthquakes",
+    events: "Events",
     labels: "Place names",
     snapped: "Highlight fixed depths",
   },
   timeTitle: "Time",
   timeHelp: (seconds) =>
-    `The earthquakes appear in the order they happened, over about ${seconds} seconds. You can also move the date by hand.`,
+    `The events appear in the order they happened, over about ${seconds} seconds. You can also move the date by hand.`,
   replay: "Replay",
   stop: "Stop",
   until: (date) => `up to ${date}`,
@@ -201,7 +208,7 @@ const en: Copy = {
     ],
     dots: [
       "The dots",
-      "Each dot is an earthquake in SGC's catalogue, where and as deep as it happened. The bigger the dot, the larger the magnitude.",
+      "Each dot is an event in SGC's catalogue, where and as deep as it happened. The bigger the dot, the larger the magnitude.",
     ],
     plate: (rate) => [
       "The grey band",
@@ -219,7 +226,7 @@ const en: Copy = {
       `The block is about ${w} from west to east, ${l} from south to north and ${d} tall. The numbers on the side mark how many kilometres below the surface. To make it easier to see, the vertical can be stretched: at "×1" the block is true to scale and the mountains barely show.`,
     ],
     snapped: (list) =>
-      `The catalogue puts many small earthquakes at exactly the same depth: ${list}. That is why you see "layers" there, and they are not real.`,
+      `The catalogue puts many small events at exactly the same depth: ${list}. That is why you see "layers" there, and they are not real.`,
   },
   groups: {
     shallow: "shallow group (Istmina–Sipí)",
@@ -236,6 +243,9 @@ const en: Copy = {
     trench: "Pacific trench",
     plate: "Nazca plate · USGS Slab2 model",
     rupture: (date) => `where the rock broke on ${date} · USGS model`,
+    plateShort: "Nazca plate",
+    ruptureShort: "where the rock broke",
+    widthShort: (km) => `~${km}`,
   },
   compass: {
     N: "north",

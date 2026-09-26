@@ -95,7 +95,7 @@ export function InsightsApp() {
   const c = insightsCopy[lang];
   const dark = useIsDark();
   const [tab, setTab] = useState<Tab>(readTab);
-  const { data, context, forecast, isPending, isError, error, retrying, retry, incomplete } = useInsights();
+  const { data, context, forecast, isPending, isError, error, retrying, retry, incomplete, staleSince } = useInsights();
   // The tabs are drawn from a deferred copy, so the render the data triggers (hundreds of ms of it
   // on a phone) runs as a transition React can interrupt, not one task that blocks input. It used
   // to be interruptible by accident: `lazy`'s retry after its suspension was (see `chunks`). And a
@@ -129,7 +129,7 @@ export function InsightsApp() {
             {/* Pulled out by its own inline padding, so the arrow lines up with the title below it. */}
             <Button variant="ghost" size="sm-touch" className="-ms-2.5 pointer-coarse:-ms-4" asChild>
               <a href="/">
-                <ArrowLeftIcon />
+                <ArrowLeftIcon data-icon="inline-start" />
                 {c.back}
               </a>
             </Button>
@@ -146,16 +146,12 @@ export function InsightsApp() {
                 aria-label={dark ? c.themeToLight : c.themeToDark}
                 onClick={toggleTheme}
               >
-                {dark ? (
-                  <SunIcon className="size-4 pointer-coarse:size-5" />
-                ) : (
-                  <MoonIcon className="size-4 pointer-coarse:size-5" />
-                )}
+                {dark ? <SunIcon /> : <MoonIcon />}
               </Button>
             </div>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{c.title}</h1>
-          <p className="max-w-prose text-muted-foreground text-pretty">{c.subtitle}</p>
+          <p className="max-w-lg text-muted-foreground text-pretty">{c.subtitle}</p>
           <TabsList ref={tabList} aria-label={c.tabsLabel}>
             {TABS.map((t) => (
               <TabsTrigger key={t} value={t}>
@@ -166,7 +162,16 @@ export function InsightsApp() {
         </header>
 
         <main className="contents">
-          {incomplete && !isError ? (
+          {/* One notice at a time, and never beside the load error, which replaces the page. Data that
+              stopped updating comes before an unfinished history: it is the one the reader cannot see
+              for themselves, and it holds for the back-fill's own progress too, which is as old. */}
+          {isError ? null : staleSince !== null && data ? (
+            <Alert variant="caution" role="status">
+              <AlertTriangleIcon />
+              <AlertTitle>{c.staleTitle}</AlertTitle>
+              <AlertDescription>{c.staleBody(staleSince, data.now, lang)}</AlertDescription>
+            </Alert>
+          ) : incomplete ? (
             <Alert variant="caution" role="status">
               <AlertTriangleIcon />
               <AlertTitle>{c.incompleteTitle}</AlertTitle>
@@ -212,7 +217,7 @@ export function InsightsApp() {
       {shown && (
         <footer ref={footer} className="mt-auto flex flex-col gap-1 border-t pt-6 text-sm text-muted-foreground">
           {shown.data.dataEnd !== null && <p>{c.dataUpTo(shown.data.dataEnd, lang)}</p>}
-          <p className="max-w-prose text-pretty">{c.footer}</p>
+          <p className="max-w-md text-pretty">{c.footer}</p>
           <p>{c.timeNote}</p>
         </footer>
       )}
@@ -223,7 +228,9 @@ export function InsightsApp() {
 /** A viewport tall, like the monitor's, so nothing below it is on screen when the page replaces it. */
 function PageSkeleton({ label }: { label: string }) {
   return (
-    <div role="status" aria-label={label} className="flex h-svh flex-col gap-4">
+    <div role="status" className="flex h-svh flex-col gap-4">
+      {/* Text, not a name: a status region announces its content, and a name alone is not read. */}
+      <span className="sr-only">{label}</span>
       <Skeleton className="h-10 w-2/3" />
       <Skeleton className="h-6 w-1/2" />
       <Skeleton className="flex-1" />
