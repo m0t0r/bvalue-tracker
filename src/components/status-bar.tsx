@@ -197,7 +197,7 @@ export function StatusBar({
           ? t.refreshWait(CADENCE[zone].refreshMinIntervalS / 60)
           : "";
 
-  // While the page cannot reach the server, the line says since when the figures are, and that outranks
+  // While a refetch over the figures has failed, the line says since when they are, and that outranks
   // every answer to a press but a request under way: "Ya tienes los datos más recientes" would be stale
   // itself, and "No se pudo consultar al SGC" blames SGC for what is the connection as often as not.
   // A press parked offline (`isPaused`) is not under way, so "Consultando al SGC…" does not sit there
@@ -277,9 +277,9 @@ export function StatusBar({
               <RefreshCwIcon data-icon="inline-start" className={refresh.isPending ? "animate-spin" : undefined} />
               {t.refresh}
             </Button>
-            {/* One line is always reserved. The live region announces refresh results, and the page
-                losing the server: a caution, so neutral with a warning icon, not red (nothing the reader
-                did failed, and the figures stay).
+            {/* One line is always reserved. The live region announces refresh results, and figures
+                that could not be updated: a caution, so neutral with a warning icon, not red (nothing
+                the reader did failed, and the figures stay).
                 The standing note about automatic updates sits outside it, so it is never read out as if
                 it were news. The note goes quiet while a run has failed: it promises a cadence that has
                 stopped — the fast lane stands down after a failure — whether or not the failed-query

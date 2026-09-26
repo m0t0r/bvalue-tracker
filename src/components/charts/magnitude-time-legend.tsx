@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n";
+import { FILL } from "@/lib/cluster-fill";
 import { cn } from "@/lib/utils";
 import { useZone } from "@/lib/zone";
 import { CLUSTER_DEPTH_KM } from "../../../core/clusters";
@@ -19,7 +20,7 @@ export function ClusterLegend() {
     <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
       {(["shallow", "deep"] as const).map((c) => (
         <li key={c} className="flex items-center gap-1.5">
-          <span className={cn("size-2.5 rounded-full", c === "shallow" ? "bg-(--chart-1)" : "bg-(--chart-4)")} />
+          <span className={cn("size-2.5 rounded-full", FILL[c])} />
           {t.clusterName[c]} <span>({t.clusterWhere[c](CLUSTER_DEPTH_KM)})</span>
         </li>
       ))}

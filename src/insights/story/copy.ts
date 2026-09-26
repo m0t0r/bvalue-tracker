@@ -99,7 +99,7 @@ const es = {
     durationPast:
       "Para los sismos anteriores de la lista no se ha publicado una duración de la sacudida comparable, así que aquí no se comparan.",
     durationNote:
-      "La estación es {station}, de la red del SGC. Las cifras de Pereira salen de su registro de aceleración y las calcula esta página: la parte fuerte es el tiempo entre el 5\u00a0% y el 95\u00a0% de la energía del movimiento (la intensidad de Arias) en las dos componentes horizontales, y los tiempos se cuentan desde que empezó el sismo. Lo que sintió cada persona pudo durar más o menos. La cifra de {from} segundos a {toMin} minutos es la que da el SGC para sus estaciones más cercanas al epicentro. La de la falla viene del {usgs}: el tiempo hasta que salió el 95 % de su momento sísmico (la medida del tamaño de la que sale la magnitud), contado desde que empezó a romperse.",
+      "La estación es {station}, de la red del SGC. Las cifras de Pereira salen de su registro de aceleración y las calcula esta página: la parte fuerte es el tiempo entre el 5\u00a0% y el 95\u00a0% de la energía del movimiento (la intensidad de Arias) en las dos componentes horizontales, y los tiempos se cuentan desde que empezó el sismo. Lo que sintió cada persona pudo durar más o menos. La cifra de {from} segundos a {toMin} minutos es la que da el SGC para sus estaciones más cercanas al epicentro. La de la falla viene del {usgs}: el tiempo hasta que salió el 95\u00a0% de su momento sísmico (la medida del tamaño de la que sale la magnitud), contado desde que empezó a romperse.",
     durationUsgs: "modelo de falla finita del USGS",
     ladderTitle: "Un punto más de magnitud: unas 32 veces más energía",
     ladder1:

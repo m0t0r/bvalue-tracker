@@ -1,7 +1,7 @@
 import { FilterIcon, XIcon } from "lucide-react";
 import { Fragment } from "react";
 import { useIntersectionObserver } from "usehooks-ts";
-import { FILL } from "@/components/clusters-card";
+import { FILL } from "@/lib/cluster-fill";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,10 +59,12 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
 
   const counts = [shown.toLocaleString(lang), total.toLocaleString(lang)] as const;
   // What a filter change announces: the count, and nothing else. Mounted whether or not anything is
-  // filtered, since a live region inserted with its text already in it is often not read out.
+  // filtered, since a live region inserted with its text already in it is often not read out, but
+  // empty while nothing is: a refetch that adds events to an unfiltered page is not news to announce.
+  // It is also the count a screen reader meets in the notice, whose visible copy is hidden from it.
   const announce = (
     <span role="status" className="sr-only">
-      {t.scopeTitle(...counts)}
+      {chips.length === 0 ? null : t.scopeTitle(...counts)}
     </span>
   );
 
@@ -85,7 +87,9 @@ export function FilterScope({ chips, cluster, shown, total, onClear }: Props) {
         className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 *:[svg]:translate-y-0"
       >
         <FilterIcon className="text-muted-foreground" />
-        <span className="text-sm font-medium">{t.scopeTitle(...counts)}</span>
+        <span aria-hidden className="text-sm font-medium">
+          {t.scopeTitle(...counts)}
+        </span>
         <div className="flex flex-wrap items-center gap-1.5">
           {chips.map((c) => (
             <Chip key={c.key} chip={c} />

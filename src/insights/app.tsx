@@ -107,6 +107,16 @@ export function InsightsApp() {
     [isPending, data, context, forecast],
   );
   const shown = useDeferredValue(loaded);
+  // One notice at a time, and never beside the load error, which replaces the page. Data that stopped
+  // updating comes before an unfinished history: it is the one the reader cannot see for themselves,
+  // and it holds for the back-fill's own progress too, which is as old.
+  const notice = isError
+    ? null
+    : staleSince !== null && data
+      ? { title: c.staleTitle, body: c.staleBody(staleSince, data.now, lang) }
+      : incomplete
+        ? { title: c.incompleteTitle, body: c.incompleteBody }
+        : null;
   const other = lang === "es" ? "en" : "es";
   const tabList = useRef<HTMLDivElement>(null);
   const footer = useRef<HTMLElement>(null);
@@ -162,22 +172,18 @@ export function InsightsApp() {
         </header>
 
         <main className="contents">
-          {/* One notice at a time, and never beside the load error, which replaces the page. Data that
-              stopped updating comes before an unfinished history: it is the one the reader cannot see
-              for themselves, and it holds for the back-fill's own progress too, which is as old. */}
-          {isError ? null : staleSince !== null && data ? (
-            <Alert variant="caution" role="status">
+          {notice ? (
+            <Alert variant="caution" role="note">
               <AlertTriangleIcon />
-              <AlertTitle>{c.staleTitle}</AlertTitle>
-              <AlertDescription>{c.staleBody(staleSince, data.now, lang)}</AlertDescription>
-            </Alert>
-          ) : incomplete ? (
-            <Alert variant="caution" role="status">
-              <AlertTriangleIcon />
-              <AlertTitle>{c.incompleteTitle}</AlertTitle>
-              <AlertDescription>{c.incompleteBody}</AlertDescription>
+              <AlertTitle>{notice.title}</AlertTitle>
+              <AlertDescription>{notice.body}</AlertDescription>
             </Alert>
           ) : null}
+          {/* The notice is announced from here: a live region mounted with its text already in it is
+              often not read out, and the notice itself mounts only when its state begins. */}
+          <span role="status" className="sr-only">
+            {notice ? `${notice.title}. ${notice.body}` : null}
+          </span>
           {isError ? (
             <LoadError
               title={t.loadFailed}

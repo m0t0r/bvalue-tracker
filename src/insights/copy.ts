@@ -170,7 +170,7 @@ const es = {
   /** `at`: when the oldest data on screen was fetched; the time alone when that was today. */
   staleBody: (at: number, now: number, lang: Lang) => {
     const { time, day } = since(at, now, lang);
-    return `Sin conexión con el servidor desde ${day === null ? "las" : `el ${day} a las`} ${time}. Lo que ves es de entonces y se actualizará solo.`;
+    return `No se pudieron actualizar: lo que ves es ${day === null ? "de las" : `del ${day} a las`} ${time}, y se actualizará solo.`;
   },
   dataUpTo: (ms: number, lang: Lang) => `Datos del SGC hasta el ${fmtDayLong(ms, lang)}`,
   footer:
@@ -322,7 +322,7 @@ const en: Copy = {
   staleTitle: "The data is not updating",
   staleBody: (at, now, lang) => {
     const { time, day } = since(at, now, lang);
-    return `No connection to the server since ${time}${day === null ? "" : ` on ${day}`}. What you see is from then, and it will update by itself.`;
+    return `They could not be updated: what you see is from ${time}${day === null ? "" : ` on ${day}`}, and it will update by itself.`;
   },
   dataUpTo: (ms, lang) => `SGC data up to ${fmtDayLong(ms, lang)}`,
   footer:

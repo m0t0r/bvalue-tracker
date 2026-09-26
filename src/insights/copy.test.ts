@@ -273,19 +273,21 @@ describe("the stale-data notice", () => {
   const since = Date.parse("2026-09-26T17:35:00Z");
   it("gives the time alone when the data is from today, Colombian time", () => {
     const now = Date.parse("2026-09-26T23:00:00Z"); // 18:00 the same Colombian day
-    expect(insightsCopy.es.staleBody(since, now, "es")).toContain("desde las 12:35.");
-    expect(insightsCopy.en.staleBody(since, now, "en")).toContain("since 12:35.");
+    expect(insightsCopy.es.staleBody(since, now, "es")).toContain("es de las 12:35,");
+    expect(insightsCopy.en.staleBody(since, now, "en")).toContain("is from 12:35,");
   });
   it("adds the day once the reader's day has turned, even when UTC's has not", () => {
     const now = Date.parse("2026-09-27T06:00:00Z"); // 01:00 on the 27th in Colombia
-    expect(insightsCopy.es.staleBody(since, now, "es")).toContain("desde el 26 de septiembre a las 12:35.");
-    expect(insightsCopy.en.staleBody(since, now, "en")).toContain("since 12:35 on 26 September.");
+    expect(insightsCopy.es.staleBody(since, now, "es")).toContain("es del 26 de septiembre a las 12:35,");
+    expect(insightsCopy.en.staleBody(since, now, "en")).toContain("is from 12:35 on 26 September,");
   });
   it("says it comes back by itself and never sends the reader to reload, as the monitor's line does", () => {
     for (const lang of ["es", "en"] as const) {
       const s = insightsCopy[lang].staleBody(since, since, lang);
       expect(s).toMatch(/solo|by itself/);
       expect(s).not.toMatch(/recarg|reload/i);
+      // When the figures were fetched, not when a connection was lost (code review, 2026-09-26).
+      expect(s).not.toMatch(/conexi|connection/i);
     }
   });
 });

@@ -778,6 +778,12 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       t.el.style.display = "";
       const sx = ((cx + 1) / 2) * w;
       const sy = ((1 - cy) / 2) * h;
+      // A label whose point has left the canvas sideways leaves with it: clamped to the edge, it would
+      // name whatever is drawn there (the trench, the depth ticks, after a drag or a close view).
+      if (t.clamp && (sx < 0 || sx > w)) {
+        t.el.style.display = "none";
+        continue;
+      }
       if (!t.clamp) {
         t.el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -50%)`;
         continue;
