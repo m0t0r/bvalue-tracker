@@ -4,12 +4,13 @@
  * `scene.ts` draws it with OGL; the tests hold it here.
  *
  * Units are kilometres. x runs east, z runs south (a camera in the south looks north with east on its
- * right), y runs up. Everything vertical is multiplied by one exaggeration, ground and depth alike, so
- * the block never mixes two scales.
+ * right), y runs up. Everything vertical is multiplied by one exaggeration, ground and depth alike;
+ * the land alone can also be raised (`landScale`), the one place the block mixes two scales.
  */
 import { bearingDeg, epicentralKm } from "@bvalue/seismo";
 import { GROUND, RUPTURE } from "../block";
 import { compassPoint, type Insights, type QuakeLike, type Source } from "../claims";
+import { TOWNS } from "../region";
 import { commonDepths } from "../shared";
 import { USGS_ASSESSED } from "../story/model";
 
@@ -35,6 +36,8 @@ export type Preset = "oblique" | "south" | "above" | "rupture" | "chaparral";
 
 export interface View {
   exaggeration: number;
+  /** The mountains raised to `RAISED_LAND` times their height; false leaves them at the exaggeration. */
+  raised: boolean;
   layers: Record<Layer, boolean>;
   /** Show events up to this time (ms); null shows all. */
   until: number | null;
@@ -48,6 +51,18 @@ export interface View {
 export const PREVIEW_EXAGGERATION = 2;
 export const VIEWER_EXAGGERATION = 1;
 
+/**
+ * How many times their height the mountains stand when raised, whatever the vertical exaggeration.
+ * They are at most ~5 km high on a 500 km block: at true scale, ~8 px on a laptop, too little to read
+ * as relief (owner's call, 2026-09-26, with a setting back to true scale). Only the land is raised:
+ * the sea floor and every depth stay at the block's exaggeration.
+ */
+export const RAISED_LAND = 5;
+
+/** The factor the land's heights are drawn at, before the block's own exaggeration multiplies them. */
+export const landScale = (v: Pick<View, "raised" | "exaggeration">) =>
+  v.raised ? Math.max(1, RAISED_LAND / v.exaggeration) : 1;
+
 export const ALL_LAYERS: Record<Layer, boolean> = {
   ground: true,
   plate: true,
@@ -59,6 +74,19 @@ export const ALL_LAYERS: Record<Layer, boolean> = {
 };
 
 // --- What the block shows ----------------------------------------------------------------------
+
+/**
+ * Each pinned place but Pereira, and how far it is from Pereira in a straight line over the surface
+ * (great circle), to the nearest 5 km: the block's pins are for scale, not for survey.
+ */
+export function pinDistances() {
+  const home = TOWNS.find((t) => t.kind === "home")!;
+  return TOWNS.filter((t) => PINNED.includes(t.id) && t.id !== home.id).map((t) => ({
+    id: t.id,
+    name: t.name,
+    km: Math.round(epicentralKm(home, t) / 5) * 5,
+  }));
+}
 
 /** The places the block pins. The baked map leaves their names off, so none is named twice. */
 export const PINNED = ["pereira", "istmina", "chaparral", "buenaventura"];
@@ -175,20 +203,30 @@ export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t +
  * Where each ground node falls on the map image (`bake-basemap.ts`), which covers exactly the block
  * and is Web Mercator: u runs with the longitude, v with Mercator's y.
  */
-export function mapUv() {
+/** A ground grid: `GROUND` (GEBCO) or the fine one, with its heights in metres. */
+export interface HeightGrid {
+  lon0: number;
+  lat0: number;
+  step: number;
+  nx: number;
+  ny: number;
+  elevationM: ArrayLike<number>;
+}
+
+export function mapUv(g: Omit<HeightGrid, "elevationM" | "lon0"> = GROUND) {
   const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-  const lat1 = GROUND.lat0 + (GROUND.ny - 1) * GROUND.step;
-  const uv = new Float32Array(GROUND.nx * GROUND.ny * 2);
-  for (let j = 0; j < GROUND.ny; j++) {
-    const v = (merc(GROUND.lat0 + j * GROUND.step) - merc(GROUND.lat0)) / (merc(lat1) - merc(GROUND.lat0));
-    for (let i = 0; i < GROUND.nx; i++) uv.set([i / (GROUND.nx - 1), v], (j * GROUND.nx + i) * 2);
+  const lat1 = g.lat0 + (g.ny - 1) * g.step;
+  const uv = new Float32Array(g.nx * g.ny * 2);
+  for (let j = 0; j < g.ny; j++) {
+    const v = (merc(g.lat0 + j * g.step) - merc(g.lat0)) / (merc(lat1) - merc(g.lat0));
+    for (let i = 0; i < g.nx; i++) uv.set([i / (g.nx - 1), v], (j * g.nx + i) * 2);
   }
   return uv;
 }
 
-/** The ground's height at a town, from the nearest GEBCO node, in km. */
-export function groundKmAt(lat: number, lon: number) {
-  const i = Math.round((lon - GROUND.lon0) / GROUND.step);
-  const j = Math.round((lat - GROUND.lat0) / GROUND.step);
-  return (GROUND.elevationM[j * GROUND.nx + i] ?? 0) / 1000;
+/** The ground's height at a place, from the grid's nearest node, in km, before any raising. */
+export function groundKmAt(lat: number, lon: number, g: HeightGrid = GROUND) {
+  const i = Math.round((lon - g.lon0) / g.step);
+  const j = Math.round((lat - g.lat0) / g.step);
+  return (g.elevationM[j * g.nx + i] ?? 0) / 1000;
 }

@@ -321,8 +321,11 @@ the reader's own questions). Everything above still applies to it; this section 
     uncertainty. The model's top is set by its hypocentre and width. Do not draw or describe the
     rupture as starting at the plate's surface.
 - **The 3D tab's rules** (from 2026-09-25):
-  - **One exaggeration for everything vertical**, ground and depth alike, always written on the block
-    ("A escala real" at ×1). The preview turns at ×2, where the relief shows (at ×1 the relief of
+  - **One exaggeration for every depth**, always written on the block ("A escala real" at ×1). **The
+    land alone is also raised, ×5 by default** (owner's call, 2026-09-26; "Montañas" in the settings
+    puts it back to true scale): at true scale its ~5 km do not show on a 500 km block. The sea floor
+    and every depth stay at the exaggeration, and the corner tag, the settings and the key say the
+    mountains are raised; never describe the block as all at true scale while they are. The preview turns at ×2, where the relief shows (at ×1 the relief of
     4–5 km barely shows against 240 km); the viewer opens at ×1, true to scale (owner's call,
     2026-09-26: ×2 doubled the plate's dip and every depth the reader judges there), and ×2 and ×4
     are one press away. The ×2 default had been the prototype's, never decided.

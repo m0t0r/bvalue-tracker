@@ -353,6 +353,18 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   written by `scripts/insights-block.ts` and committed: GEBCO 2020 every 0.05° over the Slab2 box, and
   USGS's finite-fault plane for the M7.4. The plate is `section.json`'s grid and the events are the live
   catalogue, so neither is repeated. The script needs no manual download.
+- **The block's fine ground** is `src/insights/block3d/relief.bin.gz` (80 kB, 451 × 181 heights in whole
+  metres; `encodeHeights` in `block.ts` is the format), written by `scripts/insights-relief.ts` and
+  committed: the same box every 0.01° (~1.1 km), land from Mapterhorn's terrain tiles (zoom 7) and the
+  sea floor from `block.json`'s GEBCO grid, since Mapterhorn has none. `block3d/relief.ts` fetches and
+  decodes it once per page (the preview and every opening of the viewer share it); the scene draws
+  GEBCO's grid first and swaps the fine one in when it has loaded, and keeps GEBCO's if it never does.
+  **It is a binary file and not an image on purpose**: a first version was a 71 kB Terrarium WebP read
+  back through a canvas's `getImageData`, which private browsing (Safari, Brave, Firefox's
+  fingerprinting protection) adds noise to, and one unit of noise was 256 m. The file is served as
+  gzip; a server that sends it with `Content-Encoding: gzip` (Vite's dev server does) has had it
+  unzipped by the browser already, and the decoder checks the gzip magic bytes for that. How to redo it
+  is in [development](development.md#the-3d-blocks-fine-ground).
 
 ### The 3D tab ("En 3D", `src/insights/block3d`, from 2026-09-25)
 
@@ -398,6 +410,40 @@ full-screen viewer with five views to jump to.
   it and returns focus to "Explorar en 3D", and the page behind does not scroll. Reduced motion stops
   the preview's rotation and makes the views jump instead of glide; otherwise a pause button on the
   preview stops it (WCAG 2.2.2).
+- **The mountains are raised ×5 by default, and a setting puts them back to true scale** ("Montañas":
+  "Realzadas ×5" / "A escala real", `RAISED_LAND` and `landScale` in `shared.ts`; owner's call,
+  2026-09-26). At true scale the highest peak (~5.2 km) is ~8 px tall on a laptop's 500 km block, and
+  the fine ground on its own changed nothing the owner could see. **Only the land is raised**: the sea
+  floor and every depth stay at the block's exaggeration, so this is the one place the block mixes two
+  scales, and every surface that states the scale says so (the corner tag, "Montañas realzadas ×5";
+  the settings' help; the key's "Las medidas"). The mountains stand at ×5 whatever the vertical
+  exaggeration (`landScale` = 5 ÷ exaggeration, never below 1): multiplied, ×4 would have made them
+  ×20. The raising is the ground program's `uLandScale` uniform, applied in the vertex shader to
+  y > 0 (the normal's y divided by it), so a press in the settings rewrites one number, not an
+  81,631-node mesh: a first version rebuilt the mesh on every change. ×3, ×5 and ×10 were compared on
+  the default view: ×3 read as texture, ×10 as spikes. The ×1 exaggeration is named "A escala real"
+  like the mountains' true-scale option (it was "×1 (real)"), at the owner's request. **Declined in the
+  code review** (2026-09-26): that the viewer then opens with "A escala real" pressed under
+  "Exageración vertical" while the mountains are raised. Each choice sits under its own heading, the
+  exaggeration's help says it is the depths that stay unstretched, and the corner tag names the
+  raising; the owner asked for the name.
+- **A moving sea was built and removed** (2026-09-26): a see-through surface at sea level with slowly
+  drifting swells and glints, from the owner's idea of making the Pacific "a bit live". The owner
+  found it looked bad, and waves on the viewer that shows the M7.4's rupture risk reading as a tsunami
+  that event could not have made (it was ~100–125 km deep, under land). Do not retry it.
+- **A pin shows its distance from Pereira** (`pinDistances` in `shared.ts`, 2026-09-26): in the viewer
+  the other three pins are buttons; a mouse over one, a tap or the keyboard's focus draws a dashed line
+  to Pereira's pin and adds the distance to the pin's own name ("Buenaventura · ~180 km"); a pressed
+  pin is a toggle with `aria-pressed`, and its name says "a unos 115 km" (rounded). A label of
+  its own at the line's middle covered the pin's name whenever the line was short on screen. The
+  distance is great-circle, to the nearest 5 km (the pins are for scale), and the key lists all three,
+  for a reader who cannot hover, and says it works in "Explorar en 3D" (the key is also on the tab,
+  beside the preview, whose pins are inert). A tapped pin keeps its line while the block is turned, so it can be
+  followed from any angle; a tap on the block that does not turn it (under 5 px of travel) lets it go.
+  The line is drawn in screen space between the two pins' tips each frame. The preview's pins stay
+  inert. A first version cleared the line on any press on the block, and positioned a distance label
+  whose point threw while no pin was chosen: that stopped every label after it in the frame, and the
+  line froze where it was.
 - **The preview turns at ×2 and the viewer opens at ×1** (`PREVIEW_EXAGGERATION`,
   `VIEWER_EXAGGERATION` in `shared.ts`, owner's call, 2026-09-26): the preview is a showcase, where
   the relief should show; the viewer is where the reader judges the plate's dip and the sources'

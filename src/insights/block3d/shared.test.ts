@@ -1,18 +1,21 @@
 import captured from "../../../test/fixtures/api-events-2026-09-24.json";
 import { describe, expect, it } from "vitest";
-import { GROUND } from "../block";
+import { GROUND, decodeHeights, encodeHeights } from "../block";
 import { insights, type Catalogues } from "../claims";
 import {
   EAST,
   FLOOR_KM,
   NORTH,
   PRESETS,
+  RAISED_LAND,
   SOUTH,
   VIEWER_EXAGGERATION,
   WEST,
   blockModel,
   framing,
+  landScale,
   mapUv,
+  pinDistances,
   type Preset,
 } from "./shared";
 
@@ -146,5 +149,35 @@ describe("blockModel without the M7.4", () => {
       choco: cat.choco.map((e) => (e.id === "SGC2026pqqmro" ? { ...e, removedAt: "2026-09-24T00:00:00Z" } : e)),
     };
     expect(blockModel(insights(without, NOW)).rupture).toBeNull();
+  });
+});
+
+describe("the raised mountains", () => {
+  it("stand at the same height whatever the vertical exaggeration", () => {
+    for (const exaggeration of [1, 2, 4]) {
+      expect(landScale({ raised: true, exaggeration }) * exaggeration).toBe(RAISED_LAND);
+    }
+  });
+
+  it("are never lowered below the exaggeration, and follow it at true scale", () => {
+    expect(landScale({ raised: true, exaggeration: RAISED_LAND * 2 })).toBe(1);
+    expect(landScale({ raised: false, exaggeration: 4 })).toBe(1);
+  });
+});
+
+describe("the pins' distances from Pereira", () => {
+  it("covers every pin but Pereira, to the nearest 5 km", () => {
+    expect(pinDistances()).toEqual([
+      { id: "istmina", name: "Istmina", km: 115 },
+      { id: "chaparral", name: "Chaparral", km: 125 },
+      { id: "buenaventura", name: "Buenaventura", km: 180 },
+    ]);
+  });
+});
+
+describe("the fine ground's file", () => {
+  it("round-trips heights across the sea, the coast and the peaks", () => {
+    const heights = Int16Array.from([-4080, -3900, -1, 1, 5195, 30, -32768, 32767, 0, 12]);
+    expect(decodeHeights(encodeHeights(heights, 5), 5)).toEqual(heights);
   });
 });

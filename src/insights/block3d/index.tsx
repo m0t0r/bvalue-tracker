@@ -40,6 +40,7 @@ import {
   LENGTH_KM,
   PREVIEW_EXAGGERATION,
   VIEWER_EXAGGERATION,
+  pinDistances,
   WIDTH_KM,
   blockModel,
   type BlockModel,
@@ -62,10 +63,18 @@ export function Block3D({ data }: { data: Insights }) {
   const explore = useRef<HTMLButtonElement>(null);
   const reduced = useReducedMotion();
   // The viewer's view. The preview shares its layers but always turns at ×2 over the whole catalogue.
-  const [view, setView] = useState<View>({ exaggeration: VIEWER_EXAGGERATION, layers: ALL_LAYERS, until: null });
-  // Keyed on the layers alone: the viewer's date and exaggeration are not the preview's.
-  const { layers } = view;
-  const previewView = useMemo(() => ({ layers, exaggeration: PREVIEW_EXAGGERATION, until: null }), [layers]);
+  const [view, setView] = useState<View>({
+    exaggeration: VIEWER_EXAGGERATION,
+    raised: true,
+    layers: ALL_LAYERS,
+    until: null,
+  });
+  // Keyed on the layers and the mountains alone: the viewer's date and exaggeration are not the preview's.
+  const { layers, raised } = view;
+  const previewView = useMemo(
+    () => ({ layers, raised, exaggeration: PREVIEW_EXAGGERATION, until: null }),
+    [layers, raised],
+  );
   const [preview, setPreview] = useState<SceneHandle | null>(null);
   // The reader can stop the turning (WCAG 2.2.2); reduced motion never starts it. Follows a change of
   // the setting while the tab is open, not only the one at mount.
@@ -136,11 +145,14 @@ function Block({
   className,
   onReady,
   children,
+  pressablePins = false,
 }: {
   data: Insights;
   view: View;
   lang: Lang;
   className: string;
+  /** The viewer's: a pin shows its distance from Pereira. The preview's pins are inert. */
+  pressablePins?: boolean;
   onReady?: (h: SceneHandle) => void;
   children?: ReactNode;
 }) {
@@ -170,6 +182,9 @@ function Block({
       width: t.scene.width(fmtKm(WIDTH_KM)),
       length: t.scene.length(fmtKm(LENGTH_KM)),
       dark,
+      distance: pressablePins
+        ? { pin: (name, km) => t.scene.pinDistance(name, fmtKm(km)), label: (km) => t.scene.distance(fmtKm(km)) }
+        : null,
     });
     h.canvas.setAttribute("role", "img");
     h.canvas.setAttribute("aria-label", t.canvas);
@@ -191,7 +206,7 @@ function Block({
     <div ref={box} className={`relative overflow-hidden ${className}`}>
       {children}
       <span className="absolute top-1 left-1 z-10 rounded bg-background/80 px-1 text-2xs text-muted-foreground">
-        {c.exaggerationTag(view.exaggeration)}
+        {c.exaggerationTag(view.exaggeration, view.raised)}
       </span>
       <Credit label={c.credit} />
     </div>
@@ -388,6 +403,7 @@ function Viewer({
               view={view}
               lang={lang}
               className="min-h-0 flex-1"
+              pressablePins
               onReady={(s) => {
                 s.onInteract(() => setPreset(null));
                 setH(s);
@@ -507,6 +523,25 @@ function Panel({
               {EXAGGERATIONS.map((n) => (
                 <ToggleGroupItem key={n} value={String(n)}>
                   {c.exaggerationOption(n)}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </FieldSet>
+          <FieldSeparator />
+          <FieldSet>
+            <FieldLegend>{c.relief}</FieldLegend>
+            <FieldDescription>{c.reliefHelp}</FieldDescription>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm-touch"
+              aria-label={c.relief}
+              value={view.raised ? "raised" : "true"}
+              onValueChange={(v) => v && setView({ ...view, raised: v === "raised" })}
+            >
+              {(["raised", "true"] as const).map((k) => (
+                <ToggleGroupItem key={k} value={k}>
+                  {c.reliefOption[k]}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -633,6 +668,8 @@ function Key({
     deeper: fmtKm(Math.abs(r.deeperKm)),
     shallower: r.deeperKm < 0,
   };
+  const near = pinDistances().map((d) => `${d.name} ~${fmtKm(d.km)}`);
+  const pins = `${near.slice(0, -1).join(", ")}${c.and}${near.at(-1)}`;
   const items: { swatch?: ReactNode; text: [string, string]; more?: ReactNode }[] = [
     { text: c.key.ground },
     {
@@ -659,7 +696,7 @@ function Key({
           },
         ]
       : []),
-    { text: c.key.pins },
+    { text: c.key.pins(pins) },
     { text: c.key.depth(fmtKm(WIDTH_KM), fmtKm(LENGTH_KM), fmtKm(FLOOR_KM)) },
   ];
   const snapped = model.snapped.map((s) => c.snappedItem(s.count, fmtKm(s.depthKm, 1)));

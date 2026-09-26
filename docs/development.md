@@ -9,7 +9,7 @@
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
 | `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL for the monitor; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
-| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts`, `insights-block.ts` and `insights-history.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground and rupture plane; the past earthquakes of story step 2, from ISC-GEM), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
+| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts` and `insights-history.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
 | `src/**/*.test.ts` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec, kept for history. Its §3 lists every verified fact about the SGC endpoint. |
@@ -65,6 +65,15 @@ the pinned towns change:
 2. Wait until `get title` starts with `ready`, then `screenshot` (4096 × 1644 at scale 2).
 3. `cwebp -q 78 <png> -o src/insights/block3d/basemap-light.webp`; the same with `theme=dark`.
 4. Look at it before committing: the towns the block pins (`PINNED` in `shared.ts`) must be absent.
+
+## The 3D block's fine ground
+
+`src/insights/block3d/relief.bin.gz` is the block's ground every 0.01°, baked by
+`pnpm tsx scripts/insights-relief.ts` (it needs `dwebp` on PATH, from Homebrew's `webp`, to read
+Mapterhorn's tiles). It reads three of Mapterhorn's zoom-7 tiles for the land and `block.json`'s GEBCO
+grid for the sea floor, checks that its encoding round-trips, and writes gzip. Redo it only if the
+block's bounds change: `RELIEF` in `src/insights/block.ts` must cover `block.json`'s box, and the script
+refuses to run if it does not. `test/relief.test.ts` holds the committed file to the grid.
 
 ## Tooling gotchas
 
