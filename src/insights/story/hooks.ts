@@ -20,9 +20,14 @@ export function useSize<T extends HTMLElement>() {
   return [ref, size] as const;
 }
 
-const wideQuery = () => window.matchMedia("(min-width: 768px)");
+/**
+ * Text beside the drawing from 768 px, and on any landscape window from 560 px: pinned over half of
+ * a short window (a landscape phone, or a desktop at 200 % zoom), the drawing was ~170–210 px tall
+ * and most scenes could not be drawn in it. Beside the text it gets the window's full height.
+ */
+const wideQuery = () => window.matchMedia("(min-width: 768px), (orientation: landscape) and (min-width: 560px)");
 
-/** The story's two layouts: text beside the drawing (≥ 768 px), or the drawing pinned above the text. */
+/** The story's two layouts: text beside the drawing, or the drawing pinned above the text. */
 export const useWide = () =>
   useSyncExternalStore(
     (cb) => {

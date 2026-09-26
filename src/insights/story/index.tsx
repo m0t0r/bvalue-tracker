@@ -8,7 +8,7 @@ import { scaleLinear, scaleTime } from "d3-scale";
 import { useMemo, useState, type ReactNode } from "react";
 import { Slider } from "@/components/ui/slider";
 import { useI18n, type Lang } from "@/lib/i18n";
-import { fmtDate, fmtDay } from "@/lib/format";
+import { fmtDate, fmtDay, fmtDayLong } from "@/lib/format";
 import {
   P_WAVE_KMS,
   S_WAVE_KMS,
@@ -59,10 +59,15 @@ export function Story({ data, forecastShown }: { data: Insights; forecastShown: 
   return (
     <div className="flex flex-col">
       <Hero data={data} model={model} lang={lang} />
-      <section className="relative md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-10">
+      {/* Side by side is decided in one place, `useWide`, whose media query the layout and the step
+          observer share. */}
+      <section
+        data-side={wide || undefined}
+        className="group/story relative data-side:grid data-side:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] data-side:gap-10"
+      >
         {/* The drawing keeps a fixed box, half the window on a phone and all of it beside the text,
             so nothing moves when it is measured and drawn. */}
-        <div className="sticky top-0 z-10 h-[50svh] border-b bg-background py-2 md:order-2 md:h-svh md:self-start md:border-b-0 md:py-6">
+        <div className="sticky top-0 z-10 h-[50svh] border-b bg-background py-2 group-data-side/story:order-2 group-data-side/story:h-svh group-data-side/story:self-start group-data-side/story:border-b-0 group-data-side/story:py-6">
           <div ref={graphicRef} className="size-full">
             <Graphic
               data={data}
@@ -74,18 +79,18 @@ export function Story({ data, forecastShown }: { data: Insights; forecastShown: 
             />
           </div>
         </div>
-        <div className="md:order-1">
+        <div className="group-data-side/story:order-1">
           {steps.map((s, i) => (
             <article
               key={s.id}
               ref={register(i)}
               aria-current={i === active ? "step" : undefined}
               data-active={i === active || undefined}
-              className="flex min-h-[70svh] flex-col justify-start pt-10 pb-16 text-muted-foreground transition-colors duration-500 data-active:text-foreground md:min-h-[90svh] md:justify-center md:py-24 motion-reduce:transition-none"
+              className="flex min-h-[70svh] flex-col justify-start pt-10 pb-16 text-muted-foreground transition-colors duration-500 data-active:text-foreground group-data-side/story:min-h-[90svh] group-data-side/story:justify-center group-data-side/story:py-24 motion-reduce:transition-none"
             >
               <div className="mx-auto flex w-full max-w-prose flex-col gap-4">
                 {s.chapter && (
-                  <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">{s.chapter}</p>
+                  <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">{s.chapter}</p>
                 )}
                 <h2 className="text-2xl leading-tight font-semibold tracking-tight text-balance md:text-3xl">
                   {s.title}
@@ -125,9 +130,9 @@ function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: 
 
   return (
     <header className="flex min-h-[80svh] flex-col justify-center gap-6 py-12">
-      <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">{c.kicker}</p>
+      <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">{c.kicker}</p>
       <p className="flex flex-col gap-3">
-        <span className="text-8xl leading-none font-semibold tracking-tighter tabular-nums md:text-9xl">
+        <span className="text-8xl leading-none font-semibold tracking-tighter proportional-nums md:text-9xl">
           {mix.total}
         </span>
         <span className="max-w-3xl text-2xl leading-tight font-medium tracking-tight text-balance md:text-4xl">
@@ -136,7 +141,7 @@ function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: 
       </p>
       <p className="max-w-2xl text-lg leading-relaxed text-pretty">{claims.strongMix(mix, 4, 7)}</p>
       <p className="max-w-2xl text-lg leading-relaxed text-pretty text-muted-foreground">
-        <Rich text={c.intro} parts={{ date: fmtDay(model.start, lang) }} />
+        <Rich text={c.intro} parts={{ date: fmtDayLong(model.start, lang) }} />
       </p>
 
       <figure className="flex flex-col gap-2">
@@ -144,7 +149,7 @@ function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: 
           <Rich
             text={c.strip}
             parts={{
-              date: fmtDay(model.start, lang),
+              date: fmtDayLong(model.start, lang),
               n: fmt(strong.length + (main ? 1 : 0)),
               main: main ? `${mainWord} (${fmtMag(main.mag)})` : "",
             }}
@@ -158,7 +163,7 @@ function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: 
               height={h + 16}
               className="block overflow-visible"
               role="img"
-              aria-label={c.stripAria.replace("{date}", fmtDay(model.start, lang))}
+              aria-label={c.stripAria.replace("{date}", fmtDayLong(model.start, lang))}
             >
               <line x1={0} x2={size.width} y1={h - 10} y2={h - 10} className="stroke-border" />
               {ticks.map((t) => (
@@ -240,7 +245,8 @@ function useSteps(
   const main = model.main;
   const mainState = data.mainshock.choco.state;
   const mainWord = c.main(mainState);
-  const mainDate = main ? fmtDay(main.t, lang) : fmtDay(model.start, lang);
+  // Dates in running prose are written out ("10 de agosto"); the drawings keep the short form.
+  const mainDate = fmtDayLong(main ? main.t : model.start, lang);
   const mc = data.mc.choco;
   const d = data.distances;
   const f = model.facts;
@@ -286,7 +292,10 @@ function useSteps(
           <Rich text={c.where.p1} parts={{ ...names, main: mainWord, date: mainDate }} />
         </p>
         <p>
-          <Rich text={c.where.p2} parts={{ n: <Num>{fmt(model.all.length)}</Num>, date: fmtDay(model.start, lang) }} />
+          <Rich
+            text={c.where.p2}
+            parts={{ n: <Num>{fmt(model.all.length)}</Num>, date: fmtDayLong(model.start, lang) }}
+          />
         </p>
         <p>
           <Rich
@@ -503,7 +512,7 @@ function useSteps(
                   magLabel: fmtMag(main.mag),
                   nAfter: <Num>{fmt(roundSig(eq.toLargestAfter))}</Num>,
                   after: fmtMag(model.largestAfter.mag),
-                  afterDate: fmtDay(model.largestAfter.t, lang),
+                  afterDate: fmtDayLong(model.largestAfter.t, lang),
                   nM4: <Num>{fmt(roundSig(eq.toM4))}</Num>,
                 }}
               />
@@ -683,7 +692,7 @@ function useSteps(
           <p>
             <Rich
               text={c.clocks.shallowWeeks(f.weekInProgress)}
-              parts={{ date: fmtDay(model.start, lang), weeks: <Num>{model.shallowStrongWeeks.join(", ")}</Num> }}
+              parts={{ date: fmtDayLong(model.start, lang), weeks: <Num>{model.shallowStrongWeeks.join(", ")}</Num> }}
             />
           </p>
           {shallowDecay.case === "not-decayed" && (
@@ -730,7 +739,7 @@ function useSteps(
             <Rich
               text={c.tolima.p1(tState)}
               parts={{
-                date: fmtDay(data.start.tolima, lang),
+                date: fmtDayLong(data.start.tolima, lang),
                 km: km(model.chocoToTolimaKm === null ? null : roundSig(model.chocoToTolimaKm, 2)),
                 main: mainWord,
                 tolima: names.tolima,
@@ -842,7 +851,7 @@ function useSteps(
               mag: fmtMag(threshold),
               k: <Num>{fmt(days.k)}</Num>,
               n: <Num>{fmt(days.n)}</Num>,
-              date: fmtDay(model.start, lang),
+              date: fmtDayLong(model.start, lang),
             }}
           />
         </p>
@@ -871,8 +880,8 @@ function useSteps(
               parts={{
                 magLabel: fmtMag(main.mag),
                 km: km(model.mainHypoKm),
-                p: <Num>{`${fmt(a.p)} s`}</Num>,
-                s: <Num>{`${fmt(a.s)} s`}</Num>,
+                p: <Num>{`${fmt(a.p)}\u00a0s`}</Num>,
+                s: <Num>{`${fmt(a.s)}\u00a0s`}</Num>,
               }}
             />
           </p>

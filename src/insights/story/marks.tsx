@@ -76,7 +76,7 @@ export function SceneTitle({ small, children }: { small: boolean; children: Reac
       className="fill-muted-foreground uppercase"
       fontSize={small ? 10 : 11.5}
       fontWeight={500}
-      letterSpacing="0.06em"
+      letterSpacing="0.05em"
     >
       {children}
     </text>
