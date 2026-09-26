@@ -20,7 +20,7 @@ import { FILL, STROKE } from "../tones";
 import { Layer, SceneTitle, radius, star } from "./marks";
 import type { Ev, StoryModel } from "./model";
 import { Rich, fill } from "./rich";
-import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
+import { ClocksScene, EnergyScene, FeltScene, TolimaScene, durationRows } from "./scenes";
 import { KM_PER_DEG, RATE, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
 
 export type SceneId = "where" | "energy" | "section" | "clocks" | "tolima" | "tolimaSection" | "felt" | "unknown";
@@ -44,6 +44,13 @@ function historyAria(model: StoryModel, withLarger: boolean, lang: Lang) {
   const mainRow = `${fill(c.historyMain, { date: fmtDateTime(main.t, lang) })}, ${fmtMag(main.mag)}`;
   const list = [...(withLarger ? h.larger.map(row) : []), mainRow, ...h.smaller.map(row)];
   return fill(c.historyAria, { list: list.join("; ") });
+}
+
+/** The duration drawing's text alternative: every bar, longest first, with the label it is drawn with. */
+function durationAria(model: StoryModel, lang: Lang) {
+  const rows = durationRows(model, lang);
+  if (!rows.length) return "";
+  return fill(storyCopy[lang].graphic.durationAria, { list: rows.map((r) => `${r.line1}, ${r.line2}`).join("; ") });
 }
 
 export function Graphic({
@@ -158,7 +165,12 @@ export function Graphic({
       deep: fmtKm(depthMedian("deep") ?? 0),
       rate: RATE,
     }),
-    energy: sub === "ladder" ? c.ladderAria : historyAria(model, sub === "larger", lang),
+    energy:
+      sub === "ladder"
+        ? c.ladderAria
+        : sub === "duration"
+          ? durationAria(model, lang)
+          : historyAria(model, sub === "larger", lang),
     clocks: c.clocksAria,
     tolima: fill(c.tolimaAria, {
       choco: data.largestShare.choco === null ? "" : share(data.largestShare.choco),

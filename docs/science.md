@@ -374,6 +374,64 @@ the reader's own questions). Everything above still applies to it; this section 
     - Years go through `fmtYear` (America/Bogota), because Colombia ran on UTC−4 in 1992–93.
     - The second part's lead sentence names no place, because a revised mainshock can move an inland
       event (1979 Eje Cafetero, at M7.1) into the "larger" list. Each item names its own place.
+- **"¿Cuánto duró?": how long the fault took to break, measured only** (story step after "Pero
+  Colombia ha tenido sismos más grandes", from 2026-09-26, at the owner's request: a strong but short
+  earthquake does less harm than a long one). Committed data, `src/insights/durations.json`, from
+  `scripts/insights-durations.ts`; the rules are in `src/insights/durations.ts`. Checked on 2026-09-26:
+  - **One measure for every event: the central 90%**, the seconds between 5% and 95% of the moment
+    being out, on its source time function (the rate at which the fault released its seismic moment;
+    `releaseTimes`, which places each crossing inside its sample step). The M7.4 from **USGS's
+    finite-fault model** (`us6000tjl2_1`, reviewed, its `moment_rate.mr` pinned by URL): **5% at 30.18 s,
+    95% at 53.83 s, so 23.65 s, "unos 24"**. Its tail after ~56 s (up to 180 s in the file) holds ~1% of
+    the moment and does not move the 95% point. USGS's own event texts state no duration. **Neira 1995
+    (0.91 → 4.16 s, 3.25 s) and Calima 1995 (0.49 → 2.44 s, 1.95 s)** from **SCARDEC** (Vallée & Douet
+    2016, PEPI 257, doi:10.1016/j.pepi.2016.05.012), the average STFs (`fctmoysource_*`). Recomputed in
+    Python from both files. The two sources are different methods, so the note calls every figure
+    approximate; the page says "energía" for the moment and the note says so.
+  - **Why the central 90% and not the time to 95%** (code review, 2026-09-26). The first version said
+    "tardó unos 54 segundos en romperse, empezó despacio". But the two sources put zero in different
+    places (USGS at the hypocentral time, SCARDEC at the first significant release), so 54 s against
+    SCARDEC's 4 s was not like for like; and the first 30 s, under 5% of the moment, are the
+    low-amplitude early part of one inversion, which a 30 s nucleation for an intermediate-depth Mw 7.4
+    would be extraordinary to confirm (Vallée 2013's scaling gives ~36 s in total for a shallow one). The
+    step now compares the central 90% (24, 3 and 2 s) and names the slow start as the model's own, its
+    least certain part, left out of the comparison. `slow` is rounded **down** (30.18 → 30) so "less
+    than 5% in the first {slow} seconds" stays true.
+  - **Whole seconds**, and only while the page's rule has **found** the M7.4 (`compareDurations`), like
+    `USGS_ASSESSED`: the figures are about that event and no other.
+  - **Every other event on the history list is left out, not estimated** (owner decision, 2026-09-26).
+    Checked, so nobody researches them again: SCARDEC starts in 1992 and lacks Páez 1994 and Armenia
+    1999; USGS has no finite-fault model for any of them; the IRIS/EarthScope STF product is Mw 7+.
+    **Global CMT half-durations are not measurements**: GCMT's format document says they are "assumed
+    in the inversion, following a standard scaling relationship" (h = 1.05×10⁻⁸·M0^(1/3), dyne-cm).
+    ComCat's `sourcetime-duration` for Páez 1994 (22 s, W-phase) is twice a centroid delay, a proxy
+    (Duputel et al. 2012). 1906 and both 1979 events have no published duration that could be read
+    (Beck & Ruff 1984 is paywalled). A duration worked out from magnitude would only restate the energy
+    step in seconds.
+  - **Armenia 1999 is not on the step at all** (owner decision, 2026-09-26). The one inversion
+    (Chavarría et al. 2012, Rev. Invest. Univ. Quindío 23(2), doi:10.33975/riuq.vol23n2.404) puts two
+    bursts at τ = 8–18 s and 26–35 s, but its text says the second began "26 s después del primer
+    subevento", it fixes 9 s triangles on a 10 s grid, 35 s is five times what scaling gives for Mw 6.0
+    (Vallée 2013: T = 10^−5.36 · M0^0.342, ~7 s), and the city's accelerograph recorded **under 5 s** of
+    strong motion (Chávez-García et al. 2021, NHESS 21, doi:10.5194/nhess-21-2345-2021), while shaking
+    at a site normally outlasts the rupture (Boore 2003). Drawn beside the others it would have
+    contradicted the one record there is.
+  - **Rupture is not shaking, and the step says so with SGC's words.** SGC's article "¿Cuánto duró el
+    sismo de San José del Palmar, Chocó?" (linked, `SGC_DURATION_URL`) separates how long people feel
+    it, how long instruments record it and how long the fault moves, and says its stations nearest the
+    epicentre recorded "aproximadamente entre 90 segundos y 2 minutos de movimiento significativo" (read
+    through press copies and SGC's post on X, since the agent does not fetch SGC hosts). Site duration is
+    source duration plus a path term that grows with distance and on soft ground (Boore 2003, PAGEOPH
+    160, doi:10.1007/PL00012553; Trifunac & Brady 1975, BSSA 65: ~1–1.5 s more per 10 km, soft sites
+    ~10–12 s longer). Duration adds to damage mainly through soils, landslides and cumulative damage
+    (USGS, "What are the effects of earthquakes?"; Hancock & Bommer 2006, Earthquake Spectra 22,
+    doi:10.1193/1.2220576), so the step says it is one factor with depth, distance and ground.
+  - **Size and duration go together** (Houston 2001, JGR 106, doi:10.1029/2000JB900468: durations
+    scale with the cube root of the moment), which the step says in one sentence. Houston also finds
+    deeper events shorter for their size, which Poli & Prieto 2014 do not see within intermediate and
+    deep events; the step does not claim it.
+  - Not done, possible later: the M7.4's shaking duration at a station near Pereira from SGC's open
+    FDSN waveforms. It needs one request the owner runs and gives one station's figure, not the city's.
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.
