@@ -52,3 +52,20 @@ export function dailyCounts(events: readonly { time: string; depthKm: number }[]
   }
   return { days, maxTotal, maxCluster };
 }
+
+/** An inclusive range of Colombian days, each given by the instant it begins (`DayCount.start`). */
+export interface DayRange {
+  from: number;
+  to: number;
+}
+
+/**
+ * The events of a range of Colombian days, by the same day rule as `dailyCounts`, so a bar and the
+ * table it narrows always agree on which day an event belongs to. An unreadable time matches no day.
+ */
+export function eventsInDays<E extends { time: string }>(events: readonly E[], range: DayRange): E[] {
+  return events.filter((e) => {
+    const d = dayStart(e.time);
+    return d >= range.from && d <= range.to;
+  });
+}

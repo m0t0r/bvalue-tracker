@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseCatalogHtml } from "../core/seiscomp.ts";
-import { dailyCounts } from "../src/lib/daily-counts.ts";
+import { dailyCounts, eventsInDays } from "../src/lib/daily-counts.ts";
 
 const fixture = parseCatalogHtml(
   readFileSync(new URL("./fixtures/seiscomp-2026-08-10_2026-09-18.html", import.meta.url), "utf8"),
@@ -80,5 +80,35 @@ describe("what dailyCounts does not assume", () => {
 
   it("survives a catalogue in which no time can be read at all", () => {
     expect(dailyCounts([at("not a date", 40)])).toEqual({ days: [], maxTotal: 0, maxCluster: 0 });
+  });
+});
+
+describe("the events of a range of Colombian days, which the catalogue table narrows to", () => {
+  const at = (time: string) => ({ time, depthKm: 40 });
+
+  it("takes both ends of the range whole, by Colombian day", () => {
+    const events = [
+      at("2026-09-12T04:59:59Z"), // 11 Sept, 23:59:59 in Colombia
+      at("2026-09-12T05:00:00Z"), // 12 Sept, 00:00
+      at("2026-09-15T12:00:00Z"),
+      at("2026-09-19T04:59:59Z"), // 18 Sept, 23:59:59
+      at("2026-09-19T05:00:00Z"), // 19 Sept, 00:00
+    ];
+    expect(eventsInDays(events, { from: day("2026-09-12"), to: day("2026-09-18") })).toEqual(events.slice(1, 4));
+  });
+
+  it("reads a range of one day as that day alone", () => {
+    const events = [at("2026-09-12T15:00:00Z"), at("2026-09-13T15:00:00Z")];
+    expect(eventsInDays(events, { from: day("2026-09-13"), to: day("2026-09-13") })).toEqual([events[1]]);
+  });
+
+  it("matches the day the bars counted the events in", () => {
+    const { days } = dailyCounts(fixture);
+    for (const d of [days[0]!, days[20]!, days.at(-1)!])
+      expect(eventsInDays(fixture, { from: d.start, to: d.start })).toHaveLength(d.total);
+  });
+
+  it("leaves out an event whose time cannot be read, as the bars do", () => {
+    expect(eventsInDays([at("not a date")], { from: day("2026-09-12"), to: day("2026-09-12") })).toEqual([]);
   });
 });

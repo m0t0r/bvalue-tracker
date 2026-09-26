@@ -47,6 +47,23 @@ const YEAR = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, year: "numeric
 export const fmtYear = (ms: number) => Number(YEAR.format(ms));
 /** Axis tick and short label: "18 sept", with a no-break space so the day never parts from its month. */
 export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms).replace(" ", "\u00A0");
+// The Colombian month of an instant, to compare, and the day of the month alone ("12").
+const MONTH = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit" });
+const DAY_OF_MONTH = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, day: "numeric" });
+/**
+ * A range of Colombian days, each given by the instant it begins: "12–18 sept" within a month,
+ * "30 ago – 2 sept" across one, the day alone for one day. No line breaks inside either end or after the dash.
+ *
+ * Built from `fmtDay`, not `formatRange`, whose shape moves with the ICU data: Node 24.11 wrote
+ * "12–18 Sept" in en-GB and Node 24.21 "12 – 18 Sept", which read here as two months.
+ */
+export function fmtDayRange(from: number, to: number, lang: Lang): string {
+  if (from === to) return fmtDay(from, lang);
+  if (MONTH.format(from) === MONTH.format(to)) return `${DAY_OF_MONTH.format(from)}–${fmtDay(to, lang)}`;
+  return `${fmtDay(from, lang)} –\u2060 ${fmtDay(to, lang)}`;
+}
+/** The Colombian date of an instant as "2026-09-12", for a file name. */
+export const fmtIsoDay = (ms: number) => new Date(ms + TZ_OFFSET_MS).toISOString().slice(0, 10);
 /** A day inside running prose: "10 de agosto", "10 August". Abbreviations stay in labels and ticks. */
 export const fmtDayLong = (ms: number, lang: Lang) => DAY_MONTH_LONG[lang].format(ms);
 /** Axis tick on a range of a few days, where a date alone repeats: "18 sept, 14:00" */

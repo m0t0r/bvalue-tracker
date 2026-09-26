@@ -82,6 +82,11 @@ refuses to run if it does not. `test/relief.test.ts` holds the committed file to
   it in place. Its own `tsconfig.json` has `lib: ["ES2022"]` and `types: []`, so a DOM or Node
   global in the library fails `pnpm typecheck` — that is what keeps it runtime-neutral. Its tests
   are the `seismo` vitest project. Import it as `@bvalue/seismo`, never by a relative path.
+- **`Intl.DateTimeFormat.formatRange` changes shape with Node's ICU data**, so a test that pins its
+  output can pass locally and fail in CI. en-GB wrote a same-month range "12–18 Sept" on Node 24.11
+  (ICU 77) and "12 – 18 Sept" on CI's Node 24.21 (2026-09-26, PR #81). `fmtDayRange` builds the range
+  from `fmtDay` and a bare day number instead. Pieces formatted one at a time (`format`, not
+  `formatRange`) have been stable here.
 - **`vitest` is held at 4.x**: `@cloudflare/vitest-pool-workers` does not support 5.
   For the same reason `compatibility_date` cannot be newer than the pool's bundled
   runtime (it errored on 2026-09-01; 2026-08-20 works). Everything else is on latest.

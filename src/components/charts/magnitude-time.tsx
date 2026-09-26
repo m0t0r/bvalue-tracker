@@ -1,25 +1,41 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
   type RefObject,
 } from "react";
-import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, XAxis, YAxis, ZAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ReferenceArea,
+  Scatter,
+  ScatterChart,
+  XAxis,
+  YAxis,
+  ZAxis,
+  useActiveTooltipLabel,
+  useXAxisInverseScale,
+} from "recharts";
 import { useResizeObserver } from "usehooks-ts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import type { StoredEvent } from "@/lib/api";
-import { dailyCounts } from "@/lib/daily-counts";
+import { dailyCounts, type DayRange } from "@/lib/daily-counts";
+import { pickDay, spanDays } from "@/lib/day-selection";
 import { fmtDate, fmtDateTime, fmtDay, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useZone } from "@/lib/zone";
 import { clusterOf } from "../../../core/clusters";
-import { ClusterLegend } from "./magnitude-time-legend";
+import { ClusterLegend, DailyLine, useFinePointer } from "./magnitude-time-legend";
 import type { ZoneId } from "../../../core/zones";
 
 // The shallow cluster keeps the page's blue; the deep one, which went quiet after the first week, is
@@ -68,17 +84,271 @@ function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
   return { domain: [0, top], ticks };
 }
 
-/** `mainshockId` is the zone's detected mainshock, drawn as a star apart from the other events; null draws none. */
+// Recharts' keyboard layer moves its tooltip from day to day with the arrows but has no notion of
+// choosing one. This reads the day it is on, so Enter can choose it.
+function ActiveDay({ into }: { into: RefObject<number | null> }) {
+  const label = useActiveTooltipLabel();
+  useEffect(() => {
+    into.current = label == null ? null : Number(label);
+  }, [into, label]);
+  return null;
+}
+
+/**
+ * A day not chosen: grey, still there to compare against, plainly not what the catalogue shows. One of
+ * the theme's own greys rather than the day's colours dimmed (owner's call).
+ */
+const REST = "var(--border)";
+
+type InverseX = NonNullable<ReturnType<typeof useXAxisInverseScale>>;
+// The bar chart's x scale, read backwards, so a press is placed by its own coordinates.
+function InverseXProbe({ into }: { into: RefObject<InverseX | null> }) {
+  const inverse = useXAxisInverseScale();
+  useEffect(() => {
+    into.current = inverse ?? null;
+  }, [into, inverse]);
+  return null;
+}
+
+interface Day {
+  t: number;
+  start: number;
+  total: number;
+  shallow: number;
+  deep: number;
+}
+
+/**
+ * The daily bars, and choosing days on them. A press on a day with events chooses it, and a second
+ * press lets it go. With a mouse a drag, or a shift-press from the last day pressed, chooses every day
+ * in between; on touch a sideways drag scrolls the chart, so there a press is all there is. The drag
+ * lives here and not in the chart around it, so sweeping across the days redraws the bars alone and
+ * not the scatter's hundreds of dots; the scatter shows the choice once it is made.
+ */
+const DailyBars = memo(function DailyBars({
+  daily,
+  days,
+  onDays,
+  xAxis,
+  yAxis,
+}: {
+  daily: readonly Day[];
+  days: DayRange | null;
+  onDays: (d: DayRange | null) => void;
+  xAxis: ReactNode;
+  yAxis: ReactNode;
+}) {
+  const { t, lang } = useI18n();
+  const fine = useFinePointer();
+  const bars = useRef<HTMLDivElement>(null);
+  const inverse = useRef<InverseX | null>(null);
+  const activeDay = useRef<number | null>(null);
+  const anchor = useRef<number | null>(null);
+  const dragRef = useRef<{ from: number; to: number; extend: boolean } | null>(null);
+  const [drag, setDrag] = useState<DayRange | null>(null);
+
+  // The day under the pointer, from the event's own position. Recharts' hover index is not used: it is
+  // set a frame after the mousemove, so a quick press or release landed on the previous day, a tap has
+  // no move before it at all, and off the plot it is null, which `daily[Number(null)]` read as day one.
+  const dayAt = (clientX: number, clamp: boolean): Day | undefined => {
+    const wrapper = bars.current?.querySelector(".recharts-wrapper");
+    const first = daily[0];
+    if (!wrapper || !inverse.current || !first) return undefined;
+    const at = Number(inverse.current(clientX - wrapper.getBoundingClientRect().left));
+    const i = Math.floor((at - first.start) / DAY);
+    return daily[clamp ? Math.min(Math.max(i, 0), daily.length - 1) : i];
+  };
+  const press = (start: number) => {
+    anchor.current = start;
+    onDays(pickDay(days, start));
+  };
+  const span = (from: number, to: number) => {
+    anchor.current = from;
+    onDays(spanDays(from, to));
+  };
+
+  // A drag is followed on the window, so it goes on outside the chart and ends wherever the button is
+  // let go. The listeners are stable functions that call the latest handlers, so they can be removed.
+  // It is dropped, choosing nothing, when the window loses focus, on Escape, and when a move arrives
+  // with the button already up: each is a mouseup the page never got (a context menu, a switch of app,
+  // a release over another frame), after which the next click anywhere would have chosen a range.
+  const stop = () => {
+    delete document.documentElement.dataset.dragDays;
+    window.removeEventListener("mousemove", on.move);
+    window.removeEventListener("mouseup", on.up);
+    window.removeEventListener("blur", on.cancel);
+    window.removeEventListener("keydown", on.key);
+    dragRef.current = null;
+    setDrag(null);
+  };
+  const latest = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void; cancel: () => void }>({
+    move: () => {},
+    up: () => {},
+    cancel: () => {},
+  });
+  useLayoutEffect(() => {
+    latest.current = {
+      move: (e) => {
+        const g = dragRef.current;
+        if (!g) return;
+        if ((e.buttons & 1) === 0) return stop();
+        const d = dayAt(e.clientX, true);
+        if (!d || d.start === g.to) return;
+        g.to = d.start;
+        setDrag(spanDays(g.from, d.start));
+      },
+      up: (e) => {
+        const g = dragRef.current;
+        stop();
+        if (!g) return;
+        const to = dayAt(e.clientX, true)?.start ?? g.to;
+        if (g.from !== to || g.extend) span(g.from, to);
+        else if (daily.find((d) => d.start === g.from)?.total) press(g.from);
+      },
+      cancel: stop,
+    };
+  });
+  const [on] = useState(() => ({
+    move: (e: MouseEvent) => latest.current.move(e),
+    up: (e: MouseEvent) => latest.current.up(e),
+    cancel: () => latest.current.cancel(),
+    key: (e: KeyboardEvent) => e.key === "Escape" && latest.current.cancel(),
+  }));
+  useEffect(
+    () => () => {
+      delete document.documentElement.dataset.dragDays;
+      window.removeEventListener("mousemove", on.move);
+      window.removeEventListener("mouseup", on.up);
+      window.removeEventListener("blur", on.cancel);
+      window.removeEventListener("keydown", on.key);
+    },
+    [on],
+  );
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    // Ctrl-press is a right click on a Mac: its menu swallows the mouseup.
+    if (e.button !== 0 || e.ctrlKey) return;
+    const d = dayAt(e.clientX, false);
+    if (!d) return;
+    // No text selection and no focus ring from a mouse press; the keyboard has its own way in.
+    e.preventDefault();
+    const extend = e.shiftKey && days !== null;
+    dragRef.current = { from: extend ? (anchor.current ?? days.from) : d.start, to: d.start, extend };
+    setDrag(spanDays(dragRef.current.from, d.start));
+    document.documentElement.dataset.dragDays = "";
+    window.addEventListener("mousemove", on.move);
+    window.addEventListener("mouseup", on.up);
+    window.addEventListener("blur", on.cancel);
+    window.addEventListener("keydown", on.key);
+  };
+  const onClick = (e: React.MouseEvent) => {
+    const d = dayAt(e.clientX, false);
+    if (d && d.total > 0) press(d.start);
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    // A held Enter repeats; each repeat would let go of the day the first one chose.
+    if (e.key !== "Enter" || e.repeat) return;
+    const d = daily.find((x) => x.t === activeDay.current);
+    if (!d) return;
+    e.preventDefault();
+    if (e.shiftKey && days) span(anchor.current ?? days.from, d.start);
+    else if (d.total > 0) press(d.start);
+  };
+
+  // What the bars show as chosen: the drag while it lasts, then the choice.
+  const lit = drag ?? days;
+  const chosen = (start: number) => !lit || (start >= lit.from && start <= lit.to);
+
+  return (
+    // The press handlers sit on a plain element around the chart, not on Recharts' own events, which
+    // report its lagging hover index. A mouse gets the drag; anything else, a press.
+    // `data-day-bars` gives the bars the pointer, and a drag turns the whole page to the sideways
+    // cursor (`[data-drag-days]`); both are in index.css, which says why they are not a `style` prop.
+    <div
+      ref={bars}
+      data-day-bars
+      className="shrink-0"
+      onKeyDown={onKeyDown}
+      {...(fine ? { onMouseDown } : { onClick })}
+    >
+      <ChartContainer
+        config={{ total: { label: t.dailyTitle, color: "var(--chart-1)" } }}
+        className="aspect-auto h-36 w-(--plot-w) shrink-0"
+      >
+        <BarChart data={daily as Day[]} margin={BAR_MARGIN} barCategoryGap={2} title={t.dailyTitle} desc={t.dailyKeys}>
+          <ActiveDay into={activeDay} />
+          <InverseXProbe into={inverse} />
+          <CartesianGrid vertical={false} />
+          {/* The scatter's band, behind the bars too: a chosen day of three events is a bar a few
+              pixels tall, and the dimming alone left it hard to find. */}
+          {lit ? <ReferenceArea x1={lit.from} x2={lit.to + DAY} fill="var(--foreground)" fillOpacity={0.07} /> : null}
+          {xAxis}
+          {yAxis}
+          <ChartTooltip
+            cursor={{ fillOpacity: 0.08 }}
+            content={({ active, payload }) => {
+              const p = payload?.[0]?.payload as Day | undefined;
+              if (!active || !p) return null;
+              return (
+                <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
+                  <div>
+                    <span className="font-medium">{p.total}</span> · {fmtDate(p.t, lang)}
+                  </div>
+                  {p.deep > 0 && p.shallow > 0 ? (
+                    <div className="text-muted-foreground">
+                      {t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }}
+          />
+          {(["shallow", "deep"] as const).map((c) => (
+            <Bar
+              key={c}
+              dataKey={c}
+              stackId="day"
+              fill={c === "shallow" ? "var(--chart-1)" : "var(--chart-4)"}
+              isAnimationActive={false}
+            >
+              {daily.map((d) => (
+                <Cell
+                  key={d.start}
+                  fill={chosen(d.start) ? (c === "shallow" ? "var(--chart-1)" : "var(--chart-4)") : REST}
+                  className="transition-fill motion-reduce:transition-none"
+                />
+              ))}
+            </Bar>
+          ))}
+        </BarChart>
+      </ChartContainer>
+    </div>
+  );
+});
+
+/**
+ * `mainshockId` is the zone's detected mainshock, drawn as a star apart from the other events; null draws none.
+ * `days` are the days the daily bars have chosen, which narrow the catalogue table (`useDaySelection`);
+ * `picked` is how many events that leaves it.
+ */
 export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
   events,
   mainshockId,
+  days,
+  picked,
+  onDays,
+  onShowPicked,
 }: {
   events: readonly StoredEvent[];
   mainshockId: string | null;
+  days: DayRange | null;
+  picked: number;
+  onDays: (d: DayRange | null) => void;
+  onShowPicked: () => void;
 }) {
   const { t, lang } = useI18n();
   const zone = useZone();
-  const { points, deepPoints, main, daily, domain, days, count, magTop } = useMemo(() => {
+  const { points, deepPoints, main, daily, domain, dayCount, count, magTop } = useMemo(() => {
     const pts = events.map((e) => ({
       t: Date.parse(e.time),
       mag: e.mag,
@@ -97,9 +367,15 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
       points: pts.filter((p) => p.id !== mainshockId && p.cluster === "shallow"),
       deepPoints: pts.filter((p) => p.id !== mainshockId && p.cluster === "deep"),
       main: pts.filter((p) => p.id === mainshockId),
-      daily: byDay.days.map((d) => ({ t: d.start + DAY / 2, total: d.total, shallow: d.shallow, deep: d.deep })),
+      daily: byDay.days.map((d) => ({
+        t: d.start + DAY / 2,
+        start: d.start,
+        total: d.total,
+        shallow: d.shallow,
+        deep: d.deep,
+      })),
       domain: [lo, hi] as [number, number],
-      days: Math.max(1, byDay.days.length),
+      dayCount: Math.max(1, byDay.days.length),
       count: countAxis(byDay.maxTotal),
       magTop: Math.max(MAG_TOP[zone.id], Math.ceil(Math.max(0, ...events.map((e) => e.mag)) + 0.5)),
     };
@@ -109,12 +385,12 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
   const { width: viewW = 0 } = useResizeObserver({ ref: scroller as RefObject<HTMLDivElement> });
 
   const roomW = Math.max(0, viewW - AXIS_COL);
-  const plotW = viewW > 0 && viewW < DENSE_BELOW ? Math.max(roomW, days * PX_PER_DAY) : roomW;
+  const plotW = viewW > 0 && viewW < DENSE_BELOW ? Math.max(roomW, dayCount * PX_PER_DAY) : roomW;
   const scrolls = plotW > roomW + 1;
   // Weekly ticks are right when the whole range is on screen. Once it scrolls there is room for more,
   // and a week of empty axis between labels reads as a gap in the data. A range of two weeks or less
   // (a young swarm) gets a label every day: weekly, it had one label for the whole chart.
-  const tickDays = scrolls ? Math.max(1, Math.ceil(TICK_GAP / (plotW / days))) : days <= 14 ? 1 : 7;
+  const tickDays = scrolls ? Math.max(1, Math.ceil(TICK_GAP / (plotW / dayCount))) : dayCount <= 14 ? 1 : 7;
   const ticks = useMemo(() => {
     const out: number[] = [];
     for (let d = domain[0]; d <= domain[1]; d += tickDays * DAY) out.push(d);
@@ -138,6 +414,13 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
     stick.current = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
     setScrolled(el.scrollLeft > 1);
   }, []);
+
+  // Escape anywhere in the chart lets go of the chosen days; the bars handle the rest (`DailyBars`).
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Escape" || !days) return;
+    e.preventDefault();
+    onDays(null);
+  };
 
   const xAxis = (labels: boolean) => (
     <XAxis
@@ -203,6 +486,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
         <div
           ref={scroller}
           onScroll={onScroll}
+          onKeyDown={onKeyDown}
           role="group"
           aria-label={t.magTimeRegion}
           tabIndex={0}
@@ -228,6 +512,10 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
                   {xAxis(true)}
                   {yMag(false)}
                   <ZAxis range={[28, 28]} />
+                  {/* The chosen days, carried up to the scatter, so its dots can be matched to the catalogue. */}
+                  {days ? (
+                    <ReferenceArea x1={days.from} x2={days.to + DAY} fill="var(--foreground)" fillOpacity={0.07} />
+                  ) : null}
                   <ChartTooltip
                     cursor={{ strokeDasharray: "3 3" }}
                     content={({ active, payload }) => {
@@ -278,41 +566,12 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
                     </BarChart>
                   </ChartContainer>
                 </div>
-                <ChartContainer
-                  config={{ total: { label: t.dailyTitle, color: "var(--chart-1)" } }}
-                  className="aspect-auto h-36 w-(--plot-w) shrink-0"
-                >
-                  <BarChart data={daily} margin={BAR_MARGIN} barCategoryGap={2} title={t.dailyTitle}>
-                    <CartesianGrid vertical={false} />
-                    {xAxis(true)}
-                    {yCount(false)}
-                    <ChartTooltip
-                      cursor={{ fillOpacity: 0.08 }}
-                      content={({ active, payload }) => {
-                        const p = payload?.[0]?.payload as (typeof daily)[number] | undefined;
-                        if (!active || !p) return null;
-                        return (
-                          <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
-                            <div>
-                              <span className="font-medium">{p.total}</span> · {fmtDate(p.t, lang)}
-                            </div>
-                            {p.deep > 0 && p.shallow > 0 ? (
-                              <div className="text-muted-foreground">
-                                {t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      }}
-                    />
-                    <Bar dataKey="shallow" stackId="day" fill="var(--chart-1)" isAnimationActive={false} />
-                    <Bar dataKey="deep" stackId="day" fill="var(--chart-4)" isAnimationActive={false} />
-                  </BarChart>
-                </ChartContainer>
+                <DailyBars daily={daily} days={days} onDays={onDays} xAxis={xAxis(true)} yAxis={yCount(false)} />
               </div>
             </div>
           </div>
         </div>
+        <DailyLine days={days} count={picked} onShow={onShowPicked} />
       </CardContent>
     </Card>
   );
