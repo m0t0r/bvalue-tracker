@@ -82,22 +82,19 @@ const es = {
     larger1: "Hubo sismos todavía mayores, y el dibujo los pone a la misma escala:",
     largerItem: "{name}, {date}: {pastMag}, unas {x} veces la energía del {magLabel}.",
     larger2: "Que hayan ocurrido no dice cuándo habrá otro: la historia sirve para comparar, no para pronosticar.",
-    durationTitle: "La falla liberó casi toda su energía en unos {core} segundos",
+    durationTitle: "Cerca del epicentro, el suelo se movió entre {from} segundos y {toMin} minutos",
     duration1:
-      "La magnitud dice cuánta energía liberó un sismo, pero no cuánto tardó en liberarla. Según el modelo del USGS, la falla del {magLabel} liberó el 90 % de su energía en unos {core} segundos.",
-    durationSlow:
-      "El modelo muestra además un comienzo lento: en los primeros {slow} segundos salió menos del 5 %. Es la parte más incierta del modelo, así que no entra en la comparación.",
-    durationPast:
-      "Medidos de la misma forma, los sismos de la lista que tienen una duración publicada tardaron mucho menos en liberarla:",
-    durationItem: "{name}, {date}: {pastMag}, a {depth} de profundidad, en unos {s} segundos.",
-    durationSize:
-      "Un sismo más grande rompe un trozo de falla más largo, y eso toma más tiempo. Por eso el tamaño y la duración suelen ir juntos.",
-    durationShaking:
-      "Eso es lo que duró la ruptura, no lo que duró el temblor. El {sgc} distingue tres duraciones: cuánto lo sienten las personas, cuánto lo registran los instrumentos y cuánto se mueve la falla. Las cifras de arriba son las de la falla. Las estaciones del SGC más cercanas al epicentro registraron entre 90 segundos y 2 minutos de movimiento significativo, porque las ondas siguen llegando después de que la falla se detiene. En general, la sacudida dura más cuanto más lejos se está y más blando es el suelo, aunque llegue más débil.",
+      "Además de qué tan fuerte fue un sismo, importa cuánto dura la sacudida. Según el {sgc}, sus estaciones más cercanas al epicentro del {magLabel} registraron entre {from} segundos y {toMin} minutos de movimiento significativo.",
+    durationRupture:
+      "La falla misma se movió durante menos tiempo: unos {rupture} segundos, según el modelo del USGS. Las ondas siguen llegando después de que la falla se detiene, y en general la sacudida dura más cuanto más lejos se está y más blando es el suelo, aunque llegue más débil.",
+    durationFelt:
+      "Por eso no hay una sola respuesta. El SGC distingue tres duraciones: cuánto lo sienten las personas, cuánto lo registran los instrumentos y cuánto se mueve la falla. Lo que sintió cada quien depende de dónde estaba, del suelo y del edificio.",
     durationDamage:
       "Una sacudida larga hace más daño, sobre todo en suelos y laderas, que pueden ceder. Pero la duración es solo una parte: la profundidad, la distancia y el tipo de suelo también cuentan.",
+    durationPast:
+      "Para los sismos anteriores de la lista no se ha publicado una duración de la sacudida comparable, así que aquí no se comparan.",
     durationNote:
-      "Duración: los segundos en que salió el 90 % central del momento sísmico, del 5 % al 95 %. El momento sísmico es la medida del tamaño de la que sale la magnitud; arriba se le llama «energía» para simplificar. La del {magLabel} viene del {usgs}; las de los otros sismos, de la base de datos {scardec} (Vallée y Douet, 2016). Son modelos hechos con métodos distintos, así que las cifras son aproximadas. Del resto de la lista no hay una duración publicada que se pueda comparar con estas, y aquí no se estima.",
+      "La cifra de {from} segundos a {toMin} minutos es la que da el SGC para sus estaciones más cercanas al epicentro; no es la duración en Pereira. La de la falla viene del {usgs}: el tiempo hasta que salió el 95 % de su momento sísmico (la medida del tamaño de la que sale la magnitud), contado desde que empezó a romperse.",
     durationUsgs: "modelo de falla finita del USGS",
     ladderTitle: "Un punto más de magnitud: unas 32 veces más energía",
     ladder1:
@@ -340,10 +337,14 @@ const es = {
           : "{mag} · {x} veces más energía",
     ladderAria: "Tres cuadrados para M4, M5 y M6; cada uno tiene unas 32 veces el área del anterior.",
     ladderNote: "Cada punto de magnitud: unas 32 veces más energía",
-    durationTitle: "Cuánto tardó en salir la energía",
-    durationAxis: "segundos en que salió el 90 % de la energía",
-    durationSeconds: "unos {s} s",
-    durationAria: "Barras con los segundos en que cada sismo liberó el 90 % de su energía: {list}.",
+    durationTitle: "Cuánto duró el {magLabel} · segundos",
+    durationGround: "El suelo cerca del epicentro · SGC",
+    durationGroundValue: "entre {from} s y {toMin} min",
+    durationFault: "La falla · modelo del USGS",
+    durationFaultValue: "unos {s} s",
+    durationAxis: "segundos",
+    durationAria:
+      "Dos barras: el suelo cerca del epicentro se movió entre {from} segundos y {toMin} minutos, según el SGC; la falla se movió unos {rupture} segundos, según el modelo del USGS.",
     clocksTitle: "Eventos por día ({mc} o más) · Chocó",
     clocksAria:
       "Eventos por día desde el primer evento, en escala logarítmica, para el grupo profundo y el superficial, con la curva típica de réplicas como referencia.",
@@ -427,22 +428,19 @@ const en: StoryCopy = {
     larger1: "There have been larger ones still, and the drawing puts them at the same scale:",
     largerItem: "{name}, {date}: {pastMag}, about {x} times the energy of the {magLabel}.",
     larger2: "That they happened says nothing about when another will: history is for comparing, not for forecasting.",
-    durationTitle: "The fault released almost all its energy in about {core} seconds",
+    durationTitle: "Near the epicentre, the ground moved for {from} seconds to {toMin} minutes",
     duration1:
-      "Magnitude says how much energy an earthquake released, not how long it took to release it. According to USGS's model, the fault of the {magLabel} released 90% of its energy in about {core} seconds.",
-    durationSlow:
-      "The model also shows a slow start: in the first {slow} seconds less than 5% came out. It is the least certain part of the model, so it is left out of the comparison.",
-    durationPast:
-      "Measured the same way, the earthquakes on the list that have a published duration took far less time to release it:",
-    durationItem: "{name}, {date}: {pastMag}, {depth} deep, in about {s} seconds.",
-    durationSize:
-      "A larger earthquake breaks a longer stretch of fault, and that takes longer. That is why size and duration usually go together.",
-    durationShaking:
-      "That is how long the rupture lasted, not how long the shaking did. {sgc} separates three durations: how long people feel it, how long instruments record it, and how long the fault moves. The figures above are the fault's. SGC's stations nearest the epicentre recorded between 90 seconds and 2 minutes of significant movement, because the waves keep arriving after the fault stops. In general, shaking lasts longer the further away you are and the softer the ground, even if it arrives weaker.",
+      "Besides how strong an earthquake is, how long the shaking lasts matters. According to {sgc}, its stations nearest the epicentre of the {magLabel} recorded between {from} seconds and {toMin} minutes of significant movement.",
+    durationRupture:
+      "The fault itself moved for less time: about {rupture} seconds, according to USGS's model. The waves keep arriving after the fault stops, and in general shaking lasts longer the further away you are and the softer the ground, even if it arrives weaker.",
+    durationFelt:
+      "So there is no single answer. SGC separates three durations: how long people feel it, how long instruments record it, and how long the fault moves. What each person felt depends on where they were, the ground and the building.",
     durationDamage:
       "Long shaking does more damage, especially to soils and slopes, which can give way. But duration is only part of it: depth, distance and the ground matter too.",
+    durationPast:
+      "No comparable shaking duration is published for the earlier earthquakes on the list, so they are not compared here.",
     durationNote:
-      "Duration: the seconds in which the central 90% of the seismic moment came out, from 5% to 95%. The seismic moment is the measure of size that magnitude comes from; above it is called “energy”, for simplicity. The {magLabel}'s comes from {usgs}; the other earthquakes' from the {scardec} database (Vallée & Douet, 2016). They are models made with different methods, so the figures are approximate. The rest of the list has no published duration that compares with these, and none is estimated here.",
+      "The {from} seconds to {toMin} minutes is SGC's figure for its stations nearest the epicentre; it is not the duration in Pereira. The fault's comes from {usgs}: the time until 95% of its seismic moment (the measure of size that magnitude comes from) was out, counted from when it started to break.",
     durationUsgs: "USGS's finite-fault model",
     ladderTitle: "Each step of magnitude, about 32 times the energy",
     ladder1:
@@ -661,10 +659,14 @@ const en: StoryCopy = {
           : "{mag} · {x} times more energy",
     ladderAria: "Three squares for M4, M5 and M6; each has about 32 times the area of the one before.",
     ladderNote: "Each step of magnitude: about 32 times the energy",
-    durationTitle: "How long the energy took to come out",
-    durationAxis: "seconds in which 90% of the energy came out",
-    durationSeconds: "about {s} s",
-    durationAria: "Bars showing the seconds in which each earthquake released 90% of its energy: {list}.",
+    durationTitle: "How long the {magLabel} lasted · seconds",
+    durationGround: "The ground near the epicentre · SGC",
+    durationGroundValue: "{from} s to {toMin} min",
+    durationFault: "The fault · USGS model",
+    durationFaultValue: "about {s} s",
+    durationAxis: "seconds",
+    durationAria:
+      "Two bars: the ground near the epicentre moved for {from} seconds to {toMin} minutes, according to SGC; the fault moved for about {rupture} seconds, according to USGS's model.",
     clocksTitle: "Events per day ({mc} and up) · Chocó",
     clocksAria:
       "Events per day since the first event, on a logarithmic scale, for the deep and the shallow group, with the typical aftershock curve for reference.",

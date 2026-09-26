@@ -14,8 +14,9 @@ export interface Release {
  * samples in time order, and the moment itself. Each sample's rate holds until the next sample (the
  * last one for the step before it), and a crossing is placed inside its step in proportion, so a
  * coarse sampling moves neither time by a whole step. A negative rate, which a deconvolved function can
- * dip to, counts as no release. The times are on the file's own axis, whose zero each source defines
- * differently; only their difference, `t95 − t5`, compares across sources.
+ * dip to, counts as no release. The times are on the file's own axis: for USGS's finite-fault model
+ * its zero is the hypocentral time, where the modelled rupture starts. Another source may put zero
+ * elsewhere, so an absolute time is only read against its own file's zero.
  */
 export function releaseTimes(rate: readonly (readonly [number, number])[]): Release & { moment: number } {
   if (rate.length < 2) throw new Error("releaseTimes: fewer than two samples");

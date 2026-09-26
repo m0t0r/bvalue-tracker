@@ -7,24 +7,6 @@
     "usgsId": "us6000tjl2",
     "product": "us6000tjl2_1",
     "url": "https://earthquake.usgs.gov/product/finite-fault/us6000tjl2_1/us/1786734841617/moment_rate.mr",
-    "t5": 30.18,
-    "t95": 53.83,
-    "momentNm": 172300000000000000000
-  },
-  "past": [
-    {
-      "id": "iscgem89834",
-      "scardec": "FCTs_19950819_214331_COLOMBIA",
-      "t5": 0.91,
-      "t95": 4.16,
-      "momentNm": 9919000000000000000
-    },
-    {
-      "id": "iscgem118073",
-      "scardec": "FCTs_19950208_184025_COLOMBIA",
-      "t5": 0.49,
-      "t95": 2.44,
-      "momentNm": 3749000000000000000
-    }
-  ]
+    "t95": 53.83
+  }
 }

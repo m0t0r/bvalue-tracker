@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HISTORY_FOR } from "./history";
-import { DURATIONS, compareDurations } from "./durations";
+import { DURATIONS, shakingDuration } from "./durations";
 import { releaseTimes } from "./release";
 
 /** A moment-rate function sampled every `dt` seconds from 0 to `end`. */
@@ -47,34 +47,30 @@ describe("the committed durations", () => {
     expect(DURATIONS.main.usgsId).toBe("us6000tjl2");
   });
 
-  it("holds the times recomputed from USGS's and SCARDEC's files on 2026-09-26", () => {
-    expect(DURATIONS.main).toMatchObject({ t5: 30.18, t95: 53.83 });
-    const past = Object.fromEntries(DURATIONS.past.map((p) => [p.id, [p.t5, p.t95]]));
-    // Neira and Calima, 1995, from SCARDEC's average source time functions.
-    expect(past).toEqual({ iscgem89834: [0.91, 4.16], iscgem118073: [0.49, 2.44] });
+  it("holds the times recomputed from USGS's file on 2026-09-26", () => {
+    expect(DURATIONS.main.t95).toBe(53.83);
   });
 });
 
-describe("compareDurations", () => {
-  it("compares the central 90% in whole seconds, longest first", () => {
-    const d = compareDurations({ id: HISTORY_FOR }, true)!;
-    expect(d.main.core).toBe(24);
-    expect(d.main.seconds).toBeCloseTo(23.65, 9);
-    expect(d.past.map((p) => [p.quake.id, p.core])).toEqual([
-      ["iscgem89834", 3],
-      ["iscgem118073", 2],
-    ]);
-    expect(d.past[0]!.quake.name.es).toBe("Neira (Caldas)");
+describe("shakingDuration", () => {
+  it("leads with how long the ground moved, SGC's 90 s to 2 min near the epicentre", () => {
+    const d = shakingDuration({ id: HISTORY_FOR }, true)!;
+    expect(d.nearEpicentre).toEqual({ fromS: 90, toS: 120 });
   });
 
-  it("rounds the slow start down, so less than 5% was out by then", () => {
-    // 30.18 s: "in the first 30 seconds" holds; rounding 29.6 up to 30 would not.
-    expect(compareDurations({ id: HISTORY_FOR }, true)!.main.slow).toBe(30);
-    expect(DURATIONS.main.t5).toBeGreaterThanOrEqual(30);
+  it("gives the fault's own time, to 95% of the moment from the model's start, in whole seconds", () => {
+    // Not the central 90% (24 s): with nothing to compare it with, the reader's question is how long
+    // the fault moved, and the model's whole release says that.
+    expect(shakingDuration({ id: HISTORY_FOR }, true)!.ruptureS).toBe(54);
+  });
+
+  it("puts the fault's time below the ground's, which is the point the step makes", () => {
+    const d = shakingDuration({ id: HISTORY_FOR }, true)!;
+    expect(d.ruptureS).toBeLessThan(d.nearEpicentre.fromS);
   });
 
   it("is shown only for the M7.4, and only once the page's rule has found it", () => {
-    expect(compareDurations({ id: HISTORY_FOR }, false)).toBeNull();
-    expect(compareDurations({ id: "SGC2026zzzzzz" }, true)).toBeNull();
+    expect(shakingDuration({ id: HISTORY_FOR }, false)).toBeNull();
+    expect(shakingDuration({ id: "SGC2026zzzzzz" }, true)).toBeNull();
   });
 });

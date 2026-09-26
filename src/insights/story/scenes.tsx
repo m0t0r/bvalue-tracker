@@ -14,6 +14,7 @@ import { fmtDateTime, fmtDay } from "@/lib/format";
 import { arrivalSeconds, ratesSince, strongDays, type Insights, type Source } from "../claims";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
+import { shakingParts } from "../durations";
 import { rankLayout, type Compared } from "../history";
 import { fmt, fmtKm, fmtMag, fmtTimes, medianHorizontalErrorKm } from "../shared";
 import { FILL, STROKE } from "../tones";
@@ -124,44 +125,50 @@ function RowLabel(p: { x: number; y: number; fs: number; small: boolean; line1: 
   );
 }
 
-export interface DurationRow {
+interface DurationRow {
   id: string;
+  /** The ground's row, in the mainshock's colour; the fault's is neutral. */
   main: boolean;
   line1: string;
   line2: string;
-  /** Seconds in which the central 90% of the moment came out. */
+  /** Seconds the bar is solid to. */
   seconds: number;
+  /** Where a range ends: the bar runs on, fainter, to here. */
+  upTo?: number;
 }
 
-/** The duration drawing's rows, longest first, which its text alternative (`graphic.tsx`) lists too. */
-export function durationRows(model: StoryModel, lang: Lang): DurationRow[] {
+/**
+ * The duration drawing's rows, the ground near the epicentre first and the fault under it. Their
+ * figures are formatted by `shakingParts`, as the step's prose and the text alternative's are.
+ */
+function durationRows(model: StoryModel, lang: Lang): DurationRow[] {
   const c = storyCopy[lang].graphic;
   const d = model.durations;
-  const main = model.main;
-  if (!d || !main) return [];
-  const line2 = (mag: number, s: number) => `${fmtMag(mag)} · ${fill(c.durationSeconds, { s: fmt(s) })}`;
+  if (!d) return [];
+  const parts = shakingParts(d);
   return [
     {
-      id: main.id,
+      id: "ground",
       main: true,
-      line1: fill(c.historyMain, { date: fmtDateTime(main.t, lang) }),
-      line2: line2(main.mag, d.main.core),
-      seconds: d.main.seconds,
+      line1: c.durationGround,
+      line2: fill(c.durationGroundValue, parts),
+      seconds: d.nearEpicentre.fromS,
+      upTo: d.nearEpicentre.toS,
     },
-    ...d.past.map((r) => ({
-      id: r.quake.id,
+    {
+      id: "fault",
       main: false,
-      line1: fill(c.historyRow, { name: r.quake.name[lang], date: fmtDateTime(r.quake.time, lang) }),
-      line2: line2(r.quake.mag, r.core),
-      seconds: r.seconds,
-    })),
+      line1: c.durationFault,
+      line2: fill(c.durationFaultValue, { s: parts.rupture }),
+      seconds: d.ruptureS,
+    },
   ];
 }
 
 /**
- * The seconds in which each earthquake released the central 90% of its moment, as bars on one axis,
- * longest first, each under its two lines of text. Like `Ranks`, the text steps down a pixel at a time
- * (to 9 px) until the rows, the axis and its label fit the height.
+ * Durations as bars on one axis of seconds, each under its two lines of text; a range runs on fainter
+ * to its end. Like `Ranks`, the text steps down a pixel at a time (to 9 px) until the rows, the axis
+ * and its label fit the height.
  */
 function Durations({
   rows,
@@ -192,7 +199,9 @@ function Durations({
   while (!l.fits && l.fs > 9) l = layout(l.fs - 1);
   if (!rows.length || !l.fits) return null;
   const { fs, barH, labelH, rowH } = l;
-  const longest = Math.max(...rows.map((r) => r.seconds));
+  // The axis text is a pixel smaller than the labels, but never under the 9 px floor.
+  const axisFs = Math.max(9, fs - 1);
+  const longest = Math.max(...rows.map((r) => r.upTo ?? r.seconds));
   const x = scaleLinear()
     .domain([0, Math.max(10, Math.ceil(longest / 10) * 10)])
     .range([left, width - right]);
@@ -212,6 +221,15 @@ function Durations({
               height={barH}
               className={r.main ? "fill-chart-2" : "fill-muted-foreground"}
             />
+            {r.upTo !== undefined && (
+              <rect
+                x={x(r.seconds)}
+                y={y + labelH}
+                width={Math.max(0, x(r.upTo) - x(r.seconds))}
+                height={barH}
+                className={`${r.main ? "fill-chart-2" : "fill-muted-foreground"} opacity-40`}
+              />
+            )}
           </g>
         );
       })}
@@ -223,14 +241,14 @@ function Durations({
             x={x(t)}
             y={axisY + fs + 4}
             textAnchor="middle"
-            fontSize={fs - 1}
+            fontSize={axisFs}
             className="fill-muted-foreground tabular-nums"
           >
             {fmt(t)}
           </text>
         </g>
       ))}
-      <text x={x(0)} y={axisY + 2 * fs + 10} fontSize={fs - 1} className="fill-muted-foreground">
+      <text x={x(0)} y={axisY + 2 * fs + 10} fontSize={axisFs} className="fill-muted-foreground">
         {axis}
       </text>
     </g>
@@ -241,7 +259,8 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
   const c = storyCopy[lang].graphic;
   const main = model.main;
   const h = model.history;
-  if (!main || !h) return null;
+  // Only the history's squares need `h`: the ladder and the durations draw without it.
+  if (!main) return null;
   const fs = small ? 11 : 13;
   const top = small ? 36 : 64;
 
@@ -259,9 +278,9 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
     line1: fill(c.historyRow, { name: r.quake.name[lang], date: fmtDateTime(r.quake.time, lang) }),
     line2: fill(c.historyTimes(r.relation), { mag: fmtMag(r.quake.mag), x: fmtTimes(r.times) }),
   });
-  const below = h.smaller.map(item);
-  const smaller = [mainItem, ...below];
-  const everything = [...h.larger.map(item), mainItem, ...below];
+  const below = h ? h.smaller.map(item) : [];
+  const smaller = h ? [mainItem, ...below] : [];
+  const everything = h ? [...h.larger.map(item), mainItem, ...below] : [];
 
   // The ladder: M4, M5, M6 side by side, each ~31.6× the area of the one before.
   const step = energyRatio(5, 4);
@@ -292,7 +311,7 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
         {sub === "ladder"
           ? c.energyTitle
           : sub === "duration"
-            ? c.durationTitle
+            ? fill(c.durationTitle, { magLabel: fmtMag(main.mag) })
             : fill(c.historyTitle, { magLabel: fmtMag(main.mag) })}
       </SceneTitle>
       {bars.length > 0 && (
