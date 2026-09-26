@@ -16,7 +16,10 @@ it is the guide for every `agent-browser` command below.
 3. Stub the refresh route **before the first `open`**, in the same session:
 
    ```sh
-   agent-browser --session v network route '**/api/refresh*' --body '{}'
+   # The monitor stores the refresh answer as the zone's status: `{}` blanks the page
+   # (`status.data.backfill` is undefined). Answer with the zone's real status instead.
+   body=$(curl -s -H 'Sec-Fetch-Site: same-origin' "localhost:<port>/api/status?zone=tolima")
+   agent-browser --session v network route '**/api/refresh*' --body "$body"
    agent-browser --session v set viewport 390 700   # phone
    agent-browser --session v open http://localhost:<port>/insights
    ```
@@ -93,12 +96,15 @@ whether the reader can recover without a reload (retry, back online, next refetc
 | Server answers 5xx or 429 | `test/browser/fault.js`: `{ match: "/api/<route>", status: 503 }` |
 | Slow answer: a loading state, no layout shift | `fault.js` `{ match, delay: 5000 }` + DevTools MCP `emulate` (Slow 4G, CPU 4×) |
 | Body that is not the expected JSON | `fault.js` `{ match, status: 200, body: "<html>" }` |
-| Offline, then back online | `agent-browser offline on` / `off` |
-| A failed last run, an unfinished back-fill | `network route '**/api/status*' --body <json>` (`docs/development.md`) |
+| Offline, then back online | `agent-browser set offline on` / `off` (also fires TanStack Query's refetch-on-reconnect) |
+| A failed last run, an unfinished back-fill | `fault.js` `{ match: "/api/status", status: 200, body: <json> }` (a `network route` misses the preloaded request), and the `/api/refresh` stub answering the **same** JSON: the back-fill loop stores the refresh answer over it |
 
 `fault.js` is an init script, so start the session with it before the first `open`:
 `agent-browser --session v --init-script test/browser/fault.js ...`; its header says how to set
-rules (`localStorage.fault`, then `reload`). Keep the `/api/refresh` stub on throughout.
+rules (`localStorage.fault`, then `reload`). Keep the `/api/refresh` stub on throughout. Faked answers
+never reach the network log: read `window.faultLog` for what a rule answered. A failed *refetch*
+(data already on screen) is reached with `set offline on`, then `off`, once the data is over a
+minute old; a synthetic `visibilitychange` does not trigger one headlessly.
 
 ### Before/after screenshots (UI changes)
 

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangleIcon, InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
+import { InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
 import { lazy, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
 import { bTimeDescription } from "@/components/charts/b-over-time-description";
@@ -8,6 +8,7 @@ import { Deferred } from "@/components/deferred";
 import { EventsTable } from "@/components/events-table";
 import { FilterScope } from "@/components/filter-scope";
 import { FiltersCard } from "@/components/filters";
+import { LoadError } from "@/components/load-error";
 import { StatusBar } from "@/components/status-bar";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEvents, getStatus } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { loadError, loadFailed, retrying } from "@/lib/load-failed";
 import { scopeChips, useScope } from "@/lib/scope";
 import { toggleTheme, useIsDark } from "@/lib/theme";
 import { ZoneProvider, useZoneState } from "@/lib/zone";
@@ -151,7 +153,11 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   // The status bar and the page under it are drawn in one commit, whichever request answers last,
   // so the stats cannot re-wrap above content that is already on screen (`StatusBar`). A status
   // request that failed once is not waited for through its retries: the page goes ahead without it.
-  const settled = !events.isPending && (!status.isPending || status.failureCount > 0);
+  // Only a catalogue the page never got is a failed load. A background refetch that fails keeps
+  // the dashboard as it is, with no alert: "Última consulta al SGC" still dates it, and the next
+  // refetch tries again. /insights follows the same rule (`loadFailed`).
+  const catalogueFailed = loadFailed(events);
+  const settled = (!events.isPending || catalogueFailed) && (!status.isPending || status.failureCount > 0);
 
   return (
     <>
@@ -163,6 +169,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           status={settled ? status.data : undefined}
           shown={events.data ? view.shown.length : null}
           mainshock={events.data ? view.mainshock : null}
+          catalogueFailed={catalogueFailed}
         />
         {settled && events.data ? (
           <FilterScope
@@ -174,15 +181,17 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           />
         ) : null}
 
-        {settled && events.isError ? (
-          <Alert variant="destructive">
-            <AlertTriangleIcon />
-            <AlertTitle>{t.loadFailed}</AlertTitle>
-            <AlertDescription>
-              {t.loadFailedBody}
-              <TechnicalDetail>{String(events.error)}</TechnicalDetail>
-            </AlertDescription>
-          </Alert>
+        {settled && catalogueFailed ? (
+          <LoadError
+            title={t.loadFailed}
+            body={t.loadFailedBody}
+            retry={t.loadRetry}
+            retrying={retrying(events)}
+            retryingLabel={t.loadRetrying}
+            onRetry={() => void events.refetch()}
+          >
+            <TechnicalDetail>{String(loadError(events))}</TechnicalDetail>
+          </LoadError>
         ) : null}
 
         {/* Gate on data, not on "not pending": a failed load must not draw an empty dashboard
@@ -262,7 +271,8 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           <Skeleton className="min-h-svh w-full" />
         ) : null}
 
-        {settled ? (
+        {/* How to read figures the page has not got: a failed load shows its error only. */}
+        {settled && events.data ? (
           <Alert role="note">
             <InfoIcon />
             <AlertTitle>{t.caveatsTitle}</AlertTitle>

@@ -172,3 +172,16 @@ describe("the mainshock stat", () => {
     expect(c("none").join(" ")).not.toMatch(keeps);
   });
 });
+
+/**
+ * The load error used to say "check your connection and reload" (2026-09-26). The page cannot tell
+ * a dropped connection from a failing server, and the alert has its own retry button, so it
+ * blames neither and never sends the reader to reload.
+ */
+describe("the load error", () => {
+  it.each(langs)("does not send the reader to reload, in %s", (lang) => {
+    expect(dicts[lang].loadFailedBody).not.toMatch(/recarg|reload/i);
+    expect(dicts[lang].loadRetry).toBeTruthy();
+    expect(dicts[lang].loadRetrying).toBeTruthy();
+  });
+});
