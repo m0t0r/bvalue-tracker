@@ -372,7 +372,12 @@ function Viewer({
                     </SheetTrigger>
                   ))}
                 </div>
-                <SheetContent side="bottom" showCloseButton={false} aria-describedby={undefined} className="h-4/5">
+                <SheetContent
+                  side="bottom"
+                  showCloseButton={false}
+                  aria-describedby={undefined}
+                  className="data-[side=bottom]:h-4/5"
+                >
                   <VisuallyHidden.Root asChild>
                     <SheetTitle>{c.panel}</SheetTitle>
                   </VisuallyHidden.Root>
