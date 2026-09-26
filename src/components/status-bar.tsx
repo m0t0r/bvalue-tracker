@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse, type StoredEvent } from "@/lib/api";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
-import { fmtDateTime, fmtDay, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
+import { fmtClock, fmtDateTime, fmtDay, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
 import { useNow } from "@/lib/use-now";
@@ -77,6 +77,7 @@ export function StatusBar({
   mainshock,
   loading,
   catalogueFailed = false,
+  staleSince = null,
 }: {
   /** The page is still waiting for its status or its catalogue: draw a placeholder, not the stats. */
   loading: boolean;
@@ -89,6 +90,12 @@ export function StatusBar({
    * fills, and the page's load error is the only alert: this bar draws neither of its own.
    */
   catalogueFailed?: boolean;
+  /**
+   * When the data on screen was fetched, if a refetch over it has since failed or waits offline
+   * (`staleSince` in load-failed.ts); null while the page is current. The line under the button then
+   * dates the data instead of promising updates that are not arriving.
+   */
+  staleSince?: number | null;
 }) {
   const { t, lang } = useI18n();
   const zone = useZone().id;
@@ -190,6 +197,16 @@ export function StatusBar({
           ? t.refreshWait(CADENCE[zone].refreshMinIntervalS / 60)
           : "";
 
+  // While the page cannot reach the server, the line says since when the figures are, and that outranks
+  // every answer to a press but a request under way: "Ya tienes los datos más recientes" would be stale
+  // itself, and "No se pudo consultar al SGC" blames SGC for what is the connection as often as not.
+  // A press parked offline (`isPaused`) is not under way, so "Consultando al SGC…" does not sit there
+  // for as long as the connection is down.
+  const stale = staleSince === null ? null : fmtClock(staleSince, lang, now);
+  const staleNote = stale !== null && !(refresh.isPending && !refresh.isPaused);
+  const live = staleNote ? t.staleSince(stale.time, stale.day) : message;
+  const pending = refresh.isPending || backfill.isPending;
+
   // The newest event's time reaches SGC's own page for it, the same link the table's time column
   // carries, with the same UTC form one hover away. An event with no id cannot happen — the id is
   // the primary key — but the status API types it as nullable, so it falls back to plain text.
@@ -248,23 +265,37 @@ export function StatusBar({
           </div>
           {/* Below lg this block wraps onto its own line at the start edge, so it reads from there; beside the stats it hugs the end edge. */}
           <div className="flex flex-col items-start gap-2 lg:items-end">
-            {/* One label and one icon: the button keeps its width while it works. */}
-            <Button onClick={() => refresh.mutate({ auto: false })} disabled={refresh.isPending || backfill.isPending}>
+            {/* One label and one icon: the button keeps its width while it works. `aria-disabled`, not
+                `disabled`: a disabled button drops the keyboard focus it holds to the page. */}
+            <Button
+              size="default-touch"
+              aria-disabled={pending}
+              onClick={() => {
+                if (!pending) refresh.mutate({ auto: false });
+              }}
+            >
               <RefreshCwIcon data-icon="inline-start" className={refresh.isPending ? "animate-spin" : undefined} />
               {t.refresh}
             </Button>
-            {/* One line is always reserved. The live region announces refresh results; the standing note
-                about automatic updates sits outside it, so it is never read out as if it were news.
-                The note goes quiet while a run has failed: it promises a cadence that has stopped —
-                the fast lane stands down after a failure — whether or not the failed-query alert is
-                the one shown (`pageAlert`). The line stays, so nothing moves. */}
+            {/* One line is always reserved. The live region announces refresh results, and the page
+                losing the server: a caution, so neutral with a warning icon, not red (nothing the reader
+                did failed, and the figures stay).
+                The standing note about automatic updates sits outside it, so it is never read out as if
+                it were news. The note goes quiet while a run has failed: it promises a cadence that has
+                stopped — the fast lane stands down after a failure — whether or not the failed-query
+                alert is the one shown (`pageAlert`). The line stays, so nothing moves. */}
             <span
               aria-live="polite"
-              className={message === "" ? "sr-only" : "min-h-4 text-start text-xs text-muted-foreground lg:text-end"}
+              className={
+                live === ""
+                  ? "sr-only"
+                  : "flex min-h-4 items-start gap-1.5 text-start text-xs text-muted-foreground lg:text-end"
+              }
             >
-              {message}
+              {staleNote ? <AlertTriangleIcon aria-hidden className="mt-px size-3.5 shrink-0" /> : null}
+              {live}
             </span>
-            {message === "" ? (
+            {live === "" ? (
               <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">
                 {failed ? null : t.autoUpdate(everyMin)}
               </span>
@@ -279,7 +310,7 @@ export function StatusBar({
           <AlertDescription>
             {t.zones[zone].backfillBody}
             {backfill.isPending ? null : (
-              <Button variant="outline" size="sm" onClick={() => backfill.mutate()}>
+              <Button variant="outline" size="sm-touch" onClick={() => backfill.mutate()}>
                 {t.backfillAction}
               </Button>
             )}

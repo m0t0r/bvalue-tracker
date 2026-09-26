@@ -18,7 +18,7 @@ import {
   ChevronRightIcon,
   DownloadIcon,
 } from "lucide-react";
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import type { StoredEvent } from "@/lib/api";
 import { downloadCsv } from "@/lib/download";
 import { fmtIsoDateTime, fmtNum, fmtRegion, fmtUtc, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { useZone } from "@/lib/zone";
 
 const features = tableFeatures({
@@ -112,6 +113,24 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
   );
   const pageCount = Math.max(1, table.getPageCount());
 
+  // The fade at the table's trailing edge says "more columns this way", so it goes once there are
+  // none: at the end of the scroll, or when the table fits. Scroll events do not bubble, so the
+  // wrapper listens in the capture phase for the scroller inside `Table`; a ResizeObserver catches
+  // the table fitting or overflowing as the window, the page of rows or the sort changes it.
+  const [atEnd, setAtEnd] = useState(true);
+  const measure = useCallback((el: Element) => setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1), []);
+  const watch = useCallback(
+    (node: HTMLDivElement | null) => {
+      const scroller = node?.querySelector("[data-slot=table-container]");
+      if (!scroller) return;
+      const ro = new ResizeObserver(() => measure(scroller));
+      ro.observe(scroller);
+      if (scroller.firstElementChild) ro.observe(scroller.firstElementChild);
+      return () => ro.disconnect();
+    },
+    [measure],
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -119,7 +138,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
         <CardAction>
           <Button
             variant="outline"
-            size="sm"
+            size="sm-touch"
             onClick={() => downloadCsv(`sgc-${zone.id}-events.csv`, toCsv(events, lang))}
             disabled={events.length === 0}
           >
@@ -138,8 +157,14 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
           </Empty>
         ) : (
           <div
-            className="relative after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-8 after:bg-linear-to-l after:from-card lg:after:hidden"
-            title={t.scrollHint}
+            ref={watch}
+            onScrollCapture={(e) => measure(e.target as Element)}
+            className={cn(
+              "relative",
+              !atEnd &&
+                "after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-8 after:bg-linear-to-l after:from-card",
+            )}
+            title={atEnd ? undefined : t.scrollHint}
           >
             <Table size="sm">
               <TableHeader>
@@ -190,7 +215,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
         <div className="flex gap-2">
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon-sm-touch"
             aria-label={t.prevPage}
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
@@ -199,7 +224,7 @@ export const EventsTable = memo(function EventsTable({ events }: { events: Store
           </Button>
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon-sm-touch"
             aria-label={t.nextPage}
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}

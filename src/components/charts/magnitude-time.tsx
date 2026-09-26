@@ -18,7 +18,8 @@ import { fmtDate, fmtDateTime, fmtDay, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useZone } from "@/lib/zone";
-import { CLUSTER_DEPTH_KM, clusterOf } from "../../../core/clusters";
+import { clusterOf } from "../../../core/clusters";
+import { ClusterLegend } from "./magnitude-time-legend";
 import type { ZoneId } from "../../../core/zones";
 
 // The shallow cluster keeps the page's blue; the deep one, which went quiet after the first week, is
@@ -182,7 +183,9 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
     />
   );
   // Pinned while the plot scrolls under it, so a dot always has a magnitude beside it. It is opaque
-  // and, once scrolled, casts a shadow: the one cue that the chart continues to the left.
+  // and, once scrolled, casts a shadow: the one cue that the chart continues to the left. A drawing of
+  // tick numbers only, so hidden from assistive technology and out of the tab order: as a chart of its
+  // own it was a stop named "2345".
   const pinnedCol = cn("sticky left-0 z-10 w-(--axis-col) shrink-0 bg-card", scrolled && "shadow-pin");
   // Recharts lays out nothing for a chart with no data, so the pinned charts carry one invisible
   // point. Both scales are given explicitly above, so it cannot move a tick.
@@ -195,17 +198,8 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
         <CardDescription>{t.magTimeDesc}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {/* The two depth groups are Chocó's (docs/science.md); elsewhere every dot is one colour and needs no key. */}
-        {zone.depthClusters ? (
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {(["shallow", "deep"] as const).map((c) => (
-              <li key={c} className="flex items-center gap-1.5">
-                <span className={cn("size-2.5 rounded-full", c === "shallow" ? "bg-(--chart-1)" : "bg-(--chart-4)")} />
-                {t.clusterName[c]} <span>({t.clusterWhere[c](CLUSTER_DEPTH_KM)})</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        {/* Shared with the placeholder (`MagnitudeTimePlaceholder`), so the card keeps its height when the chart lands. */}
+        <ClusterLegend />
         <div
           ref={scroller}
           onScroll={onScroll}
@@ -219,9 +213,9 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
             style={{ "--axis-col": `${AXIS_COL}px`, "--plot-w": `${plotW}px` } as CSSProperties}
           >
             <div className="flex">
-              <div className={pinnedCol}>
+              <div aria-hidden className={pinnedCol}>
                 <ChartContainer config={config} className="aspect-auto h-64 w-full">
-                  <ScatterChart margin={PINNED_SCATTER_MARGIN} data={seed}>
+                  <ScatterChart margin={PINNED_SCATTER_MARGIN} data={seed} accessibilityLayer={false}>
                     {xAxis(false)}
                     {yMag(true)}
                     <Scatter data={seed} fill="none" stroke="none" isAnimationActive={false} />
@@ -275,9 +269,9 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
             <div className="flex flex-col gap-2">
               <h3 className="sticky left-0 w-fit text-sm font-medium">{t.dailyTitle}</h3>
               <div className="flex">
-                <div className={pinnedCol}>
+                <div aria-hidden className={pinnedCol}>
                   <ChartContainer config={config} className="aspect-auto h-36 w-full">
-                    <BarChart margin={PINNED_BAR_MARGIN} data={seed}>
+                    <BarChart margin={PINNED_BAR_MARGIN} data={seed} accessibilityLayer={false}>
                       {xAxis(false)}
                       {yCount(true)}
                       <Bar dataKey="total" fill="none" isAnimationActive={false} />

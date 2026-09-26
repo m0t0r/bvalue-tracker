@@ -51,6 +51,15 @@ export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms).rep
 export const fmtDayLong = (ms: number, lang: Lang) => DAY_MONTH_LONG[lang].format(ms);
 /** Axis tick on a range of a few days, where a date alone repeats: "18 sept, 14:00" */
 export const fmtDayTime = (ms: number, lang: Lang) => DAY_MONTH_TIME[lang].format(ms);
+const TIME = formatters({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+/**
+ * An earlier instant for a sentence ("desde las 12:35"): its time, and its day ("18 sept") only
+ * when that was not the same Colombian day as `now`.
+ */
+export const fmtClock = (ms: number, lang: Lang, now = Date.now()) => ({
+  time: TIME[lang].format(ms),
+  day: Math.floor((ms + TZ_OFFSET_MS) / DAY) === Math.floor((now + TZ_OFFSET_MS) / DAY) ? null : fmtDay(ms, lang),
+});
 /** Sortable "2026-09-18 17:43" for the table, in Colombian time. */
 export const fmtIsoDateTime = (iso: string) =>
   new Date(Date.parse(iso) + TZ_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");

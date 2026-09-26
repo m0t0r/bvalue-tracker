@@ -63,120 +63,119 @@ export function FiltersCard({ mcAuto, value, onChange, hasMainshock }: Props) {
         <CardAction>
           {/* Asked of the page, like every other change here, so that clearing from the card and
               clearing from the scope bar are the same event and cannot drift apart. */}
-          <Button variant="ghost" size="sm" onClick={() => onChange(defaultFilters(zone.id))}>
+          <Button variant="ghost" size="sm-touch" onClick={() => onChange(defaultFilters(zone.id))}>
             <RotateCcwIcon data-icon="inline-start" />
             {t.reset}
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent>
-        <form onSubmit={(e) => e.preventDefault()}>
-          <FieldGroup className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <form.Field name="from">
-              {(field) => (
-                <Field data-invalid={!!formError}>
-                  <FieldLabel htmlFor={field.name}>{t.from}</FieldLabel>
-                  <Input
-                    id={field.name}
-                    type="date"
-                    min="2018-03-01"
-                    aria-invalid={!!formError}
-                    aria-describedby={formError ? "date-error" : undefined}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                  {formError ? <FieldError id="date-error">{String(formError)}</FieldError> : null}
-                </Field>
-              )}
-            </form.Field>
-            <form.Field name="to">
-              {(field) => (
-                <Field data-invalid={!!formError}>
-                  <FieldLabel htmlFor={field.name}>{t.to}</FieldLabel>
-                  <Input
-                    id={field.name}
-                    type="date"
-                    aria-invalid={!!formError}
-                    aria-describedby={formError ? "date-error" : undefined}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </Field>
-              )}
-            </form.Field>
-            <form.Field name="minMag">
-              {(field) => (
+        {/* No <form>: nothing here is submitted, every change applies as it is made. Inside a form Radix
+            adds a hidden input per slider and switch, which DevTools reports as fields with no label. */}
+        <FieldGroup className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <form.Field name="from">
+            {(field) => (
+              <Field data-invalid={!!formError}>
+                <FieldLabel htmlFor={field.name}>{t.from}</FieldLabel>
+                <Input
+                  id={field.name}
+                  type="date"
+                  min="2018-03-01"
+                  aria-invalid={!!formError}
+                  aria-describedby={formError ? "date-error" : undefined}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                {formError ? <FieldError id="date-error">{String(formError)}</FieldError> : null}
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="to">
+            {(field) => (
+              <Field data-invalid={!!formError}>
+                <FieldLabel htmlFor={field.name}>{t.to}</FieldLabel>
+                <Input
+                  id={field.name}
+                  type="date"
+                  aria-invalid={!!formError}
+                  aria-describedby={formError ? "date-error" : undefined}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="minMag">
+            {(field) => (
+              <Field>
+                <FieldLabel id="minMag-label">
+                  {t.minMag}: <span>M{field.state.value.toFixed(1)}</span>
+                </FieldLabel>
+                <Slider
+                  aria-labelledby="minMag-label"
+                  aria-valuetext={`M${field.state.value.toFixed(1)}`}
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  value={[field.state.value]}
+                  onValueChange={([v]) => field.handleChange(v ?? 0)}
+                />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="mc">
+            {(field) => {
+              const manual = field.state.value !== null;
+              const shown = field.state.value ?? mcAuto ?? 2.3;
+              return (
                 <Field>
-                  <FieldLabel id="minMag-label">
-                    {t.minMag}: <span>M{field.state.value.toFixed(1)}</span>
+                  <FieldLabel id="mc-label">
+                    {t.mcLabel}: <span>{shown.toFixed(1)}</span>
                   </FieldLabel>
                   <Slider
-                    aria-labelledby="minMag-label"
-                    aria-valuetext={`M${field.state.value.toFixed(1)}`}
-                    min={0}
-                    max={5}
+                    aria-labelledby="mc-label"
+                    aria-valuetext={shown.toFixed(1)}
+                    min={2}
+                    max={4}
                     step={0.1}
-                    value={[field.state.value]}
-                    onValueChange={([v]) => field.handleChange(v ?? 0)}
+                    value={[shown]}
+                    onValueChange={([v]) => field.handleChange(v ?? null)}
                   />
+                  <FieldDescription>
+                    {manual ? (
+                      <Button type="button" variant="link" size="inline" onClick={() => field.handleChange(null)}>
+                        {t.mcBackToAuto}
+                      </Button>
+                    ) : (
+                      t.mcAuto
+                    )}
+                  </FieldDescription>
+                  {/* Why the automatic Mc uses this method, beside the control it explains. */}
+                  <FieldDescription>{t.mcHelp}</FieldDescription>
                 </Field>
-              )}
-            </form.Field>
-            <form.Field name="mc">
-              {(field) => {
-                const manual = field.state.value !== null;
-                const shown = field.state.value ?? mcAuto ?? 2.3;
-                return (
-                  <Field>
-                    <FieldLabel id="mc-label">
-                      {t.mcLabel}: <span>{shown.toFixed(1)}</span>
-                    </FieldLabel>
-                    <Slider
-                      aria-labelledby="mc-label"
-                      aria-valuetext={shown.toFixed(1)}
-                      min={2}
-                      max={4}
-                      step={0.1}
-                      value={[shown]}
-                      onValueChange={([v]) => field.handleChange(v ?? null)}
-                    />
-                    <FieldDescription>
-                      {manual ? (
-                        <Button type="button" variant="link" size="inline" onClick={() => field.handleChange(null)}>
-                          {t.mcBackToAuto}
-                        </Button>
-                      ) : (
-                        t.mcAuto
-                      )}
-                    </FieldDescription>
-                  </Field>
-                );
-              }}
-            </form.Field>
-            <p className="max-w-[75ch] text-sm text-pretty text-muted-foreground sm:col-span-2 lg:col-span-4">
-              {t.mcHelp}
-            </p>
-            <form.Field name="manualOnly">
+              );
+            }}
+          </form.Field>
+          <form.Field name="manualOnly">
+            {(field) => (
+              <Field orientation="horizontal">
+                <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
+                <FieldLabel htmlFor={field.name}>{t.manualOnly}</FieldLabel>
+              </Field>
+            )}
+          </form.Field>
+          {/* With no mainshock detected there is nothing for this switch to exclude. */}
+          {!hasMainshock ? null : (
+            <form.Field name="excludeMainshock">
               {(field) => (
                 <Field orientation="horizontal">
                   <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
-                  <FieldLabel htmlFor={field.name}>{t.manualOnly}</FieldLabel>
+                  <FieldLabel htmlFor={field.name}>{t.excludeMainshock}</FieldLabel>
                 </Field>
               )}
             </form.Field>
-            {/* With no mainshock detected there is nothing for this switch to exclude. */}
-            {!hasMainshock ? null : (
-              <form.Field name="excludeMainshock">
-                {(field) => (
-                  <Field orientation="horizontal">
-                    <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
-                    <FieldLabel htmlFor={field.name}>{t.excludeMainshock}</FieldLabel>
-                  </Field>
-                )}
-              </form.Field>
-            )}
-          </FieldGroup>
-        </form>
+          )}
+        </FieldGroup>
       </CardContent>
     </Card>
   );

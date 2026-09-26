@@ -1,18 +1,14 @@
 import { memo, useMemo } from "react";
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis } from "recharts";
-import { DownloadIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { downloadCsv } from "@/lib/download";
 import { fmtDateTime, fmtDay, fmtDayTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { useZone } from "@/lib/zone";
 import { WINDOW_SIZE, type Stats } from "@/lib/stats";
+import { BTimeCsvButton } from "./b-over-time-csv";
 import { bTimeDescription } from "./b-over-time-description";
 import type { Cluster } from "../../../core/clusters";
-import { windowsToCsv } from "../../../core/csv";
 
 /** Below this span the axis labels carry the hour as well as the date. */
 const SHORT_SPAN_MS = 4 * 86_400_000;
@@ -34,7 +30,6 @@ export const BOverTimeChart = memo(function BOverTimeChart({
   mainshockTime: string | null;
 }) {
   const { t, lang } = useI18n();
-  const zone = useZone();
   const config = {
     b: { label: t.bTitle, color: "var(--chart-1)" },
     band: { label: t.band, color: "var(--chart-1)" },
@@ -61,21 +56,7 @@ export const BOverTimeChart = memo(function BOverTimeChart({
         <CardTitle>{t.bTimeTitle}</CardTitle>
         <CardDescription>{bTimeDescription(t, stats, magType, cluster)}</CardDescription>
         <CardAction>
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label={t.downloadBCsv}
-            disabled={stats.windows.length === 0}
-            onClick={() =>
-              downloadCsv(
-                `sgc-${zone.id}-b-windows${cluster !== null ? `-${cluster}` : ""}${magType !== null ? `-${magType}` : ""}.csv`,
-                windowsToCsv(stats.windows, lang),
-              )
-            }
-          >
-            <DownloadIcon data-icon="inline-start" />
-            {t.downloadCsv}
-          </Button>
+          <BTimeCsvButton stats={stats} magType={magType} cluster={cluster} />
         </CardAction>
       </CardHeader>
       {/* Centred at a fixed height, not stretched to the b card beside it: the y axis is pinned to
@@ -96,7 +77,8 @@ export const BOverTimeChart = memo(function BOverTimeChart({
           <ChartContainer config={config} className="aspect-auto h-80 w-full">
             <ComposedChart
               data={data}
-              margin={{ left: 0, right: 12, top: 16 }}
+              // The right margin holds the "b = 1" label, and the last date tick with it.
+              margin={{ left: 0, right: 40, top: 16 }}
               title={t.bTimeTitle}
               desc={t.bTimeAlt(data[0]!.b.toFixed(2), data[data.length - 1]!.b.toFixed(2))}
             >
@@ -141,12 +123,6 @@ export const BOverTimeChart = memo(function BOverTimeChart({
                   );
                 }}
               />
-              <ReferenceLine
-                y={1}
-                stroke="var(--muted-foreground)"
-                strokeDasharray="4 4"
-                label={{ value: "b = 1", position: "insideTopRight", fill: "var(--muted-foreground)", fontSize: 12 }}
-              />
               {mainshockTime !== null ? (
                 <ReferenceLine
                   x={Date.parse(mainshockTime)}
@@ -169,6 +145,24 @@ export const BOverTimeChart = memo(function BOverTimeChart({
                 isAnimationActive={false}
               />
               <Line dataKey="b" stroke="var(--color-b)" strokeWidth={2} dot={false} isAnimationActive={false} />
+              {/* After the band and the line, so the reference stays visible across them. Its label sits
+                  in the right margin, past the end of the plot, where no series can cross it: inside,
+                  it sat on the ±1σ band at 3.76:1 and the b line ran through it. The halo keeps it
+                  legible over a grid line. */}
+              <ReferenceLine
+                y={1}
+                stroke="var(--muted-foreground)"
+                strokeDasharray="4 4"
+                label={{
+                  value: "b = 1",
+                  position: "right",
+                  fill: "var(--muted-foreground)",
+                  fontSize: 12,
+                  stroke: "var(--card)",
+                  strokeWidth: 3,
+                  paintOrder: "stroke",
+                }}
+              />
             </ComposedChart>
           </ChartContainer>
         )}

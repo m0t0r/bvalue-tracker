@@ -8,7 +8,8 @@ import {
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef } from "react";
+import { DEPTH_STOPS, MapLegend, mapDescription } from "@/components/map-legend";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
 import { fmtDateTime, fmtRegion } from "@/lib/format";
@@ -20,14 +21,6 @@ import type { ZoneId } from "../../core/zones";
 // MapLibre 6 ships its worker as a separate module that imports a shared chunk,
 // so it must go through the bundler (`?worker&url`), not be copied as a plain asset.
 setWorkerUrl(workerUrl);
-
-// Sequential single hue, light → dark with depth. Kept as hex: MapLibre cannot parse the oklch tokens.
-const DEPTH_STOPS: [number, string][] = [
-  [0, "#9ec5f4"],
-  [40, "#5598e7"],
-  [80, "#256abf"],
-  [120, "#0d366b"],
-];
 
 /**
  * Relief shading per theme, hex for the same reason. On the dark basemap a shadow has nothing
@@ -46,6 +39,10 @@ const VIEW: Record<ZoneId, { center: [number, number]; zoom: number }> = {
   choco: { center: [-76.6, 4.75], zoom: 7.6 },
   tolima: { center: [-75.63, 3.85], zoom: 10 },
 };
+
+/** OpenFreeMap's attribution as its TileJSON gives it, with "Data from" in the page's language. */
+const openFreeMapCredit = (dataFrom: string) =>
+  `<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank">© OpenMapTiles</a> ${dataFrom} <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>`;
 
 const toGeoJson = (events: readonly StoredEvent[], mainshockId: string | null) => ({
   type: "FeatureCollection" as const,
@@ -77,7 +74,6 @@ export default function EventMap({
     const ring = getComputedStyle(document.documentElement).getPropertyValue("--chart-2").trim();
     const m = new MapLibreMap({
       container: el.current!,
-      style: `https://tiles.openfreemap.org/styles/${dark ? "dark" : "positron"}`,
       ...VIEW[zone.id],
       attributionControl: { compact: true },
       cooperativeGestures: true,
@@ -96,6 +92,21 @@ export default function EventMap({
     // an empty pixel and keep the console readable for real errors.
     m.on("styleimagemissing", (e) => {
       if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+    });
+    // OpenFreeMap credits OpenStreetMap as "Data from …" in English whatever the page's language. The
+    // credit comes from the tiles' TileJSON, which the style only points at, so it cannot be edited
+    // on the way in; an attribution written into the style's source wins over the TileJSON's
+    // (MapLibre's `loadTileJson`). This is OpenFreeMap's own credit, links and all, with that one
+    // phrase in the page's language.
+    m.setStyle(`https://tiles.openfreemap.org/styles/${dark ? "dark" : "positron"}`, {
+      transformStyle: (_, next) => {
+        const tiles = next.sources.openmaptiles;
+        if (!tiles || tiles.type !== "vector") return next;
+        return {
+          ...next,
+          sources: { ...next.sources, openmaptiles: { ...tiles, attribution: openFreeMapCredit(t.mapDataFrom) } },
+        };
+      },
     });
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
     const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 10 });
@@ -198,7 +209,7 @@ export default function EventMap({
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.mapTitle}</CardTitle>
-        <CardDescription>{mainshockId === null ? t.mapDesc : `${t.mapDesc} ${t.mapRing}`}</CardDescription>
+        <CardDescription>{mapDescription(t, mainshockId)}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* The canvas is a keyboard stop (arrows pan, +/- zoom); its own outline is clipped, so the frame shows focus. */}
@@ -206,29 +217,8 @@ export default function EventMap({
           ref={el}
           className="h-96 w-full overflow-hidden rounded-lg border has-[canvas:focus-visible]:outline-2 has-[canvas:focus-visible]:outline-offset-2 has-[canvas:focus-visible]:outline-ring"
         />
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="whitespace-nowrap">{t.depth}</span>
-            <span>0</span>
-            <span
-              className="h-2 w-20 shrink-0 rounded-full sm:w-28"
-              // oxlint-disable-next-line shadcn/no-inline-styles -- Drawn from the map's own hex stops, which MapLibre needs as hex.
-              style={{ background: `linear-gradient(to right, ${DEPTH_STOPS.map(([, c]) => c).join(",")})` }}
-            />
-            <span>120+</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {[2, 3, 4, 5].map((mag) => (
-              <span key={mag} className="flex items-center gap-1">
-                <span
-                  className="inline-block size-(--dot) rounded-full bg-muted-foreground"
-                  style={{ "--dot": `${mag * 3.2}px` } as CSSProperties}
-                />
-                M{mag}
-              </span>
-            ))}
-          </div>
-        </div>
+        {/* Shared with the placeholder (`MapPlaceholder`), so the card keeps its height when the map lands. */}
+        <MapLegend />
       </CardContent>
     </Card>
   );

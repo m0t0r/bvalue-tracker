@@ -57,7 +57,12 @@ describe("staleSince", () => {
   });
   it("gives the oldest data on screen when several are behind", () => {
     const behind = { ...ok, status: "error" as const };
-    expect(staleSince([{ ...behind, dataUpdatedAt: 3_000 }, { ...behind, dataUpdatedAt: 2_000 }])).toBe(2_000);
+    expect(
+      staleSince([
+        { ...behind, dataUpdatedAt: 3_000 },
+        { ...behind, dataUpdatedAt: 2_000 },
+      ]),
+    ).toBe(2_000);
   });
   // A catalogue the page never got is the load error's, not this notice's.
   it("ignores a query with no data", () => {

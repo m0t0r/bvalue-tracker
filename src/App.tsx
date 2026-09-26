@@ -2,13 +2,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
 import { lazy, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
+import { BTimeCsvButton } from "@/components/charts/b-over-time-csv";
 import { bTimeDescription } from "@/components/charts/b-over-time-description";
+import { fmdDescription } from "@/components/charts/fmd-description";
+import { MagnitudeTimePlaceholder } from "@/components/charts/magnitude-time-legend";
 import { ClustersCard } from "@/components/clusters-card";
 import { Deferred } from "@/components/deferred";
 import { EventsTable } from "@/components/events-table";
 import { FilterScope } from "@/components/filter-scope";
 import { FiltersCard } from "@/components/filters";
 import { LoadError } from "@/components/load-error";
+import { MapPlaceholder, mapDescription } from "@/components/map-legend";
 import { StatusBar } from "@/components/status-bar";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -19,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEvents, getStatus } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { loadError, loadFailed, retrying } from "@/lib/load-failed";
+import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
 import { scopeChips, useScope } from "@/lib/scope";
 import { toggleTheme, useIsDark } from "@/lib/theme";
 import { ZoneProvider, useZoneState } from "@/lib/zone";
@@ -89,11 +93,7 @@ export function App() {
                 aria-label={dark ? t.themeToLight : t.themeToDark}
                 onClick={toggleTheme}
               >
-                {dark ? (
-                  <SunIcon className="size-4 pointer-coarse:size-5" />
-                ) : (
-                  <MoonIcon className="size-4 pointer-coarse:size-5" />
-                )}
+                {dark ? <SunIcon /> : <MoonIcon />}
               </Button>
             </div>
           </div>
@@ -101,8 +101,10 @@ export function App() {
           <p className="text-muted-foreground text-pretty">{copy.subtitle}</p>
         </header>
 
+        {/* Out of the tab order: the panel's first content is focusable (the refresh button, or the
+            load error's retry), so a stop on the panel itself would be one press that does nothing. */}
         {ZONE_IDS.map((z) => (
-          <TabsContent key={z} value={z} className="flex flex-col gap-6">
+          <TabsContent key={z} value={z} tabIndex={-1} className="flex flex-col gap-6">
             <ZoneProvider value={ZONES[z]}>
               <ZonePage zone={z} />
             </ZoneProvider>
@@ -154,9 +156,12 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   // so the stats cannot re-wrap above content that is already on screen (`StatusBar`). A status
   // request that failed once is not waited for through its retries: the page goes ahead without it.
   // Only a catalogue the page never got is a failed load. A background refetch that fails keeps
-  // the dashboard as it is, with no alert: "Última consulta al SGC" still dates it, and the next
-  // refetch tries again. /insights follows the same rule (`loadFailed`).
+  // the dashboard as it is, with no alert, and the next refetch tries again; the line under the
+  // refresh button says since when the figures are (`staleSince`), instead of promising updates that
+  // are not arriving. /insights follows the same rule (`loadFailed`). Beside the load error there are
+  // no figures to date.
   const catalogueFailed = loadFailed(events);
+  const stale = catalogueFailed ? null : staleSince([status, events]);
   const settled = (!events.isPending || catalogueFailed) && (!status.isPending || status.failureCount > 0);
 
   return (
@@ -170,6 +175,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           shown={events.data ? view.shown.length : null}
           mainshock={events.data ? view.mainshock : null}
           catalogueFailed={catalogueFailed}
+          staleSince={stale}
         />
         {settled && events.data ? (
           <FilterScope
@@ -211,6 +217,9 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                   <Deferred
                     title={t.bTimeTitle}
                     description={bTimeDescription(t, deferred.stats, deferred.magType, deferred.cluster)}
+                    action={
+                      <BTimeCsvButton stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
+                    }
                   >
                     <BOverTimeChart
                       stats={deferred.stats}
@@ -248,15 +257,26 @@ function ZonePage({ zone }: { zone: ZoneId }) {
             ) : (
               <>
                 <div className="enter grid gap-6 lg:grid-cols-2" style={{ "--i": 1 } as CSSProperties}>
-                  <Deferred title={t.fmdTitle}>
+                  <Deferred
+                    title={t.fmdTitle}
+                    description={fmdDescription(t, deferred.stats, deferred.magType, deferred.cluster)}
+                  >
                     <FmdChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
                   </Deferred>
-                  <Deferred title={t.mapTitle} height="map">
+                  <Deferred
+                    title={t.mapTitle}
+                    description={mapDescription(t, mainshock)}
+                    placeholder={<MapPlaceholder />}
+                  >
                     <EventMap events={deferred.shown} mainshockId={mainshock} />
                   </Deferred>
                 </div>
                 <div className="enter" style={{ "--i": 2 } as CSSProperties}>
-                  <Deferred title={t.magTimeTitle}>
+                  <Deferred
+                    title={t.magTimeTitle}
+                    description={t.magTimeDesc}
+                    placeholder={<MagnitudeTimePlaceholder />}
+                  >
                     <MagnitudeTimeChart events={deferred.shown} mainshockId={mainshock} />
                   </Deferred>
                 </div>
@@ -268,7 +288,11 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           </>
         ) : !settled ? (
           // At least a viewport tall, so nothing below is on screen to be pushed away when content arrives.
-          <Skeleton className="min-h-svh w-full" />
+          // The status role says so to a screen reader, which the skeleton alone leaves in silence.
+          <div role="status">
+            <span className="sr-only">{t.loading}</span>
+            <Skeleton className="min-h-svh w-full" />
+          </div>
         ) : null}
 
         {/* How to read figures the page has not got: a failed load shows its error only. */}
