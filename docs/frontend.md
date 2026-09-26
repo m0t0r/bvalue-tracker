@@ -425,6 +425,8 @@ full-screen viewer with five views to jump to.
 - The explanation comes first: the reader is not a specialist. Layers are `Switch`es named for their on
   state; the views and the exaggeration are `ToggleGroup`s. The hint names the reader's input (a phone
   pinches, a mouse scrolls). The views row fades at its edge on a phone, where it is cut mid-word.
+  The viewer's header carries the language switch (`LanguageButton`, shared with both pages' headers):
+  the page's own switch is under the viewer, out of reach while it is open.
 - **Checked at 390 px and 1440 px, both themes, both languages** (2026-09-25): the side-length label
   ends at the block's edge (a centred one ran off a phone's screen), and the exaggeration note sits top
   left, clear of the credit. **Every label but the pins is clamped inside the block** (its width read
@@ -854,7 +856,8 @@ a pointer to this section. What they ask, and how this page answers them:
   - `Table` takes `size="sm"`: 4 px cell sides, for the events table.
   - `Toggle`/`ToggleGroup` size `sm-touch` grows like `Button`'s. `Toggle` shares `Button`'s
     transition (named properties including `scale`, 150 ms `--ease-out`), press scale and
-    `ring-3 ring-ring`. `ToggleGroup`'s gap is a class per
+    `ring-3 ring-ring`. Pressed, a toggle is the primary colour (black, white in dark mode), like
+    `Button`'s `default`, not shadcn's `muted` (2026-09-26). `ToggleGroup`'s gap is a class per
     `spacing` (0–2), not shadcn's inline `--gap`, which `no-inline-styles` rejects.
   - `TechnicalDetail` takes `size` rather than a `className`; `Deferred` takes a `placeholder` node
     rather than a class. A class string built at runtime cannot be checked.

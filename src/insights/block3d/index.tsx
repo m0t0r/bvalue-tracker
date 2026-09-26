@@ -8,6 +8,7 @@ import { InfoIcon, PauseIcon, PlayIcon, SlidersHorizontalIcon, SquareIcon, XIcon
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { VisuallyHidden } from "radix-ui";
+import { LanguageButton } from "@/components/language-button";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -352,6 +353,8 @@ function Viewer({
             <span className="pointer-coarse:hidden">{c.hint.pointer}</span>
           </p>
         </div>
+        {/* The page's own switch is under the viewer, out of reach while it is open. */}
+        <LanguageButton />
         <Button ref={close} size="icon-sm-touch" variant="ghost" aria-label={c.close} onClick={onClose}>
           <XIcon />
         </Button>
