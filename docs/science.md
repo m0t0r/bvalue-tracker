@@ -339,6 +339,37 @@ the reader's own questions). Everything above still applies to it; this section 
     "above/inside/close" in words, on the story's cuts.
   - **The key names the snapped depths** (`commonDepths`, at least 20 events at one exact depth; 60 at
     42.9 km, 54 at 39.9 and 32 at 45.9 on the fixture), because in 3D they look like layers.
+  - **The sea is setting, drawn from data where there is data, and says which is which** (from
+    2026-09-26; the key's last entry, "El mar"). It has nothing to do with the earthquakes, and the key
+    says so: the M7.4 was ~100–125 km deep, under land, and made no tsunami, so the waves must never
+    read as its doing.
+    - *From the forecast*: each swell's direction, its period, and its height relative to the others,
+      and whitecaps only when the wind's waves stand 0.3 m or more (full at 1 m, `WHITECAPS_*`). The
+      source is Open-Meteo's marine forecast from Météo-France's wave model (MFWAM) for one point in
+      the open sea, 4.3° N, 78.3° W, **a model's forecast, not a measurement**, which the key says;
+      the hour drawn is the one the reader's clock is in, stated in Colombian time.
+    - *Invented, and stated*: the size. Real swells here are a few metres high and a few hundred
+      metres long, under a thousandth of a pixel on a 500 km block; each is drawn at its deep-water
+      length for its period (L = gT²/2π) **×75**, and its height **×400**, one factor for every train
+      (`WAVE_LENGTH_SCALE`, `WAVE_HEIGHT_SCALE`), both in the key. No wave is drawn shorter than
+      2.5 km, so one under about 5 s (`SHORT_WAVE_PERIOD_S`, 4.6 s) is drawn longer than 75×, and the
+      wind's waves are only texture, with no height; the key says both (a first version said only
+      "the wind's, longer still", which was false for a long wind sea and for a short swell, and the
+      captured forecast has a 3.5 s swell). The period is real, so each crest takes as long to pass
+      as a real one.
+    - *Also invented, not stated*: where each crest is (no forecast gives that), a ±14° fan around
+      each swell's direction, and one point's sea spread over the whole block: near the coast real
+      waves bend to face the shore, and the drawing does not.
+    - *The water's colour is measured*: ESA's Ocean Colour CCI v6 chlorophyll, the median month of
+      2021–2025 per ~4.6 km cell (`sea-colour.json`, `scripts/insights-sea-colour.ts`), through a ramp
+      anchored on this box's own measured reflectance (open sea `#004679` at 0.22 mg/m³, shelf
+      `#255466` at 0.55, nearshore `#4e7065` at 2.3) and, at 7, the Forel-Ule scale's class 12, the
+      delta front's class, darkened by the ratio that turns class 6 into the measured nearshore colour
+      (`SEA_COLOUR_STOPS`). Chlorophyll stands for colour: near this coast it rises with river runoff
+      and sediment as well as plankton, and the key names both. The satellite masks the first 5–15 km
+      off the river mouths, which take their nearest measured cell; the water there is probably
+      browner than drawn. Checked 2026-09-26: open sea 0.21–0.23 mg/m³, shelf 0.37–0.71, nearshore
+      ~2.3, the San Juan's delta front 5–9 (2025, per-pixel median of monthly values).
 - **"¿Qué tan grande?": the M7.4 against past Colombian earthquakes** (story step 2, from 2026-09-25;
   it replaced "Un solo sismo liberó casi toda la energía", the M7.4 against its own aftershocks, at the
   owner's request: readers measure it against the earthquakes they remember, Armenia 1999 and 1995).

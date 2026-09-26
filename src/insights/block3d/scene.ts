@@ -8,6 +8,7 @@
 import { Camera, Geometry, Mesh, Orbit, Program, Renderer, Sphere, Texture, Transform, Vec3 } from "ogl";
 import { GROUND, RELIEF, RUPTURE } from "../block";
 import type { Insights } from "../claims";
+import type { SeaHour } from "../../../worker/api-types";
 import { SLAB2 } from "../plate";
 import { TOWNS } from "../region";
 import {
@@ -18,16 +19,20 @@ import {
   SOUTH,
   WEST,
   blockModel,
+  drawnSea,
   easeInOut,
   eventRadius,
   framing,
   groundKmAt,
   landScale,
   pinDistances,
+  seaColour,
   mapUv,
   x,
   z,
   type BlockEvent,
+  type DrawnSea,
+  type DrawnTrain,
   type HeightGrid,
   type Preset,
   type View,
@@ -35,6 +40,7 @@ import {
 import basemapDark from "./basemap-dark.webp?url";
 import basemapLight from "./basemap-light.webp?url";
 import { loadRelief } from "./relief";
+import SEA_COLOUR from "./sea-colour.json";
 
 export interface SceneText {
   trench: string;
@@ -59,6 +65,11 @@ export interface SceneText {
    * turning preview, which the reader does not handle).
    */
   distance: { pin: (name: string, km: number) => string; label: (km: number) => string } | null;
+  /**
+   * The compass's letters, north, east, south and west, or null for none (the preview, whose pause
+   * button has that corner).
+   */
+  compass: readonly [string, string, string, string] | null;
 }
 
 export interface SceneHandle {
@@ -66,8 +77,12 @@ export interface SceneHandle {
   setView(v: View): void;
   /** A newer catalogue: the events are redrawn in place, the camera stays where it is. */
   setData(data: Insights): void;
+  /** The hour of the sea-state forecast to draw, or null for the usual sea. */
+  setSea(hour: SeaHour | null): void;
   goTo(p: Preset, animate: boolean): void;
   setAutoRotate(on: boolean): void;
+  /** Whether the sea's waves move: still while the reader has paused the preview, or under reduced motion. */
+  setWaves(moving: boolean): void;
   /** Called when the reader starts turning the block by hand. */
   onInteract(cb: () => void): void;
   dispose(): void;
@@ -132,6 +147,13 @@ const LABEL = "pointer-events-none rounded bg-background/80 px-1 text-xs leading
  * 2.1–2.8:1 in light mode, and even over `LABEL`'s backing 3.7–4.2:1.
  */
 const LABEL_QUIET = "pointer-events-none whitespace-nowrap text-xs leading-tight text-foreground";
+/**
+ * The trench's label, over the moving sea: near-white in a dark halo (`text-on-sea`, `text-shadow-sea`
+ * in `index.css`, with the measurements). The sea runs from dark blue to a glint's white behind it, and
+ * in `text-foreground` it was 3.0:1 at the default view.
+ */
+const LABEL_ON_SEA =
+  "pointer-events-none whitespace-nowrap text-xs leading-tight font-medium text-on-sea text-shadow-sea";
 /** Below this block width the plate's and the rupture's labels drop the model's name. */
 const NARROW_PX = 480;
 /** How close a label may come to the block's edge, px. */
@@ -148,6 +170,56 @@ function labelElement(text: string, className: string) {
  * A map pin whose tip is the town: the element has no size, so centring it on the point puts its
  * origin there, and the pin and its name hang above it. The SVG is fixed markup; the name is text.
  */
+/** Where the compass's letters stand from its centre, in its SVG's units (a 56-unit square, 1 unit a px). */
+const COMPASS_LETTER_R = 17.5;
+
+/** The rose's ticks: every 45°, longer at the four cardinal points; drawn once, turned with the rose. */
+const COMPASS_TICKS = Array.from({ length: 8 }, (_, k) => {
+  const a = (k * Math.PI) / 4;
+  const [r0, r1] = k % 2 === 0 ? [22.5, 26] : [24.2, 26];
+  const [s, c] = [Math.sin(a), -Math.cos(a)];
+  return `<line x1="${(s * r0).toFixed(2)}" y1="${(c * r0).toFixed(2)}" x2="${(s * r1).toFixed(2)}" y2="${(c * r1).toFixed(2)}" class="${k % 2 === 0 ? "stroke-foreground" : "stroke-muted-foreground"}" stroke-width="${k % 2 === 0 ? 1.4 : 1}" stroke-linecap="round"/>`;
+}).join("");
+
+/**
+ * The viewer's compass rose, top right. The rose turns so its north points where north lies on screen:
+ * ticks every 45°, a slim needle dark to the north, and the four cardinal letters on their bearings,
+ * each kept upright. Decorative for a screen reader: the views and the key say where things are. Fixed
+ * markup; the letters are text.
+ */
+function compassElement(letters: readonly [string, string, string, string]) {
+  const el = document.createElement("div");
+  el.setAttribute("aria-hidden", "true");
+  el.className =
+    "pointer-events-none absolute top-2 right-2 size-14 rounded-full border bg-background/85 text-foreground shadow-sm";
+  el.innerHTML = `<svg viewBox="-28 -28 56 56" class="size-full"><g>${COMPASS_TICKS}<path d="M0 -12 L2.6 0 L-2.6 0 Z" class="fill-foreground"/><path d="M0 12 L2.6 0 L-2.6 0 Z" class="fill-muted-foreground"/><circle r="1.4" class="fill-background stroke-foreground" stroke-width="0.8"/></g></svg>`;
+  const svg = el.querySelector("svg")!;
+  const rose = el.querySelector("g")!;
+  const marks = letters.map((letter, k) => {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("dominant-baseline", "central");
+    t.setAttribute(
+      "class",
+      k === 0 ? "fill-foreground text-2xs font-bold" : "fill-muted-foreground text-2xs font-medium",
+    );
+    t.textContent = letter;
+    svg.append(t);
+    return t;
+  });
+  /** Turns the rose so north points `angle` radians clockwise from up. */
+  const point = (angle: number) => {
+    rose.setAttribute("transform", `rotate(${(angle * 180) / Math.PI})`);
+    marks.forEach((t, k) => {
+      const a = angle + (k * Math.PI) / 2;
+      t.setAttribute("x", (Math.sin(a) * COMPASS_LETTER_R).toFixed(2));
+      t.setAttribute("y", (-Math.cos(a) * COMPASS_LETTER_R).toFixed(2));
+    });
+  };
+  point(0);
+  return { el, point };
+}
+
 function pinElement(name: string, home: boolean, pressable: string | null = null) {
   const el: HTMLElement = document.createElement(pressable ? "button" : "div");
   el.className = pressable
@@ -262,6 +334,193 @@ void main() {
   fragColor = vec4(toSrgb(c.rgb), c.a * uOpacity);
 }`;
 
+// --- The sea's surface --------------------------------------------------------------------------
+// x runs east, z south. Every length is scene units (km). Three wave trains move it, each as the daily
+// sea-state job stored it (`drawnSea` in `shared.ts` turns Open-Meteo's metres and seconds into these):
+// the main swell, a second swell and the wind's own waves. Each is a sum of "exponential sines" (after
+// Acerola's water, github.com/GarrettGunnell/Water, MIT): each octave is a·e^(sin x − 1), sharp crests
+// and broad troughs, and each bends the next one's position (domain warp), so the short waves bunch on
+// the long ones.
+
+const WAVES = /* glsl */ `
+uniform float uTime;
+// Each train: the direction it runs towards (x east, z south), its drawn wavelength (km), its period (s).
+uniform vec4 uSwell;
+uniform vec4 uSwell2;
+uniform vec4 uChop;
+// Each train's drawn height (km), which moves the surface, and how strongly it is shaded; 0 when absent.
+uniform vec3 uHeight;
+uniform vec3 uSteep;
+// One train around its direction: its height (0 trough to 1 crest) and its gradient, per unit of
+// shading. \`px\`: km per pixel; an octave shorter than ~4 px fades out, or it glitters as noise.
+// \`lost\` gathers how much slope was faded, for the glint to widen by.
+float train(vec2 p, float t, vec4 w, float spread, int octaves, float px, out vec2 grad, inout float lost) {
+  float f0 = 6.2831853 / w.z;
+  float omega = 6.2831853 / w.w;
+  float f = f0;
+  float a = 1.0;
+  float seed = 0.0;
+  float h = 0.0, sum = 0.0, faded = 0.0;
+  grad = vec2(0.0);
+  for (int i = 0; i < 8; i++) {
+    if (i >= octaves) break;
+    float turn = spread * sin(seed);
+    vec2 d = -vec2(w.x * cos(turn) - w.y * sin(turn), w.x * sin(turn) + w.y * cos(turn));
+    // In deep water a wave k times shorter comes √k times as often.
+    float x = dot(d, p) * f + t * omega * sqrt(f / f0);
+    float e = a * exp(sin(x) - 1.0);
+    float dx = e * cos(x);
+    // px·f is the phase one pixel spans: 2π/6 is six pixels to a wave, 2π/3 three.
+    float keep = 1.0 - smoothstep(1.05, 2.1, px * f);
+    h += e;
+    grad += keep * f * d * dx;
+    faded += (1.0 - keep) * a * f;
+    p -= d * dx * a * 0.19 / f;
+    sum += a;
+    f *= 1.18;
+    a *= 0.82;
+    seed += 1253.2131;
+  }
+  grad /= sum;
+  lost += faded / sum;
+  return h / sum;
+}`;
+
+/** The water program's wave uniforms for a drawn sea. */
+function seaUniforms(s: DrawnSea) {
+  const train = (t: DrawnTrain) => ({ value: [t.dir[0], t.dir[1], t.lengthKm, t.periodS] });
+  return {
+    uSwell: train(s.swell),
+    uSwell2: train(s.swell2),
+    uChop: train(s.chop),
+    uHeight: { value: [s.swell.heightKm, s.swell2.heightKm, 0] },
+    uSteep: { value: [s.swell.steep, s.swell2.steep, s.chop.steep] },
+    uWhitecaps: { value: s.whitecaps },
+  };
+}
+
+/** Where the water's sun stands, seen from the camera: over the open Pacific, west of the shelf (x, z). */
+const SEA_GLINT = [x(-78.3), z(4.3)] as const;
+/** How high the water's sun stands, radians: a late-afternoon sun. */
+const SUN_ELEVATION = (20 * Math.PI) / 180;
+
+const WATER_VERTEX = /* glsl */ `#version 300 es
+in vec3 position;
+uniform mat4 viewMatrix;
+uniform mat4 projectionMatrix;
+out vec3 vWorld;
+out vec2 vBase;
+${WAVES}
+void main() {
+  vec2 p = position.xz;
+  vec2 g;
+  float lost = 0.0;
+  // Only the swells move the surface; the wind's waves are too short for the mesh and only shade it.
+  float h = uHeight.x * train(p, uTime, uSwell, 0.25, 4, 0.0, g, lost) + uHeight.y * train(p, uTime, uSwell2, 0.3, 4, 0.0, g, lost);
+  vBase = p;
+  vWorld = vec3(p.x, h, p.y);
+  gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
+}`;
+
+const WATER_FRAGMENT = /* glsl */ `#version 300 es
+precision highp float;
+in vec3 vWorld;
+in vec2 vBase;
+uniform vec3 cameraPosition;
+uniform sampler2D tHeight;
+uniform vec4 uBox; // west x, south z, width, length
+uniform vec2 uTexels;
+uniform vec3 uSun;
+// The water's own colour (sRGB, one texel a ~4.6 km cell), where its grid lies, and a theme's gain on it.
+uniform sampler2D tColour;
+uniform vec4 uColourBox;
+uniform vec2 uColourTexels;
+uniform float uColourGain;
+uniform vec3 uScatter;
+uniform vec3 uSkyLow;
+uniform vec3 uSkyHigh;
+uniform vec3 uFoam;
+// How much the wind's waves break into whitecaps, 0 to 1, from their height.
+uniform float uWhitecaps;
+out vec4 fragColor;
+${SRGB_OUT}
+${WAVES}
+float elevationKm(vec2 p) {
+  vec2 uv = vec2((p.x - uBox.x) / uBox.z, (uBox.y - p.y) / uBox.w);
+  uv = (uv * (uTexels - 1.0) + 0.5) / uTexels;
+  float s = texture(tHeight, uv).r * (255.0 / 127.5) - 1.0;
+  return sign(s) * s * s * 6.0;
+}
+float hash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float noise(vec2 x) {
+  vec2 i = floor(x);
+  vec2 f = fract(x);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+void main() {
+  float e = elevationKm(vBase);
+  if (e > 0.004) discard;
+  float depth = max(0.0, -e);
+  float px = length(fwidth(vBase));
+  vec2 g1, g2, g3;
+  float lost = 0.0;
+  float h1 = train(vBase, uTime, uSwell, 0.25, 6, px, g1, lost);
+  float h2 = train(vBase, uTime, uSwell2, 0.3, 6, px, g2, lost);
+  float h3 = train(vBase, uTime, uChop, 0.9, 8, px, g3, lost);
+  vec2 g = uSteep.x * g1 + uSteep.y * g2 + uSteep.z * g3;
+  // How high the swells stand here, 0 trough to 1 crest, for the light through their crests.
+  float hn = (uHeight.x * h1 + uHeight.y * h2) / max(uHeight.x + uHeight.y, 1e-4);
+  vec3 n = normalize(vec3(-g.x, 1.0, -g.y));
+  vec3 v = normalize(cameraPosition - vWorld);
+  vec3 l = uSun;
+  float ndv = max(dot(n, v), 0.0);
+  // Water's Fresnel (Schlick, IOR 1.33): a mirror at a low angle, its own colour looking down.
+  // Capped, and the glint dimmed, when looking along the sea: from the block's usual distance the whole
+  // Pacific is a grazing view, and both turned it white.
+  float fres = min(0.45, 0.02 + 0.98 * pow(1.0 - ndv, 5.0));
+  float glare = smoothstep(0.08, 0.4, ndv);
+  vec3 r = reflect(-v, n);
+  vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.0, 0.35, r.y));
+  // Its own colour, from what satellites see there: clear blue offshore, grey-green near the rivers.
+  vec2 cuv = vec2((vBase.x - uColourBox.x) / uColourBox.z, (uColourBox.y - vBase.y) / uColourBox.w);
+  cuv = (cuv * (uColourTexels - 1.0) + 0.5) / uColourTexels;
+  vec3 body = toLinear(texture(tColour, cuv).rgb) * uColourGain;
+  // Lit by the low sun: the faces turned to it lighter, the backs darker, which is what shows the swell
+  // from above, where the glint does not reach.
+  body *= 0.4 + 1.1 * max(dot(n, l), 0.0);
+  // Light through the crests, looking towards the sun (Atlas, GDC 2019).
+  float toSun = pow(max(dot(l, -v), 0.0), 4.0);
+  float scatter = 1.4 * hn * toSun * pow(0.5 - 0.5 * dot(l, n), 3.0) + 0.25 * pow(ndv, 2.0) * hn;
+  body += uScatter * scatter;
+  // The glint: sharp where the ripples show, wider and dimmer where they were faded.
+  vec3 hv = normalize(l + v);
+  float nh = max(dot(n, hv), 0.0);
+  // Far off, where the ripples are faded, the glint fades with them: widened instead, it covered the sea.
+  float sharp = 400.0 / (1.0 + lost);
+  float near = 1.0 - smoothstep(0.25, 0.8, px);
+  float spec = glare * near * (pow(nh, sharp) * 1.8 * min(1.0, sharp / 150.0) + pow(nh, 50.0) * 0.18);
+  // Whitecaps where the wind's waves crest, as much as their height makes them break, and fewer where a
+  // pixel covers more sea: far off, they merged into white patches. A swell alone does not break. And a
+  // thin line where the sea meets the coast.
+  float crest = uWhitecaps * smoothstep(0.72, 0.92, h3) * (1.0 - smoothstep(0.3, 1.0, px));
+  // Only at the waterline: off the San Juan's delta the shelf stays shallow for kilometres, and a band by
+  // depth (60 m) spread a white smear over its green water.
+  float shore = 0.6 * (1.0 - smoothstep(0.0, 0.012, depth));
+  float grain = 0.55 + 0.45 * noise(vBase * 1.3 + uTime * 0.4);
+  float foam = clamp(max(crest * 0.7, shore * 0.8) * grain, 0.0, 1.0);
+  vec3 col = mix(body, sky, fres) + spec;
+  col = mix(col, uFoam, foam);
+  // smoothstep's first edge below its second: the other way round is undefined in GLSL ES 3.00.
+  float edge = 1.0 - smoothstep(-0.004, 0.004, e);
+  // Opaque: the surface, not the water under it. Only the coast's edge blends into the land.
+  fragColor = vec4(toSrgb(col), edge);
+}`;
+
 // --- Geometry helpers ---------------------------------------------------------------------------
 
 function normals(pos: Float32Array, index: Uint16Array | Uint32Array) {
@@ -369,6 +628,8 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   const overlay = document.createElement("div");
   overlay.className = "pointer-events-none absolute inset-0 overflow-hidden";
   container.append(overlay);
+  const compass = text.compass === null ? null : compassElement(text.compass);
+  if (compass) overlay.append(compass.el);
 
   const scene = new Transform();
   const camera = new Camera(gl, { fov: 32, near: 5, far: 6000 });
@@ -471,12 +732,130 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     (relief) => {
       if (disposed) return;
       heights = { ...RELIEF, elevationM: relief.elevationM };
+      setHeights(heights);
       const old = ground.geometry;
       ground.geometry = groundGeometry(heights);
       old.remove();
     },
     () => {},
   );
+
+  // --- The sea's surface (prototype): drawn over the sea floor, only where the ground is below 0 --
+  // The ground's heights as a texture the water reads to find the coast and how deep it is: one byte,
+  // the square root of the height's share of 6 km either side of 128, so the coast gets the finest steps.
+  const heightTexture = (h: HeightGrid) => {
+    const px = new Uint8Array(h.nx * h.ny * 4);
+    for (let k = 0; k < h.nx * h.ny; k++) {
+      const e = h.elevationM[k]! / 6000;
+      const s = Math.sign(e) * Math.sqrt(Math.min(1, Math.abs(e)));
+      px[k * 4] = Math.round(127.5 + 127.5 * s);
+    }
+    return new Texture(gl, {
+      image: px,
+      width: h.nx,
+      height: h.ny,
+      generateMipmaps: false,
+      flipY: false,
+      minFilter: gl.LINEAR,
+      magFilter: gl.LINEAR,
+    });
+  };
+  const heightBox = (h: HeightGrid) => {
+    const [w, s] = [x(h.lon0), z(h.lat0)];
+    return [w, s, x(h.lon0 + (h.nx - 1) * h.step) - w, s - z(h.lat0 + (h.ny - 1) * h.step)];
+  };
+  // The water's own colour, cell by cell, from what satellites see (`seaColour` in `shared.ts`): clear
+  // blue offshore, grey-green where the rivers meet the sea. One RGBA texel per ~4.6 km cell, sRGB.
+  const colourTexture = (() => {
+    const { nx, ny, log10Chl } = SEA_COLOUR;
+    const px = new Uint8Array(nx * ny * 4);
+    log10Chl.forEach((v, k) => {
+      const [r, g, b] = seaColour(v);
+      px.set([r * 255, g * 255, b * 255, 255], k * 4);
+    });
+    return new Texture(gl, {
+      image: px,
+      width: nx,
+      height: ny,
+      generateMipmaps: false,
+      flipY: false,
+      minFilter: gl.LINEAR,
+      magFilter: gl.LINEAR,
+    });
+  })();
+  const seaColours = pal.dark
+    ? {
+        // The same water, dimmed like the rest of the dark block.
+        uColourGain: 0.6,
+        uScatter: hsl(0.47, 0.6, 0.35),
+        uSkyLow: hsl(0.6, 0.25, 0.25),
+        uSkyHigh: hsl(0.62, 0.35, 0.15),
+        uFoam: hsl(0.55, 0.15, 0.75),
+      }
+    : {
+        uColourGain: 1,
+        uScatter: hsl(0.47, 0.6, 0.55),
+        // Its own sky, pale at the horizon and bluer above: the page's white made the far sea white.
+        uSkyLow: hsl(0.57, 0.4, 0.78),
+        uSkyHigh: hsl(0.59, 0.5, 0.62),
+        uFoam: hsl(0.55, 0.2, 0.97),
+      };
+  const waterProgram = new Program(gl, {
+    vertex: WATER_VERTEX,
+    fragment: WATER_FRAGMENT,
+    transparent: true,
+    cullFace: false,
+    depthWrite: false,
+    uniforms: {
+      uTime: { value: 0 },
+      ...seaUniforms(drawnSea(null)),
+      tHeight: { value: heightTexture(heights) },
+      uBox: { value: heightBox(heights) },
+      uTexels: { value: [heights.nx, heights.ny] },
+      tColour: { value: colourTexture },
+      uColourBox: { value: heightBox({ ...SEA_COLOUR, elevationM: [] }) },
+      uColourTexels: { value: [SEA_COLOUR.nx, SEA_COLOUR.ny] },
+      uSun: { value: new Vec3(0, 1, 0) },
+      ...Object.fromEntries(Object.entries(seaColours).map(([k, v]) => [k, { value: v }])),
+    },
+  });
+  const water = (() => {
+    const [nx, nz] = [301, 121];
+    const pos = new Float32Array(nx * nz * 3);
+    for (let j = 0; j < nz; j++)
+      for (let i = 0; i < nx; i++)
+        pos.set([WEST + ((EAST - WEST) * i) / (nx - 1), 0, NORTH + ((SOUTH - NORTH) * j) / (nz - 1)], (j * nx + i) * 3);
+    const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
+    let n = 0;
+    for (let j = 0; j < nz - 1; j++)
+      for (let i = 0; i < nx - 1; i++) {
+        const a = j * nx + i;
+        idx.set([a, a + nx, a + 1, a + 1, a + nx, a + nx + 1], n);
+        n += 6;
+      }
+    return add(scene, new Geometry(gl, { position: { size: 3, data: pos }, index: { data: idx } }), waterProgram, {
+      renderOrder: 1,
+    });
+  })();
+  const setHeights = (h: HeightGrid) => {
+    // GEBCO's texture is dropped for the fine ground's; freed, or it stays on the GPU until the context goes.
+    gl.deleteTexture((waterProgram.uniforms.tHeight!.value as Texture).texture);
+    waterProgram.uniforms.tHeight!.value = heightTexture(h);
+    waterProgram.uniforms.uBox!.value = heightBox(h);
+    waterProgram.uniforms.uTexels!.value = [h.nx, h.ny];
+  };
+  // The sea's own clock, seconds. It stops where it is while the waves are paused (the preview's pause
+  // button, reduced motion) and goes on from there, so the sea neither jumps nor restarts.
+  let [paused, stoppedAt] = [0, null as number | null];
+  const clock = () => (stoppedAt ?? performance.now() / 1000) - paused;
+  const setWaves = (moving: boolean) => {
+    const now = performance.now() / 1000;
+    if (!moving && stoppedAt === null) stoppedAt = now;
+    else if (moving && stoppedAt !== null) {
+      paused += now - stoppedAt;
+      stoppedAt = null;
+    }
+  };
 
   // --- The plate: Slab2's top, its body, its cut faces and its stated uncertainty --------------
   const top = (k: number) => SLAB2.topKm[k] ?? null;
@@ -748,7 +1127,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   canvas.addEventListener("pointerup", onUp);
 
   tag(
-    labelElement(text.trench, LABEL_QUIET),
+    labelElement(text.trench, LABEL_ON_SEA),
     () => [x(-78.05), 8, z(4.2)],
     () => view.layers.labels,
   );
@@ -789,6 +1168,8 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     for (const p of programs)
       if (p.uniforms.uClipY!.value > -1e8) p.uniforms.uClipY!.value = -FLOOR_KM * v.exaggeration;
     ground.visible = v.layers.ground;
+    // Its own switch alone: tied to the ground's too, "Mar" read on for a sea that was not drawn.
+    water.visible = v.layers.sea;
     plate.visible = v.layers.plate;
     rupture.visible = model.rupture !== null && v.layers.rupture;
     dots.mesh.visible = v.layers.events;
@@ -862,6 +1243,21 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     fromAbove = Math.min(1, Math.max(0, (-look.y - 0.6) / 0.3));
     groundProgram.uniforms.uOpacity!.value = 1 - 0.45 * fromAbove;
     groundProgram.depthWrite = fromAbove === 0;
+    // The sea stays opaque from above: the events are drawn over it anyway, and see-through it showed the
+    // pale map under it.
+    waterProgram.uniforms.uTime!.value = clock();
+    // The water's own sun, low and in front of the camera, towards the open Pacific: from a low view its
+    // glitter runs across the sea; from above only the wave faces turned to it catch it. The scene's
+    // light, from the north-west, only mirrored off the sea from the north; a sun kept where the sea
+    // mirrors it from above made a hazy white disc of the middle of the sea.
+    let [ax, az] = [SEA_GLINT[0] - camera.position.x, SEA_GLINT[1] - camera.position.z];
+    if (Math.hypot(ax, az) < 1) [ax, az] = [look.x, look.z];
+    const flatLen = Math.hypot(ax, az) || 1;
+    (waterProgram.uniforms.uSun!.value as Vec3).set(
+      (ax / flatLen) * Math.cos(SUN_ELEVATION),
+      Math.sin(SUN_ELEVATION),
+      (az / flatLen) * Math.cos(SUN_ELEVATION),
+    );
     plate.visible = view.layers.plate && fromAbove < 0.5;
     uncertainty.visible = view.layers.plate && view.layers.uncertainty && fromAbove < 0.5;
     box.visible = fromAbove < 0.5;
@@ -923,6 +1319,13 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       const now = id === null ? null : distances.get(id)!;
       if (now) pinNames.get(now.id)!.textContent = `${now.name} · ${text.distance!.label(now.km)}`;
     }
+    // The compass: the way north runs on screen from the point the camera looks at, whatever the tilt.
+    if (compass) {
+      const from = project([orbit.target.x, 0, orbit.target.z]);
+      const to = project([orbit.target.x, 0, orbit.target.z - 20]);
+      if (from && to && Math.hypot(to[0] - from[0], to[1] - from[1]) > 0.01)
+        compass.point(Math.atan2(to[0] - from[0], -(to[1] - from[1])));
+    }
   };
   function resize() {
     const { clientWidth: w, clientHeight: h } = container;
@@ -940,6 +1343,13 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   resize();
   setView(initial);
   goTo("oblique", false);
+  // Prototype: `?cam=x,y,z,tx,ty,tz` puts the viewer's camera anywhere, for a headless check.
+  const cam = import.meta.env.DEV && text.distance && new URLSearchParams(location.search).get("cam");
+  if (cam) {
+    const [px, py, pz, tx, ty, tz] = cam.split(",").map(Number) as [number, number, number, number, number, number];
+    current = null;
+    place(new Vec3(px, py, pz), new Vec3(tx, ty, tz));
+  }
   raf = requestAnimationFrame(loop);
 
   return {
@@ -952,7 +1362,11 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       dots = makeDots(model.events);
       setView(view);
     },
+    setSea(hour) {
+      for (const [k, u] of Object.entries(seaUniforms(drawnSea(hour)))) waterProgram.uniforms[k]!.value = u.value;
+    },
     goTo,
+    setWaves,
     setAutoRotate(on) {
       autoRotate = on;
     },

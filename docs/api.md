@@ -1,8 +1,8 @@
 # API
 
 `GET /api/events`, `/api/events.csv`, `/api/stats`, `/api/b-windows.csv` (b over time, one
-row per window), `/api/status`, `/api/context`, `POST /api/refresh`, `POST /api/client-error`.
-Every route but `/api/health` takes `zone=choco|tolima` (`core/zones.ts`). No `zone` is
+row per window), `/api/status`, `/api/context`, `/api/sea`, `POST /api/refresh`, `POST /api/client-error`.
+Every route but `/api/health` and `/api/sea` takes `zone=choco|tolima` (`core/zones.ts`). No `zone` is
 Chocó, so every URL and script from before there were two zones keeps its meaning; any other value
 is a 400. The downloaded CSVs are named after the zone (`sgc-tolima-events.csv`).
 
@@ -67,6 +67,13 @@ carries its product's own date, and it drops a digest whose `sgcEventId` is not 
 The forecast (`usgsForecast`) does hide on age: from USGS's `nextUpdateAt`, or 14 days after issue
 without one, and whenever it is not `reviewed` ([the science](science.md#the-insights-page-insights-from-2026-09-24)).
 Credit "USGS" beside any figure from it (US public domain).
+
+`GET /api/sea` (no `zone`: one sea for the block) serves Open-Meteo's marine forecast as the daily job
+last stored it ([the daily sea-state job](ingest.md#the-daily-sea-state-job)): `null` before the first
+run, or `{ source, model, lat, lon, fetchedAt, hours }` (`SeaForecast` in `worker/api-types.ts`), each
+hour `{ t, swell, swell2, wind }` and each train `{ heightM, fromDeg, periodS }` or `null`. It never
+fetches Open-Meteo itself; one primary-key read, `no-cache`. Only the 3D tab asks, so it is not
+preloaded. Credit Open-Meteo, with its link, wherever a figure from it is shown (CC BY 4.0).
 
 CSV headers are the stable machine names (`id,time,lat,…`) by default. `?lang=es` on
 either CSV endpoint, and the page's download buttons while the page is in Spanish,

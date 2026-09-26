@@ -9,7 +9,7 @@
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
 | `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL for the monitor; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
-| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts` and `insights-history.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
+| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
 | `src/**/*.test.ts` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec, kept for history. Its §3 lists every verified fact about the SGC endpoint. |
@@ -74,6 +74,23 @@ Mapterhorn's tiles). It reads three of Mapterhorn's zoom-7 tiles for the land an
 grid for the sea floor, checks that its encoding round-trips, and writes gzip. Redo it only if the
 block's bounds change: `RELIEF` in `src/insights/block.ts` must cover `block.json`'s box, and the script
 refuses to run if it does not. `test/relief.test.ts` holds the committed file to the grid.
+
+## The 3D block's sea
+
+- **Its colour** is `src/insights/block3d/sea-colour.json`, baked by
+  `pnpm tsx scripts/insights-sea-colour.ts && pnpm format` from ESA's Ocean Colour CCI through NOAA
+  PIFSC's ERDDAP (one ~6 MB request, no key). ERDDAP's grid is 0–360° east with latitude listed north
+  to south; a query with negative longitudes answers an opaque 404 or 500. The script writes one line,
+  which `pnpm format` then spreads out. Redo it for another box or a newer span of years.
+- **Its swell** comes from `/api/sea`, which is empty in a fresh local database until the daily job
+  has run. Apply the migrations (`pnpm db:migrate:local`), then run the job once against `pnpm dev`:
+  `curl 'http://localhost:5173/cdn-cgi/handler/scheduled?cron=7+11+*+*+*'` (the port is `pnpm dev`'s).
+  That is one request to Open-Meteo and USGS's daily run; **it never reaches SGC**. Without it the
+  block draws its usual sea and the key says no forecast is at hand.
+- **A camera anywhere, for a headless check**: in `pnpm dev` only, `?cam=x,y,z,tx,ty,tz` on
+  `/insights?tab=3d` puts the viewer's camera at `x,y,z` looking at `tx,ty,tz` (km, x east, z south,
+  y up; `?cam=-30,45,120,-170,0,10` is low over the open sea). `agent-browser`'s mouse wheel does not
+  reach the canvas, so this is how to get a close-up.
 
 ## Tooling gotchas
 

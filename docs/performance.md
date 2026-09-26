@@ -126,6 +126,11 @@ practices stayed at 100.
     `relief.bin.gz` (80 kB, fetched once per page when the 3D block is first drawn, after the map
     image; GEBCO's grid shows until it arrives). Raising or lowering the mountains is a uniform
     write, not a new mesh.
+  - The live sea, its colour and the compass (2026-09-26, `vite build` against `main`) took the 3D
+    chunk from 153.1 kB to 181.7 kB (51.0 → 60.1 kB gzipped): the water's shaders, `sea-colour.json`
+    (~2.4 kB gzipped) and the copy. The shell did not move. One more same-origin request, `/api/sea`
+    (~11 kB), goes out when the 3D tab first draws. The water is one more draw of a 36,000-vertex mesh
+    a frame; its fragment shader sums up to 20 octaves, and fades the ones under a few pixels.
   - The felt-intensity question (2026-09-25, `vite build`) took the questions chunk from 66.9 kB to
     72.2 kB (22.2 → 23.9 kB gzipped), and the shell from 21.3 kB to 25.6 kB (8.5 → 10.0 kB gzipped):
     its rule and its sentences are in `claims.ts` and `copy.ts`, which the shell already loads. One

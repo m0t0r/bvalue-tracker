@@ -6,12 +6,20 @@ import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
 import { computeStats, type CatalogStats } from "@bvalue/seismo";
 import { DEFAULT_ZONE, ZONE_IDS, isZoneId, type ZoneId } from "../core/zones.ts";
-import type { ContextResponse, HealthResponse, StatusResponse, StoredEvent, ZoneHealth } from "./api-types.ts";
+import type {
+  ContextResponse,
+  HealthResponse,
+  SeaForecast,
+  StatusResponse,
+  StoredEvent,
+  ZoneHealth,
+} from "./api-types.ts";
 import { lastRun, toStored, zoneMainshockRow, type EventRow } from "./db.ts";
 import { PRODUCTS_CRON, readContext, refreshProducts } from "./external.ts";
 import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
 import { asLevel, logger, type Logger } from "./log.ts";
 import { INGEST_CRON, dueNow, sgcUnwell, tickMinute } from "./plan.ts";
+import { readSea, refreshSea } from "./sea.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -302,6 +310,15 @@ app.get("/api/context", async (c) => {
   return c.json((await readContext(c.env.DB, zone)) satisfies ContextResponse);
 });
 
+/**
+ * The sea state the 3D block draws: Open-Meteo's marine forecast, as the daily job last stored it.
+ * Never fetched on a request; one primary-key read. Null before the first run.
+ */
+app.get("/api/sea", async (c) => {
+  c.header("cache-control", "no-cache");
+  return c.json((await readSea(c.env.DB)) satisfies SeaForecast | null);
+});
+
 app.post("/api/refresh", async (c) => {
   const db = c.env.DB;
   const now = new Date();
@@ -433,12 +450,22 @@ export default {
    */
   async scheduled(controller, env) {
     // The daily USGS job is its own invocation with its own CPU, and never touches SGC.
+    // The sea state rides on the same invocation, after USGS: one small request, and either failing
+    // leaves the other to run. The first failure is rethrown, so the invocation is recorded as failed.
     if (controller.cron === PRODUCTS_CRON) {
-      await refreshProducts({
-        db: env.DB,
-        log: log(env, { trigger: "usgs" }),
-        now: new Date(controller.scheduledTime),
-      });
+      const now = new Date(controller.scheduledTime);
+      let failed: unknown = null;
+      try {
+        await refreshProducts({ db: env.DB, log: log(env, { trigger: "usgs" }), now });
+      } catch (err) {
+        failed = err;
+      }
+      try {
+        await refreshSea({ db: env.DB, log: log(env, { trigger: "sea" }), now });
+      } catch (err) {
+        failed ??= err;
+      }
+      if (failed !== null) throw failed;
       return;
     }
     if (controller.cron !== INGEST_CRON) {

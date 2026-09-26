@@ -1,6 +1,6 @@
 import { contextPath, eventsPath, statusPath } from "../../core/page-data";
 import type { ZoneId } from "../../core/zones";
-import type { ContextResponse, StatusResponse, StoredEvent } from "../../worker/api-types";
+import type { ContextResponse, SeaForecast, StatusResponse, StoredEvent } from "../../worker/api-types";
 
 export type { ContextResponse, IngestRun, StatusResponse, StoredEvent } from "../../worker/api-types";
 
@@ -36,4 +36,6 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 export const getEvents = (zone: ZoneId) => json<StoredEvent[]>(eventsPath(zone));
 export const getContext = (zone: ZoneId) => json<ContextResponse>(contextPath(zone));
 export const getStatus = (zone: ZoneId) => json<StatusResponse>(statusPath(zone));
+/** The 3D block's sea-state forecast; null before the daily job's first run. Not preloaded: only the 3D tab asks. */
+export const getSea = () => json<SeaForecast | null>("/api/sea");
 export const postRefresh = (zone: ZoneId) => json<StatusResponse>(`/api/refresh?zone=${zone}`, { method: "POST" });

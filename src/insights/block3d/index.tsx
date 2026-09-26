@@ -4,6 +4,7 @@
  * picks a view (the owner's choice after the E1 prototype, 2026-09-25). The copy is `copy.ts`; the
  * logic without a DOM is `shared.ts`; the drawing is `scene.ts`.
  */
+import { useQuery } from "@tanstack/react-query";
 import { InfoIcon, PauseIcon, PlayIcon, SlidersHorizontalIcon, SquareIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -26,13 +27,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { useIsDark } from "@/lib/theme";
-import { fmtDay } from "@/lib/format";
-import type { Insights } from "../claims";
+import { getSea } from "@/lib/api";
+import { fmtClock, fmtDay } from "@/lib/format";
+import { compassPoint, type Insights } from "../claims";
+import type { SeaHour, WaveTrain } from "../../../worker/api-types";
 import { CONVERGENCE_CM_PER_YEAR } from "../plate";
 import { fmt, fmtKm, fmtMag } from "../shared";
 import { BG } from "../tones";
 import { useReducedMotion } from "../use-reduced-motion";
-import { block3dCopy, type RuptureFacts } from "./copy";
+import { block3dCopy, type RuptureFacts, type SeaFacts, type TrainFacts } from "./copy";
 import { createScene, webglAvailable, type SceneHandle } from "./scene";
 import {
   ALL_LAYERS,
@@ -40,7 +43,11 @@ import {
   LENGTH_KM,
   PREVIEW_EXAGGERATION,
   VIEWER_EXAGGERATION,
+  WAVE_HEIGHT_SCALE,
+  WAVE_LENGTH_SCALE,
+  SHORT_WAVE_PERIOD_S,
   pinDistances,
+  seaHourAt,
   WIDTH_KM,
   blockModel,
   type BlockModel,
@@ -54,6 +61,25 @@ const VIEWS: Preset[] = ["oblique", "south", "above", "rupture", "chaparral"];
 /** Checked once: each check makes a WebGL context, and browsers keep only a few alive. */
 const WEBGL = webglAvailable();
 const EXAGGERATIONS = [1, 2, 4];
+
+const HOUR = 3_600_000;
+
+/**
+ * The forecast's hour the clock is in, followed as the hours pass; null before it loads, while the
+ * route fails, or once the stored hours have run out. The block then draws its usual sea and states no
+ * figure. One query for the page (the preview and every opening of the viewer share it), retried by
+ * the page's `shouldRetry` and asked again once half an hour old; none without WebGL, where nothing
+ * draws it. The clock moves at each hour's start, which is when the hour drawn can change.
+ */
+function useSeaHour(): SeaHour | null {
+  const { data } = useQuery({ queryKey: ["sea"], queryFn: getSea, enabled: WEBGL, staleTime: HOUR / 2 });
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setTimeout(() => setNow(Date.now()), Math.floor(now / HOUR + 1) * HOUR - now + 50);
+    return () => clearTimeout(id);
+  }, [now]);
+  return useMemo(() => seaHourAt(data ?? null, now), [data, now]);
+}
 
 export function Block3D({ data }: { data: Insights }) {
   const { lang } = useI18n();
@@ -75,6 +101,7 @@ export function Block3D({ data }: { data: Insights }) {
     () => ({ layers, raised, exaggeration: PREVIEW_EXAGGERATION, until: null }),
     [layers, raised],
   );
+  const sea = useSeaHour();
   const [preview, setPreview] = useState<SceneHandle | null>(null);
   // The reader can stop the turning (WCAG 2.2.2); reduced motion never starts it. Follows a change of
   // the setting while the tab is open, not only the one at mount.
@@ -102,6 +129,8 @@ export function Block3D({ data }: { data: Insights }) {
           <Block
             data={data}
             view={previewView}
+            sea={sea}
+            still={reduced || !spin}
             lang={lang}
             className="pointer-events-none h-[45svh] rounded-lg border md:h-[55svh]"
             onReady={setPreview}
@@ -124,11 +153,19 @@ export function Block3D({ data }: { data: Insights }) {
           )}
         </div>
       )}
-      <Key model={model} data={data} lang={lang} />
+      <Key model={model} data={data} sea={sea} lang={lang} />
       {/* On the body, beside the page rather than inside it, so the page can be made inert under it. */}
       {open &&
         createPortal(
-          <Viewer data={data} model={model} view={view} setView={setView} lang={lang} onClose={close.current} />,
+          <Viewer
+            data={data}
+            model={model}
+            view={view}
+            setView={setView}
+            sea={sea}
+            lang={lang}
+            onClose={close.current}
+          />,
           document.body,
         )}
     </section>
@@ -141,6 +178,8 @@ export function Block3D({ data }: { data: Insights }) {
 function Block({
   data,
   view,
+  sea,
+  still,
   lang,
   className,
   onReady,
@@ -149,6 +188,9 @@ function Block({
 }: {
   data: Insights;
   view: View;
+  sea: SeaHour | null;
+  /** The waves hold still: reduced motion, or the preview paused by the reader (WCAG 2.2.2). */
+  still: boolean;
   lang: Lang;
   className: string;
   /** The viewer's: a pin shows its distance from Pereira. The preview's pins are inert. */
@@ -161,8 +203,8 @@ function Block({
   const box = useRef<HTMLDivElement>(null);
   const handle = useRef<SceneHandle | null>(null);
   // What the scene is built from, read when it is built; later changes go through the handle.
-  const latest = useRef({ data, view, onReady });
-  latest.current = { data, view, onReady };
+  const latest = useRef({ data, view, sea, still, onReady });
+  latest.current = { data, view, sea, still, onReady };
   const built = useRef<Insights | null>(null);
 
   // Rebuilt only for a new language or theme: its labels and colours are drawn inside it. Data and
@@ -185,7 +227,10 @@ function Block({
       distance: pressablePins
         ? { pin: (name, km) => t.scene.pinDistance(name, fmtKm(km)), label: (km) => t.scene.distance(fmtKm(km)) }
         : null,
+      compass: pressablePins ? t.compassPoints : null,
     });
+    h.setSea(latest.current.sea);
+    h.setWaves(!latest.current.still);
     h.canvas.setAttribute("role", "img");
     h.canvas.setAttribute("aria-label", t.canvas);
     handle.current = h;
@@ -201,6 +246,8 @@ function Block({
     built.current = data;
   }, [data]);
   useEffect(() => handle.current?.setView(view), [view]);
+  useEffect(() => handle.current?.setSea(sea), [sea]);
+  useEffect(() => handle.current?.setWaves(!still), [still]);
 
   return (
     <div ref={box} className={`relative overflow-hidden ${className}`}>
@@ -208,12 +255,12 @@ function Block({
       <span className="absolute top-1 left-1 z-10 rounded bg-background/80 px-1 text-2xs text-muted-foreground">
         {c.exaggerationTag(view.exaggeration, view.raised)}
       </span>
-      <Credit label={c.credit} />
+      <Credit label={c.credit} sea={sea !== null && view.layers.sea ? c.creditSea : null} />
     </div>
   );
 }
 
-function Credit({ label }: { label: string }) {
+function Credit({ label, sea }: { label: string; sea: string | null }) {
   const a = "pointer-events-auto underline-offset-2 hover:underline";
   return (
     <span className="absolute right-1 bottom-1 z-10 rounded bg-background/80 px-1 text-2xs text-muted-foreground">
@@ -231,6 +278,15 @@ function Credit({ label }: { label: string }) {
       <a className={a} href="https://mapterhorn.com/attribution" target="_blank" rel="noopener noreferrer">
         © Mapterhorn
       </a>
+      {sea && (
+        <>
+          {" "}
+          · {sea}{" "}
+          <a className={a} href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">
+            Open-Meteo
+          </a>
+        </>
+      )}
     </span>
   );
 }
@@ -257,6 +313,7 @@ function Viewer({
   model,
   view,
   setView,
+  sea,
   lang,
   onClose,
 }: {
@@ -264,6 +321,7 @@ function Viewer({
   model: BlockModel;
   view: View;
   setView: (v: View) => void;
+  sea: SeaHour | null;
   lang: Lang;
   onClose: () => void;
 }) {
@@ -335,6 +393,7 @@ function Viewer({
       model={model}
       view={view}
       setView={setView}
+      sea={sea}
       lang={lang}
       tab={tab}
       onTab={setTab}
@@ -401,6 +460,8 @@ function Viewer({
             <Block
               data={data}
               view={view}
+              sea={sea}
+              still={reduced}
               lang={lang}
               className="min-h-0 flex-1"
               pressablePins
@@ -474,6 +535,7 @@ function Panel({
   model,
   view,
   setView,
+  sea,
   lang,
   tab,
   action,
@@ -483,6 +545,7 @@ function Panel({
   model: BlockModel;
   view: View;
   setView: (v: View) => void;
+  sea: SeaHour | null;
   lang: Lang;
   tab: PanelTab;
   /** Beside the tabs: the sheet's close button on a phone. */
@@ -504,7 +567,7 @@ function Panel({
         {action}
       </div>
       <TabsContent value="key" className="min-h-0 overflow-y-auto px-3 pt-2 pb-8">
-        <Key model={model} data={data} lang={lang} heading={false} />
+        <Key model={model} data={data} sea={sea} lang={lang} heading={false} />
       </TabsContent>
       <TabsContent value="settings" className="min-h-0 overflow-y-auto px-3 pt-2 pb-8">
         <FieldGroup>
@@ -643,11 +706,13 @@ function Replay({
 function Key({
   model,
   data,
+  sea,
   lang,
   heading = true,
 }: {
   model: BlockModel;
   data: Insights;
+  sea: SeaHour | null;
   lang: Lang;
   heading?: boolean;
 }) {
@@ -670,7 +735,38 @@ function Key({
   };
   const near = pinDistances().map((d) => `${d.name} ~${fmtKm(d.km)}`);
   const pins = `${near.slice(0, -1).join(", ")}${c.and}${near.at(-1)}`;
-  const items: { swatch?: ReactNode; text: [string, string]; more?: ReactNode }[] = [
+  const seaSaid = seaFacts(sea, lang);
+  type Item = { swatch?: ReactNode; text: [string, string]; more?: ReactNode };
+  // The sea comes last, after the note on the depths: it is setting, not data about the earthquakes.
+  const seaItem: Item = {
+    text: c.key.sea(seaSaid),
+    more: (
+      <span className="flex flex-col gap-1">
+        <span>{c.key.seaColour}</span>
+        <span className="flex flex-wrap gap-x-3">
+          {seaSaid && (
+            <a
+              className="underline underline-offset-2"
+              href="https://open-meteo.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {c.key.seaSource}
+            </a>
+          )}
+          <a
+            className="underline underline-offset-2"
+            href="https://esa-oceancolour-cci.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {c.key.seaColourSource}
+          </a>
+        </span>
+      </span>
+    ),
+  };
+  const items: Item[] = [
     { text: c.key.ground },
     {
       text: c.key.dots,
@@ -708,20 +804,32 @@ function Key({
           {c.keyTitle}
         </h3>
       )}
-      <dl className="flex flex-col gap-3 text-sm text-pretty">
-        {items.map(({ swatch, text: [term, desc], more }) => (
-          <div key={term} className="flex flex-col gap-1">
-            <dt className="flex items-center gap-2 font-medium">
-              {swatch}
-              {term}
-            </dt>
-            <dd className="text-muted-foreground">{desc}</dd>
-            {more && <dd className="text-muted-foreground">{more}</dd>}
-          </div>
-        ))}
-      </dl>
+      <dl className="flex flex-col gap-3 text-sm text-pretty">{items.map(keyRow)}</dl>
       {list && <p className="text-sm text-muted-foreground text-pretty">{c.key.snapped(list)}</p>}
+      <dl className="flex flex-col gap-3 text-sm text-pretty">{keyRow(seaItem)}</dl>
     </section>
+  );
+}
+
+/** One of the key's terms: its name (with a swatch), what it is, and anything more. */
+function keyRow({
+  swatch,
+  text: [term, desc],
+  more,
+}: {
+  swatch?: ReactNode;
+  text: [string, string];
+  more?: ReactNode;
+}) {
+  return (
+    <div key={term} className="flex flex-col gap-1">
+      <dt className="flex items-center gap-2 font-medium">
+        {swatch}
+        {term}
+      </dt>
+      <dd className="text-muted-foreground">{desc}</dd>
+      {more && <dd className="text-muted-foreground">{more}</dd>}
+    </div>
   );
 }
 
@@ -732,4 +840,34 @@ function Dot({ cls, label }: { cls: string; label: string }) {
       {label}
     </span>
   );
+}
+
+/**
+ * The hour the block draws, as the key states it. A train that rounds to 0.0 m is left out, as the
+ * drawing all but leaves it out; heights to a tenth of a metre, periods to the second.
+ */
+function seaFacts(hour: SeaHour | null, lang: Lang): SeaFacts | null {
+  if (!hour) return null;
+  const c = block3dCopy[lang];
+  const shown = (t: WaveTrain | null) => (t && t.heightM >= 0.05 ? t : null);
+  const train = (t: WaveTrain | null): TrainFacts | null => {
+    const s = shown(t);
+    return (
+      s && {
+        height: `${fmt(s.heightM, 1)}\u00A0m`,
+        from: c.compass[compassPoint(s.fromDeg)],
+        period: `${fmt(s.periodS)}\u00A0s`,
+      }
+    );
+  };
+  const wind = shown(hour.wind);
+  return {
+    ...fmtClock(hour.t, lang),
+    swell: train(hour.swell),
+    swell2: train(hour.swell2),
+    wind: wind && `${fmt(wind.heightM, 1)}\u00A0m`,
+    longer: fmt(WAVE_LENGTH_SCALE),
+    taller: fmt(WAVE_HEIGHT_SCALE),
+    short: `${fmt(Math.round(SHORT_WAVE_PERIOD_S))} s`,
+  };
 }

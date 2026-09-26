@@ -54,6 +54,12 @@
   --radius-px: 1px;
   /* Cast by the pinned y axis of "Magnitud en el tiempo" once the plot has scrolled under it. */
   --shadow-pin: 6px 0 8px -7px var(--pin-shadow);
+  /* A label over the 3D block's moving sea ("fosa del Pacífico"): near-white text in a deep-navy halo.
+     The sea behind it runs from dark blue to a glint's white within seconds, so no bare text colour
+     holds (measured 2026-09-26: black 3.0:1 at the default view and 3.3:1 under the glitter, white
+     6.2:1 and 2.9:1); on the halo, white stays at 6:1 or more even over a white glint. */
+  --color-on-sea: var(--on-sea);
+  --text-shadow-sea: 0 0 1px var(--on-sea-halo), 0 0 2px var(--on-sea-halo), 0 0 4px var(--on-sea-halo);
   /* Pereira's pulse on the insights story: Tailwind's ping, three times and then still. Looped, it
      pulsed beside the text for as long as a chapter was read. */
   --animate-beacon: beacon 1s cubic-bezier(0, 0, 0.2, 1) 3;
@@ -217,6 +223,9 @@
   --ease-move: cubic-bezier(0.2, 0, 0, 1);
   --duration-move: 550ms;
   --pin-shadow: rgb(0 0 0 / 0.35);
+  /* Both themes: the sea is dark blue in either. */
+  --on-sea: oklch(0.985 0 0);
+  --on-sea-halo: oklch(0.22 0.05 250);
 }
 .dark {
   --pin-shadow: rgb(255 255 255 / 0.22);

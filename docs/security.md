@@ -74,7 +74,10 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   The 3D tab (`src/insights/block3d`) needs nothing more: WebGL is not a CSP directive, and its map
   is a same-origin image baked in advance, so it never reaches OpenFreeMap or Mapterhorn from a
   reader's browser. Only the dev-only bake page does (`bake-basemap.html`, not in the build). Its
-  labels and pins are DOM built with `textContent`; the one `innerHTML` is the pin's fixed SVG.
+  labels and pins are DOM built with `textContent`; the two `innerHTML`s are fixed SVG with nothing
+  interpolated from data: the pin's and the compass rose's (whose letters are set with `textContent`).
+  Its sea's forecast comes from the Worker (`/api/sea`), and its sea's colour is committed data, so the
+  sea adds nothing to the CSP either.
 - **The response headers are the two files below, and nothing else sets them**
   (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
 
@@ -124,6 +127,11 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   else. It runs
   server-side, so the page's CSP is unchanged. Each fetch has a 20 s timeout, and each digest reads
   only the fields it names and throws on anything else, so a malformed file stores nothing.
+- **The daily sea-state job fetches one fixed URL** (`SEA_URL` in `worker/sea.ts`, Open-Meteo's
+  marine API), nothing built from a response, with a 20 s timeout and redirects refused. It runs
+  server-side, so no reader's address reaches Open-Meteo and the CSP is unchanged. `digestSea` keeps
+  only numbers, range-checked, and the page shows them as React text; `/api/sea` sits behind the same
+  origin check and rate limit as the rest of `/api/*`.
 - **The page shows USGS's numbers and none of its strings.** The felt-intensity question renders
   intensities and counts as React text, never DYFI's cell label or PAGER's city name, and its link
   to USGS is built from `sourceEventId` only when it matches `^[a-z]{2}[a-z0-9]{1,20}$`

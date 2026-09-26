@@ -125,6 +125,33 @@ export interface ExternalProduct<D> {
   digest: D;
 }
 
+/** One wave train as Open-Meteo's model gives it: its height, where it comes from (0° north, 90° east), its period. */
+export interface WaveTrain {
+  heightM: number;
+  fromDeg: number;
+  periodS: number;
+}
+
+/** One hour of the sea state: the main swell, a second swell and the wind's own waves, each null when absent. */
+export interface SeaHour {
+  /** The hour's start, ms since the epoch (UTC). */
+  t: number;
+  swell: WaveTrain | null;
+  swell2: WaveTrain | null;
+  wind: WaveTrain | null;
+}
+
+/** `GET /api/sea`: Open-Meteo's marine forecast for one point in the 3D block's Pacific, or null. */
+export interface SeaForecast {
+  source: "open-meteo";
+  model: "meteofrance_wave";
+  lat: number;
+  lon: number;
+  /** When the daily job stored it. */
+  fetchedAt: string;
+  hours: SeaHour[];
+}
+
 /** `GET /api/context?zone=`: what USGS publishes about the zone's mainshock. null where there is nothing. */
 export interface ContextResponse {
   dyfi: ExternalProduct<DyfiDigest> | null;

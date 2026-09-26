@@ -516,10 +516,54 @@ full-screen viewer with five views to jump to.
   "Exageración vertical" while the mountains are raised. Each choice sits under its own heading, the
   exaggeration's help says it is the depths that stay unstretched, and the corner tag names the
   raising; the owner asked for the name.
-- **A moving sea was built and removed** (2026-09-26): a see-through surface at sea level with slowly
-  drifting swells and glints, from the owner's idea of making the Pacific "a bit live". The owner
-  found it looked bad, and waves on the viewer that shows the M7.4's rupture risk reading as a tsunami
-  that event could not have made (it was ~100–125 km deep, under land). Do not retry it.
+- **The sea moves with the day's real swell** (2026-09-26, the owner's request; switch "Mar",
+  `layers.sea`). A first version the same morning, a see-through surface with slowly drifting swells
+  and glints, was removed: it barely moved and read as nothing like water. The second is an **opaque
+  surface** at sea level (the owner: "surface water, not depth water"), discarded wherever the ground
+  is above the sea, which the water reads from a one-byte heights texture (`heightTexture` in
+  `scene.ts`). What it takes from where, and what it invents, is in
+  [the science](science.md#the-3d-tabs-rules-from-2026-09-25); the fetch is
+  [the daily sea-state job](ingest.md#the-daily-sea-state-job).
+  - **The waves** are three trains, the main swell, a second swell and the wind's own waves, each a
+    sum of "exponential sines" (after Acerola's water, github.com/GarrettGunnell/Water, MIT: sharp
+    crests, broad troughs, each octave bending the next). `drawnSea` in `shared.ts` turns an hour of
+    the forecast into the shader's uniforms; the swells move the mesh and all three shade it. Before
+    the forecast loads, or once the stored hours run out, the sea is `USUAL_SEA` and the key states no
+    figure.
+  - **Not built, each tried or weighed:** waves a tap sets off (the owner: not realistic at this
+    scale), a calm option, see-through water, a light pattern on the sea floor (caustics; the owner
+    did not want it), three.js's `Water` and `WaterMesh` (`WaterMesh` needs three.js's WebGPU renderer,
+    and three.js is 120 kB more; they are one shader, written here instead), and Water Pro
+    (commercial, its licence forbids its code in a public repository).
+  - **Why it is not pale:** a glint sun placed where the flat sea mirrors it put a hazy white disc in
+    the middle of the sea from above, and the water faded from above with the ground, showing the
+    pale map. The water's own sun stands 20° up in front of the camera (`SUN_ELEVATION`), and the
+    water is opaque at every angle; the events are drawn over it anyway. **Why it does not speckle:**
+    an octave shorter than 3–6 px fades out, and the glint fades where they do; the fresnel is capped
+    and the glint dimmed at grazing angles, which is the whole Pacific from the default view.
+  - **The trench's label is near-white in a dark halo** (`text-on-sea`, `text-shadow-sea` in
+    `index.css`, which holds the measurements): on the sea, the old `text-foreground` was 3.0:1 at the
+    default view, and white alone fell to 2.9:1 under the glitter. From "Desde el sur" it floats over
+    the page's white and reads as outlined text.
+  - **The shore's foam is a line at the waterline**, not a band by depth: off the San Juan's delta the
+    shelf stays shallow for kilometres, and 60 m of depth spread a white smear over its green water.
+  - **The key's "El mar" is its last entry**, after the note on the depths (owner: it is not
+    essential data).
+  - **What the code review changed (2026-09-26):** the preview's pause button stops the waves as well
+    as the turning, and is now "Detener el movimiento"; reduced motion stills them, and follows a
+    change of the setting while the tab is open (`setWaves`; the viewer, which has no pause, stills
+    them under reduced motion, and "Mar" hides them, WCAG 2.2.2). The waves' clock stops where it is
+    and goes on from there. "Mar" is its own switch: tied to "Terreno" as well, it read on for a sea
+    that was not drawn. `/api/sea` is a TanStack query with the page's retry policy (a first version
+    kept a failed answer for the whole visit), not asked without WebGL, and the hour drawn moves at
+    each hour's start rather than on a one-minute tick. The key's sizes say what the drawing does:
+    waves under about 5 s (`SHORT_WAVE_PERIOD_S`) are drawn longer than 75×, and the wind's are only
+    texture, with no height.
+- **A compass rose in the viewer's top right** (2026-09-26, owner's request): ticks every 45°, a
+  two-tone needle, and N, E, S, O (W in English) on their bearings, kept upright. Every frame it turns
+  to where north lies on screen, by projecting a point 20 km north of the one the camera looks at, so
+  it is right at any tilt. Viewer only: the preview's pause button has that corner. Hidden from screen
+  readers; the views and the key say where things are.
 - **A pin shows its distance from Pereira** (`pinDistances` in `shared.ts`, 2026-09-26): in the viewer
   the other three pins are buttons; a mouse over one, a tap or the keyboard's focus draws a dashed line
   to Pereira's pin and adds the distance to the pin's own name ("Buenaventura · ~180 km"); a pressed
