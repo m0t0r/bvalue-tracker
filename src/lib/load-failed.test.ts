@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadError, loadFailed, retrying } from "./load-failed";
+import { loadError, loadFailed, retrying, staleSince } from "./load-failed";
 
 const q = { data: undefined, errorUpdatedAt: 0, error: null, failureReason: null, fetchStatus: "idle" as const };
 
@@ -38,5 +38,29 @@ describe("retrying", () => {
   });
   it("is false when nothing runs", () => {
     expect(retrying(q)).toBe(false);
+  });
+});
+
+describe("staleSince", () => {
+  const ok = { data: [], dataUpdatedAt: 1_000, status: "success" as const, fetchStatus: "idle" as const };
+  it("is null while every query is current", () => {
+    expect(staleSince([ok, { ...ok, dataUpdatedAt: 2_000 }])).toBeNull();
+  });
+  // TanStack keeps the data and moves the query to `error` only once its retries are spent, so one
+  // dropped request does not flash the notice.
+  it("dates the data once a refetch over it has failed", () => {
+    expect(staleSince([ok, { ...ok, dataUpdatedAt: 2_000, status: "error" }])).toBe(2_000);
+  });
+  // Offline, the refetch is parked and never fails: the data is just as old.
+  it("dates the data while a refetch waits for the network", () => {
+    expect(staleSince([{ ...ok, fetchStatus: "paused" }])).toBe(1_000);
+  });
+  it("gives the oldest data on screen when several are behind", () => {
+    const behind = { ...ok, status: "error" as const };
+    expect(staleSince([{ ...behind, dataUpdatedAt: 3_000 }, { ...behind, dataUpdatedAt: 2_000 }])).toBe(2_000);
+  });
+  // A catalogue the page never got is the load error's, not this notice's.
+  it("ignores a query with no data", () => {
+    expect(staleSince([{ ...ok, data: undefined, dataUpdatedAt: 0, status: "error" }])).toBeNull();
   });
 });

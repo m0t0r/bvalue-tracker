@@ -20,3 +20,21 @@ export function loadError(query: { error: unknown; failureReason: unknown }): un
 export function retrying(query: { fetchStatus: "fetching" | "paused" | "idle" }): boolean {
   return query.fetchStatus !== "idle";
 }
+
+/**
+ * When the oldest data on screen was fetched, if a refetch over it has failed (or waits offline),
+ * else null. A failed refetch keeps what the page shows (`loadFailed`), and this is what says so:
+ * without it the page kept saying it updates itself while nothing reached it (docs/frontend.md).
+ * `status` turns to `error` only after the query's retries, so a single dropped request never shows.
+ */
+export function staleSince(
+  queries: {
+    data: unknown;
+    dataUpdatedAt: number;
+    status: "pending" | "error" | "success";
+    fetchStatus: "fetching" | "paused" | "idle";
+  }[],
+): number | null {
+  const behind = queries.filter((q) => q.data !== undefined && (q.status === "error" || q.fetchStatus === "paused"));
+  return behind.length === 0 ? null : Math.min(...behind.map((q) => q.dataUpdatedAt));
+}

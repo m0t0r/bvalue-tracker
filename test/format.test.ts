@@ -4,6 +4,7 @@ import {
   dayStart,
   fmtDateTime,
   fmtDay,
+  fmtDayLong,
   fmtIsoDateTime,
   fmtRegion,
   fmtUtc,
@@ -17,9 +18,16 @@ describe("Colombian time", () => {
   it("formats every date and time in America/Bogota, whatever the machine's own zone", () => {
     expect(fmtDateTime("2026-08-10T12:34:27Z", "es")).toBe("10 ago 2026, 07:34");
     expect(fmtDateTime(LATE, "en")).toBe("10 Aug 2026, 22:10");
-    expect(fmtDay(Date.parse(LATE), "es")).toBe("10 ago");
+    expect(fmtDay(Date.parse(LATE), "es")).toBe("10\u00A0ago");
     expect(fmtIsoDateTime(LATE)).toBe("2026-08-10 22:10");
     expect(fmtUtc(LATE)).toBe("2026-08-11 03:10 UTC");
+  });
+
+  it("keeps a short day on one line, and writes it out in full for running prose", () => {
+    // A no-break space: "20 sept – 22 / sept" broke across lines in the b card.
+    expect(fmtDay(Date.parse("2026-09-20T17:00:00Z"), "es")).toBe("20\u00A0sept");
+    expect(fmtDayLong(Date.parse(LATE), "es")).toBe("10 de agosto");
+    expect(fmtDayLong(Date.parse(LATE), "en")).toBe("10 August");
   });
 
   it("gives a past event's year by Colombia's own clock, which ran on UTC−4 in 1992–93", () => {
