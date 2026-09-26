@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // The project's old Worker name, kept only so that choco.<subdomain>.workers.dev keeps
+  // redirecting to the app, which is now the Worker `bvalue-tracker` (../../wrangler.jsonc).
+  // Deployed by CI after the app; see docs/deployment.md ("The old URL").
+  "name": "choco",
+  // Pinned so a deploy can never land in another account.
+  "account_id": "007ce3d670b57672f62e4ffd3869dfc5",
+  "main": "index.ts",
+  "compatibility_date": "2026-08-20",
+  "workers_dev": true,
+  "vars": { "TARGET_ORIGIN": "https://bvalue-tracker.sgc-swarm.workers.dev" },
+  // Stated empty, not left out: this deploy replaces the old app Worker, and its ingest
+  // crons must go with it, or two Workers would poll SGC.
+  "triggers": { "crons": [] },
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+}

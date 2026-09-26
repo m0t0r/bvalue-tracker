@@ -1,7 +1,7 @@
 # bvalue-tracker
 
 [![CI](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml)
-[![Mozilla Observatory](https://img.shields.io/mozilla-observatory/grade/choco.sgc-swarm.workers.dev)](https://developer.mozilla.org/en-US/observatory/analyze?host=choco.sgc-swarm.workers.dev)
+[![Mozilla Observatory](https://img.shields.io/mozilla-observatory/grade/bvalue-tracker.sgc-swarm.workers.dev)](https://developer.mozilla.org/en-US/observatory/analyze?host=bvalue-tracker.sgc-swarm.workers.dev)
 
 A live monitor for the earthquake sequence in Chocó, Colombia, that followed the
 M7.4 San José del Palmar earthquake of 2026-08-10 12:34:27 UTC, and for the
@@ -9,7 +9,7 @@ earthquake swarm at Chaparral, Tolima, that began on 2026-09-20. It keeps a
 catalogue of each up to date from the Servicio Geológico Colombiano (SGC), and
 computes its Gutenberg–Richter **b-value**, over the whole catalogue and over time.
 
-**Live:** <https://choco.sgc-swarm.workers.dev>
+**Live:** <https://bvalue-tracker.sgc-swarm.workers.dev>
 
 The page is written for a Spanish-speaking reader who is interested in the science but
 is not a seismologist. It is Spanish first, has an English toggle, and explains its

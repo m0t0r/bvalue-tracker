@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "choco",
+  "name": "bvalue-tracker",
   // Pinned so a deploy can never land in another account.
   "account_id": "007ce3d670b57672f62e4ffd3869dfc5",
   "main": "worker/index.ts",

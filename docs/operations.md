@@ -178,8 +178,8 @@ why it is shaped the way it is. All of it was measured here, on 2026-09-20.
 - **`upload_source_maps` needs the build to emit a map**, and the map must be the Worker's
   only. `build.sourcemap` at the top level would also emit maps for the client bundle, and
   those are static assets: they would be published beside the page and hand over the whole
-  source. It is scoped to the `choco` environment in `vite.config.ts`, which puts
-  `index.js.map` in `dist/choco/` and nothing in `dist/client/`. Confirm on the first deploy
+  source. It is scoped to the `bvalue_tracker` environment in `vite.config.ts`, which puts
+  `index.js.map` in `dist/bvalue_tracker/` and nothing in `dist/client/`. Confirm on the first deploy
   by reading a stack trace in Workers Logs; the `--dry-run` output does not show it.
 
 <a id="the-pages-own-failures"></a>

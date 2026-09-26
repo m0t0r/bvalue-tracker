@@ -71,6 +71,12 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # The old name, choco, now only redirects to the app (docs/deployment.md, "The old URL").
+      # After the app, so the redirect never points at a Worker that does not exist yet.
+      - run: pnpm exec wrangler deploy -c worker/redirect/wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Smoke test
         if: vars.PRODUCTION_URL != ''
         # Through env, not interpolated into the script: a repository variable should not
