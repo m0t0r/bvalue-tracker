@@ -255,39 +255,53 @@ function Block({
       <span className="absolute top-1 left-1 z-10 rounded bg-background/80 px-1 text-2xs text-muted-foreground">
         {c.exaggerationTag(view.exaggeration, view.raised)}
       </span>
-      <Credit label={c.credit} sea={sea !== null && view.layers.sea ? c.creditSea : null} />
+      <Credit
+        label={c.credit}
+        sea={sea !== null && view.layers.sea ? c.creditSea : null}
+        besideCompass={pressablePins}
+      />
     </div>
   );
 }
 
-function Credit({ label, sea }: { label: string; sea: string | null }) {
-  const a = "pointer-events-auto underline-offset-2 hover:underline";
+/**
+ * The map's credit, bottom right. Below 1024 px the viewer's compass has the bottom-left corner, so
+ * there the credit keeps to the right of it and wraps rather than run under it: `pl-16` is the
+ * compass's `size-14` and `left-2`, and `max-lg` its `lg:` (`compassElement` in `scene.ts`).
+ */
+function Credit({ label, sea, besideCompass }: { label: string; sea: string | null; besideCompass: boolean }) {
+  const a = "pointer-events-auto whitespace-nowrap underline-offset-2 hover:underline";
   return (
-    <span className="absolute right-1 bottom-1 z-10 rounded bg-background/80 px-1 text-2xs text-muted-foreground">
-      {label}{" "}
-      <a className={a} href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">
-        OpenFreeMap
-      </a>{" "}
-      <a className={a} href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">
-        © OpenMapTiles
-      </a>{" "}
-      <a className={a} href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
-        © OpenStreetMap
-      </a>{" "}
-      ·{" "}
-      <a className={a} href="https://mapterhorn.com/attribution" target="_blank" rel="noopener noreferrer">
-        © Mapterhorn
-      </a>
-      {sea && (
-        <>
-          {" "}
-          · {sea}{" "}
-          <a className={a} href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">
-            Open-Meteo
-          </a>
-        </>
-      )}
-    </span>
+    <div
+      data-compass={besideCompass || undefined}
+      className="pointer-events-none absolute inset-x-1 bottom-1 z-10 flex justify-end max-lg:data-compass:pl-16"
+    >
+      <span className="rounded bg-background/80 px-1 text-2xs text-muted-foreground">
+        {label}{" "}
+        <a className={a} href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">
+          OpenFreeMap
+        </a>{" "}
+        <a className={a} href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">
+          © OpenMapTiles
+        </a>{" "}
+        <a className={a} href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
+          © OpenStreetMap
+        </a>{" "}
+        ·{" "}
+        <a className={a} href="https://mapterhorn.com/attribution" target="_blank" rel="noopener noreferrer">
+          © Mapterhorn
+        </a>
+        {sea && (
+          <>
+            {" "}
+            · {sea}{" "}
+            <a className={a} href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">
+              Open-Meteo
+            </a>
+          </>
+        )}
+      </span>
+    </div>
   );
 }
 

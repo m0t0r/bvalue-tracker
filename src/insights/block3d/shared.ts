@@ -230,6 +230,38 @@ export function pinDistances() {
 }
 
 /** The places the block pins. The baked map leaves their names off, so none is named twice. */
+/**
+ * The compass needle's four faces: each half is cut along its ridge, so it reads as a raised blade
+ * rather than a flat arrow. Each face is its outline and the way it faces, in the rose's frame (SVG
+ * units, y down, north up), in the order north-left, north-right, south-left, south-right.
+ */
+export const NEEDLE_FACES = [
+  { d: "M0 -13 L-3 0 L0 0 Z", normal: [-13, -3], north: true },
+  { d: "M0 -13 L0 0 L3 0 Z", normal: [13, -3], north: true },
+  { d: "M0 13 L-3 0 L0 0 Z", normal: [-13, 3], north: false },
+  { d: "M0 13 L0 0 L3 0 Z", normal: [13, 3], north: false },
+].map((f) => ({ ...f, normal: f.normal.map((v) => v / Math.hypot(...f.normal)) as [number, number] }));
+
+/** The whole needle's outline: its opaque base, and its shadow. */
+export const NEEDLE_OUTLINE = "M0 -13 L3 0 L0 13 L-3 0 Z";
+
+/** Where the compass's light comes from on screen: the top left, as a page's shadows assume. */
+const COMPASS_LIGHT = [-0.6, -0.8] as const;
+
+/**
+ * The opacity of each needle face (in `NEEDLE_FACES`'s order) with the rose turned `angle` radians
+ * clockwise, by how squarely the turned face faces the light. The lit face is the lighter one in either
+ * theme: less of the dark ink in light, more of the light ink in dark. Never under 0.7, so the dark
+ * north half and the grey south half stay apart at any angle.
+ */
+export function needleShade(angle: number, dark: boolean): number[] {
+  const [sin, cos] = [Math.sin(angle), Math.cos(angle)];
+  return NEEDLE_FACES.map(({ normal: [x, y] }) => {
+    const lit = ((x * cos - y * sin) * COMPASS_LIGHT[0] + (x * sin + y * cos) * COMPASS_LIGHT[1] + 1) / 2;
+    return dark ? 0.7 + 0.3 * lit : 1 - 0.3 * lit;
+  });
+}
+
 export const PINNED = ["pereira", "istmina", "chaparral", "buenaventura"];
 
 export interface BlockEvent extends QuakeLike {

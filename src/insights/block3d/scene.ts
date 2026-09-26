@@ -14,6 +14,8 @@ import { TOWNS } from "../region";
 import {
   EAST,
   FLOOR_KM,
+  NEEDLE_FACES,
+  NEEDLE_OUTLINE,
   NORTH,
   PINNED,
   SOUTH,
@@ -25,6 +27,7 @@ import {
   framing,
   groundKmAt,
   landScale,
+  needleShade,
   pinDistances,
   seaColour,
   mapUv,
@@ -182,19 +185,33 @@ const COMPASS_TICKS = Array.from({ length: 8 }, (_, k) => {
 }).join("");
 
 /**
- * The viewer's compass rose, top right. The rose turns so its north points where north lies on screen:
- * ticks every 45°, a slim needle dark to the north, and the four cardinal letters on their bearings,
- * each kept upright. Decorative for a screen reader: the views and the key say where things are. Fixed
- * markup; the letters are text.
+ * The viewer's compass rose, top right from 1024 px and bottom left below it, where a phone's block
+ * puts its pins and labels in the top right. The rose turns so its north points where north lies on
+ * screen: ticks every 45°, a faceted needle dark to the north, and the four cardinal letters on their
+ * bearings, each kept upright. The needle's faces are shaded from a light that stays put while it
+ * turns (`needleShade`), and (light theme) it casts a small shadow, so it reads as raised. The map
+ * credit leaves it room below 1024 px (`Credit` in `index.tsx`): move or resize the two together.
+ * Decorative for a screen reader: the views and the key say where things are. Fixed markup; the
+ * letters are text.
  */
-function compassElement(letters: readonly [string, string, string, string]) {
+function compassElement(letters: readonly [string, string, string, string], dark: boolean) {
   const el = document.createElement("div");
   el.setAttribute("aria-hidden", "true");
   el.className =
-    "pointer-events-none absolute top-2 right-2 size-14 rounded-full border bg-background/85 text-foreground shadow-sm";
-  el.innerHTML = `<svg viewBox="-28 -28 56 56" class="size-full"><g>${COMPASS_TICKS}<path d="M0 -12 L2.6 0 L-2.6 0 Z" class="fill-foreground"/><path d="M0 12 L2.6 0 L-2.6 0 Z" class="fill-muted-foreground"/><circle r="1.4" class="fill-background stroke-foreground" stroke-width="0.8"/></g></svg>`;
+    "pointer-events-none absolute bottom-2 left-2 size-14 rounded-full border bg-background/85 text-foreground shadow-sm lg:top-2 lg:right-2 lg:bottom-auto lg:left-auto";
+  const faces = NEEDLE_FACES.map(
+    (f) => `<path d="${f.d}" data-face class="${f.north ? "fill-foreground" : "fill-muted-foreground"}"/>`,
+  ).join("");
+  // On a dark background a shadow would not show; the faces carry the depth there.
+  const shadow = dark
+    ? ""
+    : `<g transform="translate(0.8 1.2)"><path d="${NEEDLE_OUTLINE}" data-cast class="fill-foreground" fill-opacity="0.18"/></g>`;
+  // The faces are shaded by opacity over an opaque base, so neither the shadow nor the map shows through.
+  el.innerHTML = `<svg viewBox="-28 -28 56 56" class="size-full">${shadow}<g data-rose>${COMPASS_TICKS}<path d="${NEEDLE_OUTLINE}" class="fill-background"/>${faces}<circle r="1.6" class="fill-background stroke-foreground" stroke-width="0.8"/></g></svg>`;
   const svg = el.querySelector("svg")!;
-  const rose = el.querySelector("g")!;
+  const cast = el.querySelector("[data-cast]");
+  const rose = el.querySelector("[data-rose]")!;
+  const facePaths = [...rose.querySelectorAll("[data-face]")];
   const marks = letters.map((letter, k) => {
     const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
     t.setAttribute("text-anchor", "middle");
@@ -207,9 +224,15 @@ function compassElement(letters: readonly [string, string, string, string]) {
     svg.append(t);
     return t;
   });
+  let pointed: number | null = null;
   /** Turns the rose so north points `angle` radians clockwise from up. */
   const point = (angle: number) => {
-    rose.setAttribute("transform", `rotate(${(angle * 180) / Math.PI})`);
+    if (angle === pointed) return;
+    pointed = angle;
+    const turn = `rotate(${(angle * 180) / Math.PI})`;
+    rose.setAttribute("transform", turn);
+    cast?.setAttribute("transform", turn);
+    needleShade(angle, dark).forEach((o, k) => facePaths[k]!.setAttribute("fill-opacity", o.toFixed(2)));
     marks.forEach((t, k) => {
       const a = angle + (k * Math.PI) / 2;
       t.setAttribute("x", (Math.sin(a) * COMPASS_LETTER_R).toFixed(2));
@@ -628,7 +651,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   const overlay = document.createElement("div");
   overlay.className = "pointer-events-none absolute inset-0 overflow-hidden";
   container.append(overlay);
-  const compass = text.compass === null ? null : compassElement(text.compass);
+  const compass = text.compass === null ? null : compassElement(text.compass, text.dark);
   if (compass) overlay.append(compass.el);
 
   const scene = new Transform();
