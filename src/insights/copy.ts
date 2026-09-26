@@ -149,7 +149,7 @@ const es = {
   title: "¿Qué está pasando?",
   subtitle:
     "Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto, explicados en palabras sencillas con los datos del Servicio Geológico Colombiano.",
-  back: "Volver al monitor",
+  back: "Volver al inicio",
   tabsLabel: "Forma de verlo",
   tabs: { story: "La historia", questions: "Preguntas", "3d": "En 3D" },
   loading: "Cargando los catálogos…",
