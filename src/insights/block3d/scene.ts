@@ -6,7 +6,7 @@
  * `bake-basemap.ts`) and from the live catalogue, which `setData` follows in place.
  */
 import { Camera, Geometry, Mesh, Orbit, Program, Renderer, Sphere, Texture, Transform, Vec3 } from "ogl";
-import { GROUND, RUPTURE } from "../block";
+import { GROUND, RELIEF, RUPTURE } from "../block";
 import type { Insights } from "../claims";
 import { SLAB2 } from "../plate";
 import { TOWNS } from "../region";
@@ -22,15 +22,19 @@ import {
   eventRadius,
   framing,
   groundKmAt,
+  landScale,
+  pinDistances,
   mapUv,
   x,
   z,
   type BlockEvent,
+  type HeightGrid,
   type Preset,
   type View,
 } from "./shared";
 import basemapDark from "./basemap-dark.webp?url";
 import basemapLight from "./basemap-light.webp?url";
+import { loadRelief } from "./relief";
 
 export interface SceneText {
   trench: string;
@@ -49,6 +53,12 @@ export interface SceneText {
   length: string;
   /** The page's theme: the scene's colours and map image are read from it once. */
   dark: boolean;
+  /**
+   * The viewer's pins answer a hover, a tap or the keyboard with a line to Pereira and its length:
+   * `pin` names a pin for a screen reader, `label` is the line's. Null leaves the pins inert (the
+   * turning preview, which the reader does not handle).
+   */
+  distance: { pin: (name: string, km: number) => string; label: (km: number) => string } | null;
 }
 
 export interface SceneHandle {
@@ -138,14 +148,22 @@ function labelElement(text: string, className: string) {
  * A map pin whose tip is the town: the element has no size, so centring it on the point puts its
  * origin there, and the pin and its name hang above it. The SVG is fixed markup; the name is text.
  */
-function pinElement(name: string, home: boolean) {
-  const el = document.createElement("div");
-  el.className = "pointer-events-none relative size-0";
+function pinElement(name: string, home: boolean, pressable: string | null = null) {
+  const el: HTMLElement = document.createElement(pressable ? "button" : "div");
+  el.className = pressable
+    ? "group pointer-events-auto relative size-0 cursor-pointer outline-none"
+    : "pointer-events-none relative size-0";
+  if (pressable) {
+    el.setAttribute("type", "button");
+    el.setAttribute("aria-label", pressable);
+  }
   el.innerHTML = `<svg viewBox="0 0 24 32" aria-hidden="true" class="absolute -top-8 -left-3 h-8 w-6 drop-shadow ${
     home ? "text-place" : "text-foreground"
   }"><path fill="currentColor" d="M12 0C5.4 0 0 5.2 0 11.6 0 20.3 12 32 12 32s12-11.7 12-20.4C24 5.2 18.6 0 12 0z"/><circle cx="12" cy="11.5" r="4.6" class="fill-background"/></svg>`;
   const label = document.createElement("span");
-  label.className = `absolute -top-14 left-0 -translate-x-1/2 whitespace-nowrap ${LABEL}`;
+  label.className = `absolute -top-14 left-0 -translate-x-1/2 whitespace-nowrap ${LABEL}${
+    pressable ? " group-focus-visible:ring-2 group-focus-visible:ring-ring" : ""
+  }`;
   label.textContent = name;
   el.append(label);
   return el;
@@ -164,15 +182,22 @@ uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
 uniform mat3 normalMatrix;
+// The land (y > 0) raised on its own; 1 for everything else. Its normal scales by the inverse.
+uniform float uLandScale;
 out vec3 vNormal;
 out vec2 vUv;
 out vec3 vColor;
 out float vWorldY;
 void main() {
   vec3 p = ${instanced ? "position * scale + offset" : "position"};
+  vec3 n = normal;
+  if (p.y > 0.0) {
+    p.y *= uLandScale;
+    n.y /= uLandScale;
+  }
   vec4 world = modelMatrix * vec4(p, 1.0);
   vWorldY = world.y;
-  vNormal = normalize(normalMatrix * normal);
+  vNormal = normalize(normalMatrix * n);
   vUv = uv;
   vColor = ${instanced ? "icolor" : "color"};
   gl_Position = projectionMatrix * viewMatrix * world;
@@ -290,7 +315,7 @@ function grid(
       else if (ok[b] && ok[c] && ok[d]) idx.push(b, c, d);
     }
   }
-  const index = new Uint16Array(idx);
+  const index = nx * ny > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
   return new Geometry(gl, {
     position: { size: 3, data: pos },
     normal: { size: 3, data: normals(pos, index) },
@@ -379,6 +404,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
         uAmbient: { value: ambient },
         uDirect: { value: 1.6 },
         uClipY: { value: o.clip ? -FLOOR_KM : -1e9 },
+        uLandScale: { value: 1 },
       },
     });
     programs.push(p);
@@ -411,25 +437,26 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     return m;
   };
 
-  // --- Ground: GEBCO 2020, the monitor's map baked on top ---------------------------------------
-  const groundProgram = lit({ mode: 1 });
-  groundProgram.depthWrite = true;
-  add(
-    vertical,
+  // --- Ground: GEBCO 2020, then the fine ground; the monitor's map baked on top ---------------
+  // The land is raised on its own by the ground program's `uLandScale` (`landScale`): the sea floor and
+  // every depth stay true, and a change of it is a uniform, not a new mesh.
+  let heights: HeightGrid = GROUND;
+  const groundGeometry = (h: HeightGrid) =>
     grid(
       gl,
-      GROUND.nx,
-      GROUND.ny,
-      (i, j) => [
-        x(GROUND.lon0 + i * GROUND.step),
-        GROUND.elevationM[j * GROUND.nx + i]! / 1000,
-        z(GROUND.lat0 + j * GROUND.step),
-      ],
-      { uv: mapUv(), color: (i, j) => groundColour(GROUND.elevationM[j * GROUND.nx + i]!, pal.dark) },
-    ),
-    groundProgram,
-  );
-  const ground = vertical.children.at(-1) as Mesh;
+      h.nx,
+      h.ny,
+      (i, j) => [x(h.lon0 + i * h.step), h.elevationM[j * h.nx + i]! / 1000, z(h.lat0 + j * h.step)],
+      { uv: mapUv(h), color: (i, j) => groundColour(h.elevationM[j * h.nx + i]!, pal.dark) },
+    );
+  const groundProgram = lit({ mode: 1 });
+  groundProgram.depthWrite = true;
+  const ground = add(vertical, groundGeometry(heights), groundProgram);
+  /** The drawn ground's height at a place, in km before the vertical exaggeration: where a pin stands. */
+  const groundKm = (lat: number, lon: number) => {
+    const km = groundKmAt(lat, lon, heights);
+    return km > 0 ? km * landScale(view) : km;
+  };
   {
     const img = new Image();
     img.onload = () => {
@@ -438,6 +465,18 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     };
     img.src = pal.dark ? basemapDark : basemapLight;
   }
+  let disposed = false;
+  // The fine ground replaces GEBCO's once it has loaded; if it never does, GEBCO's stays.
+  void loadRelief().then(
+    (relief) => {
+      if (disposed) return;
+      heights = { ...RELIEF, elevationM: relief.elevationM };
+      const old = ground.geometry;
+      ground.geometry = groundGeometry(heights);
+      old.remove();
+    },
+    () => {},
+  );
 
   // --- The plate: Slab2's top, its body, its cut faces and its stated uncertainty --------------
   const top = (k: number) => SLAB2.topKm[k] ?? null;
@@ -636,15 +675,78 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       () => view.layers.labels && fromAbove < 0.5,
     );
   }
+  const pinAt = (t: { lat: number; lon: number }): [number, number, number] => [
+    x(t.lon),
+    Math.max(0, groundKm(t.lat, t.lon)) * view.exaggeration,
+    z(t.lat),
+  ];
+  // Which pin's distance is shown: a mouse over it, else one pressed (a tap), else one the keyboard is on.
+  const pinState = { hover: null as string | null, pressed: null as string | null, focused: null as string | null };
+  const shownPin = () => pinState.hover ?? pinState.pressed ?? pinState.focused;
+  const distances = new Map(pinDistances().map((d) => [d.id, d]));
+  const home = TOWNS.find((t) => t.kind === "home")!;
+  // Each pressable pin's name: it gains the distance while its line shows.
+  const pinNames = new Map<string, HTMLElement>();
+  const pinButtons = new Map<string, HTMLElement>();
+  // A pressed pin is a toggle, and says so to a screen reader.
+  const setPressed = (id: string | null) => {
+    pinState.pressed = id;
+    for (const [k, el] of pinButtons) el.setAttribute("aria-pressed", String(k === id));
+  };
   for (const t of TOWNS.filter((t) => PINNED.includes(t.id))) {
-    const h = groundKmAt(t.lat, t.lon);
+    const d = text.distance && distances.get(t.id);
+    const el = pinElement(t.name, t.kind === "home", d ? text.distance!.pin(t.name, d.km) : null);
+    if (d) {
+      pinNames.set(t.id, el.querySelector("span")!);
+      pinButtons.set(t.id, el);
+      el.setAttribute("aria-pressed", "false");
+      el.addEventListener("pointerenter", (e) => {
+        if (e.pointerType === "mouse") pinState.hover = t.id;
+      });
+      el.addEventListener("pointerleave", () => {
+        if (pinState.hover === t.id) pinState.hover = null;
+      });
+      el.addEventListener("click", () => {
+        setPressed(pinState.pressed === t.id ? null : t.id);
+      });
+      // Only the keyboard's focus: a tap focuses the button too, and a second tap must hide the line.
+      el.addEventListener("focus", () => {
+        if (el.matches(":focus-visible")) pinState.focused = t.id;
+      });
+      el.addEventListener("blur", () => {
+        if (pinState.focused === t.id) pinState.focused = null;
+      });
+    }
     tag(
-      pinElement(t.name, t.kind === "home"),
-      () => [x(t.lon), h * view.exaggeration, z(t.lat)],
+      el,
+      () => pinAt(t),
       () => view.layers.labels,
       { clamp: false },
     );
   }
+  // The line to Pereira: under the pins, drawn in screen space between their tips each frame.
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", "absolute inset-0 size-full overflow-visible");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("class", "stroke-foreground");
+  line.setAttribute("stroke-width", "1.5");
+  line.setAttribute("stroke-dasharray", "5 4");
+  line.setAttribute("stroke-linecap", "round");
+  svg.append(line);
+  overlay.prepend(svg);
+  let distanceFor: string | null = null;
+  // A pressed pin keeps its line while the reader turns the block, so it can be followed from any
+  // angle; a tap on the block that does not turn it (under 5 px of travel) lets it go.
+  let downAt: [number, number] | null = null;
+  const onDown = (e: PointerEvent) => (downAt = [e.clientX, e.clientY]);
+  const onUp = (e: PointerEvent) => {
+    if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 5) setPressed(null);
+    downAt = null;
+  };
+  canvas.addEventListener("pointerdown", onDown);
+  canvas.addEventListener("pointerup", onUp);
+
   tag(
     labelElement(text.trench, LABEL_QUIET),
     () => [x(-78.05), 8, z(4.2)],
@@ -682,6 +784,7 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
   function setView(v: View) {
     const exChanged = vertical.scale.y !== v.exaggeration;
     view = v;
+    groundProgram.uniforms.uLandScale!.value = landScale(v);
     vertical.scale.y = v.exaggeration;
     for (const p of programs)
       if (p.uniforms.uClipY!.value > -1e8) p.uniforms.uClipY!.value = -FLOOR_KM * v.exaggeration;
@@ -793,6 +896,33 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
       const inside = Math.max(LABEL_INSET, Math.min(w - t.width - LABEL_INSET, left));
       t.el.style.transform = `translate(${inside}px, ${sy}px) translate(0, -50%)`;
     }
+    // The distance line, between the two pins' tips; hidden if either is behind the camera.
+    const id = text.distance && view.layers.labels ? shownPin() : null;
+    const town = id === null ? null : TOWNS.find((t) => t.id === id)!;
+    const project = ([px, py, pz]: [number, number, number]) => {
+      const cw = pv[3]! * px + pv[7]! * py + pv[11]! * pz + pv[15]!;
+      if (cw <= 0) return null;
+      const cx = (pv[0]! * px + pv[4]! * py + pv[8]! * pz + pv[12]!) / cw;
+      const cy = (pv[1]! * px + pv[5]! * py + pv[9]! * pz + pv[13]!) / cw;
+      return [((cx + 1) / 2) * w, ((1 - cy) / 2) * h] as const;
+    };
+    const [a, b] = town ? [project(pinAt(town)), project(pinAt(home))] : [null, null];
+    if (a && b) {
+      line.setAttribute("x1", String(a[0]));
+      line.setAttribute("y1", String(a[1]));
+      line.setAttribute("x2", String(b[0]));
+      line.setAttribute("y2", String(b[1]));
+      line.style.display = "";
+    } else line.style.display = "none";
+    // The distance goes in the pin's own name ("Chaparral · ~125 km"): a label of its own, at the
+    // line's middle, covered the name whenever the line was short on screen.
+    if (id !== distanceFor) {
+      const before = distanceFor === null ? null : distances.get(distanceFor)!;
+      if (before) pinNames.get(before.id)!.textContent = before.name;
+      distanceFor = id;
+      const now = id === null ? null : distances.get(id)!;
+      if (now) pinNames.get(now.id)!.textContent = `${now.name} · ${text.distance!.label(now.km)}`;
+    }
   };
   function resize() {
     const { clientWidth: w, clientHeight: h } = container;
@@ -826,14 +956,18 @@ export function createScene(container: HTMLElement, data: Insights, initial: Vie
     setAutoRotate(on) {
       autoRotate = on;
     },
+
     onInteract(cb) {
       listeners.push(cb);
     },
     dispose() {
+      disposed = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
       canvas.removeEventListener("pointerdown", interact);
       canvas.removeEventListener("wheel", interact);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerup", onUp);
       canvas.remove();
       overlay.remove();
       gl.getExtension("WEBGL_lose_context")?.loseContext();

@@ -121,6 +121,11 @@ practices stayed at 100.
     151.4 kB (37.0 → 49.8 kB gzipped): Radix Dialog for the phone's `Sheet`, `Tabs`, `ToggleGroup`,
     `Switch` and `Field`. Opening the viewer on a 4×-throttled phone measured 152 ms on both builds
     (Event Timing, a real key press). vaul would have added ~17 kB more; see [the page](frontend.md).
+  - The raised mountains and the pins' distances (2026-09-26, `vite build` against `main`) took the 3D
+    chunk from 147.5 kB to 153.1 kB (48.9 → 51.0 kB gzipped), plus the fine ground's file,
+    `relief.bin.gz` (80 kB, fetched once per page when the 3D block is first drawn, after the map
+    image; GEBCO's grid shows until it arrives). Raising or lowering the mountains is a uniform
+    write, not a new mesh.
   - The felt-intensity question (2026-09-25, `vite build`) took the questions chunk from 66.9 kB to
     72.2 kB (22.2 → 23.9 kB gzipped), and the shell from 21.3 kB to 25.6 kB (8.5 → 10.0 kB gzipped):
     its rule and its sentences are in `claims.ts` and `copy.ts`, which the shell already loads. One

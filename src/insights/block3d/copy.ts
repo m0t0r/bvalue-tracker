@@ -4,7 +4,7 @@
  * number of its own.
  */
 import type { Lang } from "@/lib/i18n";
-import type { Preset } from "./shared";
+import { RAISED_LAND, type Preset } from "./shared";
 
 export interface RuptureFacts {
   /** "10 de agosto" */
@@ -62,10 +62,20 @@ const es = {
   panel: "Leyenda y ajustes",
   tabs: { key: "Leyenda", settings: "Ajustes" },
   exaggeration: "Exageración vertical",
-  exaggerationHelp: "Estira la altura para separar mejor las profundidades. Con ×1, el bloque está a escala real.",
+  exaggerationHelp: "Estira la altura para separar mejor las profundidades. «A escala real» las deja sin estirar.",
   layersTitle: "Capas",
-  exaggerationOption: (n: number) => (n === 1 ? "×1 (real)" : `×${n}`),
-  exaggerationTag: (n: number) => (n === 1 ? "A escala real" : `Exageración vertical ×${n}`),
+  exaggerationOption: (n: number) => (n === 1 ? "A escala real" : `×${n}`),
+  exaggerationTag: (n: number, raised: boolean) =>
+    raised
+      ? n === 1
+        ? `Montañas realzadas ×${RAISED_LAND}`
+        : `Exageración vertical ×${n} · montañas ×${RAISED_LAND}`
+      : n === 1
+        ? "A escala real"
+        : `Exageración vertical ×${n}`,
+  relief: "Montañas",
+  reliefHelp: `Miden hasta unos 5 km de alto: a escala real, en un bloque de 500 km casi no se ven. Realzadas, su altura se multiplica por ${RAISED_LAND}; el fondo del mar y las profundidades quedan igual.`,
+  reliefOption: { raised: `Realzadas ×${RAISED_LAND}`, true: "A escala real" },
   layers: {
     ground: "Terreno",
     plate: "Placa",
@@ -103,10 +113,13 @@ const es = {
     ],
     offset: (f: RuptureFacts) =>
       `El USGS ubica ese sismo unos ${f.offset} más al ${f.direction} y ${f.deeper} ${f.shallower ? "menos" : "más"} profundo de lo que lo ubica el SGC. Por eso la zona naranja no pasa por el punto de ese sismo.`,
-    pins: ["Los marcadores", "Pereira, en rojo, y otros lugares que sirven de referencia."] as Pair,
+    pins: (list: string): [string, string] => [
+      "Los marcadores",
+      `Pereira, en rojo, y otros lugares que sirven de referencia. En «Explorar en 3D», pasa el cursor por un marcador, o tócalo, para ver a cuánto está de Pereira en línea recta: ${list}.`,
+    ],
     depth: (w: string, l: string, d: string): [string, string] => [
       "Las medidas",
-      `El bloque mide unos ${w} de oeste a este, ${l} de sur a norte y ${d} de alto. Los números del costado marcan cuántos kilómetros hay bajo la superficie. Para que se vea mejor, lo vertical se puede estirar: con «×1», el bloque está a escala real y las montañas casi no se notan.`,
+      `El bloque mide unos ${w} de oeste a este, ${l} de sur a norte y ${d} de alto. Los números del costado marcan cuántos kilómetros hay bajo la superficie. Para que se vea mejor, la altura se puede estirar y las montañas se pueden realzar ×${RAISED_LAND}, porque a escala real casi no se notan. Las dos opciones están en «Ajustes».`,
     ],
     snapped: (list: string) =>
       `El catálogo pone a muchos eventos pequeños exactamente a la misma profundidad: ${list}. Por eso ahí se ven «capas», que no son reales.`,
@@ -121,6 +134,8 @@ const es = {
   and: " y ",
 
   scene: {
+    pinDistance: (name: string, km: string) => `${name}: a unos ${km} de Pereira en línea recta`,
+    distance: (km: string) => `~${km}`,
     width: (km: string) => `~${km}, oeste–este`,
     length: (km: string) => `~${km}, sur–norte`,
     trench: "fosa del Pacífico",
@@ -179,10 +194,20 @@ const en: Copy = {
   panel: "Key and settings",
   tabs: { key: "Key", settings: "Settings" },
   exaggeration: "Vertical exaggeration",
-  exaggerationHelp: "Stretches the height so the depths separate better. At ×1 the block is true to scale.",
+  exaggerationHelp: 'Stretches the height so the depths separate better. "True to scale" leaves them unstretched.',
   layersTitle: "Layers",
-  exaggerationOption: (n) => (n === 1 ? "×1 (true)" : `×${n}`),
-  exaggerationTag: (n) => (n === 1 ? "True to scale" : `Vertical exaggeration ×${n}`),
+  exaggerationOption: (n) => (n === 1 ? "True to scale" : `×${n}`),
+  exaggerationTag: (n, raised) =>
+    raised
+      ? n === 1
+        ? `Mountains raised ×${RAISED_LAND}`
+        : `Vertical exaggeration ×${n} · mountains ×${RAISED_LAND}`
+      : n === 1
+        ? "True to scale"
+        : `Vertical exaggeration ×${n}`,
+  relief: "Mountains",
+  reliefHelp: `They are up to about 5 km high: at true scale they barely show on a 500 km block. Raised, their height is multiplied by ${RAISED_LAND}; the sea floor and the depths stay the same.`,
+  reliefOption: { raised: `Raised ×${RAISED_LAND}`, true: "True to scale" },
   layers: {
     ground: "Ground",
     plate: "Plate",
@@ -220,10 +245,13 @@ const en: Copy = {
     ],
     offset: (f) =>
       `USGS places that earthquake about ${f.offset} further ${f.direction} and ${f.deeper} ${f.shallower ? "shallower" : "deeper"} than SGC does. That is why the orange patch does not pass through that earthquake's dot.`,
-    pins: ["The markers", "Pereira, in red, and other places for reference."],
+    pins: (list) => [
+      "The markers",
+      `Pereira, in red, and other places for reference. In "Explore in 3D", hover over a marker, or tap it, to see how far it is from Pereira in a straight line: ${list}.`,
+    ],
     depth: (w, l, d) => [
       "The sizes",
-      `The block is about ${w} from west to east, ${l} from south to north and ${d} tall. The numbers on the side mark how many kilometres below the surface. To make it easier to see, the vertical can be stretched: at "×1" the block is true to scale and the mountains barely show.`,
+      `The block is about ${w} from west to east, ${l} from south to north and ${d} tall. The numbers on the side mark how many kilometres below the surface. To make it easier to see, the height can be stretched and the mountains raised ×${RAISED_LAND}, because at true scale they barely show. Both options are in "Settings".`,
     ],
     snapped: (list) =>
       `The catalogue puts many small events at exactly the same depth: ${list}. That is why you see "layers" there, and they are not real.`,
@@ -238,6 +266,8 @@ const en: Copy = {
   and: " and ",
 
   scene: {
+    pinDistance: (name, km) => `${name}: about ${km} from Pereira in a straight line`,
+    distance: (km) => `~${km}`,
     width: (km) => `~${km}, west–east`,
     length: (km) => `~${km}, south–north`,
     trench: "Pacific trench",
