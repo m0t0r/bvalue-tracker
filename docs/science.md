@@ -180,7 +180,12 @@ the reader's own questions). Everything above still applies to it; this section 
     where they start to feel them, and the page never claims an event was felt.
   - *Drift* (`drift`): the median epicentre of the swarm's first day against the last 24 h. A
     movement is stated only when it exceeds both 1.5 km and the events' median horizontal location
-    error, and always as a hint. Ten events at each end or nothing.
+    error, and always as a hint. Ten events at each end or nothing, and "too few" says which ends
+    it means ("en el primer día del enjambre o en las últimas 24 horas"); "aún es pronto" only while
+    the swarm is under two days old and the two windows overlap (2026-09-26: a quietened swarm read
+    as a young one).
+  - *Inside the crust* is said only for a median depth under 30 km (`CRUSTAL_KM`, `crustal` in
+    `claims.ts`), on the story and the questions tab alike; question 4 used to say it always.
 - **Measured on production, 2026-09-24 14:44 UTC** (the fixture `test/fixtures/api-events-2026-09-24.json`,
   every figure recomputed in Python): the shallow group ran **4.8 events a day** in the last 120 h
   against a median day of **10** (Mc 2.3) — quieter, but only just past the half-rate line, so the
@@ -317,7 +322,10 @@ the reader's own questions). Everything above still applies to it; this section 
     rupture as starting at the plate's surface.
 - **The 3D tab's rules** (from 2026-09-25):
   - **One exaggeration for everything vertical**, ground and depth alike, always written on the block
-    ("A escala real" at ×1). It opens at ×2; at ×1 the relief of 4–5 km barely shows against 240 km.
+    ("A escala real" at ×1). The preview turns at ×2, where the relief shows (at ×1 the relief of
+    4–5 km barely shows against 240 km); the viewer opens at ×1, true to scale (owner's call,
+    2026-09-26: ×2 doubled the plate's dip and every depth the reader judges there), and ×2 and ×4
+    are one press away. The ×2 default had been the prototype's, never decided.
   - **The rupture is named in plain words**: "donde se rompió la roca", "la zona naranja", never
     "ruptura" alone (the owner, not a seismologist, could not tell what the orange slice was). Its
     key states its length, depth range and largest slip from `block.json`, and the offset between

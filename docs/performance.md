@@ -17,8 +17,10 @@ practices stayed at 100.
   well took the main chunk from 922 kB to 472 kB (276 → 142 kB gzipped) and did the rest of
   the blocking time.
   - The placeholder is **the same card with the same title** and a skeleton the height of the
-    chart it becomes (`height`: `"chart"`, the default, is `h-80`; `"map"` is `h-104`, the
-    map's canvas plus legend). A plain box of the wrong height would trade the blocking time for layout
+    chart it becomes (`placeholder`: an `h-80` skeleton by default; the map and the magnitude chart
+    draw their real legend beside skeletons of their drawings, since a legend wraps differently at
+    each width; the description and "Valor b en el tiempo"'s CSV button come without the chunk).
+    A plain box of the wrong height would trade the blocking time for layout
     shift, which is the thing CLS counts.
   - A card that is already on screen (the b-over-time chart on a desktop) still loads
     immediately — one frame after the shell, instead of holding it up.

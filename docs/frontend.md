@@ -151,13 +151,20 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   refetched when its last ingest changes, the monitor's own rule, so a page left open does not keep
   counting "the last 7 days" over a catalogue that stopped growing. The two pages are separate
   documents and share no cache. Status also drives the warning while either zone's history is
-  incomplete (`backfill.done < total`); the page never starts the back-fill, which is the monitor's,
-  so nothing on it can reach SGC.
+  incomplete (`backfill.done < total`); the page never starts the back-fill, so nothing on it can
+  reach SGC. The Worker's cron carries it on, so the notice says it completes by itself. **A refetch
+  that fails keeps the claims, and the page says so** (2026-09-26): `staleSince` over both catalogues
+  and both statuses puts a caution notice in the back-fill notice's slot ("Los datos no se están
+  actualizando · Sin conexión con el servidor desde las 12:35. Lo que ves es de entonces y se
+  actualizará solo.", worded as the monitor's line, the day only when it is not today). One notice at
+  a time: the load error, then stale data, then an unfinished history. Checked with a 503 on `/api/`
+  and offline, and back.
 - **Copy.** The shell and every data-dependent sentence live in `src/insights/copy.ts`; each is a
   function of a claim's result, so the words cannot say more than the rule decided. Each tab keeps its
   long-form prose in its own `copy.ts`. Language and theme are the monitor's (`useI18n`, `theme.ts`),
   so a choice made on one page holds on the other.
-- **Colours.** Chocó's groups keep the monitor's blue and teal and the mainshock its orange. The
+- **Colours.** Chocó's groups keep the monitor's blue and teal and the mainshock its orange (the
+  monitor's Gutenberg–Richter fit line is `foreground` for that reason, not `--chart-2`). The
   Chaparral swarm is `--chart-5`, a violet chosen by search against all four under simulated colour
   blindness (the numbers are in `index.css`). **Pereira is red, `--place`** (owner's call,
   2026-09-24): in `foreground` it read as black beside Chaparral's near-black violet. It is its own
@@ -176,7 +183,9 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
 - **Figures and their units never part at a line break.** `fmtKm`, `fmtPct` and every "N km" written
   into the copy put a no-break space (U+00A0) before the unit: a thin space broke "~120 / km" at
   320 px. Not the narrow one (U+202F): in Geist it reads as no space at all in a 30 px figure. That
-  one groups thousands ("125 893"), where the digits are meant to sit close.
+  one groups thousands ("125 893"), where the digits are meant to sit close. A range's dash is
+  written " –⁠" (a word joiner after it): a line may break after an en dash even when a no-break
+  space follows (UAX #14), which left "20 sept – 22 / sept" in the b card.
 - **SVG text is sized in screen pixels.** A drawing that scales with its column (the questions tab's
   map, `viewBox` 400) multiplies its font sizes by viewBox units per pixel; in viewBox units alone
   its town names were 7 px on a 320 px phone.
@@ -202,12 +211,17 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   `story/scenes.tsx`, `rankLayout` in `history.ts`, 2026-09-25): the M7.4 in the mainshock's orange,
   past earthquakes in `muted-foreground`. Squares are right-aligned so each label sits beside its own
   square; left-aligned, the small ones' labels floated ~250 px from them. A row is never shorter than
-  its two lines of text, and the labels step down a pixel at a time (to 9 px) until every row fits:
-  at 320 × 640 the second part's nine rows did not fit at 11 px and the drawing came out empty.
+  its two lines of text. The labels are measured (`fitRanks` in `story/layout.ts`, `textWidth` in
+  `story/measure.ts`: one canvas measurement, cached once the web font has loaded), the widest line
+  decides how much width the squares get, and the text steps down a pixel at a time (to 9 px) until
+  every row fits the height and the largest square is at least two rows tall; if even 9 px is too
+  wide, the first lines drop the time. At 320 × 640 the second part's nine rows did not fit at 11 px
+  and the drawing came out empty; an estimate of 13 em per label clipped "Armenia (Quindío) · 25 ene
+  1999, 13:19" at 320 px (interface review, 2026-09-26).
   Every row gives the day and time in Colombian time, like the M7.4's (`fmtDateTime`, 2026-09-25);
   1906 reads 10:39, Bogotá's mean solar time, since Colombia had no standard time until 1914. With
   the time added, "Costa de Ecuador y Colombia" ran 7 px past the right edge at 320 px, so the 1906
-  row is "Costa Ecuador–Colombia"; the tightest label (Armenia, first part) keeps 2–3 px. The
+  row is "Costa Ecuador–Colombia"; no label comes closer than the 6 px margin to the right edge. The
   drawing's title names the M7.4 ("frente al M7.4"), because every row's ratio is against it. The
   text alternative lists every row with its label. Both layouts, the first part's and the second's,
   stay mounted so the step change cross-fades; drawing only the active one was suggested in review
@@ -223,16 +237,31 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   seconds past the longest bar. Like the squares, the text steps down a pixel at a time to 9 px until
   the rows, the axis and its label fit. PR #65 drew rupture durations of past earthquakes here
   instead; they read as shaking and were taken out (see the science). Checked at 1280 and 320 px,
-  both themes. **On a landscape phone (667 × 375) the story's drawing is
-  ~170 px tall and holds neither this step nor the energy squares**, which were already empty there;
-  that is the story's layout, not this step's.
+  both themes. **Any landscape window from 560 px uses the side-by-side layout** (`useWide` in
+  `story/hooks.ts`: `(min-width: 768px), (orientation: landscape) and (min-width: 560px)`), so a
+  landscape phone or a desktop at 200 % zoom (667 × 375, 640 × 450) gives the drawing the window's
+  full height (338 × 327 and 322 × 402) instead of ~170–210 px pinned over half of it, where this
+  step and the energy squares came out empty. The layout and the step observer read the same query
+  (`data-side` on the section). A portrait window under about 600 px tall still cannot draw every
+  scene.
 - **The ×32 ladder's labels sit on the squares' baseline, in gaps sized to hold them** (2026-09-26,
   owner's report). Each "×32" was centred in a fixed 14 px (phone) or 26 px gap, narrower than the
   label, and set 10 px above the previous square's top: it ran into both neighbours (at 375 px into
   the M6 square), and the two labels floated at different heights, the first far from M5. Each gap is
   now the label's width plus 12 px (20 on a desktop), both labels share one height just above the
   baseline, and the squares take the width left after both gaps (M6 about 13 % smaller on a phone).
-  Checked at 1280, 375 and 320 px, both themes.
+  Checked at 1280, 375 and 320 px, both themes. The squares are `muted-foreground`, untinted: the
+  blue at 40 % was "Chocó superficial"'s colour in the story's key, and 1.7:1 against the card.
+- **The waves step drops its seismogram label and footnote on a phone**: both ran off the drawing at
+  320 px, and the aside beside it says both. **Chaparral's close-up** has a phone title ("Chaparral
+  de cerca · intenso = reciente"). The swarm's age is a colour step (`--chart-5-age-1..4`, 1 the
+  oldest), never opacity, each ≥ 3:1 on the card (the numbers are in `index.css`); the strip's
+  smaller events are neutral, like Chocó's. The calendar's and the map's legends are spaced by
+  measured widths, and a calendar tile shows its month only when it fits. Every story step was
+  scanned for SVG text past the drawing's edge at 320, 375, 390, 640 × 450, 667 × 375 and 1280 px,
+  both languages (2026-09-26).
+- **Dates in running prose are written out** (`fmtDayLong`, "10 de agosto"); drawings, chips and
+  labels keep `fmtDay` ("10 ago", with a no-break space).
 - **USGS's forecast is a box inside "¿Viene uno más grande?"**, not a question of its own
   (`questions/forecast.tsx`, 2026-09-25; the rules are in
   [the science](science.md#the-insights-page-insights-from-2026-09-24)). The draft wording had it as a
@@ -289,7 +318,9 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   Pereira shows. On a phone that makes it about 1 px per km, so the ticks go every 40 km and the
   "más profundo hacia el este" arrow drops its words, which the sentence beside it already says.
   The plate is neutral (`muted-foreground` at 20 % for the body, 10 % for the uncertainty band),
-  so the source colours stay the only colours in the drawing.
+  so the source colours stay the only colours in the drawing. The band is called "franja tenue" /
+  "faint band": in dark mode it is darker than the body, not lighter, and "franja clara" was wrong
+  there.
   - **Both cuts go through `story/section.tsx`**: `frameSections` frames Chocó's and Chaparral's at
     one scale (see [the science](science.md#the-insights-page-insights-from-2026-09-24)), and
     `SectionFrame` draws the depth axis, the plate, the ground and a locator map for either. Chaparral's
@@ -359,9 +390,18 @@ full-screen viewer with five views to jump to.
   the ground turns see-through and what only makes sense from the side (depth ticks, the plate, its
   margin, the box, the underground labels) hides. Towns are teardrop pins, Pereira in `--place`,
   their names in the text colour. The block's size is written on its top edges.
-- **The viewer is a modal dialog**: focus goes to its close button and stays inside it, Escape closes
+- **The viewer is a modal dialog**: it is portalled to `<body>` and the page root is `inert` while it
+  is open; focus goes to its close button and loops inside it over every tab stop, the panel's tab
+  content included (a first version missed that one and let Tab reach the page behind). Escape closes
   it and returns focus to "Explorar en 3D", and the page behind does not scroll. Reduced motion stops
-  the preview's rotation and makes the views jump instead of glide. Without WebGL 2 the tab says so
+  the preview's rotation and makes the views jump instead of glide; otherwise a pause button on the
+  preview stops it (WCAG 2.2.2).
+- **The preview turns at ×2 and the viewer opens at ×1** (`PREVIEW_EXAGGERATION`,
+  `VIEWER_EXAGGERATION` in `shared.ts`, owner's call, 2026-09-26): the preview is a showcase, where
+  the relief should show; the viewer is where the reader judges the plate's dip and the sources'
+  depths, which ×2 doubled. The viewer keeps the reader's choice while the tab stays mounted. At ×1
+  the plate's label sits at least 70 km down (`max(40 × exaggeration, 70)`), or it lay on "~500 km"
+  at 320–390 px. Without WebGL 2 the tab says so
   and points to the story's cuts, which remain the text alternative.
 - **The viewer's explanation and settings are one panel with two tabs, "Leyenda" and "Ajustes"**
   (`Panel`, 2026-09-26). It replaced a hand-rolled `<details>` ("Capas, escala y tiempo") that, open
@@ -377,13 +417,26 @@ full-screen viewer with five views to jump to.
   - While the sheet is open the viewer's own key handler stands aside (`sheetOpen`), and it ignores an
     Escape Radix has already handled (`defaultPrevented`): otherwise one Escape closed both the sheet
     and the viewer. Escape closes one layer at a time, and focus goes back to the button that opened
-    it.
+    it: Radix keeps one trigger per sheet and returned focus to "Ajustes" whichever button opened it,
+    so `onCloseAutoFocus` sends it to the one pressed. On touch the layer rows are ~47 px apart, clear
+    of the Switch's 46 px hit area.
 - The explanation comes first: the reader is not a specialist. Layers are `Switch`es named for their on
   state; the views and the exaggeration are `ToggleGroup`s. The hint names the reader's input (a phone
   pinches, a mouse scrolls). The views row fades at its edge on a phone, where it is cut mid-word.
 - **Checked at 390 px and 1440 px, both themes, both languages** (2026-09-25): the side-length label
   ends at the block's edge (a centred one ran off a phone's screen), and the exaggeration note sits top
-  left, clear of the credit.
+  left, clear of the credit. **Every label but the pins is clamped inside the block** (its width read
+  once per resize); below 480 px the plate, rupture and size labels drop what the key says (the model,
+  the date, the directions). The quieter labels are `text-xs` in `foreground`: in `muted-foreground`
+  at 10 px they measured 2.1–2.9:1 on the grey plate (8.6:1 now, light). Checked again at 320, 390 and
+  1280 px, 2026-09-26. Pins can still overlap one another from some angles (Chaparral's name over
+  Pereira's pin at 390 px on the default view).
+- **The questions tab's line caps are pixels, not `ch`** (Geist put 65ch at ~95 characters): body
+  `max-w-lg`, lede and headings `max-w-xl`, captions `max-w-md`. Its choices are `ToggleGroup`s like
+  the 3D tab's. The stat row wraps (`basis-32 grow`), since "~120 km" outgrew a third of 320 px.
+  Calendar day numbers are 12 px from 360 px and 10 px below, where "14×6" does not fit a 31 px cell.
+  The M ≥ 4 stat counts the events *after* the M7.4 ("después del M7.4"), which the calendar's and the
+  story's totals include; "desde" read as including it.
 
 ## Interface conventions
 
@@ -436,7 +489,9 @@ colour, motion). Keep to them:
   within the last five minutes, so it may only appear when nothing has failed;
   `refreshStillFailing` replaces it beside the alert and must not tell the reader to press
   again, because while SGC is refusing us the Worker's own wait is an hour; `refreshFailed`
-  is for the request from the *page* failing, which is a different thing again.
+  is for the request from the *page* failing, which is a different thing again. While the data is
+  stale (`staleSince`), the stale line takes priority over all three: `refreshWait` would claim
+  fresh data, and `refreshFailed` blames SGC for what is usually the connection.
 - **The refresh button standing down is good news, not a countdown.** The throttle is the
   cron's own period, so it refuses most presses, so `refreshWait` says the reader
   already has the newest data instead of asking them to wait N minutes. It is a timed
@@ -446,7 +501,7 @@ colour, motion). Keep to them:
 - **Decimal point everywhere** ("M7.4", "Mc = 2.0"), matching SGC, the CSV and every
   computed number. Never mix in decimal commas.
 - Terms: "sismo" only for the mainshock, "evento" for catalogue entries, "valor b",
-  "Mc / magnitud de completitud".
+  "Mc / magnitud de completitud". The 3D tab too (its layer is "Eventos").
 - **Red means something failed.** Cautions ("fewer than 50 events", "history
   incomplete") are neutral badges with a warning icon. A *badge* stays neutral; an
   **alert states itself with its own surface** — see the bullet below.
@@ -459,12 +514,13 @@ colour, motion). Keep to them:
   the title and its icon), one constant hue per ramp.
   - **What bounds the light fills is the description.** It stays on `--muted-foreground`
     in every variant, so only the line that names the state is coloured — and that grey
-    clears 4.5:1 on white by just 4.73:1, so a fill any deeper takes it under AA. Hence
+    (`oklch(0.54)` since 2026-09-26; shadcn's 0.556 was 4.34:1 on a `--muted` fill) is 5.04:1 on
+    white and 4.85:1 on these fills, so a fill much deeper takes it under AA. Hence
     fills at `oklch(0.988 …)`, about Tailwind's `*-50`, with the **border** carrying the
     colour at this size, as it does in the shadcn "custom colors" alert these follow.
     Dark mode has the headroom (the grey sits at 6:1) for a real step off `--card`.
     Measured in the browser, light then dark: caution title 4.77 and 10.40, failure title
-    8.24 and 6.89, both descriptions 4.56–6.07, borders 1.36 and 2.12 against the page.
+    8.24 and 6.89, descriptions 4.85–4.86 and 6.03–6.07, borders 1.36 and 2.12 against the page.
   - **The two `-strong` values are a fixed 0.11 apart in lightness**, red the darker in
     light mode and amber the lighter in dark. The two alerts used to stand in the status bar at
     once; they no longer do ("One alert at a time" below), and the separation stays so they
@@ -481,7 +537,9 @@ colour, motion). Keep to them:
   used to be `text-destructive/90`, which is the same mistake and is now the plain
   secondary colour.
 - Order by importance: the b-value leads the page, above the filters. On a phone it
-  must be within the first screen.
+  must be within the first screen. The b card's plain description ("Cuánto pesan los eventos
+  grandes frente a los pequeños…") is a caption under the number, not the card's description: at
+  375 × 812 the figure had 2 px to spare. With it there, the figure ends at 786.
 - **The status bar's stats are one wrapping row at every width**, never a two-column grid
   on a phone. The stats are not the same size — "Eventos" is three digits, "Evento más
   reciente" is "18 sept 2026, 17:08" — so equal halves broke the date across two lines
@@ -523,16 +581,22 @@ colour, motion). Keep to them:
   The form remembers the last object it handed up and compares by identity, so while it is invalid
   it emits nothing, `value` stays the last good object, and nothing resets underneath them.
   - The **notice** sits in the flow under the status bar. It is the accessible one and the only one
-    in the tab order, laid out as one row wherever there is room, so the bar reads as the same
-    object come back rather than a second thing.
+    in the tab order: a group named "Filtros activos", not a live region, since mounted with its
+    chips and button it was read out whole on every filter step. An always-mounted sr-only
+    `role="status"` announces only "Mostrando N de M eventos". It is laid out as one row wherever
+    there is room, so the bar reads as the same object come back rather than a second thing.
   - The **bar** is fixed to the top of the window and **hands over from the notice**: it slides in
     once the notice has left the top of the window, and slides away when the reader comes back up
     to it. So exactly one of the two states the scope at any time, and the reader is never without
     it — which is the whole reason the bar exists, since everything below the fold is a chart drawn
     from a filtered catalogue. One `IntersectionObserver` on the notice decides it: no scroll
-    handler, no pixel threshold, nothing running on a scroll frame. It watches `entry`, not
-    `isIntersecting` alone, and requires `boundingClientRect.bottom <= 0` — a notice out of view
-    *below* the fold, which is where a short screen starts, is not one the bar may stand in for.
+    handler, no pixel threshold, nothing running on a scroll frame. Its root runs from the top of
+    the window down without end (`rootMargin: 0px 0px 100000px 0px`), so the notice leaves it only
+    by its bottom crossing the top of the window, and `past = !isIntersecting`: a notice out of view
+    *below* the fold, which is where a short screen starts, still intersects, and the bar does not
+    stand in for it. Watched against the window alone, a jump from low on the page to the top on a
+    short phone took the notice from above the window to below the fold without crossing it, and
+    left the bar over the header (2026-09-26).
     It is `aria-hidden` with its button out of the tab order, because it is a second view of a
     notice a screen reader has already read out and can still reach. The hand-over is the same
     pixel in both directions (checked in the browser, 2 px either side of it), so a reader parked
@@ -557,7 +621,8 @@ colour, motion). Keep to them:
     control answering a click and puts 90% of the travel in its first 95 ms, which over this
     distance is a pop. Measured in the browser, the bar now leaves the top edge at ~60 ms and
     lands at ~230 ms.
-  - On a phone the bar shows the first chip and counts the rest (`+3`), and shortens the count to
+  - On a phone the bar shows the first chip and counts the rest (`+3`, right after that chip), shows
+    "Quitar filtros" as its X icon alone with the words kept as its name, and shortens the count to
     "639 de 786". Both are pure CSS at the `sm` breakpoint, so its height never changes as it slides.
 - **The per-group daily strips in that card scroll sideways when narrow**, on the same idea as
   "Magnitud en el tiempo", and off the same `dailyCounts` (see [Events per day](#events-per-day)):
@@ -569,8 +634,10 @@ colour, motion). Keep to them:
 - "Detalle técnico" is one component (`technical-detail.tsx`, on shadcn `Collapsible`), used by
   the load error, the failed-ingest alert, the groups card and the b card. It takes a `size`
   for the body's type: `"sm"` for prose meant to be read, the default `"xs"` for a raw error
-  string. `CardDescription` caps itself at 75ch; a card that wants a full-width subtitle
-  passes `max-w-none`.
+  string. `CardDescription` caps itself at `max-w-lg` (32rem, about 79 characters of Geist at
+  14 px; `75ch` ran to about 107, because Geist's "0" is wide) and spans the header under the title
+  and any `CardAction`, so an action never squeezes it into a column on a phone. A card that wants
+  a full-width subtitle passes `max-w-none`.
 - **The b card's fine print is collapsed** — the magnitude-scale caveat and the goodness-of-fit
   Mc. Open, it made the card half again as tall as "Valor b en el tiempo" beside it, and because
   the two share a grid row the chart was stretched to match: 189 px of its card was empty. Folded,
@@ -597,15 +664,33 @@ colour, motion). Keep to them:
   a dropped connection from a failing server, so the copy blames neither; "Reintentar" refetches
   only the failed catalogue and reads "Reintentando…" through the query's own retries. On
   both pages only a catalogue the page never got is an error (`loadFailed`): a background refetch
-  that fails keeps what is drawn, with no alert ("Última consulta al SGC" still dates the data, and
-  the next refetch tries again). The button stays focusable while it retries (`aria-disabled`),
-  and a retry parked offline counts as running.
+  that fails keeps what is drawn, with no alert, and the next refetch tries again. The button stays
+  focusable while it retries (`aria-disabled`), and a retry parked offline counts as running.
+- **Data a failed refetch left behind is dated, not hidden** (`staleSince` in `load-failed.ts`,
+  interface review 2026-09-26). Kept silent, the monitor went on saying "Se actualiza sola cada 15
+  minutos" with every request failing, and only "Última consulta al SGC: hace N min" grew, blaming
+  SGC for the reader's connection. Offline, TanStack parks the refetch rather than failing it, so
+  nothing failed at all; `staleSince` counts a parked refetch too. On the monitor the line under the
+  refresh button then says since when the figures are ("Sin conexión con el servidor desde las
+  12:35. Se actualizará sola."; `fmtClock`, with the day only when it was not today), in the slot
+  of "Se actualiza sola cada N minutos", as a caution: neutral text with a warning icon, never red,
+  inside the live region. It names no interval and no reload, and blames neither the connection nor
+  the server any more than the load error does. It takes priority over every answer to a press
+  except a request actually under way (a press parked offline is not), and it is not shown beside
+  the load error. `status` turns to `error` only after the query's retries, so one dropped request
+  never shows it. Checked with `fault.js` 503 on `/api/` for 75 s and with `set offline on`, then
+  recovery.
 - **A chart or the map arrives in its own card, already titled.** They are loaded on approach
   (`Deferred`, see [Performance](performance.md)), so on a slow connection the reader first sees
   the card with its heading and a skeleton the size of the drawing. Never a bare grey box, and
-  never a card that changes height when the drawing lands. "Valor b en el tiempo" also brings its
-  description (`b-over-time-description.ts`), since on a desktop it is on screen at load; the
-  CSV button arrives with the chart and moves one word of that description to the next line.
+  never a card that changes height when the drawing lands. Every placeholder brings the card's own
+  description (`bTimeDescription`, `fmdDescription`, `mapDescription`), written without the chart's
+  code. The map's and the magnitude chart's placeholders draw their real legend beside skeletons of
+  the drawing's exact height (`MapPlaceholder`, `MagnitudeTimePlaceholder`), since a legend wraps
+  differently at each width, and "Valor b en el tiempo"'s CSV button is drawn in its placeholder
+  too (`BTimeCsvButton`). Measured 2026-09-26 at 320, 390, 768, 1024 and 1280 on both zones: the
+  placeholder equals the loaded card, with CLS 0 while scrolling; before, the magnitude card grew
+  from 410 px to as much as 610.
 - **The status bar appears with the page, not before it** (2026-09-26). Until both `/api/status` and
   the catalogue have answered, it is one skeleton block with no stats. Its stats wrap by their own
   width, so each value landing re-wrapped the row: on a phone "Sismo principal"'s hint took it from
@@ -671,7 +756,11 @@ colour, motion). Keep to them:
     weight is under [Performance](performance.md)). Colombia's data ends at z12.
   - Flat, no tilt: MapLibre cannot draw dots below the ground, and 3D is the insights plan's own unit.
   - "© Mapterhorn" joins the attribution, which at 320 px makes the open attribution box one
-    line taller over the map's bottom edge. It collapses once the reader moves the map.
+    line taller over the map's bottom edge. It collapses once the reader moves the map. "Data from"
+    in OpenFreeMap's credit comes from its TileJSON and is written per language by putting
+    OpenFreeMap's own credit into the style's `openmaptiles` source (`transformStyle`; a source's
+    attribution overrides the TileJSON's). It is a copy: follow OpenFreeMap if its credit changes.
+    In dark mode the attribution box and the zoom buttons use the popover colours (`index.css`).
 - **The two clusters must differ in lightness, not only in hue** (colour review,
   2026-09-19). Shallow blue and deep grey were both mid-lightness — `oklch(0.575)`
   against `oklch(0.556)`, a measured 1.07:1 — and the one place they touch is the
@@ -703,14 +792,26 @@ colour, motion). Keep to them:
   round, and in dark mode it had exactly the blue's lightness. Its hue also sits 21°
   (light) and 28° (dark) from `--destructive`; it was 12° in light, close enough to
   read as red on a page whose rule is "red means something failed".
-- `--chart-5` and the eight `--sidebar-*` tokens were deleted: nothing imported them,
-  `--chart-4`/`--chart-5` had identical light and dark values, and `--sidebar-primary`
+- The eight `--sidebar-*` tokens were deleted: nothing imported them, and `--sidebar-primary`
   was a vivid blue in dark against a neutral in light — a stock shadcn default that
   would have rendered wrong the day a sidebar was added.
 - Numeric table columns align to the trailing edge, use `tabular-nums` (set once on
   the page root) and a true minus sign (`fmtNum`).
 - Every control has an accessible name; sliders get theirs through
   `aria-labelledby` on the thumb, which is the element with `role="slider"`.
+- **Every tab stop shows focus at 3:1 or more** (interface review, 2026-09-26). Light `--ring` is
+  `oklch(0.556)`, 4.74:1 on white (shadcn's 0.708 was 2.59:1), and nothing uses `ring-ring/50`. A
+  region that is a tab stop — a Recharts `accessibilityLayer` chart, a Radix tab panel, the map
+  canvas — draws a 2 px `outline-ring` set off from it rather than a ring against its contents; a
+  tab panel inside a sheet insets it. A page-level panel whose first child is focusable takes no stop
+  of its own (`tabIndex={-1}`), and the magnitude chart's pinned y axes, which repeat the axis beside
+  them, are out of the tab order and the accessibility tree.
+- **On touch every control reaches 44 px**: tab triggers with a `before:` extender (`after:` is the
+  line variant's underline), the date inputs grow to 40, MapLibre's zoom buttons to 44, and the
+  Switch's hit area is 56 × 46. The light Switch's off track is `--muted-foreground` (5:1); shadcn's
+  `--input` was 1.26:1 and left the white thumb invisible. The Sheet slides on `--ease-slide`, and
+  under reduced motion only its fade remains: tw-animate-css has no reduced-motion rule, so its
+  `slide-*` classes are `motion-safe:`.
 
 Not yet verified by anyone: real screen-reader output, a physical touch device, and
 Safari. The back-fill and ingest-failure alerts have now been seen rendered, in both
@@ -735,16 +836,19 @@ a pointer to this section. What they ask, and how this page answers them:
     page control wrote it out itself, and they had drifted: the language button had 14 px text and
     a 44 px hit area, while "Quitar filtros" and the group buttons kept 12 px text and `sm`'s
     56 px hit area. They now share the language button's values, so on touch those three buttons
-    changed.
+    changed. Both set their icons to 16 px, 20 on touch, so a caller passes no icon size.
+    `default-touch` is `default` growing the same way (the status bar's "Actualizar ahora").
   - `Button` variant `floating` and size `icon-round` are the insights page's back-to-top button:
     opaque primary with a shadow, and a 44 px circle that clips what travels through its edge.
   - `Button` size `header` is the sortable column header (`sm` with the table's 14 px text);
     `inline` is a link-button inside running text, with no box of its own; `inline-touch` is
     `inline` growing like `sm-touch`. Variant `link-muted` is the "Detalle técnico" trigger.
   - `Table` takes `size="sm"`: 4 px cell sides, for the events table.
-  - `Toggle`/`ToggleGroup` size `sm-touch` grows like `Button`'s. `ToggleGroup`'s gap is a class per
+  - `Toggle`/`ToggleGroup` size `sm-touch` grows like `Button`'s. `Toggle` shares `Button`'s
+    transition (named properties including `scale`, 150 ms `--ease-out`), press scale and
+    `ring-3 ring-ring`. `ToggleGroup`'s gap is a class per
     `spacing` (0–2), not shadcn's inline `--gap`, which `no-inline-styles` rejects.
-  - `TechnicalDetail` takes `size` rather than a `className`; `Deferred` takes `height="map"`
+  - `TechnicalDetail` takes `size` rather than a `className`; `Deferred` takes a `placeholder` node
     rather than a class. A class string built at runtime cannot be checked.
 - **Containers may be spaced by the page.** One `no-restyle` contract lets `Alert`,
   `CardContent`, `FieldGroup`, `Tabs` and `TabsContent` take spacing (gap, padding) as well as
