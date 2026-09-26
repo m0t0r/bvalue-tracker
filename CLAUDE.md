@@ -25,7 +25,7 @@ and interface conventions. Most of it cannot be inferred from the code.
   comparisons. Use it rather than reasoning about the rendered page from source.
   "Checking the page headlessly" in `docs/development.md` says how to run the page with
   data and without touching SGC.
-- Deploys go to the Cloudflare account pinned in `wrangler.jsonc` (Worker `choco`).
+- Deploys go to the Cloudflare account pinned in `wrangler.jsonc` (Worker `bvalue-tracker`; `choco` is the old URL's redirect).
   Run `pnpm exec wrangler whoami` and confirm the account with the user before a
   first deploy of anything new.
 - The page is for a Spanish-speaking researcher: Spanish is the default UI language

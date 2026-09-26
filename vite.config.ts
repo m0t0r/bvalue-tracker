@@ -189,6 +189,6 @@ export default defineConfig({
      * two together, and let `pnpm build` confirm it: `dist/<name>/index.js.map` must exist
      * and `dist/client` must contain no map at all.
      */
-    choco: { build: { sourcemap: true } },
+    bvalue_tracker: { build: { sourcemap: true } },
   },
 });

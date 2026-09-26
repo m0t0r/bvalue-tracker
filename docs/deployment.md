@@ -1,12 +1,28 @@
 # Deployment
 
-The app is one Cloudflare Worker (`choco`) with a D1 database (`sgc-swarm`), an Analytics
+The app is one Cloudflare Worker (`bvalue-tracker`) with a D1 database (`sgc-swarm`), an Analytics
 Engine dataset (`sgc_ingest`) and two Cron Triggers: the ingest every 15 minutes and the daily USGS
 job ([Ingest](ingest.md#the-daily-usgs-job)). It runs on the Workers **free plan**, which allows 5
 Cron Triggers **per account**, so a fork sharing an account with other Workers should count them
 first (the Workers dashboard lists each Worker's triggers).
 The `sgc-swarm` names predate the project's rename to bvalue-tracker and are kept, because
 renaming a D1 database means migrating its data.
+
+## The old URL
+
+Until 2026-09 the Worker was called `choco`, so the site lived at `choco.<subdomain>.workers.dev`.
+A workers.dev hostname is the Worker's name, and Cloudflare's Redirect Rules and Bulk
+Redirects only apply to a zone you own, not to workers.dev. So the old name is still a Worker:
+`worker/redirect/`, which answers every request with a 301 to the same path and query on
+`TARGET_ORIGIN` (its `vars`). CI deploys it after the app, with
+`wrangler deploy -c worker/redirect/wrangler.jsonc`. It costs nothing extra on the free plan.
+
+- Its config states `"triggers": { "crons": [] }`. The first deploy under the old name
+  replaced the old app Worker, and the empty list is what removed its ingest crons. Leave it
+  in, so the redirect can never start polling SGC.
+- The account's workers.dev subdomain is shared by every Worker on the account. Changing it
+  moves the old hostname too, and the redirect stops catching it.
+- A fork does not need `worker/redirect/`. Drop it and the matching CI step.
 
 ## Deploying your own copy
 
@@ -39,7 +55,7 @@ repository settings:
 
 - secret `CLOUDFLARE_API_TOKEN`: the "Edit Cloudflare Workers" template plus *Account · D1 · Edit*, limited to your account. Add *Account · Workers Observability · Read* to the same token — or a separate one — if you want `pnpm logs` to work; CI does not need it
 - secret `CLOUDFLARE_ACCOUNT_ID`
-- variable `PRODUCTION_URL` = the deployed URL, e.g. `https://choco.<subdomain>.workers.dev` (optional; enables the smoke test)
+- variable `PRODUCTION_URL` = the deployed URL, e.g. `https://bvalue-tracker.<subdomain>.workers.dev` (optional; enables the smoke test)
 
 The two secrets are set on the D1 migration and `wrangler deploy` steps only, never on the
 job. `pnpm install` runs the build scripts of the dependencies allowed in

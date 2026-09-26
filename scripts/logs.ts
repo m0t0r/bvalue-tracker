@@ -20,7 +20,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const WORKER = "choco";
+const WORKER = "bvalue-tracker";
 const API = "https://api.cloudflare.com/client/v4";
 
 const USAGE = `usage: pnpm logs [events|cpu|lanes] [options]
