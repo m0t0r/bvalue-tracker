@@ -209,7 +209,15 @@ describe("the line for data that could not be updated", () => {
   });
 
   it.each(langs)("says the page picks up again by itself, in the standing note's own words, in %s", (lang) => {
-    expect(dicts[lang].staleSince("12:35", null)).toMatch(/sola|by itself/);
+    expect(dicts[lang].staleSince("12:35", null)).toMatch(/solas?|by (itself|themselves)/);
+  });
+
+  // The time is when the figures were fetched, not when anything was lost: status polls may still be
+  // answering while one catalogue refetch fails (code review, 2026-09-26).
+  it.each(langs)("dates the figures and claims no lost connection, in %s", (lang) => {
+    const s = dicts[lang].staleSince("12:35", null);
+    expect(s).not.toMatch(/conexi|connection|desde las|since/i);
+    expect(s).toMatch(/las 12:35|from 12:35/);
   });
 });
 

@@ -20,7 +20,7 @@ import { fmt, fmtKm, fmtMag, fmtTimes, medianHorizontalErrorKm } from "../shared
 import { FILL, STROKE } from "../tones";
 import { useProgress } from "./hooks";
 import { fitRanks, flowRow, type RankItem } from "./layout";
-import { textWidth } from "./measure";
+import { textWidth } from "../measure";
 import { SceneTitle, diamond, radius } from "./marks";
 import type { StoryModel } from "./model";
 import { Rich, fill } from "./rich";

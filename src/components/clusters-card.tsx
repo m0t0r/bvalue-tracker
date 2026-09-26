@@ -13,11 +13,9 @@ import { useI18n } from "@/lib/i18n";
 import type { ClusterSelection } from "@/lib/scope";
 import { MIN_RELIABLE_N } from "@/lib/stats";
 import { useNow } from "@/lib/use-now";
+import { FILL } from "@/lib/cluster-fill";
 import { cn } from "@/lib/utils";
 import { CLUSTERS, CLUSTER_DEPTH_KM, RECENT_DAYS, type Cluster, type ClusterStats } from "../../core/clusters";
-
-/** The clusters' own colours, everywhere on the page: shallow the blue, deep the teal (docs/frontend.md). */
-export const FILL: Record<Cluster, string> = { shallow: "bg-(--chart-1)", deep: "bg-(--chart-4)" };
 
 // Same idea as "Magnitud en el tiempo": squeezed into a phone's width forty days are slivers with no
 // values, so below MIN_BAR of room per day every day gets PX_PER_DAY instead and the strip scrolls

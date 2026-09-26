@@ -95,12 +95,13 @@ const es = {
   autoUpdate: (min: number) => `Se actualiza sola cada ${min} minutos`,
   /**
    * Replaces `autoUpdate` while a refetch over data on screen has failed or waits offline
-   * (`staleSince`). The page cannot tell the reader's connection from the server, so it names the
-   * link between them; the time is when the data on screen was fetched, and `day` is set only when
-   * that was not today. No interval and no "recargar": the next poll or the reconnection brings it back.
+   * (`staleSince`). It dates the figures, which is all the page knows: the time is when they were
+   * fetched, not when anything was lost (a status poll may still be answering), and `day` is set only
+   * when that was not today. It blames neither the connection nor the server. No interval and no
+   * "recargar": the next refetch or the reconnection brings it back.
    */
   staleSince: (time: string, day: string | null) =>
-    `Sin conexión con el servidor desde ${day === null ? "las" : `el ${day} a las`} ${time}. Se actualizará sola.`,
+    `No se pudieron actualizar las cifras: son ${day === null ? "de las" : `del ${day} a las`} ${time}. Se actualizarán solas.`,
   loading: "Cargando…",
   refreshing: "Consultando al SGC…",
   refreshWait: (min: number) => `Ya tienes los datos más recientes: el SGC se consultó hace menos de ${min} minutos.`,
@@ -340,7 +341,7 @@ const en: Dict = {
   refresh: "Refresh now",
   autoUpdate: (min) => `Updates itself every ${min} minutes`,
   staleSince: (time, day) =>
-    `No connection to the server since ${time}${day === null ? "" : ` on ${day}`}. It will update by itself.`,
+    `The figures could not be updated: they are from ${time}${day === null ? "" : ` on ${day}`}. They will update by themselves.`,
   loading: "Loading…",
   refreshing: "Querying SGC…",
   refreshWait: (min) => `You already have the latest data: SGC was queried less than ${min} minutes ago.`,

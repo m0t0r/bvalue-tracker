@@ -16,6 +16,7 @@ import { FILL } from "../tones";
 import { useReducedMotion } from "../use-reduced-motion";
 import { presets, ratioPhrase, relativeAmplitude, toPereira, type Preset } from "./derive";
 import { Choice, Figure, RangeField, Swatch, useWidth } from "./ui";
+import { textWidth } from "../measure";
 
 const KM_PER_DEG = 111.195;
 const MAP = 400;
@@ -265,8 +266,8 @@ function MiniMap({
         {labels.map((l) => {
           const [x, y] = project(l.lon, l.lat);
           // Kept inside the map: centred on its point, "● Istmina–Sipí" began 8 px past the left edge
-          // at 320 px. The width is estimated (Geist semibold runs ~0.6 em a character), with room.
-          const half = ((l.text.length + 2) * 0.62 * 12 * k) / 2;
+          // at 320 px. Measured in screen pixels, then scaled to the map's viewBox units.
+          const half = (textWidth(`● ${l.text}`, 12, { weight: 600 }) * k) / 2;
           return (
             <text
               key={l.s}

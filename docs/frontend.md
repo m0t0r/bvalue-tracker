@@ -155,10 +155,12 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   reach SGC. The Worker's cron carries it on, so the notice says it completes by itself. **A refetch
   that fails keeps the claims, and the page says so** (2026-09-26): `staleSince` over both catalogues
   and both statuses puts a caution notice in the back-fill notice's slot ("Los datos no se están
-  actualizando · Sin conexión con el servidor desde las 12:35. Lo que ves es de entonces y se
-  actualizará solo.", worded as the monitor's line, the day only when it is not today). One notice at
-  a time: the load error, then stale data, then an unfinished history. Checked with a 503 on `/api/`
-  and offline, and back.
+  actualizando · No se pudieron actualizar: lo que ves es de las 12:35, y se actualizará solo.",
+  worded as the monitor's line, the day only when it is not today). One notice at a time: the load
+  error, then stale data, then an unfinished history. The notice is a `note`; it is announced from an
+  always-mounted sr-only `role="status"`, since a live region inserted with its text already in it is
+  often not read out (the back-fill notice goes the same way). Checked with a 503 on `/api/` and
+  offline, and back.
 - **Copy.** The shell and every data-dependent sentence live in `src/insights/copy.ts`; each is a
   function of a claim's result, so the words cannot say more than the rule decided. Each tab keeps its
   long-form prose in its own `copy.ts`. Language and theme are the monitor's (`useI18n`, `theme.ts`),
@@ -212,7 +214,7 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   past earthquakes in `muted-foreground`. Squares are right-aligned so each label sits beside its own
   square; left-aligned, the small ones' labels floated ~250 px from them. A row is never shorter than
   its two lines of text. The labels are measured (`fitRanks` in `story/layout.ts`, `textWidth` in
-  `story/measure.ts`: one canvas measurement, cached once the web font has loaded), the widest line
+  `insights/measure.ts`, shared with the questions tab's labels: one canvas measurement, cached once the web font has loaded), the widest line
   decides how much width the squares get, and the text steps down a pixel at a time (to 9 px) until
   every row fits the height and the largest square is at least two rows tall; if even 9 px is too
   wide, the first lines drop the time. At 320 × 640 the second part's nine rows did not fit at 11 px
@@ -426,7 +428,8 @@ full-screen viewer with five views to jump to.
 - **Checked at 390 px and 1440 px, both themes, both languages** (2026-09-25): the side-length label
   ends at the block's edge (a centred one ran off a phone's screen), and the exaggeration note sits top
   left, clear of the credit. **Every label but the pins is clamped inside the block** (its width read
-  once per resize); below 480 px the plate, rupture and size labels drop what the key says (the model,
+  once per resize) while its point is on the canvas; a label whose point has left the canvas sideways
+  leaves with it, or after a drag the trench's name and the depth ticks slid along the edge; below 480 px the plate, rupture and size labels drop what the key says (the model,
   the date, the directions). The quieter labels are `text-xs` in `foreground`: in `muted-foreground`
   at 10 px they measured 2.1–2.9:1 on the grey plate (8.6:1 now, light). Checked again at 320, 390 and
   1280 px, 2026-09-26. Pins can still overlap one another from some angles (Chaparral's name over
@@ -665,17 +668,22 @@ colour, motion). Keep to them:
   only the failed catalogue and reads "Reintentando…" through the query's own retries. On
   both pages only a catalogue the page never got is an error (`loadFailed`): a background refetch
   that fails keeps what is drawn, with no alert, and the next refetch tries again. The button stays
-  focusable while it retries (`aria-disabled`), and a retry parked offline counts as running.
+  focusable while it retries (`aria-disabled`), and a retry parked offline counts as running. An
+  `aria-disabled` `Button` takes no pointer events but keeps its full colour: the retry and refresh
+  buttons say they are busy in their label or spinner, and 50 % would take "Reintentando…" under AA.
 - **Data a failed refetch left behind is dated, not hidden** (`staleSince` in `load-failed.ts`,
   interface review 2026-09-26). Kept silent, the monitor went on saying "Se actualiza sola cada 15
   minutos" with every request failing, and only "Última consulta al SGC: hace N min" grew, blaming
   SGC for the reader's connection. Offline, TanStack parks the refetch rather than failing it, so
   nothing failed at all; `staleSince` counts a parked refetch too. On the monitor the line under the
-  refresh button then says since when the figures are ("Sin conexión con el servidor desde las
-  12:35. Se actualizará sola."; `fmtClock`, with the day only when it was not today), in the slot
-  of "Se actualiza sola cada N minutos", as a caution: neutral text with a warning icon, never red,
-  inside the live region. It names no interval and no reload, and blames neither the connection nor
-  the server any more than the load error does. It takes priority over every answer to a press
+  refresh button then says since when the figures are ("No se pudieron actualizar las cifras: son de
+  las 12:35. Se actualizarán solas."; `fmtClock`, with the day only when it was not today), in the
+  slot of "Se actualiza sola cada N minutos", as a caution: neutral text with a warning icon, never
+  red, inside the live region. It names no interval and no reload, and blames neither the connection
+  nor the server any more than the load error does. **The time is when the figures were fetched, and
+  the copy says only that**: a first version read "Sin conexión con el servidor desde las 08:00",
+  which a catalogue fetched at 08:00 and a refetch failing at 12:00 made false while the status polls
+  still answered (code review, 2026-09-26). It takes priority over every answer to a press
   except a request actually under way (a press parked offline is not), and it is not shown beside
   the load error. `status` turns to `error` only after the query's retries, so one dropped request
   never shows it. Checked with `fault.js` 503 on `/api/` for 75 s and with `set offline on`, then

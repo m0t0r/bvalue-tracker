@@ -62,7 +62,9 @@ export function Block3D({ data }: { data: Insights }) {
   const reduced = useReducedMotion();
   // The viewer's view. The preview shares its layers but always turns at ×2 over the whole catalogue.
   const [view, setView] = useState<View>({ exaggeration: VIEWER_EXAGGERATION, layers: ALL_LAYERS, until: null });
-  const previewView = useMemo(() => ({ ...view, exaggeration: PREVIEW_EXAGGERATION, until: null }), [view]);
+  // Keyed on the layers alone: the viewer's date and exaggeration are not the preview's.
+  const { layers } = view;
+  const previewView = useMemo(() => ({ layers, exaggeration: PREVIEW_EXAGGERATION, until: null }), [layers]);
   const [preview, setPreview] = useState<SceneHandle | null>(null);
   // The reader can stop the turning (WCAG 2.2.2); reduced motion never starts it. Follows a change of
   // the setting while the tab is open, not only the one at mount.

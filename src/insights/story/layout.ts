@@ -3,7 +3,7 @@
  * so they can be tested. Widths come from `measure`, which is `textWidth` in the page.
  */
 import { rankLayout, type RankRow } from "../history";
-import { textWidth } from "./measure";
+import { textWidth } from "../measure";
 
 type Measure = (text: string, fontSize: number, opts?: { weight?: number }) => number;
 

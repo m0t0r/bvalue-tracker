@@ -20,7 +20,7 @@ import { shakingParts } from "../durations";
 import { FILL, STROKE } from "../tones";
 import { flowRow } from "./layout";
 import { Layer, SceneTitle, radius, star } from "./marks";
-import { textWidth } from "./measure";
+import { textWidth } from "../measure";
 import type { Ev, StoryModel } from "./model";
 import { Rich, fill } from "./rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
