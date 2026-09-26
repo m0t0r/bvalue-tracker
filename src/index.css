@@ -10,6 +10,10 @@
   --font-sans: "Geist Variable", sans-serif;
   --color-place: var(--place);
   --color-chart-5: var(--chart-5);
+  --color-chart-5-age-1: var(--chart-5-age-1);
+  --color-chart-5-age-2: var(--chart-5-age-2);
+  --color-chart-5-age-3: var(--chart-5-age-3);
+  --color-chart-5-age-4: var(--chart-5-age-4);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
@@ -74,15 +78,17 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* Below shadcn's 0.556, which was 4.34:1 on a `--muted` fill (the story's calendar tiles, "calma"):
+     0.54 is 4.64:1 there and 5.06:1 on white. */
+  --muted-foreground: oklch(0.54 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   /* A status alert tints its whole surface, so the state is read before the words are. Three
        roles per state and no more: `surface` is the fill, `edge` the border, `strong` the title
        and its icon. The description stays `--muted-foreground` in both, which is what bounds the
-       fill: that grey clears 4.5:1 on white by only 4.73:1, so a fill any deeper than these takes
-       it under AA. The border is what carries the colour at this size, as it does in the shadcn
+       fill: that grey is 5.06:1 on white and 4.87:1 on these fills, so a fill much deeper than
+       these takes it under AA. The border is what carries the colour at this size, as it does in the shadcn
        example these follow; the fill is a whisper behind it. The two `strong` values are set a
        fixed 0.11 apart in lightness — red darker, amber lighter — because a protanope or a
        deuteranope has little else to tell a failure from a caution by. See docs/frontend.md, "Interface conventions". */
@@ -98,7 +104,9 @@
   --caution-strong: oklch(0.55 0.115 80);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Focus rings and the slider thumb's edge: 4.73:1 on white. shadcn's 0.708 was 2.59:1, under the
+     3:1 a focus indicator needs. */
+  --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.575 0.163 255.5);
   /* Hex, alone in this file: event-map.tsx reads this one through getComputedStyle and
        MapLibre cannot parse an oklch string. oklch(0.620 0.164 49.7). */
@@ -111,6 +119,14 @@
        the 0.10 that reads as one colour. The dark value is a different lightness and hue for the
        same reason; the violets nearer the light one's hue sat under 0.10 against the blue there. */
   --chart-5: oklch(0.3 0.16 310);
+  /* The swarm's events by age on the story's close-up, oldest (1) to newest (4): towards a grey that
+       keeps 3:1 against the page, so "more intense = more recent" never needs opacity (which fell to
+       1.4:1). Light: 3.6, 6.4, 9.9 and 14.4:1; neighbouring steps ≥ 0.086 apart under simulated
+       colour blindness (Machado 2009, OKLab ΔE), oldest to newest 0.325. */
+  --chart-5-age-1: oklch(0.62 0 0);
+  --chart-5-age-2: color-mix(in oklab, var(--chart-5) 40%, oklch(0.62 0 0));
+  --chart-5-age-3: color-mix(in oklab, var(--chart-5) 70%, oklch(0.62 0 0));
+  --chart-5-age-4: var(--chart-5);
   /* Pereira on the insights page: the reader's own place, marked red at the owner's request
        (2026-09-24). Its own token, not `--destructive`, because it is not a failure; the two never
        share a screen, since the load error replaces every drawing. Chosen by search against the
@@ -158,6 +174,14 @@
   --chart-4: oklch(0.85 0.085 195);
   /* See the light block. Worst pair 0.136 (blue, deutan); 3.9:1 against the page. */
   --chart-5: oklch(0.55 0.1 330);
+  /* See the light block. The violet is already near 3:1 here, so there is no room below it: the
+       oldest greys towards 3:1 and the newest brighten towards the text colour, the direction that
+       reads as more intense on a dark ground. 3.1, 3.5, 5.1 and 7.1:1 against a card; neighbouring
+       steps ≥ 0.053 apart under simulated colour blindness, oldest to newest 0.205. */
+  --chart-5-age-1: color-mix(in oklab, var(--chart-5) 20%, oklch(0.5 0 0));
+  --chart-5-age-2: var(--chart-5);
+  --chart-5-age-3: color-mix(in oklab, var(--chart-5) 80%, var(--foreground));
+  --chart-5-age-4: color-mix(in oklab, var(--chart-5) 60%, var(--foreground));
   /* See the light block. Darker than the orange here, where the orange is the lighter accent:
        worst pair 0.119 (orange, tritan); 3.3:1 against a card, enough for a mark, not for text. */
   --place: oklch(0.55 0.2 29);
@@ -205,6 +229,12 @@
 }
 @utility transition-clip-path {
   transition-property: clip-path;
+  transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+/* The story's marks glide and fade; only those two properties move, on hundreds of circles. */
+@utility transition-move {
+  transition-property: translate, opacity;
   transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
   transition-duration: var(--tw-duration, var(--default-transition-duration));
 }
@@ -278,4 +308,42 @@
 }
 .maplibregl-popup-anchor-right .maplibregl-popup-tip {
   border-left-color: var(--popover);
+}
+/* Its zoom buttons too: on the theme's popover surface in dark mode, where MapLibre's white group
+   was the one bright thing on the page, with the dark glyphs inverted. */
+.dark .maplibregl-ctrl-group {
+  @apply bg-popover;
+}
+.dark .maplibregl-ctrl-group:not(:empty) {
+  box-shadow: 0 0 0 1px var(--border);
+}
+.dark .maplibregl-ctrl-group button + button {
+  border-top-color: var(--border);
+}
+.dark .maplibregl-ctrl-group .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+.dark .maplibregl-ctrl-group button:not(:disabled) {
+  @apply hover:bg-muted;
+}
+/* And the attribution: MapLibre's white box with black links was the other bright thing on the map in
+   dark mode. Scoped to the map to outrank MapLibre's stylesheet; the "i" button's dark glyph is
+   inverted like the zoom icons. */
+.dark .maplibregl-map .maplibregl-ctrl-attrib {
+  background-color: var(--popover);
+  color: var(--muted-foreground);
+}
+.dark .maplibregl-map .maplibregl-ctrl-attrib a {
+  color: var(--popover-foreground);
+}
+.dark .maplibregl-map .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+/* On touch they grow from 29px to the page's 44px, as the page's own controls do. Scoped to the map
+   so it outranks MapLibre's own stylesheet, which loads after this one. */
+@media (pointer: coarse) {
+  .maplibregl-map .maplibregl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
 }
