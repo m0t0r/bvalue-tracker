@@ -11,6 +11,7 @@ import { Deferred } from "@/components/deferred";
 import { EventsTable } from "@/components/events-table";
 import { FilterScope } from "@/components/filter-scope";
 import { FiltersCard } from "@/components/filters";
+import { LanguageButton } from "@/components/language-button";
 import { LoadError } from "@/components/load-error";
 import { MapPlaceholder, mapDescription } from "@/components/map-legend";
 import { StatusBar } from "@/components/status-bar";
@@ -44,14 +45,13 @@ const MagnitudeTimeChart = lazy(() =>
 const EventMap = lazy(() => import("@/components/event-map"));
 
 export function App() {
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
   const dark = useIsDark();
   const [zone, setZone] = useZoneState();
   const copy = t.zones[zone];
   useEffect(() => {
     document.title = copy.docTitle;
   }, [copy.docTitle]);
-  const other = lang === "es" ? "en" : "es";
 
   return (
     <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
@@ -81,12 +81,7 @@ export function App() {
                 </a>
               </Button>
               {/* The `-touch` sizes: on touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
-              <Button variant="outline" size="sm-touch" lang={other} onClick={() => setLang(other)}>
-                {/* The code the page switches to, in its own language; the name spells it out, and keeps the
-                    code in it so a voice command for what is on screen still finds the button. */}
-                {lang === "es" ? "EN" : "ES"}
-                <span className="sr-only">{lang === "es" ? " (English)" : " (Español)"}</span>
-              </Button>
+              <LanguageButton />
               <Button
                 variant="outline"
                 size="icon-sm-touch"

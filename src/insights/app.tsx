@@ -11,6 +11,7 @@ import {
   type ComponentType,
   type ReactPromise,
 } from "react";
+import { LanguageButton } from "@/components/language-button";
 import { LoadError } from "@/components/load-error";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -91,7 +92,7 @@ const readTab = (): Tab => {
 chunks[readTab()]();
 
 export function InsightsApp() {
-  const { lang, setLang, t } = useI18n();
+  const { lang, t } = useI18n();
   const c = insightsCopy[lang];
   const dark = useIsDark();
   const [tab, setTab] = useState<Tab>(readTab);
@@ -117,7 +118,6 @@ export function InsightsApp() {
       : incomplete
         ? { title: c.incompleteTitle, body: c.incompleteBody }
         : null;
-  const other = lang === "es" ? "en" : "es";
   const tabList = useRef<HTMLDivElement>(null);
   const footer = useRef<HTMLElement>(null);
 
@@ -144,12 +144,7 @@ export function InsightsApp() {
               </a>
             </Button>
             <div className="ml-auto flex items-center gap-2">
-              <Button variant="outline" size="sm-touch" lang={other} onClick={() => setLang(other)}>
-                {/* The code the page switches to, in its own language; the name spells it out, and keeps the
-                    code in it so a voice command for what is on screen still finds the button. */}
-                {lang === "es" ? "EN" : "ES"}
-                <span className="sr-only">{lang === "es" ? " (English)" : " (Español)"}</span>
-              </Button>
+              <LanguageButton />
               <Button
                 variant="outline"
                 size="icon-sm-touch"
