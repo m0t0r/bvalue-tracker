@@ -10,6 +10,7 @@ import { fmtDateTime, fmtDay, fmtDayTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useZone } from "@/lib/zone";
 import { WINDOW_SIZE, type Stats } from "@/lib/stats";
+import { bTimeDescription } from "./b-over-time-description";
 import type { Cluster } from "../../../core/clusters";
 import { windowsToCsv } from "../../../core/csv";
 
@@ -58,11 +59,7 @@ export const BOverTimeChart = memo(function BOverTimeChart({
     <Card className="h-full">
       <CardHeader>
         <CardTitle>{t.bTimeTitle}</CardTitle>
-        <CardDescription>
-          {cluster !== null ? `${t.clusterNote(t.clusterName[cluster])} ` : ""}
-          {magType !== null ? `${t.bScopeNote(magType)} ` : ""}
-          {t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—")}
-        </CardDescription>
+        <CardDescription>{bTimeDescription(t, stats, magType, cluster)}</CardDescription>
         <CardAction>
           <Button
             variant="outline"

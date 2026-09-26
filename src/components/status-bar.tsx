@@ -68,7 +68,10 @@ export function StatusBar({
   status,
   shown,
   mainshock,
+  loading,
 }: {
+  /** The page is still waiting for its status or its catalogue: draw a placeholder, not the stats. */
+  loading: boolean;
   status: StatusResponse | undefined;
   shown: number | null;
   /** The zone's mainshock as detected over its whole catalogue; null until the catalogue has loaded. */
@@ -185,6 +188,19 @@ export function StatusBar({
   ) : (
     fmtDateTime(status.newestEventTime, lang)
   );
+
+  // Until the page has its status and its catalogue, one block and no stats. The stats wrap by their
+  // own width, and each value changes it as it lands: on a phone "Sismo principal"'s hint took the row
+  // from two lines to three and pushed the refresh button down, 0.036 of CLS on every load. Drawn in
+  // the same commit as the page underneath, nothing that was already on screen moves.
+  if (loading)
+    return (
+      <Card aria-busy="true">
+        <CardContent>
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+    );
 
   return (
     <div className="flex flex-col gap-4">

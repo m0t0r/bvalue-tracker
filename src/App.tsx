@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
 import { lazy, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
+import { bTimeDescription } from "@/components/charts/b-over-time-description";
 import { ClustersCard } from "@/components/clusters-card";
 import { Deferred } from "@/components/deferred";
 import { EventsTable } from "@/components/events-table";
@@ -147,17 +148,23 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   // when a failed load swaps the viewport-tall skeleton for a short alert: the caveats note did
   // exactly that, 0.12 of CLS on every failed load, and PageSpeed Insights, whose runner the
   // same-origin check refuses, scored the page on that state (docs/performance.md).
-  const settled = !events.isPending;
+  // The status bar and the page under it are drawn in one commit, whichever request answers last,
+  // so the stats cannot re-wrap above content that is already on screen (`StatusBar`). A status
+  // request that failed once is not waited for through its retries: the page goes ahead without it.
+  const settled = !events.isPending && (!status.isPending || status.failureCount > 0);
 
   return (
     <>
       <main className="contents">
         <StatusBar
-          status={status.data}
+          loading={!settled}
+          // Withheld as well, not only hidden: the back-fill notice StatusBar draws below itself, and
+          // the back-fill it starts, would otherwise land above the loading skeleton and push it down.
+          status={settled ? status.data : undefined}
           shown={events.data ? view.shown.length : null}
           mainshock={events.data ? view.mainshock : null}
         />
-        {events.data ? (
+        {settled && events.data ? (
           <FilterScope
             chips={chips}
             cluster={scope.cluster}
@@ -167,7 +174,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           />
         ) : null}
 
-        {events.isError ? (
+        {settled && events.isError ? (
           <Alert variant="destructive">
             <AlertTriangleIcon />
             <AlertTitle>{t.loadFailed}</AlertTitle>
@@ -180,7 +187,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
 
         {/* Gate on data, not on "not pending": a failed load must not draw an empty dashboard
             that tells the reader to change their filters. Stale data stays visible if a refetch fails. */}
-        {events.data ? (
+        {settled && events.data ? (
           <>
             {/* The number the reader came for leads; the controls that shape it follow. */}
             {view.shown.length > 0 ? (
@@ -192,7 +199,10 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                   tabs={magTabs}
                 />
                 <div className="lg:col-span-2">
-                  <Deferred title={t.bTimeTitle}>
+                  <Deferred
+                    title={t.bTimeTitle}
+                    description={bTimeDescription(t, deferred.stats, deferred.magType, deferred.cluster)}
+                  >
                     <BOverTimeChart
                       stats={deferred.stats}
                       magType={deferred.magType}
@@ -247,7 +257,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
               </>
             )}
           </>
-        ) : events.isPending ? (
+        ) : !settled ? (
           // At least a viewport tall, so nothing below is on screen to be pushed away when content arrives.
           <Skeleton className="min-h-svh w-full" />
         ) : null}

@@ -13,13 +13,17 @@ import { Skeleton } from "@/components/ui/skeleton";
  *
  * The placeholder is the same card with the same title, so only the drawing arrives late and
  * nothing below it moves. `height` names the drawing, whose container the skeleton must match.
+ * `description`, where it can be written without the chunk, is the card's own, so the text is there
+ * with the data rather than with the drawing; without it the placeholder shows a skeleton line.
  */
 export function Deferred({
   title,
+  description,
   height = "chart",
   children,
 }: {
   title: string;
+  description?: string;
   height?: "chart" | "map";
   children: ReactNode;
 }) {
@@ -38,9 +42,7 @@ export function Deferred({
     <Card className="h-full" aria-busy="true">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>
-          <Skeleton className="h-4 w-full max-w-md" />
-        </CardDescription>
+        <CardDescription>{description ?? <Skeleton className="h-4 w-full max-w-md" />}</CardDescription>
       </CardHeader>
       <CardContent>
         {/* A chart's h-80, or the map's h-96 canvas plus the depth/magnitude legend under it. */}
