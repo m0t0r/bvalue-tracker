@@ -97,20 +97,142 @@ function Ranks({
               rx={Math.min(3, r.side / 6)}
               className={it.main ? "fill-chart-2" : "fill-muted-foreground"}
             />
-            <text x={tx} y={top + r.y + fs} fontSize={fs} fontWeight={600} className="fill-foreground">
-              {it.line1}
-            </text>
-            <text
-              x={tx}
-              y={top + r.y + 2 * fs + (small ? 2 : 4)}
-              fontSize={fs}
-              className="fill-muted-foreground tabular-nums"
-            >
-              {it.line2}
-            </text>
+            <RowLabel x={tx} y={top + r.y} fs={fs} small={small} line1={it.line1} line2={it.line2} />
           </g>
         );
       })}
+    </g>
+  );
+}
+
+/** A drawing row's two lines of text, the first bold, from the row's top `y`: the energy and duration rows. */
+function RowLabel(p: { x: number; y: number; fs: number; small: boolean; line1: string; line2: string }) {
+  return (
+    <>
+      <text x={p.x} y={p.y + p.fs} fontSize={p.fs} fontWeight={600} className="fill-foreground">
+        {p.line1}
+      </text>
+      <text
+        x={p.x}
+        y={p.y + 2 * p.fs + (p.small ? 2 : 4)}
+        fontSize={p.fs}
+        className="fill-muted-foreground tabular-nums"
+      >
+        {p.line2}
+      </text>
+    </>
+  );
+}
+
+export interface DurationRow {
+  id: string;
+  main: boolean;
+  line1: string;
+  line2: string;
+  /** Seconds in which the central 90% of the moment came out. */
+  seconds: number;
+}
+
+/** The duration drawing's rows, longest first, which its text alternative (`graphic.tsx`) lists too. */
+export function durationRows(model: StoryModel, lang: Lang): DurationRow[] {
+  const c = storyCopy[lang].graphic;
+  const d = model.durations;
+  const main = model.main;
+  if (!d || !main) return [];
+  const line2 = (mag: number, s: number) => `${fmtMag(mag)} · ${fill(c.durationSeconds, { s: fmt(s) })}`;
+  return [
+    {
+      id: main.id,
+      main: true,
+      line1: fill(c.historyMain, { date: fmtDateTime(main.t, lang) }),
+      line2: line2(main.mag, d.main.core),
+      seconds: d.main.seconds,
+    },
+    ...d.past.map((r) => ({
+      id: r.quake.id,
+      main: false,
+      line1: fill(c.historyRow, { name: r.quake.name[lang], date: fmtDateTime(r.quake.time, lang) }),
+      line2: line2(r.quake.mag, r.core),
+      seconds: r.seconds,
+    })),
+  ];
+}
+
+/**
+ * The seconds in which each earthquake released the central 90% of its moment, as bars on one axis,
+ * longest first, each under its two lines of text. Like `Ranks`, the text steps down a pixel at a time
+ * (to 9 px) until the rows, the axis and its label fit the height.
+ */
+function Durations({
+  rows,
+  width,
+  top,
+  height,
+  small,
+  axis,
+}: {
+  rows: DurationRow[];
+  width: number;
+  top: number;
+  height: number;
+  small: boolean;
+  axis: string;
+}) {
+  const left = small ? 12 : 24;
+  const right = small ? 16 : 32;
+  const layout = (fs: number) => {
+    const barH = Math.round(fs * (small ? 1.1 : 1.4));
+    const labelH = 2 * fs + (small ? 6 : 10);
+    const rowH = labelH + barH + Math.round(fs * (small ? 1 : 1.6));
+    // Below the axis: the tick labels' line and the axis label's, each with its descenders.
+    const below = 2 * fs + 16;
+    return { fs, barH, labelH, rowH, fits: top + rows.length * rowH + below <= height };
+  };
+  let l = layout(small ? 11 : 13);
+  while (!l.fits && l.fs > 9) l = layout(l.fs - 1);
+  if (!rows.length || !l.fits) return null;
+  const { fs, barH, labelH, rowH } = l;
+  const longest = Math.max(...rows.map((r) => r.seconds));
+  const x = scaleLinear()
+    .domain([0, Math.max(10, Math.ceil(longest / 10) * 10)])
+    .range([left, width - right]);
+  const ticks = x.ticks(small ? 3 : 6);
+  const axisY = top + rows.length * rowH;
+  return (
+    <g>
+      {rows.map((r, i) => {
+        const y = top + i * rowH;
+        return (
+          <g key={r.id}>
+            <RowLabel x={left} y={y} fs={fs} small={small} line1={r.line1} line2={r.line2} />
+            <rect
+              x={x(0)}
+              y={y + labelH}
+              width={Math.max(1, x(r.seconds) - x(0))}
+              height={barH}
+              className={r.main ? "fill-chart-2" : "fill-muted-foreground"}
+            />
+          </g>
+        );
+      })}
+      <line x1={x(0)} x2={x.range()[1]} y1={axisY} y2={axisY} className="stroke-border" />
+      {ticks.map((t) => (
+        <g key={t}>
+          <line x1={x(t)} x2={x(t)} y1={axisY} y2={axisY + 4} className="stroke-border" />
+          <text
+            x={x(t)}
+            y={axisY + fs + 4}
+            textAnchor="middle"
+            fontSize={fs - 1}
+            className="fill-muted-foreground tabular-nums"
+          >
+            {fmt(t)}
+          </text>
+        </g>
+      ))}
+      <text x={x(0)} y={axisY + 2 * fs + 10} fontSize={fs - 1} className="fill-muted-foreground">
+        {axis}
+      </text>
     </g>
   );
 }
@@ -143,9 +265,15 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
 
   // The ladder: M4, M5, M6 side by side, each ~31.6× the area of the one before.
   const step = energyRatio(5, 4);
-  const Lmax = Math.max(30, Math.min(height - top - (small ? 100 : 150), (width - (small ? 40 : 100)) / 1.26));
+  // Each gap holds its "×32" with room either side (the label is ~1.9 em wide), so the label never
+  // touches the squares it sits between; the squares are sized to the width left after both gaps.
+  const gap = Math.round(fs * 1.9) + (small ? 12 : 20);
+  const relSum = 1 + 1 / Math.sqrt(step) + 1 / step;
+  const Lmax = Math.max(
+    30,
+    Math.min(height - top - (small ? 100 : 150), (width - (small ? 24 : 100) - 2 * gap) / relSum),
+  );
   const sides = [Lmax / step, Lmax / Math.sqrt(step), Lmax];
-  const gap = small ? 14 : 26;
   const total = sides.reduce((a, b) => a + b, 0) + gap * 2;
   const base = top + (height - top) / 2 + Lmax / 2 - (small ? 10 : 18);
   let lx = (width - total) / 2;
@@ -156,11 +284,26 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
   });
   const tint = ["opacity-40", "opacity-70", "opacity-100"];
 
+  const bars = durationRows(model, lang);
+
   return (
     <g>
       <SceneTitle small={small}>
-        {sub === "ladder" ? c.energyTitle : fill(c.historyTitle, { magLabel: fmtMag(main.mag) })}
+        {sub === "ladder"
+          ? c.energyTitle
+          : sub === "duration"
+            ? c.durationTitle
+            : fill(c.historyTitle, { magLabel: fmtMag(main.mag) })}
       </SceneTitle>
+      {bars.length > 0 && (
+        <g
+          data-on={sub === "duration" || undefined}
+          aria-hidden={sub !== "duration"}
+          className="opacity-0 transition-opacity duration-500 data-on:opacity-100 motion-reduce:transition-none"
+        >
+          <Durations rows={bars} width={width} top={top} height={height} small={small} axis={c.durationAxis} />
+        </g>
+      )}
       <g
         data-on={sub === "history" || undefined}
         aria-hidden={sub !== "history"}
@@ -200,10 +343,11 @@ export function EnergyScene({ model, width, height, sub, small, lang }: ScenePro
             >
               {`M${r.m}`}
             </text>
+            {/* On the squares' baseline, between the two it compares, at one height for both steps. */}
             {i > 0 && (
               <text
                 x={r.at - gap / 2}
-                y={base - Math.max(ladder[i - 1]!.side, 10) - 10}
+                y={base - (small ? 3 : 4)}
                 textAnchor="middle"
                 fontSize={fs}
                 className="fill-muted-foreground tabular-nums"
