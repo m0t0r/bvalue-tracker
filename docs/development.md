@@ -228,7 +228,7 @@ refuses to run if it does not. `test/relief.test.ts` holds the committed file to
     run's `finished_at`. Setting `finished_at` to now (the old advice here) holds for fifteen
     minutes and then lets a focus refresh through to SGC. For a session, put both columns of each
     zone's newest row a month ahead (`started_at` a second before `finished_at`). The status bar
-    then reads "Última consulta al SGC: dentro de N días", which is the copy saying so.
+    then reads "Consulta al SGC: dentro de ~N d", which is the copy saying so.
   - **A copy goes stale by itself.** `backfill.total` counts sweep chunks from the zone's start
     to *now* (`sweepChunks`; Chaparral's are one day), so a copy that was complete yesterday is
     `done < total` today, and opening the page starts the back-fill loop against SGC. An empty

@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse, type StoredEvent } from "@/lib/api";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
-import { fmtClock, fmtDateTime, fmtDay, fmtUtc, relativeTime, sgcEventUrl } from "@/lib/format";
+import { fmtClock, fmtDay, fmtUtc, relativeTime, relativeTimeShort, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
 import { useNow } from "@/lib/use-now";
@@ -22,12 +22,23 @@ const LONG_WAIT_S = 60;
 
 function Stat({ label, value, hint }: { label: string; value: ReactNode | null; hint?: string }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
       <span className="text-sm text-muted-foreground">{label}</span>
       {value === null ? <Skeleton className="h-7 w-28" /> : <span className="text-xl font-semibold">{value}</span>}
       {/* The line is always reserved, so the cards below do not jump when the hint arrives. */}
       <span className="min-h-4 text-xs text-muted-foreground">{hint ?? ""}</span>
     </div>
+  );
+}
+
+/** "hace ~2 h" on screen, and "hace 2 horas" to a screen reader, which would read the "~" as a word. */
+function Ago({ iso, now }: { iso: string; now: number }) {
+  const { lang } = useI18n();
+  return (
+    <>
+      <span aria-hidden="true">{relativeTimeShort(iso, lang, now)}</span>
+      <span className="sr-only">{relativeTime(iso, lang, now)}</span>
+    </>
   );
 }
 
@@ -207,9 +218,17 @@ export function StatusBar({
   const live = staleNote ? t.staleSince(stale.time, stale.day) : message;
   const pending = refresh.isPending || backfill.isPending;
 
-  // The newest event's time reaches SGC's own page for it, the same link the table's time column
-  // carries, with the same UTC form one hover away. An event with no id cannot happen — the id is
-  // the primary key — but the status API types it as nullable, so it falls back to plain text.
+  // Both times lead with how long ago ("hace ~2 h", "hace 7 min"), which is what the reader asks of
+  // them, and give the clock time under it, with the day only when it was not today: a full date
+  // under each was a second line of year the page never needs.
+  const clock = (iso: string) => {
+    const c = fmtClock(Date.parse(iso), lang, now);
+    return c.day === null ? c.time : `${c.day}, ${c.time}`;
+  };
+  // The newest event reaches SGC's own page for it, the same link the table's time column carries,
+  // with the same UTC form one hover away. An event with no id cannot happen — the id is the primary
+  // key — but the status API types it as nullable, so it falls back to plain text.
+  const newestAgo = status?.newestEventTime ? <Ago iso={status.newestEventTime} now={now} /> : null;
   const newestEvent = !status?.newestEventTime ? null : status.newestEventId ? (
     <a
       className="underline underline-offset-4"
@@ -218,10 +237,10 @@ export function StatusBar({
       rel="noreferrer"
       title={fmtUtc(status.newestEventTime)}
     >
-      {fmtDateTime(status.newestEventTime, lang)}
+      {newestAgo}
     </a>
   ) : (
-    fmtDateTime(status.newestEventTime, lang)
+    newestAgo
   );
 
   // Until the page has its status and its catalogue, one block and no stats. The stats wrap by their
@@ -240,12 +259,10 @@ export function StatusBar({
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardContent className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          {/* One wrapping row at every width, rather than two columns on a phone: a stat is as wide
-              as its own longest line, and one that no longer fits beside its neighbour takes the next
-              line whole instead of folding "18 sept 2026, 17:08" in half. Which stats share a line is
-              then a consequence of the text, so a longer date or a narrower phone needs nothing here. */}
-          <div className="flex flex-wrap gap-x-6 gap-y-4 sm:gap-x-10">
+        <CardContent className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5">
+          {/* Two columns on a phone, one row from sm up. Every value is short enough for half a
+              phone ("hace ~2 h", "Ninguno claro"); a hint that is not wraps inside its own column. */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10">
             <Stat
               label={t.events}
               value={shown === null ? catalogueFailed ? "—" : null : <FlowNumber value={shown} lang={lang} />}
@@ -254,17 +271,18 @@ export function StatusBar({
             <Stat
               label={t.newestEvent}
               value={status ? (newestEvent ?? "—") : null}
-              hint={status?.newestEventTime ? relativeTime(status.newestEventTime, lang, now) : undefined}
+              hint={status?.newestEventTime ? clock(status.newestEventTime) : undefined}
             />
             <Stat
               label={t.lastUpdate}
-              value={status ? (ok?.finishedAt ? relativeTime(ok.finishedAt, lang, now) : t.never) : null}
-              hint={ok?.finishedAt ? fmtDateTime(ok.finishedAt, lang) : undefined}
+              value={status ? ok?.finishedAt ? <Ago iso={ok.finishedAt} now={now} /> : t.never : null}
+              hint={ok?.finishedAt ? clock(ok.finishedAt) : undefined}
             />
             <MainshockStat mainshock={mainshock} catalogueFailed={catalogueFailed} />
           </div>
-          {/* Below lg this block wraps onto its own line at the start edge, so it reads from there; beside the stats it hugs the end edge. */}
-          <div className="flex flex-col items-start gap-2 lg:items-end">
+          {/* Below lg this block wraps onto its own line, the note beside the button rather than under
+              it; beside the stats, at lg, it stacks and hugs the end edge. */}
+          <div className="flex items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
             {/* One label and one icon: the button keeps its width while it works. `aria-disabled`, not
                 `disabled`: a disabled button drops the keyboard focus it holds to the page. */}
             <Button

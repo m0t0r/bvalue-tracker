@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtClock, relativeTime } from "@/lib/format";
+import { fmtClock, relativeTime, relativeTimeShort } from "@/lib/format";
 
 const NOW = Date.parse("2026-09-19T12:00:00Z");
 const ago = (seconds: number, lang: "es" | "en" = "es") =>
@@ -34,6 +34,26 @@ describe("how long ago something happened", () => {
     expect(ago(25 * 3600)).toBe("hace 1 día");
     expect(ago(3 * 86_400)).toBe("hace 3 días");
     expect(ago(2 * 86_400, "en")).toBe("2 days ago");
+  });
+});
+
+describe("how long ago, where there is little room", () => {
+  const short = (seconds: number, lang: "es" | "en" = "es") =>
+    relativeTimeShort(new Date(NOW - seconds * 1000).toISOString(), lang, NOW);
+
+  it("says under a minute as '<1 min', ahead of the reader's clock too", () => {
+    expect(short(30)).toBe("hace\u00A0<1\u00A0min");
+    expect(short(-5)).toBe("hace\u00A0<1\u00A0min");
+    expect(short(0, "en")).toBe("<1m\u00A0ago");
+  });
+
+  it("keeps whole minutes exact and marks rounded hours and days with '~'", () => {
+    expect(short(7 * 60)).toBe("hace\u00A07\u00A0min");
+    expect(short(47 * 60, "en")).toBe("47m\u00A0ago");
+    expect(short(59.7 * 60)).toBe("hace\u00A0~1\u00A0h");
+    expect(short(100 * 60)).toBe("hace\u00A0~2\u00A0h");
+    expect(short(100 * 60, "en")).toBe("~2h\u00A0ago");
+    expect(short(3 * 86_400)).toBe("hace\u00A0~3\u00A0d");
   });
 });
 
