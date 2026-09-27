@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "@/App";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { shouldRetry } from "@/lib/api";
 import { I18nProvider } from "@/lib/i18n";
 import { installErrorReporting } from "@/lib/report-error";
@@ -22,10 +21,10 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
+      {/* No TooltipProvider here: the page's one tooltip (`InfoTip`) brings its own in a lazy chunk,
+          and importing one here would put Radix's Popper, 14 kB gzipped, back in the first. */}
       <I18nProvider>
-        <TooltipProvider>
-          <App />
-        </TooltipProvider>
+        <App />
       </I18nProvider>
     </QueryClientProvider>
   </StrictMode>,

@@ -63,16 +63,20 @@ export const BOverTimeChart = memo(function BOverTimeChart({
           0.4–1.2, so a taller plot would draw the same slide in b as a steeper fall. */}
       <CardContent className="flex flex-1 flex-col justify-center">
         {data.length < 2 ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyDescription>
-                {/* A whole cluster with too few events is not something a wider date range can fix, so it gets its own words. */}
-                {cluster !== null && stats.fit && stats.fit.n < WINDOW_SIZE
-                  ? t.bTimeEmptyCluster(stats.fit.n.toLocaleString(lang), WINDOW_SIZE)
-                  : t.bTimeEmpty(WINDOW_SIZE)}
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          // The plot's own height, so the card does not shrink when the windows run out: it and the b
+          // card beside it lost 329 px at once, and the filters below moved under the reader's pointer.
+          <div className="flex h-80 items-center justify-center">
+            <Empty>
+              <EmptyHeader>
+                <EmptyDescription>
+                  {/* A whole cluster with too few events is not something a wider date range can fix, so it gets its own words. */}
+                  {cluster !== null && stats.fit && stats.fit.n < WINDOW_SIZE
+                    ? t.bTimeEmptyCluster(stats.fit.n.toLocaleString(lang), WINDOW_SIZE)
+                    : t.bTimeEmpty(WINDOW_SIZE)}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </div>
         ) : (
           <ChartContainer config={config} className="aspect-auto h-80 w-full">
             <ComposedChart

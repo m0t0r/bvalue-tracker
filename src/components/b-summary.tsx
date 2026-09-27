@@ -15,9 +15,12 @@ import type { Cluster } from "../../core/clusters";
 
 interface Row {
   label: string;
+  /** The window's own line ("primeros 150 eventos · 20 sept – 24 sept"); none when there is no window. */
   sub?: string;
-  b: number;
-  sigma: number;
+  /** The longest `sub` can be, held hidden under it so the row keeps its height with or without one. */
+  reserve?: string;
+  /** Null for a window there are too few events for: the row keeps its place, with a dash and no mark. */
+  value: { b: number; sigma: number } | null;
   main: boolean;
 }
 
@@ -40,9 +43,10 @@ const CLIP = `band-clip transition-clip-path ${MOVE}`;
  */
 function BScale({ rows }: { rows: Row[] }) {
   const { t } = useI18n();
+  const values = rows.flatMap((r) => (r.value ? [r.value] : []));
   // Wide enough for b = 1 and for every error band, like the chart's axis.
-  const lo = Math.min(0.4, ...rows.map((r) => Math.floor((r.b - r.sigma) * 10) / 10));
-  const hi = Math.max(1.2, ...rows.map((r) => Math.ceil((r.b + r.sigma) * 10) / 10));
+  const lo = Math.min(0.4, ...values.map((v) => Math.floor((v.b - v.sigma) * 10) / 10));
+  const hi = Math.max(1.2, ...values.map((v) => Math.ceil((v.b + v.sigma) * 10) / 10));
   const pct = (b: number) => ((b - lo) / (hi - lo)) * 100;
   const x = (b: number) => `${pct(b)}%`;
 
@@ -52,36 +56,59 @@ function BScale({ rows }: { rows: Row[] }) {
         {rows.map((r) => (
           <div key={r.label} className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between gap-4">
-              <span>
-                <span className={r.main ? "font-medium" : undefined}>{r.label}</span>
-                {r.sub ? <span className="text-xs text-muted-foreground"> {r.sub}</span> : null}
-              </span>
+              <span className={r.main ? "font-medium" : undefined}>{r.label}</span>
               {/* Rolled like the headline: a row's figure and its mark are the one fact, and a figure that
                   snapped while its mark was still travelling read as the mark lagging behind. The scale's
                   end labels below are left to change outright — they are the ruler, not a reading off it. */}
-              <span className="font-medium whitespace-nowrap">
-                <FlowNumber value={r.b} digits={2} />
-                <FlowNumber value={r.sigma} digits={2} prefix=" ± " />
-              </span>
+              {r.value ? (
+                <span className="font-medium whitespace-nowrap">
+                  <FlowNumber value={r.value.b} digits={2} />
+                  <FlowNumber value={r.value.sigma} digits={2} prefix=" ± " />
+                </span>
+              ) : (
+                <span aria-hidden className="text-muted-foreground">
+                  —
+                </span>
+              )}
             </div>
+            {/* Under the label at full width, over a hidden copy of the longest it can be: beside the
+                figure it wrapped with its dates and not without, and the card changed height when the
+                windows ran out. It may wrap (a 320 px phone has 256 px for ~250 px of text). */}
+            {r.reserve ? (
+              <span className="-mt-1 grid text-xs text-pretty text-muted-foreground">
+                <span aria-hidden className="invisible col-start-1 row-start-1">
+                  {r.reserve}
+                </span>
+                <span className="col-start-1 row-start-1">{r.sub}</span>
+              </span>
+            ) : null}
             <div aria-hidden className="relative h-2 rounded-full bg-muted">
               <div className={cn(SLIDE, "absolute inset-0")} style={{ "--at": x(1) } as CSSProperties}>
                 <div className="absolute -inset-y-1 left-0 w-px bg-muted-foreground" />
               </div>
-              {/* Clipped rather than sized: `inset(… round)` keeps both ends a true half-circle at any
-                  width, where scaling one capsule would flatten them into ellipses. */}
-              <div
-                className={cn(CLIP, "absolute inset-0 bg-(--chart-1)/35")}
-                style={{ "--from": `${pct(r.b - r.sigma)}%`, "--to": `${100 - pct(r.b + r.sigma)}%` } as CSSProperties}
-              />
-              <div className={cn(SLIDE, "absolute inset-0")} style={{ "--at": x(r.b) } as CSSProperties}>
-                <div
-                  className={cn(
-                    "absolute top-1/2 left-0 -translate-1/2 rounded-full bg-(--chart-1) ring-2 ring-card",
-                    r.main ? "size-3.5" : "size-3",
-                  )}
-                />
-              </div>
+              {r.value ? (
+                <>
+                  {/* Clipped rather than sized: `inset(… round)` keeps both ends a true half-circle at any
+                      width, where scaling one capsule would flatten them into ellipses. */}
+                  <div
+                    className={cn(CLIP, "absolute inset-0 bg-(--chart-1)/35")}
+                    style={
+                      {
+                        "--from": `${pct(r.value.b - r.value.sigma)}%`,
+                        "--to": `${100 - pct(r.value.b + r.value.sigma)}%`,
+                      } as CSSProperties
+                    }
+                  />
+                  <div className={cn(SLIDE, "absolute inset-0")} style={{ "--at": x(r.value.b) } as CSSProperties}>
+                    <div
+                      className={cn(
+                        "absolute top-1/2 left-0 -translate-1/2 rounded-full bg-(--chart-1) ring-2 ring-card",
+                        r.main ? "size-3.5" : "size-3",
+                      )}
+                    />
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         ))}
@@ -132,6 +159,7 @@ export function BSummary({
   const dim = few || incomplete;
   const first = windows[0],
     last = windows.at(-1);
+  const drift = first && last && first !== last ? { first, last } : null;
   // A range wraps whole: "20 sept –" left at a line's end, with "22 sept" under it, read as an open
   // range. A no-break space before the dash, and a word joiner after it, since a line may break after
   // a dash even when a no-break space follows.
@@ -169,76 +197,114 @@ export function BSummary({
         </div>
       </TechnicalDetail>
     );
-  const body =
-    fit === null || mc === null ? (
-      <p className="text-sm text-pretty text-muted-foreground">{t.bNone}</p>
-    ) : (
-      <>
-        <div className="flex flex-col gap-4">
-          {/* Demoted with the secondary-text token, not opacity: it must stay readable exactly when it is least reliable. */}
-          <div
-            className={cn(
-              "flex items-baseline gap-2 transition-colors duration-200 ease-(--ease-out)",
-              dim && "text-muted-foreground",
-            )}
-          >
-            <FlowNumber value={fit.b} digits={2} className="text-5xl font-semibold tracking-tight" />
-            <FlowNumber value={fit.sigmaB} digits={2} prefix="± " className="text-xl text-muted-foreground" />
-          </div>
-          {/* What the number measures, in words, under it rather than in the card's description above
-              it: on a 375×812 phone the figure ends 2 px inside the first screen, and a line above it
-              would push it out (docs/frontend.md). */}
-          <p className="-mt-2 text-sm text-pretty text-muted-foreground">{t.bDesc}</p>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">
-              <FlowNumber value={mc} digits={1} prefix="Mc = " />
-            </Badge>
-            <Badge variant="secondary">
-              <FlowNumber value={fit.n} lang={lang} prefix="n = " suffix={` ${t.eventsAboveMc}`} />
-            </Badge>
-            {/* Cautions, not failures: red stays reserved for things that actually broke. */}
-            {few ? (
-              <Badge variant="outline">
-                <AlertTriangleIcon data-icon="inline-start" />
-                {t.bFew}
-              </Badge>
-            ) : null}
-            {incomplete ? (
-              <Badge variant="outline">
-                <AlertTriangleIcon data-icon="inline-start" />
-                {t.backfillShort}
-              </Badge>
-            ) : null}
-          </div>
-          {detail}
+  // One layout for every state, so the card never changes height as Mc moves: the Mc slider sits under
+  // it, and its section coming and going moved the slider under the reader's pointer (329 px at once,
+  // owner's report, 2026-09-27). Too few events for two windows leaves the start and the end as
+  // dashes; too few for b at all leaves every figure a dash. What is missing is said in one sentence.
+  const est = fit !== null && mc !== null ? fit : null;
+  const state = est === null ? "none" : drift ? "drift" : "few-windows";
+  const sentences = {
+    drift: t.bDrift(drift ? drift.first.b.toFixed(2) : "0.00", drift ? drift.last.b.toFixed(2) : "0.00"),
+    "few-windows": t.bDriftNone,
+    none: t.bNone,
+  };
+  // The widest a window's dates get ("28 sept – 28 sept"), to keep its line's room when it has none.
+  const widest = span({ from: "2026-09-28T12:00:00Z", to: "2026-09-28T12:00:00Z" });
+  const body = (
+    <>
+      <div className="flex flex-col gap-4">
+        {/* Demoted with the secondary-text token, not opacity: it must stay readable exactly when it is least reliable. */}
+        <div
+          className={cn(
+            "flex items-baseline gap-2 transition-colors duration-200 ease-(--ease-out)",
+            (dim || !est) && "text-muted-foreground",
+          )}
+        >
+          {est ? (
+            <>
+              <FlowNumber value={est.b} digits={2} className="text-5xl font-semibold tracking-tight" />
+              <FlowNumber value={est.sigmaB} digits={2} prefix="± " className="text-xl text-muted-foreground" />
+            </>
+          ) : (
+            <span aria-hidden className="text-5xl font-semibold tracking-tight">
+              —
+            </span>
+          )}
         </div>
-        {/* Needs two separate windows to say anything about change; with fewer, the headline stands alone. */}
-        {first && last && first !== last ? (
-          <div className="flex flex-col gap-4">
-            <p className="text-pretty text-muted-foreground">{t.bDrift(first.b.toFixed(2), last.b.toFixed(2))}</p>
-            <BScale
-              rows={[
-                {
-                  label: t.bRowStart,
-                  sub: t.bRowFirst(WINDOW_SIZE, span(first)),
-                  b: first.b,
-                  sigma: first.sigmaB,
-                  main: false,
-                },
-                { label: t.bRowAll, b: fit.b, sigma: fit.sigmaB, main: true },
-                {
-                  label: t.bRowEnd,
-                  sub: t.bRowLast(WINDOW_SIZE, span(last)),
-                  b: last.b,
-                  sigma: last.sigmaB,
-                  main: false,
-                },
-              ]}
-            />
-          </div>
-        ) : null}
-      </>
-    );
+        {/* What the number measures, in words, under it rather than in the card's description above
+            it: on a 375×812 phone the figure ends 2 px inside the first screen, and a line above it
+            would push it out (docs/frontend.md). */}
+        <p className="-mt-2 text-sm text-pretty text-muted-foreground">{t.bDesc}</p>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">
+            {mc !== null ? <FlowNumber value={mc} digits={1} prefix="Mc = " /> : "Mc = —"}
+          </Badge>
+          {/* Cautions, not failures: red stays reserved for things that actually broke. Under 50
+              events the n badge carries the caution itself rather than a third badge beside it, which
+              wrapped at a third of a desktop and on a phone. One badge and one figure in both states,
+              so n rolls across 50 like every other figure here. */}
+          <Badge variant={few ? "outline" : "secondary"}>
+            {few ? <AlertTriangleIcon data-icon="inline-start" /> : null}
+            <span aria-hidden={few || undefined}>
+              {est ? (
+                <FlowNumber
+                  value={est.n}
+                  lang={lang}
+                  prefix="n = "
+                  suffix={few ? `: ${t.bFewShort}` : ` ${t.eventsAboveMc}`}
+                />
+              ) : (
+                `n = — ${t.eventsAboveMc}`
+              )}
+            </span>
+            {few && est ? <span className="sr-only">{t.bFewSr(est.n.toLocaleString(lang))}</span> : null}
+          </Badge>
+          {incomplete ? (
+            <Badge variant="outline">
+              <AlertTriangleIcon data-icon="inline-start" />
+              {t.backfillShort}
+            </Badge>
+          ) : null}
+        </div>
+        {detail}
+      </div>
+      <div className="flex flex-col gap-4">
+        {/* Every sentence in one cell, the others hidden, so the cell is as tall as the longest at every
+            width and in both languages. The hidden drift sentence is measured with stand-in figures. */}
+        <div className="grid">
+          {(Object.keys(sentences) as (keyof typeof sentences)[]).map((k) => (
+            <p
+              key={k}
+              aria-hidden={k !== state || undefined}
+              className={cn("col-start-1 row-start-1 text-pretty text-muted-foreground", k !== state && "invisible")}
+            >
+              {sentences[k]}
+            </p>
+          ))}
+        </div>
+        {/* Needs two windows to say anything about change. */}
+        <BScale
+          rows={[
+            {
+              label: t.bRowStart,
+              sub: drift ? t.bRowFirst(WINDOW_SIZE, span(drift.first)) : undefined,
+              reserve: t.bRowFirst(WINDOW_SIZE, widest),
+              value: drift ? { b: drift.first.b, sigma: drift.first.sigmaB } : null,
+              main: false,
+            },
+            { label: t.bRowAll, value: est ? { b: est.b, sigma: est.sigmaB } : null, main: true },
+            {
+              label: t.bRowEnd,
+              sub: drift ? t.bRowLast(WINDOW_SIZE, span(drift.last)) : undefined,
+              reserve: t.bRowLast(WINDOW_SIZE, widest),
+              value: drift ? { b: drift.last.b, sigma: drift.last.sigmaB } : null,
+              main: false,
+            },
+          ]}
+        />
+      </div>
+    </>
+  );
   const BODY = "flex flex-1 flex-col justify-between gap-6";
 
   return (

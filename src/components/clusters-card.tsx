@@ -230,46 +230,92 @@ export function ClustersCard({
                 </div>
 
                 <Separator />
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  {fit ? (
-                    <>
-                      <span className="font-medium whitespace-nowrap">
-                        {t.bTitle} {fit.b.toFixed(2)} ± {fit.sigmaB.toFixed(2)}
+                {/* The cautions come and go as Mc moves, and each wrapped onto a line of its own: the
+                    card grew and shrank by 28–56 px under the Mc slider below it. Under 50 events the n
+                    becomes the caution, as in the b card, so it takes no line of its own; for the
+                    group's own Mc a hidden copy with the caution shown shares the cell, so the line is
+                    always as tall as it can get. */}
+                <div className="grid">
+                  <div
+                    aria-hidden
+                    className="invisible col-start-1 row-start-1 flex flex-wrap items-center gap-2 text-sm"
+                  >
+                    <span className="font-medium whitespace-nowrap">{t.bTitle} 0.00 ± 0.00</span>
+                    {/* The n as wide as the wider of its two forms, the plain count and the caution. */}
+                    <span className="inline-grid">
+                      <span className="col-start-1 row-start-1 whitespace-nowrap">
+                        n = {(fit?.n ?? 0).toLocaleString(lang)} {t.eventsAboveMc}
                       </span>
-                      <span className="whitespace-nowrap text-muted-foreground">
-                        n = {fit.n.toLocaleString(lang)} {t.eventsAboveMc}
-                      </span>
-                      {fit.n < MIN_RELIABLE_N ? (
-                        <Badge variant="outline">
-                          <AlertTriangleIcon data-icon="inline-start" />
-                          {t.bFew}
-                        </Badge>
-                      ) : null}
-                      {part.ownMcHigher ? (
-                        <Badge variant="outline">
-                          <AlertTriangleIcon data-icon="inline-start" />
-                          {t.clusterOwnMc(part.stats.mcMaxc!.toFixed(1))}
-                        </Badge>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">{t.clusterNoFit}</span>
-                  )}
+                      <Badge variant="outline" className="col-start-1 row-start-1">
+                        <AlertTriangleIcon data-icon="inline-start" />
+                        n = {(fit?.n ?? 0).toLocaleString(lang)}: {t.bFewShort}
+                      </Badge>
+                    </span>
+                    <Badge variant="outline">
+                      <AlertTriangleIcon data-icon="inline-start" />
+                      {t.clusterOwnMc("0.0")}
+                    </Badge>
+                  </div>
+                  <div className="col-start-1 row-start-1 flex flex-wrap items-center gap-2 self-start text-sm">
+                    {fit ? (
+                      <>
+                        <span className="font-medium whitespace-nowrap">
+                          {t.bTitle} {fit.b.toFixed(2)} ± {fit.sigmaB.toFixed(2)}
+                        </span>
+                        {fit.n < MIN_RELIABLE_N ? (
+                          <Badge variant="outline">
+                            <AlertTriangleIcon data-icon="inline-start" />
+                            <span aria-hidden>
+                              n = {fit.n.toLocaleString(lang)}: {t.bFewShort}
+                            </span>
+                            <span className="sr-only">{t.bFewSr(fit.n.toLocaleString(lang))}</span>
+                          </Badge>
+                        ) : (
+                          <span className="whitespace-nowrap text-muted-foreground">
+                            n = {fit.n.toLocaleString(lang)} {t.eventsAboveMc}
+                          </span>
+                        )}
+                        {part.ownMcHigher ? (
+                          <Badge variant="outline">
+                            <AlertTriangleIcon data-icon="inline-start" />
+                            {t.clusterOwnMc(part.stats.mcMaxc!.toFixed(1))}
+                          </Badge>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">{t.clusterNoFit}</span>
+                    )}
+                  </div>
                 </div>
               </section>
             );
           })}
         </div>
-        {stats.difference ? (
-          <div className="flex flex-col gap-1 text-sm text-pretty text-muted-foreground">
-            <p>
-              {stats.difference.p < 0.05 ? t.clusterDiffer : t.clusterSame} {t.clusterNotForecast}
+        {/* Both verdicts share one cell, the other hidden, so the paragraph keeps the longer one's height
+            when Mc moves the test across p = 0.05 (it lost a line in English at 1024 px), and keeps its
+            place when a group has no b to compare. */}
+        <div className="flex flex-col gap-1 text-sm text-pretty text-muted-foreground">
+          <div className="grid">
+            {[t.clusterDiffer, t.clusterSame].map((verdict) => (
+              <p key={verdict} aria-hidden className="invisible col-start-1 row-start-1">
+                {verdict} {t.clusterNotForecast}
+              </p>
+            ))}
+            <p className="col-start-1 row-start-1">
+              {stats.difference ? `${stats.difference.p < 0.05 ? t.clusterDiffer : t.clusterSame} ` : ""}
+              {t.clusterNotForecast}
             </p>
+          </div>
+          {/* Always mounted, so a reader who opened it finds it still open when the comparison comes
+              back; hidden meanwhile (neither seen nor reached), with its line and any open text kept. */}
+          <div aria-hidden={!stats.difference || undefined} className={cn(!stats.difference && "invisible")}>
             <TechnicalDetail>
-              {t.clusterTest(stats.difference.p < 0.001 ? "< 0.001" : stats.difference.p.toFixed(2))}
+              {t.clusterTest(
+                !stats.difference ? "0.00" : stats.difference.p < 0.001 ? "< 0.001" : stats.difference.p.toFixed(2),
+              )}
             </TechnicalDetail>
           </div>
-        ) : null}
+        </div>
       </CardContent>
     </Card>
   );
