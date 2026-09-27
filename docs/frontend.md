@@ -534,8 +534,14 @@ full-screen viewer with five views to jump to.
   - **Not built, each tried or weighed:** waves a tap sets off (the owner: not realistic at this
     scale), a calm option, see-through water, a light pattern on the sea floor (caustics; the owner
     did not want it), three.js's `Water` and `WaterMesh` (`WaterMesh` needs three.js's WebGPU renderer,
-    and three.js is 120 kB more; they are one shader, written here instead), and Water Pro
-    (commercial, its licence forbids its code in a public repository).
+    and three.js is 120 kB more; they are one shader, written here instead), Water Pro
+    (commercial, its licence forbids its code in a public repository), and swell in sets
+    (2026-09-27, after caustic-volume's lite sea, github.com/ScottieFox/caustic-volume: each train's
+    height under an envelope moving at half the crests' speed, as deep-water groups do). Tried twice
+    in a preview: mild, a set every 9–14 wavelengths and lulls at 35 % of the height, it was hard to
+    notice; strong, every 5–8 wavelengths and lulls at 12 %, the calm stretches read as glassy. The
+    owner prefers even crests. The rest of caustic-volume is caustics, see-through water, tap ripples
+    and an FFT ocean, each declined above or too heavy for one block on a page.
   - **Why it is not pale:** a glint sun placed where the flat sea mirrors it put a hazy white disc in
     the middle of the sea from above, and the water faded from above with the ground, showing the
     pale map. The water's own sun stands 20° up in front of the camera (`SUN_ELEVATION`), and the
