@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse, type StoredEvent } from "@/lib/api";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
-import { fmtClock, fmtDay, fmtUtc, relativeTime, relativeTimeShort, sgcEventUrl } from "@/lib/format";
+import { fmtClock, fmtDateTime, fmtDay, fmtUtc, relativeTime, relativeTimeShort, sgcEventUrl } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
 import { useNow } from "@/lib/use-now";
@@ -20,9 +20,26 @@ import type { ZoneMainshock } from "../../core/mainshock";
 /** A wait the reader should not sit through: the cron will do the work instead. */
 const LONG_WAIT_S = 60;
 
-function Stat({ label, value, hint }: { label: string; value: ReactNode | null; hint?: string }) {
+/**
+ * The phone's form below `sm` and the wider one from `sm` up. The two-by-two grid on a phone needs
+ * values and copy short enough for half its width; from `sm` up the bar is the one wrapping row it
+ * always was, with the full dates and sentences. Pure CSS, like the scope bar's short count, so
+ * nothing swaps in after the first paint, and the hidden form is out of the accessibility tree.
+ */
+function ByWidth({ phone, wide }: { phone: ReactNode; wide: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <>
+      <span className="sm:hidden">{phone}</span>
+      <span className="hidden sm:inline">{wide}</span>
+    </>
+  );
+}
+
+function Stat({ label, value, hint }: { label: ReactNode; value: ReactNode | null; hint?: ReactNode }) {
+  return (
+    // `min-w-0` lets a hint wrap inside its grid column on a phone; in the row from `sm` up a stat is
+    // as wide as its longest line, and wraps whole onto the next line rather than folding its text.
+    <div className="flex min-w-0 flex-col gap-1 sm:min-w-auto">
       <span className="text-sm text-muted-foreground">{label}</span>
       {value === null ? <Skeleton className="h-7 w-28" /> : <span className="text-xl font-semibold">{value}</span>}
       {/* The line is always reserved, so the cards below do not jump when the hint arrives. */}
@@ -60,7 +77,13 @@ function MainshockStat({
   if (m.largest === null || m.runnerUp === null || m.gap === null) return <Stat label={t.mainshock.label} value="—" />;
   const gap = m.gap.toFixed(1);
   if (m.state === "none")
-    return <Stat label={t.mainshock.label} value={t.mainshock.none} hint={t.mainshock.noneHint(gap)} />;
+    return (
+      <Stat
+        label={t.mainshock.label}
+        value={t.mainshock.none}
+        hint={<ByWidth phone={t.mainshock.noneHintShort(gap)} wide={t.mainshock.noneHint(gap)} />}
+      />
+    );
   const e = m.largest;
   const day = fmtDay(Date.parse(e.time), lang);
   return (
@@ -77,7 +100,13 @@ function MainshockStat({
           M{e.mag.toFixed(1)} ({e.magType})
         </a>
       }
-      hint={m.state === "found" ? t.mainshock.gapHint(day, gap) : t.mainshock.pendingHint(day)}
+      hint={
+        m.state === "found" ? (
+          <ByWidth phone={t.mainshock.gapHintShort(day, gap)} wide={t.mainshock.gapHint(day, gap)} />
+        ) : (
+          t.mainshock.pendingHint(day)
+        )
+      }
     />
   );
 }
@@ -194,7 +223,19 @@ export function StatusBar({
   // SGC is being refused outright the Worker's own wait is an hour, so "press again" would be
   // bad advice. refreshWait's claim — SGC answered in the last five minutes — is only true
   // when nothing has failed.
-  const message = refresh.isPending
+  // Inside the live region a screen reader always has the long form, and the short one is only drawn:
+  // with `ByWidth`, turning a phone past `sm` would add the other span to the region, and it would be
+  // read out again as news.
+  const waitMin = CADENCE[zone].refreshMinIntervalS / 60;
+  const wait = (
+    <>
+      <span aria-hidden="true" className="sm:hidden">
+        {t.refreshWaitShort(waitMin)}
+      </span>
+      <span className="sr-only sm:not-sr-only">{t.refreshWait(waitMin)}</span>
+    </>
+  );
+  const message: ReactNode = refresh.isPending
     ? t.refreshing
     : refresh.isError
       ? t.refreshFailed
@@ -205,7 +246,7 @@ export function StatusBar({
           ? t.refreshStillFailing
           : ""
         : stoodDown
-          ? t.refreshWait(CADENCE[zone].refreshMinIntervalS / 60)
+          ? wait
           : "";
 
   // While a refetch over the figures has failed, the line says since when they are, and that outranks
@@ -218,17 +259,20 @@ export function StatusBar({
   const live = staleNote ? t.staleSince(stale.time, stale.day) : message;
   const pending = refresh.isPending || backfill.isPending;
 
-  // Both times lead with how long ago ("hace ~2 h", "hace 7 min"), which is what the reader asks of
-  // them, and give the clock time under it, with the day only when it was not today: a full date
-  // under each was a second line of year the page never needs.
+  // On a phone both times lead with how long ago ("hace ~2 h", "hace 7 min"), which is what the
+  // reader asks of them, and give the clock time under it, with the day only when it was not today:
+  // the full "18 sept 2026, 17:08" does not fit half a phone. From `sm` up there is room for it, and
+  // the newest event gives its date with how long ago under it, the last query the other way round.
   const clock = (iso: string) => {
     const c = fmtClock(Date.parse(iso), lang, now);
     return c.day === null ? c.time : `${c.day}, ${c.time}`;
   };
+  const newestTime = status?.newestEventTime ? (
+    <ByWidth phone={<Ago iso={status.newestEventTime} now={now} />} wide={fmtDateTime(status.newestEventTime, lang)} />
+  ) : null;
   // The newest event reaches SGC's own page for it, the same link the table's time column carries,
   // with the same UTC form one hover away. An event with no id cannot happen — the id is the primary
   // key — but the status API types it as nullable, so it falls back to plain text.
-  const newestAgo = status?.newestEventTime ? <Ago iso={status.newestEventTime} now={now} /> : null;
   const newestEvent = !status?.newestEventTime ? null : status.newestEventId ? (
     <a
       className="underline underline-offset-4"
@@ -237,10 +281,10 @@ export function StatusBar({
       rel="noreferrer"
       title={fmtUtc(status.newestEventTime)}
     >
-      {newestAgo}
+      {newestTime}
     </a>
   ) : (
-    newestAgo
+    newestTime
   );
 
   // Until the page has its status and its catalogue, one block and no stats. The stats wrap by their
@@ -259,9 +303,11 @@ export function StatusBar({
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardContent className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5">
-          {/* Two columns on a phone, one row from sm up. Every value is short enough for half a
-              phone ("hace ~2 h", "Ninguno claro"); a hint that is not wraps inside its own column. */}
+        <CardContent className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5 sm:gap-y-4">
+          {/* Two columns on a phone, one wrapping row from sm up. On a phone every value is short
+              enough for half its width ("hace ~2 h", "Ninguno claro"), and a hint that is not wraps
+              inside its own column. From sm up a stat that no longer fits beside its neighbour takes
+              the next line whole, so which stats share a line is a consequence of the text. */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10">
             <Stat
               label={t.events}
@@ -269,20 +315,43 @@ export function StatusBar({
               hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined}
             />
             <Stat
-              label={t.newestEvent}
+              label={<ByWidth phone={t.newestEventShort} wide={t.newestEvent} />}
               value={status ? (newestEvent ?? "—") : null}
-              hint={status?.newestEventTime ? clock(status.newestEventTime) : undefined}
+              hint={
+                status?.newestEventTime ? (
+                  <ByWidth
+                    phone={clock(status.newestEventTime)}
+                    wide={relativeTime(status.newestEventTime, lang, now)}
+                  />
+                ) : undefined
+              }
             />
             <Stat
-              label={t.lastUpdate}
-              value={status ? ok?.finishedAt ? <Ago iso={ok.finishedAt} now={now} /> : t.never : null}
-              hint={ok?.finishedAt ? clock(ok.finishedAt) : undefined}
+              label={<ByWidth phone={t.lastUpdateShort} wide={t.lastUpdate} />}
+              value={
+                status ? (
+                  ok?.finishedAt ? (
+                    <ByWidth
+                      phone={<Ago iso={ok.finishedAt} now={now} />}
+                      wide={relativeTime(ok.finishedAt, lang, now)}
+                    />
+                  ) : (
+                    t.never
+                  )
+                ) : null
+              }
+              hint={
+                ok?.finishedAt ? (
+                  <ByWidth phone={clock(ok.finishedAt)} wide={fmtDateTime(ok.finishedAt, lang)} />
+                ) : undefined
+              }
             />
             <MainshockStat mainshock={mainshock} catalogueFailed={catalogueFailed} />
           </div>
-          {/* Below lg this block wraps onto its own line, the note beside the button rather than under
-              it; beside the stats, at lg, it stacks and hugs the end edge. */}
-          <div className="flex items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
+          {/* On a phone the note sits beside the button. From sm the note goes under it: below lg the
+              block wraps onto its own line at the start edge, so it reads from there, and beside the
+              stats at lg it hugs the end edge. */}
+          <div className="flex items-center gap-3 sm:flex-col sm:items-start sm:gap-2 lg:items-end">
             {/* One label and one icon: the button keeps its width while it works. `aria-disabled`, not
                 `disabled`: a disabled button drops the keyboard focus it holds to the page. */}
             <Button
@@ -315,7 +384,7 @@ export function StatusBar({
             </span>
             {live === "" ? (
               <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">
-                {failed ? null : t.autoUpdate(everyMin)}
+                {failed ? null : <ByWidth phone={t.autoUpdateShort(everyMin)} wide={t.autoUpdate(everyMin)} />}
               </span>
             ) : null}
           </div>

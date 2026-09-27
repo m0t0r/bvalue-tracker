@@ -200,8 +200,8 @@ those, so an untouched tab shows no chips on either side.
   take the state as an argument (`caveats(state)`).
   - **"Sismo principal" is the status bar's fourth stat, always shown** (`MainshockStat` in
     `status-bar.tsx`): "M7.4 (Mw)" linked to SGC's page for it, with the day and the gap under it;
-    "automático, en revisión" while it waits; "Ninguno claro · el mayor, solo +0.3 sobre el 2.º"
-    for a swarm. Chosen over a notice that appears only when the copy is out of date, and
+    "automático, en revisión" while it waits; "Ninguno claro · el mayor, solo 0.3 por encima del
+    siguiente" for a swarm ("+0.3 sobre el 2.º" on a phone). Chosen over a notice that appears only when the copy is out of date, and
     over a line under the title, from three variants tried on the real page (2026-09-24). A reading
     that is always there says "none clear" as a
     finding rather than leaving it to an absence, and needs no notion of the copy being "wrong".
@@ -675,13 +675,13 @@ colour, motion). Keep to them:
   the exact date is always beside it. Those two phrases are the **only** user-facing strings outside
   `i18n.tsx`, because `src/lib/format.ts` is also imported by the Node test project, which has
   neither the `@` alias nor JSX; `Record<Lang, string>` keeps both languages required there.
-  - **`relativeTimeShort` is the same ladder for a figure with little room** (the status bar):
+  - **`relativeTimeShort` is the same ladder for a figure with little room** (the status bar on a phone):
     `Intl`'s narrow units, "hace 7 min", "hace ~2 h", "hace ~3 d", "hace <1 min", with no copy of
     its own. The "~" marks hours and days only, which rounding moves by up to half a unit; whole
     minutes are exact enough to go without. A screen reader is given `relativeTime`'s long form
     instead (`Ago` in `status-bar.tsx`), since it reads "~" out as a word.
 - **A time that identifies one event is a link to SGC's own page for it** (`sgcEventUrl` in
-  `src/lib/format.ts`): the table's time column, and "Último evento" in the status bar —
+  `src/lib/format.ts`): the table's time column, and "Evento más reciente" in the status bar —
   which is why `/api/status` carries `newestEventId` beside `newestEventTime`. Both keep the UTC
   form on hover. A time that identifies no single event (the last SGC query) is not a link.
 - **The page says that it updates itself** (under the refresh button, in the footer):
@@ -750,18 +750,29 @@ colour, motion). Keep to them:
   must be within the first screen. The b card's plain description ("Cuánto pesan los eventos
   grandes frente a los pequeños…") is a caption under the number, not the card's description: at
   375 × 812 the figure had 2 px to spare. With it there, the figure ends at 786.
-- **The status bar is a two-by-two grid on a phone and one row from `sm` up** (owner's
-  call, 2026-09-27). It used to be one wrapping row at every width, because equal halves broke
-  "18 sept 2026, 17:08" across two lines below 480 px; on a phone that left "Última consulta al
-  SGC" and "Sismo principal" a line each, and the card 352 px tall at 390 px. The grid works
-  because every **value** now fits half a phone: both times lead with how long ago, in
-  `relativeTimeShort` ("hace ~2 h", "hace 7 min"), and give the clock time under it, with the day
-  only when it was not today (`fmtClock`); the labels are "Último evento" and "Consulta al SGC".
-  A **hint** may wrap inside its column (the mainshock's does, "el mayor, solo +0.3 sobre el
-  2.º"). The refresh note sits beside the button rather than under it until `lg`, where the
-  block stacks at the end of the row. 260 px tall at 390 px; at 320 px "Ninguno claro" takes two
-  lines, and nothing overflows. Units that must not part from their number take a no-break space
-  ("15\u00A0min", "el\u00A02.º").
+- **The status bar is a two-by-two grid on a phone and one wrapping row from `sm` up** (owner's
+  call, 2026-09-27). **Everything below is phone-only; from `sm` up the bar is exactly what it was
+  before** — the same labels, values, hints, notes and layout, pixel for pixel. PR #86 made the
+  phone's compact copy and note-beside-the-button layout apply at every width, and the owner had it
+  taken back off wider screens the same day. Each phone form is a `*Short` key in `i18n.tsx` beside
+  its wide one, and `ByWidth` in `status-bar.tsx` shows one or the other in CSS at `sm` (as the
+  scope bar does), so nothing swaps in after the first paint, and the hidden form is out of the
+  accessibility tree. Keep a change to one width from reaching the other.
+  - **On a phone** it used to be the same wrapping row, because equal halves broke "18 sept 2026,
+    17:08" across two lines below 480 px; that left "Última consulta al SGC" and "Sismo principal"
+    a line each, and the card 352 px tall at 390 px. The grid works because every **value** fits
+    half a phone: both times lead with how long ago, in `relativeTimeShort` ("hace ~2 h", "hace 7
+    min"), and give the clock time under it, with the day only when it was not today
+    (`fmtClock`); the labels are "Último evento" and "Consulta al SGC". A **hint** may wrap inside
+    its column (the mainshock's does, "el mayor, solo +0.3 sobre el 2.º"). The refresh note sits
+    beside the button rather than under it. 260 px tall at 390 px; at 320 px "Ninguno claro" takes
+    two lines, and nothing overflows. Units that must not part from their number take a no-break
+    space ("15\u00A0min", "el\u00A02.º").
+  - **From `sm` up** a stat is as wide as its own longest line, and one that no longer fits beside
+    its neighbour takes the next line whole, so which stats share a line is a consequence of the
+    text. The newest event gives its full date with how long ago under it, the last query the other
+    way round. The refresh note sits under the button: at the start edge on its own line below `lg`,
+    and hugging the end edge beside the stats at `lg`.
 - **"Magnitud en el tiempo" scrolls sideways when it is too narrow to read.** Below
   768 px of plot width every Colombian day gets `PX_PER_DAY` (28 px) instead of the
   whole range being squeezed in, which on a phone drew one solid band. The bars themselves
