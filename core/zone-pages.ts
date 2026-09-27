@@ -38,8 +38,9 @@ export function zonePath(pathname: string): ZoneId {
 }
 
 /**
- * What a shared link says, in Spanish like the page's default. `title` is the tab's `docTitle` in
- * `src/lib/i18n.tsx` (a test holds them equal); `site` is the name the preview gives the site.
+ * What a shared link says, in Spanish: a messenger's crawler has no browser language to follow, and the
+ * link is mostly shared in Colombia. `title` is the tab's Spanish `docTitle` in `src/lib/i18n.tsx` (a
+ * test holds them equal); `site` is the name the preview gives the site.
  */
 export const SHARE_META: Record<ZoneId, { title: string; site: string; description: string }> = {
   choco: {

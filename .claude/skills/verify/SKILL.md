@@ -70,8 +70,8 @@ Earlier findings and method: `docs/performance.md`.
 
 ### 3. Usability dogfooding (new features and UI changes)
 
-Use the feature as the Spanish-speaking reader would, on a phone first, then desktop. For each
-surface the change opens:
+Use the feature as the page's reader would (interested in the science, not a seismologist), on a
+phone first, then desktop. For each surface the change opens:
 
 - Can it be **reached, used, and left**? Every sheet, dialog or panel needs a visible close,
   works with Escape, and returns focus.
@@ -79,7 +79,7 @@ surface the change opens:
   (390×700): nothing beyond the screen without a scroll container, nothing clipped behind the
   close button.
 - Tap targets reachable with a thumb; keyboard-only path works; `snapshot -i` names make sense.
-- Both themes, both languages (ES default, EN); copy reads naturally in Spanish.
+- Both themes, both languages; copy reads naturally in each.
 - Walk the adjacent flows too (open → switch tab → resize past the breakpoint → close → reopen).
 
 The 3D legend sheet bug (2026-09-26: sheet taller than the screen, no scroll, close button
@@ -87,7 +87,7 @@ off-screen) is the kind of issue this pass exists to catch before handover.
 
 ### 4. Error handling (every page the change touches)
 
-Drive each case, screenshot it, and note whether the page says something useful in Spanish and
+Drive each case, screenshot it, and note whether the page says something useful in both languages and
 whether the reader can recover without a reload (retry, back online, next refetch).
 
 | Case | How |

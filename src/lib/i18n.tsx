@@ -526,31 +526,60 @@ export type Lang = "es" | "en";
 export const dicts: Record<Lang, Dict> = { es, en };
 const STORAGE_KEY = "sgc-swarm:lang";
 
+/**
+ * The browser's first preferred language the page has, by its primary subtag ("es-CO" is Spanish),
+ * or English when it has none of them. Exported for the tests.
+ */
+export function browserLang(languages: readonly string[]): Lang {
+  for (const tag of languages) {
+    const primary = tag.toLowerCase().split("-")[0];
+    if (primary === "es" || primary === "en") return primary;
+  }
+  return "en";
+}
+
+const preferred = () => browserLang(navigator.languages?.length ? navigator.languages : [navigator.language ?? ""]);
+
+function stored(): Lang | null {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY);
+    return v === "es" || v === "en" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({
-  lang: "es",
-  t: es,
+  lang: "en",
+  t: en,
   setLang: () => {},
 });
 
+/**
+ * The language follows the browser's unless the visitor picks one, as the theme follows the system.
+ * Picking the browser's own language clears the override, so a later change of browser language is
+ * followed again.
+ */
 export function I18nProvider({ children }: { children: ReactNode }) {
-  // Spanish unless the visitor has explicitly chosen English before.
-  const [lang, setLangState] = useState<Lang>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY) === "en" ? "en" : "es";
-    } catch {
-      return "es";
-    }
-  });
-  // Also on first load, so a restored English choice is announced as English. The document's
+  const [lang, setLangState] = useState<Lang>(() => stored() ?? preferred());
+  // Also on first load, so the page is announced in the language it is drawn in. The document's
   // title names the zone, so the page sets that itself.
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
+  useEffect(() => {
+    const follow = () => {
+      if (stored() === null) setLangState(preferred());
+    };
+    window.addEventListener("languagechange", follow);
+    return () => window.removeEventListener("languagechange", follow);
+  }, []);
   const value = useMemo(() => {
     const setLang = (l: Lang) => {
       setLangState(l);
       try {
-        localStorage.setItem(STORAGE_KEY, l);
+        if (l === preferred()) localStorage.removeItem(STORAGE_KEY);
+        else localStorage.setItem(STORAGE_KEY, l);
       } catch {
         /* private mode: keep the choice for this visit only */
       }

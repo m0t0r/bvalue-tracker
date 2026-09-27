@@ -28,8 +28,8 @@ and interface conventions. Most of it cannot be inferred from the code.
 - Deploys go to the Cloudflare account pinned in `wrangler.jsonc` (Worker `bvalue-tracker`; `choco` is the old URL's redirect).
   Run `pnpm exec wrangler whoami` and confirm the account with the user before a
   first deploy of anything new.
-- The page is for a Spanish-speaking researcher: Spanish is the default UI language
-  for this project only. Talk to the repo owner in English.
+- The page opens in the reader's browser language, Spanish or English, and English when the
+  browser lists neither. Every string needs both. Talk to the repo owner in English.
 - A PR that changes what the page looks like gets a before/after block from the `before-and-after`
   skill when it is opened, without being asked. Capture the "before" on `main` at the same
   viewport and state as the "after" (the `verify` skill does this).
