@@ -27,6 +27,15 @@ practices stayed at 100.
   - Anything above the b-value stays in the first chunk: the status bar, the groups card and
     the filters. So does the events table, whose placeholder cannot be given the right height
     cheaply (25 rows, and they wrap differently on a phone).
+  - **Except the filters' info tip** (2026-09-27): Radix's Tooltip carries Popper and floating-ui,
+    which nothing else loads at startup. In the first chunk the tip added 14 kB gzipped to both
+    pages' startup JavaScript (176.2 → 190.2 kB on the monitor, 131.0 → 143.8 on `/insights`,
+    which has no tooltip but imported a root `TooltipProvider`). Loaded after the first render
+    instead (see [the page](frontend.md)), the startup JavaScript is 176.0 and 130.1 kB, and a
+    36 kB chunk (13 kB gzipped) arrives at ~120 ms, after LCP. Interleaved cold loads of `pnpm
+    preview` against a build of `main`, unthrottled, four each way at 390 px and three at 1280:
+    LCP within a frame of `main` (medians 120 and 118 ms at 390), CLS 0, and at 1280 the same one
+    long task on both, the charts and the map arriving (~80–95 ms at ~450 ms).
 - **The latin font subset is preloaded** by a small plugin in `vite.config.ts` that reads the
   hashed file name out of the bundle. Everything on this page is text, so the largest paint
   waits for that file; once the shell painted earlier than the font arrived, the swap from the

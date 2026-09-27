@@ -26,8 +26,9 @@ groups card and the b card take. `App.tsx` is layout.
   rest. So dragging the Mc slider rebuilds no array, and choosing a group leaves `base` — the two
   daily strips in the groups card — untouched. Checked in a browser: after four steps of the Mc
   slider the MapLibre canvas and the table's first row are the same DOM nodes.
-- The `page` vitest project runs on `happy-dom` with `@testing-library/react`, for that one seam.
-  Everything else it holds is a pure function; do not reach for a renderer where `pageView` will do.
+- The `page` vitest project runs on `happy-dom` with `@testing-library/react`, for that seam and
+  one other: `InfoTip`'s wiring to Radix (see the filters card, below). Everything else it holds is
+  a pure function; do not reach for a renderer where `pageView` will do.
 
 ## Events per day
 
@@ -773,6 +774,66 @@ colour, motion). Keep to them:
     text. The newest event gives its full date with how long ago under it, the last query the other
     way round. The refresh note sits under the button: at the start edge on its own line below `lg`,
     and hugging the end edge beside the stats at `lg`.
+- **The filters card is three groups** (`filters.tsx`, owner's request, 2026-09-27): when (the two
+  dates), which events (the smallest magnitude, "Solo revisados", "Excluir sismo principal"), and the
+  Mc the b-value is fitted above, which selects no events. One column each from `lg`, dates and
+  events side by side from `sm` with Mc under the dates, stacked in that order on a phone. Each
+  date's label sits beside its input (a subgrid, so "From" and "To" line up), which saves a label's
+  height twice and reads as one range. The date-order error goes under both. The card went from
+  268 to 148 px tall at 1280 px, 329 to 148 at 1024, and 489 to 319 at 390 (Tolima). Space alone separates
+  the groups: 24 px between them against 8–12 px inside one.
+  - **Why the automatic Mc uses maximum curvature is an info tip**, not a paragraph. As four lines
+    under the Mc slider it set the height of the whole row and left three columns empty. The icon
+    follows "Automática (curvatura máxima)", or "Manual · Usar la Mc automática" when Mc is set by
+    hand, since that method is what it explains.
+  - **`InfoTip` (`info-tip.tsx`) is the page's info icon**, on shadcn's `Tooltip`: hover and focus
+    open it, as Radix does, and a tap opens and closes it, which Radix does not (it ignores touch,
+    and closes on every press and click). The behaviour is `info-tip-tooltip.tsx`. It cancels Radix's
+    own press and click handlers, and a click decides from what the press found (`openAfterClick`):
+    a phone that focuses what it taps has opened the tip on focus before the click arrives, so a
+    plain toggle closed it again. A click from the keyboard (`detail` 0) only opens, and a press
+    that became a scroll (`pointercancel`) is forgotten, or it decided the next Enter. The tip's
+    dismiss layer ignores presses on the button itself: to Radix the button is outside the tip, so
+    a mouse click blinked it shut on the press and open on the click (found writing the test).
+    One component for both, not a `Popover` on touch: a laptop with a touch screen reports a
+    fine pointer and would have got a tip that no tap opens. A tap elsewhere, Escape and a scroll
+    close it. The text is the button's description at all times (`aria-describedby` on a `hidden`
+    copy, which a description may point to), so a screen reader reaches it without opening
+    anything, and once: as an `sr-only` copy in the line it was read a second time. It opens
+    below the icon, so it does not cover the value it explains, and stays inside the 16 px gutter
+    (`collisionPadding`). `TooltipContent` is capped at the width Radix says is free, or the tip's
+    320 px ran off a 320 px phone. On touch the 44 px hit area reaches 4 px back, 20 px forward, 8 px
+    up and 16 px down (`icon-inline`): a symmetric one covered the last 8 px of the link back to the
+    automatic Mc and the bottom of the Mc slider's track (code review; measured with the page's
+    coarse-pointer rules forced on, clear of both).
+    `info-tip-tooltip.test.ts` renders it (happy-dom) and fires the events each device sends; each
+    of the handlers above was removed in turn and a test failed. Checked in a browser with a mouse,
+    the keyboard and synthetic touch sequences in both orders (Android's focus-on-tap, iOS's
+    without); not on a physical device.
+  - **The tooltip is its own chunk** (see [Performance](performance.md)). Radix's Tooltip brings
+    Popper and floating-ui, 14 kB gzipped that nothing else loaded at startup, and in the first
+    chunk they cost both pages that much, `/insights` included, which has no tooltip. `InfoTip` draws
+    its button at once and imports the behaviour in an effect, once for every tip on the page; the
+    button it then wraps looks the same, and takes focus back if the one it replaced had it. Not
+    `lazy`: it suspends even on a chunk that has arrived and holds it back 300 ms, and a failed load
+    is thrown to the nearest error boundary, of which the page has none, so a stale chunk after a
+    deploy would have blanked the page. A failed load leaves the button as it is. Neither page
+    mounts a `TooltipProvider` at its root any more: `InfoTipTooltip` brings its own, and a root one
+    would pull the module back into the first chunk. A new tooltip should go through `InfoTip`, or
+    load in the same way. One provider per tip costs nothing today: the delay is 0, so there is no
+    skip-delay to share, and Radix closes any open tooltip when another opens, provider or not
+    (declined in the code review).
+  - **Set by hand, the line under the slider keeps its type and names the state first**:
+    "Manual · Usar la Mc automática" / "Manual · Use automatic Mc", against "Automática (curvatura
+    máxima)". The link is `Button` `link-inline` / `inline`: the line's own 14 px, regular weight
+    and grey, told apart by its underline, dark on hover. It was `link` at 12 px, medium weight and
+    near-black, and three changes at once read as a jolt on switching (owner's report,
+    2026-09-27). It has no border, whose 2 px made the manual line taller than the automatic one
+    (21.3 px in both now). It wraps (`whitespace-normal`): unwrapped, the old "Switch back to
+    automatic Mc (maximum curvature)" ran past a 320 px card and stretched every field with it.
+    Link and icon share one line down to 320 px in both languages (measured). Keep it short: a
+    `<button>` stays a box even at `display: inline`, so once it wraps the icon cannot follow its
+    last word (at 12 px, "Volver a Mc automática (curvatura máxima)" already did at 320 px).
 - **"Magnitud en el tiempo" scrolls sideways when it is too narrow to read.** Below
   768 px of plot width every Colombian day gets `PX_PER_DAY` (28 px) instead of the
   whole range being squeezed in, which on a phone drew one solid band. The bars themselves
@@ -876,6 +937,39 @@ colour, motion). Keep to them:
   with `min-h-80`) instead of sitting at `h-80` with ~90 px blank beneath it: both of its axes
   are read off the data, so the room only spreads its points out. "Valor b en el tiempo" is the
   counter-example directly above — with a pinned y axis, height is a claim about the slope.
+- **Nothing above the filters changes height as Mc moves** (owner's report, 2026-09-27). The Mc
+  slider sits under the b row and, on Chocó, the groups card, so every change of height there moved
+  the slider under the reader's pointer (Chrome's scroll anchoring then moves the page instead).
+  At Mc 3.2 on Tolima the windows ran out: "Valor b en el tiempo" dropped to a two-line message and
+  the b card dropped its start / whole / end section, and the row lost 329 px (553 on a phone).
+  What holds each state's height now, checked by stepping Mc from 2.0 to 4.0 on both zones at 320,
+  390, 1024 and 1280 px in both languages (the filters card's top did not move once):
+  - "Valor b en el tiempo" shows its empty message in a box of the plot's height (`h-80`).
+  - The b card has one layout for every state. With too few events for two windows, "Todo el
+    periodo" keeps its figure and mark and the start and the end are dashes on an empty track;
+    with too few for b at all, the headline, the n and every row are dashes. One sentence says
+    which: the drift, "Aún no hay suficientes eventos ≥ Mc para comparar el inicio con el final",
+    or `bNone`. All three share one grid cell with the unused ones `invisible`, so the cell is the
+    longest one's height in both languages and at every width. The sentence names no threshold:
+    two windows exist from 160 events ≥ Mc, but there they share 140 of their 150 events, so 160 is
+    when a comparison can be drawn, not when it means much (code review). Whether the drift should
+    wait for windows that do not overlap (300 events) is an open question for the science, not
+    decided here.
+  - A row's window line ("primeros 150 eventos · 20 sept – 24 sept") sits under the label at full
+    width, over a hidden copy of the widest it can be ("28 sept – 28 sept"), so a row keeps its
+    height with dates, without them, and when they wrap at 320 px. A row with no window shows no
+    line at all: "primeros 150 eventos" beside a dash read as a sample that does not exist.
+  - Under 50 events the n badge carries the caution ("⚠ n = 45: poco fiable", `bFewSr` for a screen
+    reader) rather than a third badge, which wrapped. In the b card it stays one badge and one
+    `FlowNumber`, so n rolls across 50 like the other figures. The groups card's lines do the same.
+  - The groups card's comparison paragraph holds both verdicts in one cell, and keeps its place
+    when a group has no b; its "Detalle técnico" stays mounted and is only hidden, so it keeps its
+    room and stays open if the reader opened it. Each group's b line has a hidden copy with the
+    own-Mc caution beside it and the n as wide as its wider form, so it always has that room: about
+    40 px of blank under the line on a phone when the caution is not shown. That is the price of
+    not moving; the other way was the card jumping 28–56 px.
+  - Checked: from 2.0 to 4.0 on both zones at 320, 390, 1024 and 1280 px in both languages, and with
+    the dates narrowed to one day until b could not be fitted; the filters card's top did not move.
 - A failed load shows the error only. It must never draw an empty dashboard that
   tells the reader to change their filters.
 - **One alert at a time** (`src/lib/page-alert.ts`, 2026-09-26). The monitor used to stack the
@@ -1070,8 +1164,13 @@ a pointer to this section. What they ask, and how this page answers them:
   - `Button` variant `floating` and size `icon-round` are the insights page's back-to-top button:
     opaque primary with a shadow, and a 44 px circle that clips what travels through its edge.
   - `Button` size `header` is the sortable column header (`sm` with the table's 14 px text);
-    `inline` is a link-button inside running text, with no box of its own; `inline-touch` is
-    `inline` growing like `sm-touch`. Variant `link-muted` is the "Detalle técnico" trigger.
+    `inline` is a link-button inside running text, with no box or border of its own and the text's
+    size; `inline-touch` is `inline` growing like `sm-touch`. Variant `link-muted` is the "Detalle
+    técnico" trigger; `link-inline` is a link inside a sentence, in the sentence's own weight and
+    colour and underlined (the filters' link back to the automatic Mc).
+  - `Button` size `icon-inline` is an icon inside a line of text (`InfoTip`): 20 px, centred on the
+    line, with a 28 px hit area and 44 px on touch. It does not grow on touch, against the
+    convention above, because it would make the line of text it sits in 40 px tall.
   - `Table` takes `size="sm"`: 4 px cell sides, for the events table.
   - `Toggle`/`ToggleGroup` size `sm-touch` grows like `Button`'s. `Toggle` shares `Button`'s
     transition (named properties including `scale`, 150 ms `--ease-out`), press scale and

@@ -1,6 +1,7 @@
 import { useForm, useStore } from "@tanstack/react-form";
 import { RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { InfoTip } from "@/components/info-tip";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -72,57 +73,90 @@ export function FiltersCard({ mcAuto, value, onChange, hasMainshock }: Props) {
       <CardContent>
         {/* No <form>: nothing here is submitted, every change applies as it is made. Inside a form Radix
             adds a hidden input per slider and switch, which DevTools reports as fields with no label. */}
-        <FieldGroup className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <form.Field name="from">
-            {(field) => (
-              <Field data-invalid={!!formError}>
-                <FieldLabel htmlFor={field.name}>{t.from}</FieldLabel>
-                <Input
-                  id={field.name}
-                  type="date"
-                  min="2018-03-01"
-                  aria-invalid={!!formError}
-                  aria-describedby={formError ? "date-error" : undefined}
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {formError ? <FieldError id="date-error">{String(formError)}</FieldError> : null}
-              </Field>
+        {/* Three groups, one column each from `lg`: when (the dates), which events (the smallest
+            magnitude and the two switches), and the Mc the b-value is fitted above, which moves
+            the figures and selects nothing. Stacked on a phone in the same order. */}
+        <FieldGroup className="grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Each date's label sits beside it, so the pair reads as one range; the shared columns
+              line both inputs up whatever the labels' widths ("From" / "To"). The space between
+              label and input is Field's own gap, which a subgrid keeps over its parent's. */}
+          <div className="grid grid-cols-[auto_1fr] content-start items-center gap-y-2">
+            <form.Field name="from">
+              {(field) => (
+                <Field data-invalid={!!formError} className="col-span-2 grid grid-cols-subgrid items-center">
+                  <FieldLabel htmlFor={field.name}>{t.from}</FieldLabel>
+                  <Input
+                    id={field.name}
+                    type="date"
+                    min="2018-03-01"
+                    aria-invalid={!!formError}
+                    aria-describedby={formError ? "date-error" : undefined}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="to">
+              {(field) => (
+                <Field data-invalid={!!formError} className="col-span-2 grid grid-cols-subgrid items-center">
+                  <FieldLabel htmlFor={field.name}>{t.to}</FieldLabel>
+                  <Input
+                    id={field.name}
+                    type="date"
+                    aria-invalid={!!formError}
+                    aria-describedby={formError ? "date-error" : undefined}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            {formError ? (
+              <FieldError id="date-error" className="col-span-2">
+                {String(formError)}
+              </FieldError>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-3">
+            <form.Field name="minMag">
+              {(field) => (
+                <Field>
+                  <FieldLabel id="minMag-label">
+                    {t.minMag}: <span>M{field.state.value.toFixed(1)}</span>
+                  </FieldLabel>
+                  <Slider
+                    aria-labelledby="minMag-label"
+                    aria-valuetext={`M${field.state.value.toFixed(1)}`}
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    value={[field.state.value]}
+                    onValueChange={([v]) => field.handleChange(v ?? 0)}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="manualOnly">
+              {(field) => (
+                <Field orientation="horizontal">
+                  <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
+                  <FieldLabel htmlFor={field.name}>{t.manualOnly}</FieldLabel>
+                </Field>
+              )}
+            </form.Field>
+            {/* With no mainshock detected there is nothing for this switch to exclude. */}
+            {!hasMainshock ? null : (
+              <form.Field name="excludeMainshock">
+                {(field) => (
+                  <Field orientation="horizontal">
+                    <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
+                    <FieldLabel htmlFor={field.name}>{t.excludeMainshock}</FieldLabel>
+                  </Field>
+                )}
+              </form.Field>
             )}
-          </form.Field>
-          <form.Field name="to">
-            {(field) => (
-              <Field data-invalid={!!formError}>
-                <FieldLabel htmlFor={field.name}>{t.to}</FieldLabel>
-                <Input
-                  id={field.name}
-                  type="date"
-                  aria-invalid={!!formError}
-                  aria-describedby={formError ? "date-error" : undefined}
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="minMag">
-            {(field) => (
-              <Field>
-                <FieldLabel id="minMag-label">
-                  {t.minMag}: <span>M{field.state.value.toFixed(1)}</span>
-                </FieldLabel>
-                <Slider
-                  aria-labelledby="minMag-label"
-                  aria-valuetext={`M${field.state.value.toFixed(1)}`}
-                  min={0}
-                  max={5}
-                  step={0.1}
-                  value={[field.state.value]}
-                  onValueChange={([v]) => field.handleChange(v ?? 0)}
-                />
-              </Field>
-            )}
-          </form.Field>
+          </div>
           <form.Field name="mc">
             {(field) => {
               const manual = field.state.value !== null;
@@ -141,40 +175,33 @@ export function FiltersCard({ mcAuto, value, onChange, hasMainshock }: Props) {
                     value={[shown]}
                     onValueChange={([v]) => field.handleChange(v ?? null)}
                   />
+                  {/* Why the automatic Mc uses this method sits in a tip beside the method's
+                      name: four lines of it under the slider left the other columns empty. */}
+                  {/* One line in both states, the state first: "Automática (curvatura máxima)" or
+                      "Manual · Usar la Mc automática", the link in the line's own type. */}
                   <FieldDescription>
                     {manual ? (
-                      <Button type="button" variant="link" size="inline" onClick={() => field.handleChange(null)}>
-                        {t.mcBackToAuto}
-                      </Button>
+                      <>
+                        {t.mcManual}
+                        {" · "}
+                        <Button
+                          type="button"
+                          variant="link-inline"
+                          size="inline"
+                          onClick={() => field.handleChange(null)}
+                        >
+                          {t.mcBackToAuto}
+                        </Button>
+                      </>
                     ) : (
                       t.mcAuto
                     )}
+                    <InfoTip label={t.mcHelpLabel}>{t.mcHelp}</InfoTip>
                   </FieldDescription>
-                  {/* Why the automatic Mc uses this method, beside the control it explains. */}
-                  <FieldDescription>{t.mcHelp}</FieldDescription>
                 </Field>
               );
             }}
           </form.Field>
-          <form.Field name="manualOnly">
-            {(field) => (
-              <Field orientation="horizontal">
-                <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
-                <FieldLabel htmlFor={field.name}>{t.manualOnly}</FieldLabel>
-              </Field>
-            )}
-          </form.Field>
-          {/* With no mainshock detected there is nothing for this switch to exclude. */}
-          {!hasMainshock ? null : (
-            <form.Field name="excludeMainshock">
-              {(field) => (
-                <Field orientation="horizontal">
-                  <Switch id={field.name} checked={field.state.value} onCheckedChange={field.handleChange} />
-                  <FieldLabel htmlFor={field.name}>{t.excludeMainshock}</FieldLabel>
-                </Field>
-              )}
-            </form.Field>
-          )}
         </FieldGroup>
       </CardContent>
     </Card>
