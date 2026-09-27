@@ -36,8 +36,10 @@ describe("the standing note under the refresh button", () => {
     expect(updateEveryMin("choco")).toBe(30);
   });
 
+  // The phone's short form beside the button is the same claim, and is held to the same number.
   it.each(each)("names the zone's interval, in %s for %s", (lang, zone) => {
-    expect(dicts[lang].autoUpdate(updateEveryMin(zone))).toMatch(new RegExp(`\\b${updateEveryMin(zone)}\\smin`));
+    for (const note of [dicts[lang].autoUpdate, dicts[lang].autoUpdateShort])
+      expect(note(updateEveryMin(zone))).toMatch(new RegExp(`\\b${updateEveryMin(zone)}\\smin`));
   });
 
   // The long form in the footer says the same thing at length, and drifted from it once.
@@ -61,7 +63,8 @@ describe("the stand-down messages", () => {
 
   it.each(each)("keep refreshWait's claim of a recent successful query, in %s for %s", (lang, zone) => {
     const min = CADENCE[zone].refreshMinIntervalS / 60;
-    expect(dicts[lang].refreshWait(min)).toMatch(new RegExp(`\\b${min}\\smin`));
+    for (const wait of [dicts[lang].refreshWait, dicts[lang].refreshWaitShort])
+      expect(wait(min)).toMatch(new RegExp(`\\b${min}\\smin`));
   });
 
   it.each(langs)("do not ask the reader to press again while SGC is failing, in %s", (lang) => {
@@ -146,6 +149,8 @@ describe("the mainshock stat", () => {
     m(lang).gapHint("24 sept", "1.1"),
     m(lang).pendingHint("24 sept"),
     m(lang).noneHint("0.3"),
+    m(lang).gapHintShort("24 sept", "1.1"),
+    m(lang).noneHintShort("0.3"),
   ];
 
   it.each(langs)("never forecasts, in %s", (lang) => {
@@ -159,8 +164,10 @@ describe("the mainshock stat", () => {
 
   it.each(langs)("reads the swarm's state as 'none clear', never as 'swarm', in %s", (lang) => {
     // A gap under the threshold means no clear mainshock; it does not make a sequence a swarm.
-    expect(`${m(lang).none} ${m(lang).noneHint("0.3")}`).toMatch(/claro|clear/i);
-    expect(`${m(lang).none} ${m(lang).noneHint("0.3")}`).not.toMatch(/enjambre|swarm/i);
+    for (const hint of [m(lang).noneHint, m(lang).noneHintShort]) {
+      expect(`${m(lang).none} ${hint("0.3")}`).toMatch(/claro|clear/i);
+      expect(`${m(lang).none} ${hint("0.3")}`).not.toMatch(/enjambre|swarm/i);
+    }
   });
 
   // With a mainshock in the status bar, the Tolima tab's "enjambre" needs its reason beside it.
