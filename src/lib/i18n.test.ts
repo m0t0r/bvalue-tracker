@@ -37,7 +37,7 @@ describe("the standing note under the refresh button", () => {
   });
 
   it.each(each)("names the zone's interval, in %s for %s", (lang, zone) => {
-    expect(dicts[lang].autoUpdate(updateEveryMin(zone))).toMatch(new RegExp(`\\b${updateEveryMin(zone)} min`));
+    expect(dicts[lang].autoUpdate(updateEveryMin(zone))).toMatch(new RegExp(`\\b${updateEveryMin(zone)}\\smin`));
   });
 
   // The long form in the footer says the same thing at length, and drifted from it once.
@@ -61,7 +61,7 @@ describe("the stand-down messages", () => {
 
   it.each(each)("keep refreshWait's claim of a recent successful query, in %s for %s", (lang, zone) => {
     const min = CADENCE[zone].refreshMinIntervalS / 60;
-    expect(dicts[lang].refreshWait(min)).toMatch(new RegExp(`\\b${min} min`));
+    expect(dicts[lang].refreshWait(min)).toMatch(new RegExp(`\\b${min}\\smin`));
   });
 
   it.each(langs)("do not ask the reader to press again while SGC is failing, in %s", (lang) => {

@@ -127,5 +127,33 @@ export function relativeTime(iso: string, lang: Lang, now = Date.now()): string 
   return rtf.format(Math.round(s / 86_400), "day");
 }
 
+const NARROW: Record<Lang, Intl.RelativeTimeFormat> = {
+  es: new Intl.RelativeTimeFormat("es", { numeric: "always", style: "narrow" }),
+  en: new Intl.RelativeTimeFormat("en", { numeric: "always", style: "narrow" }),
+};
+
+/**
+ * `relativeTime` for a figure with little room: "hace 7 min", "hace ~2 h", "hace ~3 d" ("7m ago",
+ * "~2h ago"). The same ladder, in the units' own short forms from `Intl`, so no new copy lives here.
+ * Hours and days carry a "~": rounded to a whole unit they hide up to half an hour or half a day,
+ * which minutes do not. Under a minute is "hace <1 min", built from the formatter's own "1 min".
+ * No-break spaces throughout: it is a figure in a half-width column, and never breaks.
+ */
+export function relativeTimeShort(iso: string, lang: Lang, now = Date.now()): string {
+  const s = (Date.parse(iso) - now) / 1000;
+  const fmt = (value: number, unit: Intl.RelativeTimeFormatUnit, mark: string) =>
+    NARROW[lang]
+      .formatToParts(value, unit)
+      .map((p) => (p.type === "integer" ? `${mark}${p.value}` : p.value))
+      .join("")
+      .replaceAll(" ", "\u00A0");
+  if (Math.abs(s) < 60) return fmt(-1, "minute", "<");
+  const minutes = Math.round(s / 60);
+  if (Math.abs(minutes) < 60) return fmt(minutes, "minute", "");
+  const hours = Math.round(s / 3600);
+  if (Math.abs(hours) < 24) return fmt(hours, "hour", "~");
+  return fmt(Math.round(s / 86_400), "day", "~");
+}
+
 /** Fixed decimals with a true minus sign (U+2212), which aligns with the digits. */
 export const fmtNum = (v: number, d: number) => v.toFixed(d).replace("-", "−");
