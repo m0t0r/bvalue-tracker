@@ -644,8 +644,12 @@ full-screen viewer with five views to jump to.
 Settled in a six-domain interface review (accessibility, layout, copy, typography,
 colour, motion). Keep to them:
 
-- **Spanish is the default** regardless of browser language; the toggle's choice is
-  remembered per device. Every new string goes into both `es` and `en` in
+- **The page opens in the browser's language** (owner's call, 2026-09-27; Spanish for everyone
+  before that): the first of `navigator.languages` it has, by primary subtag, so `es-CO` is
+  Spanish, and English when the browser lists neither (`browserLang` in `src/lib/i18n.tsx`). The
+  toggle's choice is remembered per device, and choosing the browser's own language clears it, as
+  the theme does with the system's. A shared link's preview stays Spanish (`SHARE_META`): the
+  crawler that reads it has no browser language. Every new string goes into both `es` and `en` in
   `src/lib/i18n.tsx`, which TypeScript enforces.
 - **Every date and time on the page is Colombian time** (`America/Bogota`, UTC−5, no
   daylight saving), whatever the reader's device says. That covers the filter dates and

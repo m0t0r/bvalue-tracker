@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SHARE_META } from "../../core/zone-pages.ts";
 import { ZONE_IDS } from "../../core/zones.ts";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
-import { dicts, type Lang } from "./i18n.tsx";
+import { browserLang, dicts, type Lang } from "./i18n.tsx";
 
 /** The cron in wrangler.jsonc, in minutes. Chocó is asked on every tick, and the page quotes it. */
 const CRON_EVERY_MIN = 15;
@@ -234,5 +234,21 @@ describe("distances in the copy", () => {
     const d = dicts[lang];
     for (const s of [d.clustersDesc(60), d.clusterWhere.shallow(60), d.clusterWhere.deep(60)])
       expect(s).not.toMatch(/\d km/);
+  });
+});
+
+describe("the language a first visit opens in", () => {
+  it.each([
+    [["es-CO", "en-US"], "es"],
+    [["en-GB", "es"], "en"],
+    [["ES-co"], "es"],
+    [["pt-BR", "es-419", "en"], "es"],
+    [["de-DE", "en"], "en"],
+  ] as const)("follows the browser's first language the page has, %j → %s", (languages, lang) => {
+    expect(browserLang(languages)).toBe(lang);
+  });
+
+  it.each([[["pt-BR", "fr"]], [[]], [[""]]])("falls back to English when the browser has neither, %j", (languages) => {
+    expect(browserLang(languages)).toBe("en");
   });
 });
