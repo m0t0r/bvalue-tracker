@@ -26,6 +26,12 @@
   each (`dominantMagType` in `packages/seismo/src/gr.ts`); both use the all-types Mc so that only the
   magnitudes differ, and the b charts follow the tab. A proper fix is converting to
   one scale, which needs published SGC conversion relations: do not invent them.
+- **Type `M` is not a scale of its own. It is already a blend.** It is SeisComP's summary magnitude:
+  a weighted average of the other magnitudes computed for the event. SGC's per-event QuakeML for
+  SGC2026tcthzl (M 4.1, Santander, 2026-09-28) gives its `methodID` as `weighted_average` over 40
+  stations, and it does not say which types went into the average. In the 786-event local copy (to
+  2026-09-18), 19 Chocó events are type `M`, all M2.0–2.6, so they sit at Mc 2.3 and enter the fit.
+  Tolima's M ≥ 4 events are mostly `M` and `MLr`. Treat `M` as one more source of mixing.
 - **There are two clusters, and depth alone separates them** (`core/clusters.ts`, cut at
   `CLUSTER_DEPTH_KM` = 70). Measured on production, 2026-09-19, 799 events: depth is bimodal
   with a near-empty gap (286 events at 40–45 km; 5, 5, 1, 6 in the four 5-km bins from 55 to
