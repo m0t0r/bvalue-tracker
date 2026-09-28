@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { StoredEvent } from "@/lib/api";
 import { dicts } from "@/lib/i18n";
 import { DEFAULT_SCOPE, pageView, scopeChips, useScope, type Scope } from "@/lib/scope";
-import { computeStats } from "@bvalue/seismo";
+import { bValue, computeStats } from "@bvalue/seismo";
 import { mainshockId } from "../../core/mainshock";
 import { MAINSHOCK_ID } from "../../core/seiscomp";
 
@@ -102,6 +102,40 @@ describe("the Mc every b-value on the page is fitted above", () => {
       }
     }
   });
+
+  it("is also the other magnitude reading's, which is the tab the reader is not on", () => {
+    for (const cluster of CLUSTERS) {
+      const all = pageView(EVENTS, scope({ cluster, magScope: "all" }), NOW);
+      const type = pageView(EVENTS, scope({ cluster, magScope: "type" }), NOW);
+      // Each tab's `other` is exactly what the other tab shows, so the two readings the b card states
+      // in words are the two the tabs draw.
+      expect(all.other?.fit).toEqual(type.stats.fit);
+      expect(type.other?.fit).toEqual(all.stats.fit);
+      expect(all.other?.mc).toBe(all.clusters.all.mc);
+    }
+  });
+
+  it("compares the start and end rows over the very same spans, not the other reading's own windows", () => {
+    // Enough events for windows: small ones MLr_1, larger ones MLv, as SGC types them.
+    const mags = [2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.8, 3.0, 3.3, 3.7, 4.1];
+    const many = Array.from({ length: 900 }, (_, i) => {
+      const mag = mags[(i * 7) % mags.length]!;
+      return ev(i + 1, mag, 40, mag >= 3.5 ? "MLv" : "MLr_1");
+    });
+    const view = pageView(many, scope(), NOW);
+    const [first, last] = [view.stats.windows[0]!, view.stats.windows.at(-1)!];
+    const typeIn = (w: { from: string; to: string }) =>
+      view.ofType.filter((e) => e.time >= w.from && e.time <= w.to).map((e) => e.mag);
+    expect(view.otherEnds?.first).toEqual(bValue(typeIn(first), view.stats.mc!));
+    expect(view.otherEnds?.last).toEqual(bValue(typeIn(last), view.stats.mc!));
+    // ...which is not what the other reading's own first window says: it spans other dates.
+    expect(view.other!.windows[0]!.to).not.toBe(first.to);
+  });
+
+  it("has no other reading when every event shown shares one magnitude type", () => {
+    const oneType = EVENTS.filter((e) => e.magType === "MLr_1");
+    expect(pageView(oneType, scope(), NOW).other).toBeNull();
+  });
 });
 
 describe("the events a scope selects", () => {
@@ -153,8 +187,15 @@ describe("the events a scope selects", () => {
   });
 
   it("selects nothing on Mc: moving it must not hand the map and the table a new catalogue", () => {
-    const { clusters: _a, stats: _b, oneType: _c, ...loose } = view({ filters: { ...DEFAULT_SCOPE.filters, mc: 3.2 } });
-    const { clusters: _d, stats: _e, oneType: _f, ...tight } = view();
+    const {
+      clusters: _a,
+      stats: _b,
+      oneType: _c,
+      other: _g,
+      otherEnds: _i,
+      ...loose
+    } = view({ filters: { ...DEFAULT_SCOPE.filters, mc: 3.2 } });
+    const { clusters: _d, stats: _e, oneType: _f, other: _h, otherEnds: _j, ...tight } = view();
     expect(loose).toEqual(tight);
     // ...while still moving the figures, so the comparison above is not vacuous.
     expect(view({ filters: { ...DEFAULT_SCOPE.filters, mc: 3.2 } }).stats.mc).toBe(3.2);

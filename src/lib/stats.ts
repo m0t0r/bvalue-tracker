@@ -1,4 +1,4 @@
-export { WINDOW_SIZE } from "@bvalue/seismo";
+export { WINDOW_SIZE, WINDOW_STEP, independentWindows, readingsDiffer, windowIncomplete } from "@bvalue/seismo";
 export type { CatalogStats as Stats } from "@bvalue/seismo";
 
 /** Below this many events a b-value says more about the size of the sample than about the sequence. */

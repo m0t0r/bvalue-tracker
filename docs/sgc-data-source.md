@@ -99,6 +99,14 @@ Dead ends, do not retry:
   **historical** catalogue: 1610 → 2020-12-30, M ≥ 3.5, 16,290 events. It has nothing
   for this sequence. Its `ESP_FECHA` field is null (dates are in `ESP_FECHA_LONG`)
   and it reports `supportsPagination: false`.
+- **SGC's FDSN event service holds none of this catalogue** (2026-09-28). `sismo.sgc.gov.co:8080`,
+  the host that serves the open waveforms, also answers `/fdsnws/event/1/` (an FDSN error page,
+  service version 1.2.1). The hope was `includeallmagnitudes=true`: every magnitude SGC computed
+  for an event, so the MLv–MLr_1 offset behind Chocó's low b could be measured from SGC's own
+  numbers (see [the science](science.md)). The repo owner ran two queries, `eventid=SGC2026sdltds`
+  and a two-minute window around that MLv 4.9 (2026-09-14 20:01–20:03 UTC), both with that
+  parameter; both answered 404, the FDSN code for "no data". The catalogue page shows one magnitude
+  per event and the form has no other. The remaining route is asking SGC by email.
 - `node-html-parser` (and DOM builders in general) **do not finish** on this page:
   it never closes its `<center>` tags, so the tree nests ~1,500 deep. `htmlparser2`
   in streaming mode parses the same 0.8 MB in ~25 ms. Keep it.

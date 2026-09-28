@@ -33,7 +33,7 @@ import {
 import type { Dict, Lang } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
 import { clusterOf, computeClusterStats, type ClusterStats } from "../../core/clusters";
-import { computeStats, dominantMagType, type CatalogStats } from "@bvalue/seismo";
+import { bValue, computeStats, dominantMagType, type BValue, type BWindow, type CatalogStats } from "@bvalue/seismo";
 import { mainshockId, zoneMainshock, type ZoneMainshock } from "../../core/mainshock";
 import { DEFAULT_ZONE, type ZoneId } from "../../core/zones";
 
@@ -83,6 +83,18 @@ export interface Measured {
   stats: CatalogStats;
   /** Whether `stats` counts one magnitude type only, which is also what the b charts label themselves with. */
   oneType: boolean;
+  /**
+   * The reading on the tab the reader is not on — every type when `stats` is one type, and the other
+   * way round — above the same Mc. The b card states both in words, since which one is nearer the
+   * truth depends on how SGC's magnitude scales compare. Null when every event shares one type.
+   */
+  other: CatalogStats | null;
+  /**
+   * The other reading over the very spans of `stats`' first and last windows, so the b card's start
+   * and end rows compare magnitude types and not periods: the other reading's own windows count 150
+   * events of its own and cover other dates. Null for a window it has too few events in.
+   */
+  otherEnds: { first: BValue | null; last: BValue | null } | null;
 }
 
 export interface PageView extends Selection, Measured {
@@ -120,8 +132,27 @@ export function measure(sel: Selection, s: FitScope, now: number): Measured {
   // would let one tab pick its own and print a b-value from a different distribution. `mc` is
   // restated for the same reason `computeClusterStats` restates it: below two events `computeStats`
   // reports none, and a subset still belongs to the catalogue's Mc.
-  const stats = oneType ? { ...computeStats(sel.ofType, clusters.all.mc), mc: clusters.all.mc } : everyType;
-  return { clusters, stats, oneType };
+  const typeOnly = () => ({ ...computeStats(sel.ofType, clusters.all.mc), mc: clusters.all.mc });
+  const stats = oneType ? typeOnly() : everyType;
+  const other = sel.magType === null ? null : oneType ? everyType : typeOnly();
+  const otherEvents = oneType ? sel.shown : sel.ofType;
+  const mc = clusters.all.mc;
+  const over = (w: BWindow | undefined): BValue | null => {
+    if (w === undefined || mc === null) return null;
+    try {
+      return bValue(
+        otherEvents.filter((e) => e.time >= w.from && e.time <= w.to).map((e) => e.mag),
+        mc,
+      );
+    } catch {
+      return null;
+    }
+  };
+  const otherEnds =
+    other === null || stats.windows.length < 2
+      ? null
+      : { first: over(stats.windows[0]), last: over(stats.windows.at(-1)) };
+  return { clusters, stats, oneType, other, otherEnds };
 }
 
 /** The whole page, derived. Pure, so a test runs exactly what `useScope` runs. */
@@ -140,6 +171,14 @@ export interface ClusterSelection {
   cluster: ClusterChoice;
   onChange: (c: ClusterChoice) => void;
 }
+
+/**
+ * What the other magnitude reading is called in a key ("solo MLr_1", "todos los tipos"): one type
+ * while every type is shown, and every type while one is. Null when every event shares one type.
+ * The b card and the b chart both name it here, each from the values it draws.
+ */
+export const otherReadingKey = (t: Dict, magType: string | null, showingOneType: boolean): string | null =>
+  magType === null ? null : showingOneType ? t.bOtherKeyAll : t.bOtherKeyType(magType);
 
 /** The b card's tabs: every magnitude type, or only the commonest, with the counts that name them. */
 export interface MagTabs {
@@ -163,6 +202,10 @@ export interface PageScope {
     base: StoredEvent[];
     shown: StoredEvent[];
     stats: CatalogStats;
+    /** The reading on the other magnitude tab, if there is one. */
+    other: CatalogStats | null;
+    /** The commonest magnitude type among the events shown, whichever tab is on. */
+    commonType: string | null;
     /** The magnitude type the b charts label themselves with, or null while showing every type. */
     magType: string | null;
     /** The depth group the b charts label themselves with, or null while showing both. */
@@ -210,6 +253,8 @@ export function useScope(events: readonly StoredEvent[] | undefined, zone: ZoneI
     base: useDeferredValue(view.base),
     shown: useDeferredValue(view.shown),
     stats: useDeferredValue(view.stats),
+    other: useDeferredValue(view.other),
+    commonType: useDeferredValue(view.magType),
     magType: useDeferredValue(view.oneType ? view.magType : null),
     cluster: useDeferredValue(cluster === "all" ? null : cluster),
   };

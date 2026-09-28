@@ -178,6 +178,20 @@ const es = {
   bScopeBoth:
     "El valor real probablemente está entre los dos. Ninguno es un pronóstico: b describe lo que ya ocurrió, no anuncia el próximo evento grande.",
   bScopeNote: (type: string) => `Solo eventos con magnitud ${type}.`,
+  /** The reading on the other magnitude tab, named for the b card's sentence and its scale's key. */
+  bOtherType: (type: string) => `Solo con ${type}`,
+  bOtherAll: "Con todos los tipos de magnitud",
+  bOtherKeyType: (type: string) => `solo ${type}`,
+  bOtherKeyAll: "todos los tipos",
+  bOtherDiffer: (other: string, whole: string, end: string | null) =>
+    `${other}, el valor b sale ${whole} en todo el periodo${end === null ? "" : ` y ${end} al final`}. Cuál se acerca más al valor real depende de cómo se comparan las escalas de magnitud del SGC, algo que el SGC no ha publicado.`,
+  bOtherAgree: (other: string, whole: string) => `${other}, el valor b sale casi igual: ${whole}.`,
+  bWindowIncomplete: "En esta ventana pueden faltar eventos pequeños, y su valor b puede salir más bajo que el real.",
+  /** Which of the b card's two windows carry a ⚠, said once in the technical detail. */
+  bDetailIncomplete: (start: boolean, end: boolean) =>
+    start && end
+      ? "A las ventanas del inicio y del final (⚠) pueden faltarles eventos pequeños, así que su valor b puede salir más bajo que el real. La señal es la Mc propia de cada una, al menos 0.2 por encima de la fija. El gráfico «Valor b en el tiempo» marca estas ventanas."
+      : `A la ventana ${start ? "del inicio" : "del final"} (⚠) pueden faltarle eventos pequeños, así que su valor b puede salir más bajo que el real. La señal es su propia Mc, al menos 0.2 por encima de la fija. El gráfico «Valor b en el tiempo» marca estas ventanas.`,
   clustersTitle: "Dos grupos de eventos",
   clustersDesc: (km: number) =>
     `La secuencia está formada por dos grupos separados por la profundidad: entre 55 y 75\u00A0km casi no hay eventos. El corte está en ${km}\u00A0km.`,
@@ -240,11 +254,20 @@ const es = {
   perBin: "Por intervalo de 0.1",
   grFit: "Ajuste G–R",
   bTimeTitle: "Valor b en el tiempo",
-  bTimeDesc: (n: number, mc: string) =>
-    `Ventanas móviles de ${n} eventos con Mc fija = ${mc}. Banda: ±1σ. Cada punto se ubica en el último evento de su ventana.`,
+  bTimeDesc: (n: number, mc: string, shared: number) =>
+    `Ventanas móviles de ${n} eventos con Mc fija = ${mc}, cada una situada en su último evento. Cada ventana comparte ${shared} eventos con la anterior, así que la línea parece más fiable de lo que es. Los puntos marcan ventanas sin ningún evento en común. Banda: ±1σ.`,
+  bTimeKeyIndependent: "ventanas sin eventos en común",
+  bTimeKeyIncomplete: "pueden faltar eventos pequeños: b puede salir más bajo",
+  bTimeTipIncomplete: (own: string, mc: string) =>
+    `Mc propia de la ventana: ${own}, por encima de ${mc}. Pueden faltar eventos pequeños.`,
   bTimeEmpty: (n: number) =>
     `Cada ventana necesita ${n} eventos ≥ Mc y aún no hay suficientes. Amplía el rango de fechas o baja Mc.`,
   bTimeAlt: (a: string, b: string) => `El valor b pasa de ${a} en la primera ventana a ${b} en la más reciente.`,
+  /** The shaded stretches in words, for the chart's text alternative: its key is hidden from screen readers. */
+  bTimeAltIncomplete: (spans: string) =>
+    ` A las ventanas que terminan ${spans} pueden faltarles eventos pequeños, así que su valor b puede salir más bajo que el real.`,
+  bTimeAltSpan: (a: string, b: string) => (a === b ? `el ${a}` : `entre el ${a} y el ${b}`),
+  bTimeAltAnd: " y ",
   band: "±1σ",
   tableTitle: "Catálogo",
   downloadCsv: "Descargar CSV",
@@ -439,6 +462,19 @@ const en: Dict = {
   bScopeBoth:
     "The true value is probably between the two. Neither is a forecast: b describes what has already happened, it does not announce the next large event.",
   bScopeNote: (type) => `Only events with ${type} magnitude.`,
+  bOtherType: (type) => `With ${type} only`,
+  bOtherAll: "With all magnitude types",
+  bOtherKeyType: (type) => `${type} only`,
+  bOtherKeyAll: "all types",
+  bOtherDiffer: (other, whole, end) =>
+    `${other}, the b-value comes out at ${whole} over the whole period${end === null ? "" : ` and ${end} at the end`}. Which is nearer the true value depends on how SGC's magnitude scales compare, which SGC has not published.`,
+  bOtherAgree: (other, whole) => `${other}, the b-value comes out almost the same: ${whole}.`,
+  bWindowIncomplete:
+    "Small events may be missing from this window, so its b-value may come out lower than the true one.",
+  bDetailIncomplete: (start, end) =>
+    start && end
+      ? "The start and end windows (⚠) may be missing small events, so their b-values may come out lower than the true ones. The sign is each one's own Mc, at least 0.2 above the fixed one. The “b-value over time” chart marks these windows."
+      : `The ${start ? "start" : "end"} window (⚠) may be missing small events, so its b-value may come out lower than the true one. The sign is its own Mc, at least 0.2 above the fixed one. The “b-value over time” chart marks these windows.`,
   clustersTitle: "Two groups of events",
   clustersDesc: (km) =>
     `The sequence is two groups separated by depth: there are almost no events between 55 and 75\u00A0km. The cut is at ${km}\u00A0km.`,
@@ -494,11 +530,18 @@ const en: Dict = {
   perBin: "Per 0.1 bin",
   grFit: "G–R fit",
   bTimeTitle: "b-value over time",
-  bTimeDesc: (n, mc) =>
-    `Sliding windows of ${n} events at a fixed Mc = ${mc}. Band: ±1σ. Each point sits at the last event of its window.`,
+  bTimeDesc: (n, mc, shared) =>
+    `Sliding windows of ${n} events at a fixed Mc = ${mc}, each placed at its last event. Each window shares ${shared} events with the one before, so the line looks more reliable than it is. The dots mark windows with no events in common. Band: ±1σ.`,
+  bTimeKeyIndependent: "windows with no events in common",
+  bTimeKeyIncomplete: "small events may be missing: b may come out lower",
+  bTimeTipIncomplete: (own, mc) => `The window's own Mc: ${own}, above ${mc}. Small events may be missing.`,
   bTimeEmpty: (n) =>
     `Each window needs ${n} events ≥ Mc and there are not enough yet. Widen the date range or lower Mc.`,
   bTimeAlt: (a, b) => `b goes from ${a} in the first window to ${b} in the latest.`,
+  bTimeAltIncomplete: (spans) =>
+    ` The windows ending ${spans} may be missing small events, so their b-values may come out lower than the true ones.`,
+  bTimeAltSpan: (a, b) => (a === b ? `on ${a}` : `between ${a} and ${b}`),
+  bTimeAltAnd: " and ",
   band: "±1σ",
   tableTitle: "Catalogue",
   downloadCsv: "Download CSV",

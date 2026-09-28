@@ -8,8 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtDay } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import type { MagTabs } from "@/lib/scope";
-import { MIN_RELIABLE_N, WINDOW_SIZE, type Stats } from "@/lib/stats";
+import { otherReadingKey, type MagTabs, type PageView } from "@/lib/scope";
+import { MIN_RELIABLE_N, WINDOW_SIZE, readingsDiffer, windowIncomplete, type Stats } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "../../core/clusters";
 
@@ -21,6 +21,10 @@ interface Row {
   reserve?: string;
   /** Null for a window there are too few events for: the row keeps its place, with a dash and no mark. */
   value: { b: number; sigma: number } | null;
+  /** The same row on the other magnitude tab, drawn as a hollow mark; its figure is in the sentence above. */
+  alt?: number | null;
+  /** The window may have lost small events (its own Mc is well above the fixed one). */
+  incomplete?: boolean;
   main: boolean;
 }
 
@@ -41,12 +45,21 @@ const CLIP = `band-clip transition-clip-path ${MOVE}`;
  * The start, the whole and the end of the sequence on one b scale, so the drift is visible without
  * reading the chart beside it. The marks are decoration: every value is also written out as text.
  */
-function BScale({ rows }: { rows: Row[] }) {
+function BScale({ rows, otherKey }: { rows: Row[]; otherKey: string | null }) {
   const { t } = useI18n();
   const values = rows.flatMap((r) => (r.value ? [r.value] : []));
-  // Wide enough for b = 1 and for every error band, like the chart's axis.
-  const lo = Math.min(0.4, ...values.map((v) => Math.floor((v.b - v.sigma) * 10) / 10));
-  const hi = Math.max(1.2, ...values.map((v) => Math.ceil((v.b + v.sigma) * 10) / 10));
+  const alts = rows.flatMap((r) => (r.alt == null ? [] : [r.alt]));
+  // Wide enough for b = 1, for every error band and for the other reading's marks, like the chart's axis.
+  const lo = Math.min(
+    0.4,
+    ...values.map((v) => Math.floor((v.b - v.sigma) * 10) / 10),
+    ...alts.map((b) => Math.floor(b * 10) / 10),
+  );
+  const hi = Math.max(
+    1.2,
+    ...values.map((v) => Math.ceil((v.b + v.sigma) * 10) / 10),
+    ...alts.map((b) => Math.ceil(b * 10) / 10),
+  );
   const pct = (b: number) => ((b - lo) / (hi - lo)) * 100;
   const x = (b: number) => `${pct(b)}%`;
 
@@ -61,7 +74,18 @@ function BScale({ rows }: { rows: Row[] }) {
                   snapped while its mark was still travelling read as the mark lagging behind. The scale's
                   end labels below are left to change outright — they are the ruler, not a reading off it. */}
               {r.value ? (
+                // Inline text, as without the ⚠: as a flex row the line's height followed the icon, and each
+                // flagged row moved the Mc slider below by 2 px.
                 <span className="font-medium whitespace-nowrap">
+                  {r.incomplete ? (
+                    <>
+                      <AlertTriangleIcon
+                        aria-hidden
+                        className="mr-1.5 inline size-3.5 align-middle text-caution-strong"
+                      />
+                      <span className="sr-only">{t.bWindowIncomplete}</span>
+                    </>
+                  ) : null}
                   <FlowNumber value={r.value.b} digits={2} />
                   <FlowNumber value={r.value.sigma} digits={2} prefix=" ± " />
                 </span>
@@ -99,6 +123,11 @@ function BScale({ rows }: { rows: Row[] }) {
                       } as CSSProperties
                     }
                   />
+                  {r.alt == null ? null : (
+                    <div className={cn(SLIDE, "absolute inset-0")} style={{ "--at": x(r.alt) } as CSSProperties}>
+                      <div className="absolute top-1/2 left-0 size-3 -translate-1/2 rounded-full border-2 border-(--chart-1) bg-card" />
+                    </div>
+                  )}
                   <div className={cn(SLIDE, "absolute inset-0")} style={{ "--at": x(r.value.b) } as CSSProperties}>
                     <div
                       className={cn(
@@ -135,6 +164,12 @@ function BScale({ rows }: { rows: Row[] }) {
           <span className="h-3 w-px bg-muted-foreground" />
           {t.bLegendOne}
         </li>
+        {otherKey === null ? null : (
+          <li className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded-full border-2 border-(--chart-1)" />
+            {otherKey}
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -143,11 +178,17 @@ function BScale({ rows }: { rows: Row[] }) {
 /** `cluster` is set while the page is narrowed to one depth cluster; the card then says whose b it is showing. */
 export function BSummary({
   stats,
+  other,
+  otherEnds,
   incomplete,
   tabs,
   cluster,
 }: {
   stats: Stats;
+  /** The reading on the other magnitude tab, above the same Mc; null when every event shares one type. */
+  other: Stats | null;
+  /** The other reading over the same spans as this tab's first and last windows (`measure`). */
+  otherEnds: PageView["otherEnds"];
   incomplete: boolean;
   tabs: MagTabs;
   cluster: Cluster | null;
@@ -179,10 +220,22 @@ export function BSummary({
         , <span className="whitespace-nowrap">n = {fitGft.n.toLocaleString(lang)}</span>
       </p>
     ) : null;
+  // Flagged windows keep a ⚠ beside their figure on the scale, which takes no room; what it means is
+  // here, folded, because the chart beside the card states it in the open (its shaded stretch and key).
+  const startFlagged = drift !== null && windowIncomplete(drift.first),
+    endFlagged = drift !== null && windowIncomplete(drift.last);
+  const caution =
+    startFlagged || endFlagged ? (
+      <p className="flex items-start gap-1.5">
+        <AlertTriangleIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-caution-strong" />
+        {t.bDetailIncomplete(startFlagged, endFlagged)}
+      </p>
+    ) : null;
   const detail =
-    magType === null && gft === null ? null : (
+    magType === null && gft === null && caution === null ? null : (
       <TechnicalDetail size="sm">
         <div className="flex flex-col gap-2 text-pretty text-muted-foreground">
+          {caution}
           {magType === null ? null : (
             <>
               <p>
@@ -208,6 +261,35 @@ export function BSummary({
     "few-windows": t.bDriftNone,
     none: t.bNone,
   };
+  // Both readings in words, not only behind the tabs: which one is nearer the truth depends on how SGC's
+  // magnitude scales compare, which is not published (docs/science.md). Both variants share one cell,
+  // so the card keeps its height whichever applies.
+  const otherName = magType === null ? null : tabs.value === "all" ? t.bOtherType(magType) : t.bOtherAll;
+  const otherKey = otherReadingKey(t, magType, tabs.value === "type");
+  const otherFit = other?.fit ?? null;
+  // The start and end compare over the very same spans as this tab's windows (`otherEnds`), so a gap
+  // between the two readings is one of magnitude type and not of period.
+  const otherFirst = drift ? (otherEnds?.first ?? null) : null,
+    otherLast = drift ? (otherEnds?.last ?? null) : null;
+  const differ =
+    est !== null &&
+    otherFit !== null &&
+    (readingsDiffer(est, otherFit) || (drift !== null && otherLast !== null && readingsDiffer(drift.last, otherLast)));
+  const readings =
+    otherName === null
+      ? null
+      : {
+          differ: t.bOtherDiffer(
+            otherName,
+            otherFit ? otherFit.b.toFixed(2) : "0.00",
+            // "…and N at the end" only when both readings have an end to compare.
+            otherLast ? otherLast.b.toFixed(2) : null,
+          ),
+          agree: t.bOtherAgree(otherName, otherFit ? otherFit.b.toFixed(2) : "0.00"),
+        };
+  // Nothing to compare while this tab has no b of its own: every figure on the card is a dash then.
+  const readingsState = est === null || otherFit === null ? null : differ ? "differ" : "agree";
+  const readingsLongest = otherName === null ? null : t.bOtherDiffer(otherName, "0.00", "0.00");
   // The widest a window's dates get ("28 sept – 28 sept"), to keep its line's room when it has none.
   const widest = span({ from: "2026-09-28T12:00:00Z", to: "2026-09-28T12:00:00Z" });
   const body = (
@@ -282,22 +364,53 @@ export function BSummary({
             </p>
           ))}
         </div>
+        {readings === null ? null : (
+          <div className="-mt-2 grid">
+            {/* The longest the sentence can be, with stand-in figures: without an end window to compare
+                it loses a clause, and the card shrank by a line when Mc ran the windows out. */}
+            <p aria-hidden className="invisible col-start-1 row-start-1 text-sm text-pretty">
+              {readingsLongest}
+            </p>
+            {(Object.keys(readings) as (keyof typeof readings)[]).map((k) => (
+              <p
+                key={k}
+                aria-hidden={k !== readingsState || undefined}
+                className={cn(
+                  "col-start-1 row-start-1 text-sm text-pretty text-muted-foreground",
+                  k !== readingsState && "invisible",
+                )}
+              >
+                {readings[k]}
+              </p>
+            ))}
+          </div>
+        )}
         {/* Needs two windows to say anything about change. */}
         <BScale
+          otherKey={otherKey}
           rows={[
             {
               label: t.bRowStart,
               sub: drift ? t.bRowFirst(WINDOW_SIZE, span(drift.first)) : undefined,
               reserve: t.bRowFirst(WINDOW_SIZE, widest),
               value: drift ? { b: drift.first.b, sigma: drift.first.sigmaB } : null,
+              alt: otherFirst?.b ?? null,
+              incomplete: startFlagged,
               main: false,
             },
-            { label: t.bRowAll, value: est ? { b: est.b, sigma: est.sigmaB } : null, main: true },
+            {
+              label: t.bRowAll,
+              value: est ? { b: est.b, sigma: est.sigmaB } : null,
+              alt: est ? (otherFit?.b ?? null) : null,
+              main: true,
+            },
             {
               label: t.bRowEnd,
               sub: drift ? t.bRowLast(WINDOW_SIZE, span(drift.last)) : undefined,
               reserve: t.bRowLast(WINDOW_SIZE, widest),
               value: drift ? { b: drift.last.b, sigma: drift.last.sigmaB } : null,
+              alt: otherLast?.b ?? null,
+              incomplete: endFlagged,
               main: false,
             },
           ]}

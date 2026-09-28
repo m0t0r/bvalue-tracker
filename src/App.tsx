@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
 import { lazy, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
+import { BTimeKey } from "@/components/charts/b-over-time-key";
 import { BTimeCsvButton } from "@/components/charts/b-over-time-csv";
 import { bTimeDescription } from "@/components/charts/b-over-time-description";
 import { fmdDescription } from "@/components/charts/fmd-description";
@@ -26,7 +27,7 @@ import { getEvents, getStatus } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
 import { useDaySelection } from "@/lib/day-selection";
-import { scopeChips, useScope } from "@/lib/scope";
+import { otherReadingKey, scopeChips, useScope } from "@/lib/scope";
 import { toggleTheme, useIsDark } from "@/lib/theme";
 import { ZoneProvider, useZoneState } from "@/lib/zone";
 import { mainshockId } from "../core/mainshock";
@@ -172,6 +173,8 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   const catalogueFailed = loadFailed(events);
   const stale = catalogueFailed ? null : staleSince([status, events]);
   const settled = (!events.isPending || catalogueFailed) && (!status.isPending || status.failureCount > 0);
+  // What the b chart's dashed line is called, read off the same deferred copy as the line itself.
+  const bOtherKey = otherReadingKey(t, deferred.commonType, deferred.magType !== null);
 
   return (
     <>
@@ -218,6 +221,8 @@ function ZonePage({ zone }: { zone: ZoneId }) {
               <div className="enter grid gap-6 lg:grid-cols-3">
                 <BSummary
                   stats={view.stats}
+                  other={view.other}
+                  otherEnds={view.otherEnds}
                   incomplete={incomplete}
                   cluster={scope.cluster === "all" ? null : scope.cluster}
                   tabs={magTabs}
@@ -225,6 +230,12 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                 <div className="lg:col-span-2">
                   <Deferred
                     title={t.bTimeTitle}
+                    placeholder={
+                      <>
+                        <Skeleton className="h-80 w-full" />
+                        <BTimeKey stats={deferred.stats} other={deferred.other} otherKey={bOtherKey} />
+                      </>
+                    }
                     description={bTimeDescription(t, deferred.stats, deferred.magType, deferred.cluster)}
                     action={
                       <BTimeCsvButton stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
@@ -232,6 +243,8 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                   >
                     <BOverTimeChart
                       stats={deferred.stats}
+                      other={deferred.other}
+                      otherKey={bOtherKey}
                       magType={deferred.magType}
                       cluster={deferred.cluster}
                       mainshockTime={view.mainshock.state === "found" ? view.mainshock.largest.time : null}
