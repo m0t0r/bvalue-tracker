@@ -16,6 +16,7 @@ import { pageAlert } from "@/lib/page-alert";
 import { useNow } from "@/lib/use-now";
 import { useZone } from "@/lib/zone";
 import type { ZoneMainshock } from "../../core/mainshock";
+import { PrototypeStats, PrototypeSwitcher, useVariant } from "@/components/status-bar.prototype";
 
 /** A wait the reader should not sit through: the cron will do the work instead. */
 const LONG_WAIT_S = 60;
@@ -118,7 +119,10 @@ export function StatusBar({
   loading,
   catalogueFailed = false,
   staleSince = null,
+  events,
 }: {
+  /** PROTOTYPE: the zone's whole catalogue, for variant C. */
+  events?: StoredEvent[];
   /** The page is still waiting for its status or its catalogue: draw a placeholder, not the stats. */
   loading: boolean;
   status: StatusResponse | undefined;
@@ -138,6 +142,7 @@ export function StatusBar({
   staleSince?: number | null;
 }) {
   const { t, lang } = useI18n();
+  const variant = useVariant();
   const zone = useZone().id;
   const qc = useQueryClient();
   const now = useNow();
@@ -267,24 +272,17 @@ export function StatusBar({
     const c = fmtClock(Date.parse(iso), lang, now);
     return c.day === null ? c.time : `${c.day}, ${c.time}`;
   };
-  const newestTime = status?.newestEventTime ? (
-    <ByWidth phone={<Ago iso={status.newestEventTime} now={now} />} wide={fmtDateTime(status.newestEventTime, lang)} />
-  ) : null;
-  // The newest event reaches SGC's own page for it, the same link the table's time column carries,
-  // with the same UTC form one hover away. An event with no id cannot happen — the id is the primary
-  // key — but the status API types it as nullable, so it falls back to plain text.
-  const newestEvent = !status?.newestEventTime ? null : status.newestEventId ? (
+  const newest = status?.newestEvent ?? null;
+  const newestEvent = !newest ? null : (
     <a
       className="underline underline-offset-4"
-      href={sgcEventUrl(status.newestEventId)}
+      href={sgcEventUrl(newest.id)}
       target="_blank"
       rel="noreferrer"
-      title={fmtUtc(status.newestEventTime)}
+      title={fmtUtc(newest.time)}
     >
-      {newestTime}
+      <ByWidth phone={<Ago iso={newest.time} now={now} />} wide={fmtDateTime(newest.time, lang)} />
     </a>
-  ) : (
-    newestTime
   );
 
   // Until the page has its status and its catalogue, one block and no stats. The stats wrap by their
@@ -308,6 +306,17 @@ export function StatusBar({
               enough for half its width ("hace ~2 h", "Ninguno claro"), and a hint that is not wraps
               inside its own column. From sm up a stat that no longer fits beside its neighbour takes
               the next line whole, so which stats share a line is a consequence of the text. */}
+          {variant && status ? (
+            <PrototypeStats
+              variant={variant}
+              status={status}
+              shown={shown}
+              events={events}
+              now={now}
+              Stat={Stat}
+              mainshock={<MainshockStat mainshock={mainshock} catalogueFailed={catalogueFailed} />}
+            />
+          ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10">
             <Stat
               label={t.events}
@@ -318,11 +327,8 @@ export function StatusBar({
               label={<ByWidth phone={t.newestEventShort} wide={t.newestEvent} />}
               value={status ? (newestEvent ?? "—") : null}
               hint={
-                status?.newestEventTime ? (
-                  <ByWidth
-                    phone={clock(status.newestEventTime)}
-                    wide={relativeTime(status.newestEventTime, lang, now)}
-                  />
+                newest ? (
+                  <ByWidth phone={clock(newest.time)} wide={relativeTime(newest.time, lang, now)} />
                 ) : undefined
               }
             />
@@ -348,6 +354,7 @@ export function StatusBar({
             />
             <MainshockStat mainshock={mainshock} catalogueFailed={catalogueFailed} />
           </div>
+          )}
           {/* On a phone the note sits beside the button. From sm the note goes under it: below lg the
               block wraps onto its own line at the start edge, so it reads from there, and beside the
               stats at lg it hugs the end edge. */}
@@ -384,7 +391,15 @@ export function StatusBar({
             </span>
             {live === "" ? (
               <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">
-                {failed ? null : <ByWidth phone={t.autoUpdateShort(everyMin)} wide={t.autoUpdate(everyMin)} />}
+                {variant && ok?.finishedAt ? (
+                  lang === "es" ? (
+                    <>Última consulta al SGC: {relativeTime(ok.finishedAt, lang, now)}</>
+                  ) : (
+                    <>Last SGC query: {relativeTime(ok.finishedAt, lang, now)}</>
+                  )
+                ) : failed ? null : (
+                  <ByWidth phone={t.autoUpdateShort(everyMin)} wide={t.autoUpdate(everyMin)} />
+                )}
               </span>
             ) : null}
           </div>
@@ -414,6 +429,7 @@ export function StatusBar({
           </AlertDescription>
         </Alert>
       ) : null}
+      {variant ? <PrototypeSwitcher current={variant} /> : null}
     </div>
   );
 }

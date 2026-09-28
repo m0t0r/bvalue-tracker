@@ -188,6 +188,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           mainshock={events.data ? view.mainshock : null}
           catalogueFailed={catalogueFailed}
           staleSince={stale}
+          events={events.data}
         />
         {settled && events.data ? (
           <FilterScope

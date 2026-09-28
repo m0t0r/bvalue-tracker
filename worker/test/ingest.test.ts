@@ -588,14 +588,19 @@ describe("API", () => {
     });
   });
 
-  it("names the newest event, and its id, so the page can link its time to SGC", async () => {
+  it("names the newest event, with its magnitude and place, so the page can say what and where", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
     const status = (await (await call("/api/status")).json()) as any;
-    expect(status.newestEventTime).toBe("2026-09-18T22:08:54Z");
-    const row = await env.DB.prepare("SELECT id FROM events WHERE time = ?")
-      .bind(status.newestEventTime)
-      .first<{ id: string }>();
-    expect(status.newestEventId).toBe(row!.id);
+    const row = await env.DB.prepare("SELECT id, mag, mag_type, region FROM events WHERE time = ?")
+      .bind("2026-09-18T22:08:54Z")
+      .first<{ id: string; mag: number; mag_type: string; region: string }>();
+    expect(status.newestEvent).toEqual({
+      id: row!.id,
+      time: "2026-09-18T22:08:54Z",
+      mag: row!.mag,
+      magType: row!.mag_type,
+      region: row!.region,
+    });
   });
 
   // The deploy smoke test and any uptime check call this one, so it must stay open.
@@ -1200,7 +1205,7 @@ describe("two zones", () => {
     expect(await (await call("/api/events?zone=choco")).json()).toHaveLength(786);
     expect(await (await call("/api/events")).json()).toHaveLength(786); // no zone is Chocó, as every old link assumes
     const status = (await (await call("/api/status?zone=tolima")).json()) as any;
-    expect(status).toMatchObject({ totalEvents: 0, newestEventTime: null, lastRun: null });
+    expect(status).toMatchObject({ totalEvents: 0, newestEvent: null, lastRun: null });
     expect(status.backfill.done).toBe(0);
 
     const bad = await call("/api/events?zone=cali");

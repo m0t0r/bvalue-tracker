@@ -24,9 +24,11 @@ export interface IngestRun {
 
 export interface StatusResponse {
   totalEvents: number;
-  newestEventTime: string | null;
-  /** The same event's id, so the page can link its time to SGC's own page for it. */
-  newestEventId: string | null;
+  /**
+   * The zone's newest event: what and where it was, which the status bar leads with, and its id, so
+   * the page can link it to SGC's own page for it. null while the zone has no events.
+   */
+  newestEvent: Pick<StoredEvent, "id" | "time" | "mag" | "magType" | "region"> | null;
   lastRun: IngestRun | null;
   lastSuccessfulRun: IngestRun | null;
   /** 7-day history chunks loaded so far. Statistics are not representative until done === total. */

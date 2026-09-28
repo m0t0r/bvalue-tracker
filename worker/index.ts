@@ -213,20 +213,23 @@ async function queryEvents(db: D1Database, f: EventFilter, zone: ZoneId): Promis
 
 async function status(db: D1Database, zone: ZoneId): Promise<StatusResponse> {
   const agg = await db
-    .prepare("SELECT COUNT(*) AS n, MAX(time) AS newest FROM events WHERE zone = ? AND removed_at IS NULL")
+    .prepare("SELECT COUNT(*) AS n FROM events WHERE zone = ? AND removed_at IS NULL")
     .bind(zone)
-    .first<{ n: number; newest: string | null }>();
-  // Its id, in its own query rather than as a bare column beside MAX(time): SQLite would answer
-  // that, but only while exactly one min/max aggregate is in the statement. One indexed row
-  // (events_zone_time, walked backwards) costs less than that rule being broken silently later.
+    .first<{ n: number }>();
+  // In its own query rather than as bare columns beside MAX(time): SQLite would answer that, but
+  // only while exactly one min/max aggregate is in the statement. One indexed row (events_zone_time,
+  // walked backwards) costs less than that rule being broken silently later.
   const newest = await db
-    .prepare("SELECT id FROM events WHERE zone = ? AND removed_at IS NULL ORDER BY time DESC LIMIT 1")
+    .prepare(
+      "SELECT id, time, mag, mag_type, region FROM events WHERE zone = ? AND removed_at IS NULL ORDER BY time DESC LIMIT 1",
+    )
     .bind(zone)
-    .first<{ id: string }>();
+    .first<{ id: string; time: string; mag: number; mag_type: string; region: string }>();
   return {
     totalEvents: agg?.n ?? 0,
-    newestEventTime: agg?.newest ?? null,
-    newestEventId: newest?.id ?? null,
+    newestEvent: newest
+      ? { id: newest.id, time: newest.time, mag: newest.mag, magType: newest.mag_type, region: newest.region }
+      : null,
     lastRun: await lastRun(db, false, zone),
     lastSuccessfulRun: await lastRun(db, true, zone),
     backfill: await backfillProgress(db, new Date(), zone),
