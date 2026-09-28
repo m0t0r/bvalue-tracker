@@ -62,6 +62,7 @@ export function Graphic({
   width,
   height,
   lang,
+  mounted,
 }: {
   data: Insights;
   model: StoryModel;
@@ -69,12 +70,16 @@ export function Graphic({
   width: number;
   height: number;
   lang: Lang;
+  // `width` and `height` are the measured box, never zero: `Story` draws nothing until it is measured.
+  /** The scenes whose drawings are mounted (the story decides which: see `Story`). */
+  mounted: ReadonlySet<SceneId>;
 }) {
   const c = storyCopy[lang].graphic;
   const share = insightsCopy[lang].claims.sharePhrase;
   const { scene, sub } = state;
   const small = width < 560;
   const k = small ? 0.8 : 1;
+  const near = (id: SceneId) => mounted.has(id);
 
   // The map frames Pereira, the three sources and the bulk of the events, whatever the data holds.
   const map = useMemo(() => {
@@ -136,8 +141,6 @@ export function Graphic({
   }, [model.choco, model.bySrc.tolima, model.tolimaCut, width, height, small]);
   const sec = secs.choco;
   const secT = secs.tolima;
-
-  if (width === 0 || height === 0) return null;
 
   const onMap = scene === "where" || scene === "unknown";
   const onSec = scene === "section";
@@ -205,12 +208,20 @@ export function Graphic({
       </Layer>
 
       <Layer on={onSec}>
-        <SectionFrame sec={sec} small={small} lang={lang} />
-        <SectionBase data={data} model={model} sec={sec} small={small} sub={sub} lang={lang} />
+        {near("section") && (
+          <>
+            <SectionFrame sec={sec} small={small} lang={lang} />
+            <SectionBase data={data} model={model} sec={sec} small={small} sub={sub} lang={lang} />
+          </>
+        )}
       </Layer>
       <Layer on={onSecT}>
-        <SectionFrame sec={secT} small={small} lang={lang} />
-        <TolimaSectionBase data={data} model={model} sec={secT} small={small} lang={lang} />
+        {near("tolimaSection") && (
+          <>
+            <SectionFrame sec={secT} small={small} lang={lang} />
+            <TolimaSectionBase data={data} model={model} sec={secT} small={small} lang={lang} />
+          </>
+        )}
       </Layer>
 
       {/* The dots the map and the cross-section share. Each slides on the compositor, deeper ones a
@@ -254,7 +265,7 @@ export function Graphic({
         />
       </Layer>
       <Layer on={scene === "unknown"}>
-        <UnknownOverlay model={model} proj={map.proj} small={small} />
+        {near("unknown") && <UnknownOverlay model={model} proj={map.proj} small={small} />}
       </Layer>
       <Layer on={onMap || onSec || onSecT}>
         <SceneTitle small={small}>
@@ -276,44 +287,52 @@ export function Graphic({
       </Layer>
 
       <Layer on={scene === "energy"}>
-        <EnergyScene data={data} model={model} width={width} height={height} sub={sub} small={small} lang={lang} />
+        {near("energy") && (
+          <EnergyScene data={data} model={model} width={width} height={height} sub={sub} small={small} lang={lang} />
+        )}
       </Layer>
       <Layer on={scene === "clocks"}>
-        <ClocksScene
-          data={data}
-          model={model}
-          width={width}
-          height={height}
-          sub={sub}
-          small={small}
-          lang={lang}
-          active={scene === "clocks"}
-        />
+        {near("clocks") && (
+          <ClocksScene
+            data={data}
+            model={model}
+            width={width}
+            height={height}
+            sub={sub}
+            small={small}
+            lang={lang}
+            active={scene === "clocks"}
+          />
+        )}
       </Layer>
       <Layer on={scene === "tolima"}>
-        <TolimaScene
-          data={data}
-          model={model}
-          width={width}
-          height={height}
-          sub={sub}
-          small={small}
-          lang={lang}
-          active={scene === "tolima"}
-        />
+        {near("tolima") && (
+          <TolimaScene
+            data={data}
+            model={model}
+            width={width}
+            height={height}
+            sub={sub}
+            small={small}
+            lang={lang}
+            active={scene === "tolima"}
+          />
+        )}
       </Layer>
       <Layer on={scene === "felt"}>
-        <FeltScene
-          data={data}
-          model={model}
-          width={width}
-          height={height}
-          sub={sub}
-          small={small}
-          lang={lang}
-          threshold={state.threshold}
-          active={scene === "felt"}
-        />
+        {near("felt") && (
+          <FeltScene
+            data={data}
+            model={model}
+            width={width}
+            height={height}
+            sub={sub}
+            small={small}
+            lang={lang}
+            threshold={state.threshold}
+            active={scene === "felt"}
+          />
+        )}
       </Layer>
     </svg>
   );

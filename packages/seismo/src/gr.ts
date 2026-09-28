@@ -238,6 +238,36 @@ export interface CatalogStats {
   windows: BWindow[];
 }
 
+/** The b-value at `mc`, or null when there is no Mc or too few events above it to fit. */
+function fitAt(mags: readonly number[], mc: number | null): BValue | null {
+  if (mc === null) return null;
+  try {
+    return bValue(mags, mc);
+  } catch {
+    return null;
+  }
+}
+
+/** Mc and the b-value above it, for two events or more. */
+function headline(mags: readonly number[], mcOverride: number | null) {
+  const mcMaxc = mcMaxCurvature(mags);
+  const mc = mcOverride ?? mcMaxc;
+  return { mcMaxc, mc, fit: fitAt(mags, mc) };
+}
+
+/**
+ * `computeStats`' headline, Mc and the b-value fitted above it, without the rest of the pipeline
+ * (the frequency–magnitude bins, the goodness-of-fit Mc and b over time). For a caller that reads
+ * only these two, such as the insights page, which recomputes them every minute. `computeStats`
+ * takes its own from the same function, so the two cannot disagree.
+ */
+export function headlineStats(
+  mags: readonly number[],
+  mcOverride: number | null = null,
+): { mcMaxc: number | null; mc: number | null; fit: BValue | null } {
+  return mags.length < 2 ? { mcMaxc: null, mc: null, fit: null } : headline(mags, mcOverride);
+}
+
 /** The one statistics pipeline, shared by the page, the API and the CLI so they cannot disagree. */
 export function computeStats(
   events: readonly { time: string; mag: number }[],
@@ -247,25 +277,16 @@ export function computeStats(
   if (mags.length < 2) {
     return { count: mags.length, bins: [], mcMaxc: null, mcGft: null, mc: null, fit: null, fitGft: null, windows: [] };
   }
-  const tryFit = (mc: number | null): BValue | null => {
-    if (mc === null) return null;
-    try {
-      return bValue(mags, mc);
-    } catch {
-      return null;
-    }
-  };
-  const mcMaxc = mcMaxCurvature(mags);
+  const { mcMaxc, mc, fit } = headline(mags, mcOverride);
   const mcGft = mcGoodnessOfFit(mags);
-  const mc = mcOverride ?? mcMaxc;
   return {
     count: mags.length,
     bins: fmd(mags),
     mcMaxc,
     mcGft,
     mc,
-    fit: tryFit(mc),
-    fitGft: tryFit(mcGft),
+    fit,
+    fitGft: fitAt(mags, mcGft),
     windows: bValueWindows(events, mc, WINDOW_SIZE, WINDOW_STEP),
   };
 }

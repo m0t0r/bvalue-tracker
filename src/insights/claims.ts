@@ -9,7 +9,14 @@
  * on synthetic catalogues for the cases that one does not reach. See docs/science.md, "The
  * insights page", for why each threshold is what it is.
  */
-import { bearingDeg, computeStats, epicentralKm, hypocentralKm, largestMomentShare, type LatLon } from "@bvalue/seismo";
+import {
+  bearingDeg,
+  epicentralKm,
+  headlineStats,
+  hypocentralKm,
+  largestMomentShare,
+  type LatLon,
+} from "@bvalue/seismo";
 import { median } from "d3-array";
 import { dayStart } from "@/lib/format";
 import { clusterOf } from "../../core/clusters";
@@ -691,7 +698,12 @@ function cachedReach(choco: readonly QuakeLike[], sources: Record<Source, QuakeL
 export function insights(cat: Catalogues, now: number): Insights {
   const sources = bySource(cat);
   const live = { choco: cat.choco.filter((e) => !e.removedAt), tolima: cat.tolima.filter((e) => !e.removedAt) };
-  const stats = { choco: computeStats(live.choco), tolima: computeStats(live.tolima) };
+  // Only Mc and b, not the whole `computeStats`: its b over time and second Mc were half of this
+  // function's time, run again every minute, and nothing here reads them.
+  const stats = {
+    choco: headlineStats(live.choco.map((e) => e.mag)),
+    tolima: headlineStats(live.tolima.map((e) => e.mag)),
+  };
   const mc = { choco: stats.choco.mc, tolima: stats.tolima.mc };
   const firstTime = (es: readonly QuakeLike[]) => (es.length ? Math.min(...es.map((e) => Date.parse(e.time))) : null);
   const start = { choco: firstTime(live.choco), tolima: firstTime(live.tolima) };

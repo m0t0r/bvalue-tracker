@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { startTransition, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useReducedMotion } from "../use-reduced-motion";
 
 /** The element's content box, in whole pixels, kept current by a ResizeObserver. Zero until measured. */
@@ -12,7 +12,8 @@ export function useSize<T extends HTMLElement>() {
       if (!entry) return;
       const width = Math.round(entry.contentRect.width);
       const height = Math.round(entry.contentRect.height);
-      setSize((s) => (s.width === width && s.height === height ? s : { width, height }));
+      // A transition, so the drawing's render yields to the reader instead of holding the thread.
+      startTransition(() => setSize((s) => (s.width === width && s.height === height ? s : { width, height })));
     });
     ro.observe(el);
     return () => ro.disconnect();

@@ -343,6 +343,13 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
     perceived-shaking term beside it. A reading USGS has not published has no tile; one hidden by the
     fewer-than-5 rule keeps its tile with a dash and the reason, because there USGS does have
     reports and the reader should know why they are not shown.
+- **A scene's drawing is mounted from the step before its first one, and then kept** (`mounted` in
+  `story/index.tsx`, issue #70). Scenes cross-fade (`Layer` in `story/marks.tsx`), so the next one must
+  already be in the SVG, at opacity 0, when its step turns current; drawing all of them at load cost
+  ~1,500 elements screens away from the reader (see [Performance](performance.md)). The drawing follows
+  the active step a frame behind (`drawn`), so a scene reached by a jump (a fling, a reload with the
+  scroll kept) is mounted hidden first and still fades and reveals in. The map's layer, the shared dots
+  and the scene titles belong to the first scene.
 - **Story step 2 draws squares true to energy, one per row, largest first** (`Ranks` in
   `story/scenes.tsx`, `rankLayout` in `history.ts`, 2026-09-25): the M7.4 in the mainshock's orange,
   past earthquakes in `muted-foreground`. Squares are right-aligned so each label sits beside its own

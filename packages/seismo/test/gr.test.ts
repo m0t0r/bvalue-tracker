@@ -3,8 +3,10 @@ import {
   bDifference,
   bValue,
   bValueWindows,
+  computeStats,
   dominantMagType,
   fmd,
+  headlineStats,
   independentWindows,
   mcGoodnessOfFit,
   mcMaxCurvature,
@@ -110,6 +112,27 @@ describe("magnitude of completeness", () => {
 
   it("GFT returns null when there are too few events", () => {
     expect(mcGoodnessOfFit([2.0, 2.1, 2.2])).toBeNull();
+  });
+});
+
+describe("headlineStats", () => {
+  const events = (mags: number[]) =>
+    mags.map((mag, i) => ({ mag, time: new Date(Date.UTC(2026, 7, 10) + i * 3_600_000).toISOString() }));
+
+  it("is computeStats' own Mc and b, with and without an override", () => {
+    const mags = synthetic(600, 1.1, 2.0, 11);
+    for (const override of [null, 2.4]) {
+      const full = computeStats(events(mags), override);
+      expect(headlineStats(mags, override)).toEqual({ mcMaxc: full.mcMaxc, mc: full.mc, fit: full.fit });
+    }
+  });
+
+  it("has no Mc or b under two events, and no b when too few are above Mc", () => {
+    expect(headlineStats([])).toEqual({ mcMaxc: null, mc: null, fit: null });
+    expect(headlineStats([2.1])).toEqual({ mcMaxc: null, mc: null, fit: null });
+    const few = headlineStats([2.0, 2.0, 2.1], 5);
+    expect(few).toEqual({ mcMaxc: mcMaxCurvature([2.0, 2.0, 2.1]), mc: 5, fit: null });
+    expect(few).toEqual({ mcMaxc: computeStats(events([2.0, 2.0, 2.1]), 5).mcMaxc, mc: 5, fit: null });
   });
 });
 
