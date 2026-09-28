@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
 import { lazy, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useMediaQuery } from "usehooks-ts";
 import { BSummary } from "@/components/b-summary";
 import { BTimeKey } from "@/components/charts/b-over-time-key";
 import { BTimeCsvButton } from "@/components/charts/b-over-time-csv";
@@ -104,6 +105,10 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   // The days the "Eventos por día" bars have chosen. They narrow the catalogue table and nothing else
   // (`src/lib/day-selection.ts` says why), over the same deferred events both of them draw.
   const picked = useDaySelection(deferred.shown);
+  // From `lg` the map shares a row just under the fold, inside the 600 px every card is fetched
+  // within, so it waits until it is on screen and its picture stands in (issue #72). Below that it is
+  // screens down, and keeps the head start while the reader scrolls towards it.
+  const mapMargin = useMediaQuery("(min-width: 64rem)") ? "0px" : undefined;
   const catalogue = useRef<HTMLHeadingElement>(null);
   const showPicked = useCallback(() => {
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -245,6 +250,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                     title={t.mapTitle}
                     description={mapDescription(t, mainshock)}
                     placeholder={<MapPlaceholder />}
+                    margin={mapMargin}
                   >
                     <EventMap events={deferred.shown} mainshockId={mainshock} />
                   </Deferred>

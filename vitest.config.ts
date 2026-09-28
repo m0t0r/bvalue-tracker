@@ -14,10 +14,12 @@ export default defineConfig({
         // be typechecked by the Node one, which has none of them. vitest.config.ts replaces
         // vite.config.ts rather than extending it, so the alias has to be repeated here too.
         resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
-        // `happy-dom` is here for the two seams that cannot be reached without a renderer: that the
+        // `happy-dom` is here for the seams that cannot be reached without a renderer: that the
         // page's scope hook hands the map, the table and the charts the *same* array when only Mc
-        // moves, and that the info tip's tap and click handling still overrides Radix's Tooltip.
-        // Everything else in this project is a pure function and does not touch the DOM.
+        // moves, that the info tip's tap and click handling still overrides Radix's Tooltip, and
+        // that a deferred card waits for its own margin and the map's picture leaves only once the
+        // map has drawn, or cannot (issue #72, against a stand-in for MapLibre). Everything else
+        // in this project is a pure function and does not touch the DOM.
         test: { name: "page", include: ["src/**/*.test.ts"], environment: "happy-dom" },
       },
       {
