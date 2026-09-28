@@ -195,18 +195,41 @@ those, so an untouched tab shows no chips on either side.
 - **The header is in each zone's HTML before any JavaScript runs** (issue #69, 2026-09-28;
   `MonitorShell` in `src/components/monitor-shell.tsx`). The build renders that component, the one
   React draws, once per language (`src/static-shell.tsx`) into a slot in `#root`, and `zonePages`
-  gives each zone's file its own; React's first render replaces it with the same header at the same
-  size. So a change to the header is made in `MonitorShell`, never in `index.html`, and whatever it
-  shows must not depend on the browser or the theme: the theme button draws both halves, each an icon
-  with its own name ("Cambiar a tema claro" beside the sun), and shows one by the `dark` class
-  (`not-dark:hidden`, `dark:hidden`), since the static copy is drawn before anything knows the theme.
-  A first version kept the name in an `aria-label` from React's state, and the static copy offered
-  the dark theme to a reader already in it (code review).
+  gives each zone's file its own. So a change to the header is made in `MonitorShell`, never in
+  `index.html`, and whatever it shows must not depend on the browser or the theme: the theme button
+  draws both halves, each an icon with its own name ("Cambiar a tema claro" beside the sun), and shows
+  one by the `dark` class (`not-dark:hidden`, `dark:hidden`), since the static copy is drawn before
+  anything knows the theme. A first version kept the name in an `aria-label` from React's state, and
+  the static copy offered the dark theme to a reader already in it (code review).
+  - **React hydrates the static header rather than replacing it** (issue #97, 2026-09-28;
+    `src/lib/hydrate.ts`). Replaced, it was a new element, and a phone paints the static copy before
+    Geist has loaded: React's copy, in Geist, came out larger and became the page's LCP, after the whole
+    bundle ([Performance](performance.md) has the numbers). `main.tsx` keeps the copy in the language on
+    `<html>`, removes the other, marks the kept one `data-static-live` (a `[data-static-lang]` copy is
+    hidden while its language is not on `<html>`, which a change of language would have done to the
+    whole page) and hydrates it with the `useId` prefix the build used, so the zone tabs' ids and their
+    panels' agree. `App` draws the page under the header only from the render after hydration
+    (`useHydrated`, a layout effect, so both commit in one frame): drawn during it, the page would not
+    match the HTML. Because the header's nodes now stay, the monitor keeps a desktop scrollbar's room
+    from the first paint (`scrollbar-gutter`), or the header moved aside when the page mounted and the
+    scrollbar appeared, a layout shift. So `static-shell.tsx` must
+    render exactly what `App` renders before that, and `src/page-root.test.ts` holds it to that for both
+    zones and languages: no mismatch, every static node kept, each tab linked to its panel. A mismatch
+    all the same (a browser extension that edits the page before the bundle runs) makes React draw
+    its own header, as before, and `installErrorReporting` reports it. The dev server's page has no
+    static header, so there it is a plain `createRoot`.
+  - **Until Geist has loaded, the page is in a stand-in cut to Geist's measure** ("Geist Fallback" in
+    `index.css`): Arial, or Liberation Sans on Linux and Roboto on Android, with Geist's ascent and
+    descent and scaled to its width on the header's own strings, rounded up. The header's lines break
+    alike in both faces (43 of 44 cases across 320–1350 px and both languages; the other, Tolima's
+    Spanish subtitle at 360 px, takes a fourth line in the stand-in and gives it back), and nothing
+    moves when Geist arrives. With a bare `sans-serif` a line was 1.0 em tall to Geist's 1.3. Roboto's
+    faces are from its published files; not checked on an Android device.
   - **The head script decides the language and the theme, and nothing else does**
     (`src/boot.ts` over `src/lib/startup.ts`). It is a classic, render-blocking script at the top of
     every page's head, a file because the CSP allows no inline script, and it writes `<html lang>`
     and the `dark` class before the first paint. `index.css` shows the static copy in that language
-    (`[data-static-lang]`); `I18nProvider` opens in the language on `<html>` rather than deciding
+    (`[data-static-lang]`), and React hydrates that copy; `I18nProvider` opens in the language on `<html>` rather than deciding
     again, and `theme.ts` only changes the theme afterwards (`followSystemTheme`, `toggleTheme`).
     Before this, `initTheme()` decided the theme in the bundle. If the script never runs, the HTML's
     own `lang="es"` stands and header and page agree on Spanish, in the light theme, and the theme

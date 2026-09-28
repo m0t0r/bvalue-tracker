@@ -63,7 +63,9 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
 - Static assets bypass the Worker (`run_worker_first: ["/api/*"]`), so page headers come
   from `public/_headers`, not from Hono.
   The CSP there is narrow and was checked against the running page: MapLibre needs
-  `blob:` for its worker, the shadcn chart needs `style-src 'unsafe-inline'`, the
+  `blob:` for its worker, the shadcn chart needs `style-src 'unsafe-inline'` (and so, from
+  2026-09-28, does the header's CSS inlined in each zone's HTML, issue #97: compiled at build time
+  from `index.css` for the header's own classes, nothing from a request or the catalogue), the
   basemap needs `tiles.openfreemap.org`, and the map's relief shading needs
   `tiles.mapterhorn.com` in `connect-src` only: MapLibre fetches elevation tiles and decodes
   them with `createImageBitmap` (or, where that is missing, through a `blob:` URL, which

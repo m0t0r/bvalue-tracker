@@ -599,8 +599,10 @@ const preferred = () => browserLang(navigatorLanguages(navigator));
  * The language the head script opened the page in (`src/lib/startup.ts`), read back from `<html>`,
  * so the page is drawn in the language the static header already showed. It is decided there alone;
  * if that script never ran, the HTML's own `lang="es"` stands, and the static header is Spanish too.
+ * `takeStaticShell` keeps the static copy in this same language for React to hydrate: the two must
+ * agree, or the header's text would not match and React would redraw it.
  */
-const openedIn = (): Lang => (document.documentElement.lang === "en" ? "en" : "es");
+export const openedIn = (doc: Document = document): Lang => (doc.documentElement.lang === "en" ? "en" : "es");
 
 const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({
   lang: "en",
@@ -614,7 +616,7 @@ const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({
  * followed again.
  */
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(openedIn);
+  const [lang, setLangState] = useState<Lang>(() => openedIn());
   // Also on first load, so the page is announced in the language it is drawn in. The document's
   // title names the zone, so the page sets that itself.
   useEffect(() => {

@@ -5,9 +5,60 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Geist's stand-ins until it has loaded (issue #97): a system face given Geist's ascent and descent
+   and scaled to its width, so the header takes the same room in either. On a phone the static header
+   paints before the font arrives and React then draws its own copy in Geist, and a larger copy is a
+   new, later largest paint (docs/performance.md). Chrome sizes a line of text by the face's ascent
+   and descent, 1.3 em in Geist and about 1.0 in Arial, so the overrides are most of it: each is
+   Geist's own (1005 and -295 per 1000) divided by the face's `size-adjust`, which scales them too.
+   Each `size-adjust` was measured on the header's own strings in both languages, in the page, and
+   rounds up to the widest of them, so the stand-in is never the narrower: Geist regular is
+   1.2-1.7 % wider than Arial and 2.1-2.7 % than Roboto; Geist semibold is 0.98-1.01 times Arial
+   Bold and 1.05-1.07 times Roboto Bold. Arial on Windows, macOS and iOS; Liberation Sans, which has
+   Arial's metrics, on Linux; Roboto on Android, which has no Arial. A face none of whose `local()`
+   names exists is skipped. */
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("LiberationSans");
+  font-weight: 100 500;
+  size-adjust: 102%;
+  ascent-override: 98.53%;
+  descent-override: 28.92%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("LiberationSans-Bold");
+  font-weight: 600 900;
+  size-adjust: 100.6%;
+  ascent-override: 99.9%;
+  descent-override: 29.32%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Geist Fallback Roboto";
+  src: local("Roboto"), local("Roboto Regular"), local("Roboto-Regular");
+  font-weight: 100 500;
+  size-adjust: 103%;
+  ascent-override: 97.57%;
+  descent-override: 28.64%;
+  line-gap-override: 0%;
+}
+/* Android 12 and later ship Roboto as one variable file, likely known by no bold name: "Roboto" last,
+   so the bold face still loads there (code review; not checked on a device). */
+@font-face {
+  font-family: "Geist Fallback Roboto";
+  src: local("Roboto Bold"), local("Roboto-Bold"), local("Roboto");
+  font-weight: 600 900;
+  size-adjust: 107.5%;
+  ascent-override: 93.49%;
+  descent-override: 27.44%;
+  line-gap-override: 0%;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Geist Variable", sans-serif;
+  --font-sans: "Geist Variable", "Geist Fallback", "Geist Fallback Roboto", sans-serif;
   --color-place: var(--place);
   --color-chart-5: var(--chart-5);
   --color-chart-5-age-1: var(--chart-5-age-1);
@@ -238,9 +289,21 @@
 }
 /* The static header in each zone's HTML (`src/static-shell.tsx`) comes in both languages, and shows
    the one the head script wrote on `<html lang>` before the first paint. Spanish unless that says
-   English, as the HTML's own `lang="es"` stands if the script never ran. React replaces both. */
-[data-static-lang] {
+   English, as the HTML's own `lang="es"` stands if the script never ran. React hydrates the shown
+   one, which becomes `[data-static-live]` and keeps its box (none), and removes the other
+   (`src/lib/hydrate.ts`). */
+[data-static-lang],
+[data-static-live] {
   display: contents;
+}
+/* The monitor keeps room for a scrollbar from the first paint. The header is hydrated, not redrawn, so
+   when the page mounts under it and a desktop's scrollbar appears, the centred header would move
+   ~8 px to the side, a layout shift (0.005 at 1350 px). Not on /insights: its 3D viewer locks the
+   page's scroll, and Radix's lock adds its own room for the scrollbar, which would count it twice. A
+   Radix modal (Dialog, Sheet, Select) added to the monitor would meet the same: the page would move
+   by the scrollbar's width as it opens (code review). */
+html[data-page="monitor"] {
+  scrollbar-gutter: stable;
 }
 html:not([lang="en"]) [data-static-lang="en"],
 html[lang="en"] [data-static-lang="es"] {

@@ -9,9 +9,11 @@ import { ZONE_IDS, isZoneId, type ZoneId } from "../../core/zones";
 /**
  * The monitor's frame and header: the zone tabs, the page's three controls, and the zone's title and
  * subtitle. The build also draws it into each zone's HTML (`src/static-shell.tsx`), so a phone paints
- * the header, its largest text, before the bundle has run; React then draws this same component over
- * it at the same size. So it must not reach for the browser, and nothing in it may depend on the
- * theme except through the `dark` class.
+ * the header, its largest text, before the bundle has run; React then hydrates that copy rather than
+ * drawing its own (`src/lib/hydrate.ts`). So it must render exactly the same markup in the build and
+ * in the page: it must not reach for the browser or for state the build does not have, and nothing in
+ * it may depend on the theme except through the `dark` class. A mismatch makes React redraw the
+ * header, which costs a phone its LCP again (`src/page-root.test.ts` catches one).
  */
 export function MonitorShell({
   zone,

@@ -1,10 +1,20 @@
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { build, defineConfig, runnerImport, type Plugin } from "vite";
-import { INSIGHTS_LOAD, monitorLoad, preloadTags, stylesheetBeforeBundle, swapPreloads } from "./core/page-data.ts";
+import {
+  INSIGHTS_LOAD,
+  classAttributes,
+  monitorLoad,
+  preloadTags,
+  stylesheetBeforeBundle,
+  swapPreloads,
+  withAssetUrls,
+  withInlineStylesheet,
+} from "./core/page-data.ts";
 import { HOME_ZONE, ZONE_PATHS, withStaticShell, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
 import { ZONE_IDS, type ZoneId } from "./core/zones.ts";
 
@@ -35,13 +45,68 @@ function preloadLatinFont(): Plugin {
   };
 }
 
-/** The stylesheet ahead of the bundle in the head (`stylesheetBeforeBundle`, which says why), on every page. */
-function stylesheetBeforeBundlePlugin(): Plugin {
+/**
+ * The page's stylesheet out of the first paint's way. On a zone page the CSS the static header needs
+ * is inlined and the stylesheet moves to the end of the body (`withInlineStylesheet`, issue #97): a
+ * phone paints the header once the HTML and the head script are in. The insights page has nothing to
+ * paint before its bundle, so it keeps the stylesheet, ahead of the bundle (`stylesheetBeforeBundle`).
+ */
+function stylesheetPlacement(): Plugin {
+  // Once per build, for every zone page: the static headers and the font files are the build's own.
+  let css: Promise<string> | null = null;
   return {
-    name: "sgc-stylesheet-before-bundle",
+    name: "sgc-stylesheet-placement",
     apply: "build",
-    transformIndexHtml: { order: "post", handler: (html) => stylesheetBeforeBundle(html) },
+    buildStart() {
+      css = null;
+    },
+    transformIndexHtml: {
+      order: "post",
+      async handler(html, ctx) {
+        if (!html.includes("<!--static-shell-->")) return stylesheetBeforeBundle(html);
+        if (shells === null) throw new Error("sgc-stylesheet-placement: no static header rendered");
+        css ??= headerCss(Object.values(shells).join(""), Object.keys(ctx.bundle ?? {}));
+        return withInlineStylesheet(html, await css);
+      },
+    },
   };
+}
+
+/** The part of `@tailwindcss/node` that `headerCss` uses. */
+interface TailwindNode {
+  compile(
+    css: string,
+    options: { base: string; from: string; onDependency: (path: string) => void },
+  ): Promise<{
+    build(candidates: string[]): string;
+  }>;
+  optimize(css: string, options: { minify: boolean }): { code: string };
+}
+
+/**
+ * The CSS the static header needs: `index.css` compiled by Tailwind for exactly the class names in the
+ * header's HTML (both zones, both languages), minified, with its fonts pointed at the built files.
+ * Every rule of `index.css` that is not a utility comes along whole: the tokens for both themes, the
+ * base styles, the fallback faces and the rules that show the reader's language, so nothing depends on
+ * the theme or the language the build happened to see. About 32 kB, 6 kB with brotli; about a third
+ * of it is page rules the header does not use (the map's controls, the charts', the entry animations),
+ * left in rather than split `index.css` in two (code review).
+ *
+ * The compiler is the one `@tailwindcss/vite` itself depends on, found from that package, so the
+ * inlined CSS and the stylesheet it stands in for always come from the same Tailwind. It is given the
+ * header's class names as written (`classAttributes`); anything that is not a class it knows, it drops.
+ */
+async function headerCss(markup: string, assets: string[]): Promise<string> {
+  const fromPlugin = createRequire(createRequire(import.meta.url).resolve("@tailwindcss/vite"));
+  const { compile, optimize } = fromPlugin("@tailwindcss/node") as TailwindNode;
+  const from = path.resolve(import.meta.dirname, "src/index.css");
+  const compiler = await compile(await readFile(from, "utf8"), {
+    base: path.dirname(from),
+    from,
+    onDependency: () => {},
+  });
+  const candidates = [...new Set(classAttributes(markup).split(/\s+/).filter(Boolean))];
+  return withAssetUrls(optimize(compiler.build(candidates), { minify: true }).code.trim(), assets);
 }
 
 /**
@@ -268,7 +333,7 @@ export default defineConfig({
     cloudflare(),
     startup(),
     preloadLatinFont(),
-    stylesheetBeforeBundlePlugin(),
+    stylesheetPlacement(),
     preloadPageData(),
     zonePages(),
     insightsPage(),

@@ -24,6 +24,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabsContent } from "@/components/ui/tabs";
 import { getEvents, getStatus } from "@/lib/api";
+import { useHydrated } from "@/lib/hydrate";
 import { useI18n } from "@/lib/i18n";
 import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
 import { useDaySelection } from "@/lib/day-selection";
@@ -50,6 +51,9 @@ export function App() {
   const { t } = useI18n();
   const [zone, setZone] = useZoneState();
   const copy = t.zones[zone];
+  // The header is the static one in the HTML, adopted as it is; what it does not have waits for
+  // the render after (`src/lib/hydrate.ts`).
+  const hydrated = useHydrated();
   useEffect(() => {
     document.title = copy.docTitle;
   }, [copy.docTitle]);
@@ -58,13 +62,15 @@ export function App() {
     <MonitorShell zone={zone} onZone={setZone} onToggleTheme={toggleTheme}>
       {/* Out of the tab order: the panel's first content is focusable (the refresh button, or the
           load error's retry), so a stop on the panel itself would be one press that does nothing. */}
-      {ZONE_IDS.map((z) => (
-        <TabsContent key={z} value={z} tabIndex={-1} className="flex flex-col gap-6">
-          <ZoneProvider value={ZONES[z]}>
-            <ZonePage zone={z} />
-          </ZoneProvider>
-        </TabsContent>
-      ))}
+      {hydrated
+        ? ZONE_IDS.map((z) => (
+            <TabsContent key={z} value={z} tabIndex={-1} className="flex flex-col gap-6">
+              <ZoneProvider value={ZONES[z]}>
+                <ZonePage zone={z} />
+              </ZoneProvider>
+            </TabsContent>
+          ))
+        : null}
     </MonitorShell>
   );
 }
