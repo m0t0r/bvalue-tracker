@@ -4,7 +4,7 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { build, defineConfig, runnerImport, type Plugin } from "vite";
-import { INSIGHTS_LOAD, monitorLoad, preloadTags, swapPreloads } from "./core/page-data.ts";
+import { INSIGHTS_LOAD, monitorLoad, preloadTags, stylesheetBeforeBundle, swapPreloads } from "./core/page-data.ts";
 import { HOME_ZONE, ZONE_PATHS, withStaticShell, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
 import { ZONE_IDS, type ZoneId } from "./core/zones.ts";
 
@@ -32,6 +32,15 @@ function preloadLatinFont(): Plugin {
         return html.replace(/(<meta charset=[^>]*>)/i, `$1\n    ${tag}`);
       },
     },
+  };
+}
+
+/** The stylesheet ahead of the bundle in the head (`stylesheetBeforeBundle`, which says why), on every page. */
+function stylesheetBeforeBundlePlugin(): Plugin {
+  return {
+    name: "sgc-stylesheet-before-bundle",
+    apply: "build",
+    transformIndexHtml: { order: "post", handler: (html) => stylesheetBeforeBundle(html) },
   };
 }
 
@@ -259,6 +268,7 @@ export default defineConfig({
     cloudflare(),
     startup(),
     preloadLatinFont(),
+    stylesheetBeforeBundlePlugin(),
     preloadPageData(),
     zonePages(),
     insightsPage(),

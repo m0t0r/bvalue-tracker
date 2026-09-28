@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { INSIGHTS_LOAD, PRELOAD_MEDIA, monitorLoad, preloadTags, swapPreloads } from "../core/page-data.ts";
+import {
+  INSIGHTS_LOAD,
+  PRELOAD_MEDIA,
+  monitorLoad,
+  preloadTags,
+  stylesheetBeforeBundle,
+  swapPreloads,
+} from "../core/page-data.ts";
 import { HOME_ZONE } from "../core/zone-pages.ts";
 import { ZONE_IDS } from "../core/zones.ts";
 
@@ -42,5 +49,41 @@ describe("the pages' data preloads", () => {
       expect(INSIGHTS_LOAD).toContain(`/api/status?zone=${zone}`);
     }
     expect(new Set(INSIGHTS_LOAD).size).toBe(INSIGHTS_LOAD.length);
+  });
+});
+
+describe("stylesheetBeforeBundle", () => {
+  // Vite writes the stylesheet after the entry script and its module preloads.
+  const built = [
+    "<head>",
+    '    <meta charset="UTF-8" />',
+    '    <meta name="viewport" content="width=device-width" />',
+    '    <script src="/assets/boot-a.js"></script>',
+    "    <title>x</title>",
+    '    <script type="module" crossorigin src="/assets/index-a.js"></script>',
+    '    <link rel="modulepreload" crossorigin href="/assets/react-a.js">',
+    '    <link rel="stylesheet" crossorigin href="/assets/src-a.css">',
+    "  </head>",
+  ].join("\n");
+
+  it("moves the stylesheet ahead of the bundle, but not of the head script, which would wait for it", () => {
+    const html = stylesheetBeforeBundle(built);
+    const at = (s: string) => html.indexOf(s);
+    expect(at('<link rel="stylesheet"')).toBeGreaterThan(at("boot-a.js"));
+    expect(at('<link rel="stylesheet"')).toBeLessThan(at("index-a.js"));
+    expect(at('<link rel="stylesheet"')).toBeLessThan(at("react-a.js"));
+    expect(html).toContain(
+      '\n    <link rel="stylesheet" crossorigin href="/assets/src-a.css">\n    <script type="module"',
+    );
+    expect(html.match(/rel="stylesheet"/g)).toHaveLength(1);
+    // Nothing else moves or goes.
+    expect(html.replace(/\s+/g, "").length).toBe(built.replace(/\s+/g, "").length);
+  });
+
+  it("refuses a page with no stylesheet or no module script, rather than ship it unchanged", () => {
+    expect(() => stylesheetBeforeBundle(built.replace(/.*rel="stylesheet".*\n/, ""))).toThrow(/stylesheet/);
+    expect(() => stylesheetBeforeBundle(built.replace(/.*(type="module"|modulepreload).*\n/g, ""))).toThrow(
+      /module script/,
+    );
   });
 });

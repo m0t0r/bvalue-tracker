@@ -61,3 +61,23 @@ export function swapPreloads(html: string, from: readonly string[], to: readonly
   if (found !== 1) throw new Error(`expected the page's data preloads once, found ${found}`);
   return html.replace(tags, preloadTags(to));
 }
+
+/**
+ * `html` with its stylesheets moved to straight before the bundle: the first module script or module
+ * preload. Vite writes them last in the head, after the entry script and a dozen module preloads, and
+ * on a slow connection the one file the first paint waits for then shared the line with all of them
+ * (docs/performance.md has the A/B). Not before the head script: a classic script after a stylesheet
+ * waits for it (`withBootScript` in vite.config.ts). A page with no stylesheet or no module script
+ * throws, so a change in what Vite writes fails the build instead of shipping the old order.
+ */
+export function stylesheetBeforeBundle(html: string): string {
+  const sheets = html.match(/[ \t]*<link rel="stylesheet"[^>]*>\n?/g);
+  if (!sheets) throw new Error('stylesheetBeforeBundle: no <link rel="stylesheet"> in the page');
+  const rest = sheets.reduce((h, s) => h.replace(s, ""), html);
+  const bundle = /([ \t]*)(<script type="module"|<link rel="modulepreload")/;
+  if (!bundle.test(rest)) throw new Error("stylesheetBeforeBundle: no module script in the page");
+  // A function, so nothing in a tag is read as a replacement pattern (`$&`).
+  return rest.replace(bundle, (_, indent: string, tag: string) =>
+    [...sheets.map((s) => indent + s.trim()), indent + tag].join("\n"),
+  );
+}
