@@ -5,7 +5,7 @@
  * same `Insights`; the story's own copy is in `copy.ts`.
  */
 import { scaleLinear, scaleTime } from "d3-scale";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Slider } from "@/components/ui/slider";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { fmtDate, fmtDay, fmtDayLong } from "@/lib/format";
@@ -54,7 +54,22 @@ export function Story({ data, forecastShown }: { data: Insights; forecastShown: 
   const steps = useSteps(data, model, lang, threshold, setThreshold, forecastShown);
   const { active, register } = useActiveStep(steps.length, wide);
   const [graphicRef, size] = useSize<HTMLDivElement>();
-  const current = steps[active] ?? steps[0]!;
+  // A scene's drawing is mounted from the step before its first one, and stays: drawing every scene at
+  // load was ~3,600 SVG nodes, most of them for scenes screens away (issue #70). Keeping it makes
+  // scrolling back cost nothing.
+  const [furthest, setFurthest] = useState(0);
+  if (active > furthest) setFurthest(active);
+  const mounted = new Set(steps.slice(0, furthest + 2).map((s) => s.scene));
+  // The drawing follows the text a frame behind, so a scene is always in the SVG, hidden, for a frame
+  // before it turns on: its cross-fade and its own reveal then play even when a fling or a reload
+  // mid-story jumps past the step that would have mounted it.
+  const [drawn, setDrawn] = useState(active);
+  useEffect(() => {
+    if (drawn === active) return;
+    const id = requestAnimationFrame(() => setDrawn(active));
+    return () => cancelAnimationFrame(id);
+  }, [active, drawn]);
+  const current = steps[Math.min(drawn, steps.length - 1)] ?? steps[0]!;
 
   return (
     <div className="flex flex-col">
@@ -69,14 +84,17 @@ export function Story({ data, forecastShown }: { data: Insights; forecastShown: 
             so nothing moves when it is measured and drawn. */}
         <div className="sticky top-0 z-10 h-[50svh] border-b bg-background py-2 group-data-side/story:order-2 group-data-side/story:h-svh group-data-side/story:self-start group-data-side/story:border-b-0 group-data-side/story:py-6">
           <div ref={graphicRef} className="size-full">
-            <Graphic
-              data={data}
-              model={model}
-              state={{ scene: current.scene, sub: current.sub, threshold }}
-              width={size.width}
-              height={size.height}
-              lang={lang}
-            />
+            {size.width > 0 && size.height > 0 && (
+              <Graphic
+                data={data}
+                model={model}
+                state={{ scene: current.scene, sub: current.sub, threshold }}
+                width={size.width}
+                height={size.height}
+                lang={lang}
+                mounted={mounted}
+              />
+            )}
           </div>
         </div>
         <div className="group-data-side/story:order-1">

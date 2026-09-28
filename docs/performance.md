@@ -129,7 +129,7 @@ practices stayed at 100.
     phone 9.55 → 8.94 s, 9.71 → 9.07 s, 9.32 → 8.69 s (TBT 157 → 146, 212 → 210, 157 → 176 ms: the 3D
     scene now builds inside the measured window); on a desktop 425 → 124 ms, 497 → 200 ms, 495 → 167 ms.
   - What was left was issues #69 (static header, done 2026-09-28, above), #70 (the story's render cost: 1,261 SVG paths in one
-    group), #71 (a validator for `/api/events`) and #72 (the map at first paint on desktop `/`, done
+    group, done 2026-09-28: the bullet on the story's render below), #71 (a validator for `/api/events`) and #72 (the map at first paint on desktop `/`, done
     2026-09-28: the bullet on the map's relief below).
 - **Nothing is drawn under the loading skeleton** (`settled` in `App.tsx`). The skeleton is a
   viewport tall so that nothing below it is on screen when the dashboard replaces it. A failed
@@ -200,6 +200,39 @@ practices stayed at 100.
     and the page's CSV button builds its file in the browser. Half a millisecond per request is far
     from the CPU limit; making the field optional would put a flag on the one statistics pipeline
     the page, the API and the CLI share so they cannot disagree.
+- **The story draws only the scenes the reader is near** (issue #70, 2026-09-28). The story renders
+  twice at load: the hero and every step's text when the data arrives (the LCP is the hero's intro,
+  at every width), then the pinned drawing once a `ResizeObserver` has measured its box. That second
+  pass drew every scene at once, hidden ones included: ~3,600 SVG nodes, 1,825 of them the shared dot
+  layer and ~1,100 Chaparral's close-up, as one task of ~390 ms on a 4× phone (171 ms of script, then a
+  style recalculation of 137 ms over 3,596 elements, layout and paint), after the LCP. The drawing sits
+  below the 80svh hero, so none of it is on screen at load.
+  - **A scene's drawing mounts from the step before its first one, and stays** (`mounted` in
+    `story/index.tsx`, from the steps' own order): 3,978 → 2,439 elements at load. The map, its dots
+    and the scene titles are the first scene's, so they are all still drawn.
+  - **The drawing's first render is a transition** (`useSize` sets the size in `startTransition`), so
+    React's part of it yields; the style and layout of what it adds are still one piece.
+  - **Nothing is drawn, or computed for the drawing, before the box is measured**: the map's and the
+    cuts' framing ran once on a zero-sized box.
+  - **`insights()` computes Mc and b only** (`headlineStats` in `@bvalue/seismo`, which `computeStats`
+    takes its own from). The whole pipeline was half of `insights()`'s time (4.6 ms, 2.6 of them
+    `computeStats`, in Node on 853 + 973 events), for two numbers, and it runs every minute.
+  - Lighthouse, devtools throttling, `/insights` against a build of `main` at `dfa1e36`, same
+    `.wrangler/` copy, interleaved, five runs each, medians, every run checked for the build it loaded:
+    phone TBT 258 → 81 ms, score 54 → 59, LCP 10.50 → 10.49 s; desktop LCP 159 → 149 ms, TBT 0 on
+    both, CLS 0 everywhere. **The phone's LCP does not move because it waits on the network**, not
+    the render: `preview`'s uncompressed catalogues (~770 kB for both zones) take seconds at 1.6 Mbps.
+    Cold loads through the DevTools protocol, 4× CPU, no network throttling, seven interleaved runs
+    each: the longest task 216 → 129 ms, the time from the data to the LCP 220 → 195 ms.
+  - **What is left is per dot, not per load**: each of the 1,825 dots carries its own inline position
+    and transition, which no two elements share. Inserted into a detached SVG at 1× CPU, the dots took
+    21.7 ms of style, and 57.1 ms when every dot moves (a scene turn); positioned by `cx`/`cy`
+    attributes with no transition, 2.7 and 2.6 ms. A canvas, or attribute positions with the glide
+    animated only during a turn, is issue #94, since it changes how the turn is drawn.
+  - **The forced reflows DevTools flags on this page add no work** (Radix's `useSize` in the felt
+    step's slider, Presence in the tab panels): they pull the page's first layout forward into React's
+    commit, and the frame's own layout after them is under a millisecond. They do make that task
+    longer, which TBT counts; on the monitor it is larger (issue #95).
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under
