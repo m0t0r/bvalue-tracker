@@ -9,8 +9,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse, type StoredEvent } from "@/lib/api";
-import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
-import { fmtClock, fmtDateTime, fmtDay, fmtUtc, relativeTime, relativeTimeShort, sgcEventUrl } from "@/lib/format";
+import { CADENCE } from "../../worker/plan.ts";
+import {
+  fmtClock,
+  fmtDateTime,
+  fmtDay,
+  fmtPlace,
+  fmtUtc,
+  relativeTime,
+  relativeTimeShort,
+  sgcEventUrl,
+} from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
 import { useNow } from "@/lib/use-now";
@@ -35,11 +44,28 @@ function ByWidth({ phone, wide }: { phone: ReactNode; wide: ReactNode }) {
   );
 }
 
-function Stat({ label, value, hint }: { label: ReactNode; value: ReactNode | null; hint?: ReactNode }) {
+function Stat({
+  label,
+  value,
+  hint,
+  wide = false,
+}: {
+  label: ReactNode;
+  value: ReactNode | null;
+  hint?: ReactNode;
+  /** Both columns of the phone's grid, for a value too long for half a phone. */
+  wide?: boolean;
+}) {
   return (
     // `min-w-0` lets a hint wrap inside its grid column on a phone; in the row from `sm` up a stat is
     // as wide as its longest line, and wraps whole onto the next line rather than folding its text.
-    <div className="flex min-w-0 flex-col gap-1 sm:min-w-auto">
+    <div
+      className={
+        wide
+          ? "col-span-2 flex min-w-0 flex-col gap-1 sm:max-w-xs sm:min-w-auto lg:max-w-none lg:min-w-40"
+          : "flex min-w-0 flex-col gap-1 sm:min-w-auto lg:shrink-0"
+      }
+    >
       <span className="text-sm text-muted-foreground">{label}</span>
       {value === null ? <Skeleton className="h-7 w-28" /> : <span className="text-xl font-semibold">{value}</span>}
       {/* The line is always reserved, so the cards below do not jump when the hint arrives. */}
@@ -148,7 +174,6 @@ export function StatusBar({
    * made two thirds of every cron period a refresh the page sent and the Worker refused.
    */
   const autoRefreshAfterMs = CADENCE[zone].refreshMinIntervalS * 1000;
-  const everyMin = updateEveryMin(zone);
   // The server stands down whenever SGC was queried in the last five minutes, which with a
   // five-minute cron is most of the time. That is good news, not a countdown, so the message
   // says the reader already has the newest data rather than asking them to wait.
@@ -259,32 +284,64 @@ export function StatusBar({
   const live = staleNote ? t.staleSince(stale.time, stale.day) : message;
   const pending = refresh.isPending || backfill.isPending;
 
-  // On a phone both times lead with how long ago ("hace ~2 h", "hace 7 min"), which is what the
-  // reader asks of them, and give the clock time under it, with the day only when it was not today:
-  // the full "18 sept 2026, 17:08" does not fit half a phone. From `sm` up there is room for it, and
-  // the newest event gives its date with how long ago under it, the last query the other way round.
+  // The newest event is where and how strong, "Chaparral, Tolima (M 2.5)", all one link to SGC's own
+  // page for it (readers asked for the place and the size, not the time). When it happened is
+  // the line under it, how long ago first. On a phone that is "hace ~2 h · 17:08", with the day only
+  // when it was not today; from `sm` up, the full date.
   const clock = (iso: string) => {
     const c = fmtClock(Date.parse(iso), lang, now);
     return c.day === null ? c.time : `${c.day}, ${c.time}`;
   };
-  const newestTime = status?.newestEventTime ? (
-    <ByWidth phone={<Ago iso={status.newestEventTime} now={now} />} wide={fmtDateTime(status.newestEventTime, lang)} />
-  ) : null;
-  // The newest event reaches SGC's own page for it, the same link the table's time column carries,
-  // with the same UTC form one hover away. An event with no id cannot happen — the id is the primary
-  // key — but the status API types it as nullable, so it falls back to plain text.
-  const newestEvent = !status?.newestEventTime ? null : status.newestEventId ? (
+  const newest = status?.newestEvent ?? null;
+  // No type (owner's call): how strong, not which scale. SGC's region is stored as it comes, with no
+  // length limit, so the place is one line with an ellipsis at the character where it runs out, at every
+  // width, and "(M 2.5)" sits outside the cut, always shown. One line keeps the card's height whatever
+  // the next event's place is. The whole place is still the link's name, its tooltip and SGC's page.
+  const newestEvent = !newest ? null : (
     <a
-      className="underline underline-offset-4"
-      href={sgcEventUrl(status.newestEventId)}
+      className="flex underline underline-offset-4"
+      href={sgcEventUrl(newest.id)}
       target="_blank"
       rel="noreferrer"
-      title={fmtUtc(status.newestEventTime)}
+      title={fmtPlace(newest.region)}
     >
-      {newestTime}
+      <span className="min-w-0 truncate">{fmtPlace(newest.region)}</span>
+      <span className="shrink-0">{`\u00A0(M\u00A0${newest.mag.toFixed(1)})`}</span>
     </a>
-  ) : (
-    newestTime
+  );
+  // The UTC form is one hover away, as on every other time that identifies an event.
+  const newestWhen = !newest ? undefined : (
+    <span title={fmtUtc(newest.time)}>
+      <ByWidth
+        phone={
+          <>
+            <Ago iso={newest.time} now={now} />
+            {" · "}
+            {clock(newest.time)}
+          </>
+        }
+        wide={`${relativeTime(newest.time, lang, now)} · ${fmtDateTime(newest.time, lang)}`}
+      />
+    </span>
+  );
+  // The last query to SGC is the note under the button: when the figures were last checked is what
+  // the button is about. The footer says how often that happens. It is the last query that
+  // succeeded, and says so while a run has failed, or it would contradict "La última consulta al SGC
+  // falló" beside it. From `sm` up it adds the clock time, which an outage makes worth having; beside
+  // the button on a phone there is room for how long ago only.
+  const lastQuery = (
+    <>
+      <ByWidth phone={failed ? t.lastUpdateOkShort : t.lastUpdateShort} wide={failed ? t.lastUpdateOk : t.lastUpdate} />
+      {": "}
+      {ok?.finishedAt ? (
+        <ByWidth
+          phone={<Ago iso={ok.finishedAt} now={now} />}
+          wide={`${relativeTime(ok.finishedAt, lang, now)} · ${clock(ok.finishedAt)}`}
+        />
+      ) : (
+        t.never
+      )}
+    </>
   );
 
   // Until the page has its status and its catalogue, one block and no stats. The stats wrap by their
@@ -303,55 +360,27 @@ export function StatusBar({
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardContent className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5 sm:gap-y-4">
-          {/* Two columns on a phone, one wrapping row from sm up. On a phone every value is short
-              enough for half its width ("hace ~2 h", "Ninguno claro"), and a hint that is not wraps
-              inside its own column. From sm up a stat that no longer fits beside its neighbour takes
-              the next line whole, so which stats share a line is a consequence of the text. */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10">
+        <CardContent className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5 sm:gap-y-4 lg:flex-nowrap">
+          {/* The newest event first, across both columns on a phone, where a place such as "El Litoral
+              del San Juan (Docordo), Choco" needs the width; the events and the mainshock share the
+              row under it, each short enough for half a phone ("809", "Ninguno claro"), and a hint that
+              is not wraps inside its own column. From sm up one wrapping row: a stat that no longer
+              fits beside its neighbour takes the next line whole, and the newest event is capped
+              (`Stat`'s `wide`). From lg the card is one row that does not wrap: every stat and the
+              button block keep their width, and the newest event's place shrinks into what is left. */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10 lg:min-w-0 lg:flex-nowrap">
+            <Stat wide label={t.newestEvent} value={status ? (newestEvent ?? "—") : null} hint={newestWhen} />
             <Stat
               label={t.events}
               value={shown === null ? catalogueFailed ? "—" : null : <FlowNumber value={shown} lang={lang} />}
               hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined}
-            />
-            <Stat
-              label={<ByWidth phone={t.newestEventShort} wide={t.newestEvent} />}
-              value={status ? (newestEvent ?? "—") : null}
-              hint={
-                status?.newestEventTime ? (
-                  <ByWidth
-                    phone={clock(status.newestEventTime)}
-                    wide={relativeTime(status.newestEventTime, lang, now)}
-                  />
-                ) : undefined
-              }
-            />
-            <Stat
-              label={<ByWidth phone={t.lastUpdateShort} wide={t.lastUpdate} />}
-              value={
-                status ? (
-                  ok?.finishedAt ? (
-                    <ByWidth
-                      phone={<Ago iso={ok.finishedAt} now={now} />}
-                      wide={relativeTime(ok.finishedAt, lang, now)}
-                    />
-                  ) : (
-                    t.never
-                  )
-                ) : null
-              }
-              hint={
-                ok?.finishedAt ? (
-                  <ByWidth phone={clock(ok.finishedAt)} wide={fmtDateTime(ok.finishedAt, lang)} />
-                ) : undefined
-              }
             />
             <MainshockStat mainshock={mainshock} catalogueFailed={catalogueFailed} />
           </div>
           {/* On a phone the note sits beside the button. From sm the note goes under it: below lg the
               block wraps onto its own line at the start edge, so it reads from there, and beside the
               stats at lg it hugs the end edge. */}
-          <div className="flex items-center gap-3 sm:flex-col sm:items-start sm:gap-2 lg:items-end">
+          <div className="flex items-center gap-3 sm:flex-col sm:items-start sm:gap-2 lg:shrink-0 lg:items-end">
             {/* One label and one icon: the button keeps its width while it works. `aria-disabled`, not
                 `disabled`: a disabled button drops the keyboard focus it holds to the page. */}
             <Button
@@ -367,10 +396,8 @@ export function StatusBar({
             {/* One line is always reserved. The live region announces refresh results, and figures
                 that could not be updated: a caution, so neutral with a warning icon, not red (nothing
                 the reader did failed, and the figures stay).
-                The standing note about automatic updates sits outside it, so it is never read out as if
-                it were news. The note goes quiet while a run has failed: it promises a cadence that has
-                stopped — the fast lane stands down after a failure — whether or not the failed-query
-                alert is the one shown (`pageAlert`). The line stays, so nothing moves. */}
+                The standing note, the last SGC query, sits outside it: it changes every minute, and
+                would be read out each time as if it were news. The line stays, so nothing moves. */}
             <span
               aria-live="polite"
               className={
@@ -383,9 +410,7 @@ export function StatusBar({
               {live}
             </span>
             {live === "" ? (
-              <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">
-                {failed ? null : <ByWidth phone={t.autoUpdateShort(everyMin)} wide={t.autoUpdate(everyMin)} />}
-              </span>
+              <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">{lastQuery}</span>
             ) : null}
           </div>
         </CardContent>

@@ -243,7 +243,7 @@ those, so an untouched tab shows no chips on either side.
   The map's ring and its legend sentence (`mapRing`), the star, the marker on "Valor b en el
   tiempo", "Excluir sismo principal" and its chip all appear only while one is found; the caveats
   take the state as an argument (`caveats(state)`).
-  - **"Sismo principal" is the status bar's fourth stat, always shown** (`MainshockStat` in
+  - **"Sismo principal" is the status bar's last stat, always shown** (`MainshockStat` in
     `status-bar.tsx`): "M7.4 (Mw)" linked to SGC's page for it, with the day and the gap under it;
     "automático, en revisión" while it waits; "Ninguno claro · el mayor, solo 0.3 por encima del
     siguiente" for a swarm ("+0.3 sobre el 2.º" on a phone). Chosen over a notice that appears only when the copy is out of date, and
@@ -731,15 +731,17 @@ colour, motion). Keep to them:
     its own. The "~" marks hours and days only, which rounding moves by up to half a unit; whole
     minutes are exact enough to go without. A screen reader is given `relativeTime`'s long form
     instead (`Ago` in `status-bar.tsx`), since it reads "~" out as a word.
-- **A time that identifies one event is a link to SGC's own page for it** (`sgcEventUrl` in
-  `src/lib/format.ts`): the table's time column, and "Evento más reciente" in the status bar —
-  which is why `/api/status` carries `newestEventId` beside `newestEventTime`. Both keep the UTC
-  form on hover. A time that identifies no single event (the last SGC query) is not a link.
-- **The page says that it updates itself** (under the refresh button, in the footer):
-  readers were reloading it. The "15 minutes" in `autoUpdate` and `autoUpdateLong` is the
-  cron in `wrangler.jsonc`, and `refreshWait`'s is `REFRESH_MIN_INTERVAL_S`, which is the
-  same number for the reason given under the budget. `src/lib/i18n.test.ts` holds all three
-  to it; change them together.
+- **What identifies one event is a link to SGC's own page for it** (`sgcEventUrl` in
+  `src/lib/format.ts`): the table's time column, with the UTC form on hover; the mainshock's
+  magnitude; and the newest event's **place and magnitude** in the status bar, not its time (readers' request,
+  2026-09-28: where and how strong is what they look for). A time that identifies no single event
+  (the last SGC query) is not a link.
+- **The page says that it updates itself, in the footer** (`autoUpdateLong`): readers were
+  reloading it. It also said so under the refresh button until 2026-09-28, when the last SGC query
+  took that line (see the status bar below). The "15 minutes" in `autoUpdateLong` is the cron in
+  `wrangler.jsonc`, and `refreshWait`'s is `REFRESH_MIN_INTERVAL_S`, which is the same number for
+  the reason given under the budget. `src/lib/i18n.test.ts` holds both to it; change them
+  together.
 - **The failed-ingest alert names no interval at all, and that is the settled answer.** It
   named the cron's own rate, in the one state where the fast lane has stood down and the
   cron's rate is wrong. It was changed to the wide tick's rate instead, and within the hour
@@ -801,29 +803,82 @@ colour, motion). Keep to them:
   must be within the first screen. The b card's plain description ("Cuánto pesan los eventos
   grandes frente a los pequeños…") is a caption under the number, not the card's description: at
   375 × 812 the figure had 2 px to spare. With it there, the figure ends at 786.
-- **The status bar is a two-by-two grid on a phone and one wrapping row from `sm` up** (owner's
-  call, 2026-09-27). **Everything below is phone-only; from `sm` up the bar is exactly what it was
-  before** — the same labels, values, hints, notes and layout, pixel for pixel. PR #86 made the
-  phone's compact copy and note-beside-the-button layout apply at every width, and the owner had it
-  taken back off wider screens the same day. Each phone form is a `*Short` key in `i18n.tsx` beside
-  its wide one, and `ByWidth` in `status-bar.tsx` shows one or the other in CSS at `sm` (as the
-  scope bar does), so nothing swaps in after the first paint, and the hidden form is out of the
-  accessibility tree. Keep a change to one width from reaching the other.
-  - **On a phone** it used to be the same wrapping row, because equal halves broke "18 sept 2026,
-    17:08" across two lines below 480 px; that left "Última consulta al SGC" and "Sismo principal"
-    a line each, and the card 352 px tall at 390 px. The grid works because every **value** fits
-    half a phone: both times lead with how long ago, in `relativeTimeShort` ("hace ~2 h", "hace 7
-    min"), and give the clock time under it, with the day only when it was not today
-    (`fmtClock`); the labels are "Último evento" and "Consulta al SGC". A **hint** may wrap inside
-    its column (the mainshock's does, "el mayor, solo +0.3 sobre el 2.º"). The refresh note sits
-    beside the button rather than under it. 260 px tall at 390 px; at 320 px "Ninguno claro" takes
-    two lines, and nothing overflows. Units that must not part from their number take a no-break
-    space ("15\u00A0min", "el\u00A02.º").
+- **The status bar leads with the newest event's magnitude and place** (readers' request, owner's
+  pick of three variants tried on the real page, 2026-09-28; the prototype is on the branch
+  `prototype/status-bar-place`, never merged). "Evento más reciente" reads "Chaparral, Tolima
+  (M 2.5)", place first and all of it one link to SGC's page for the event, with how long ago and
+  the date under it.
+  Then "Eventos" and "Sismo principal". "Última consulta al SGC" is no longer a stat: it is the
+  line under the refresh button, which it concerns, in the place of "Se actualiza sola cada N
+  minutos" (the footer still says that): how long ago, and from `sm` up the clock time too.
+  - `/api/status` carries `newestEvent` (id, time, mag, region), read in the same indexed
+    one-row query as the id alone was. The status bar takes it from there rather than from the
+    catalogue, which can be a refetch behind the status poll.
+  - **The magnitude has no type** (owner's call, 2026-09-28): the line says how strong, not on which
+    scale. The code review asked for the type, since "M" is only 64 of the fixture's 1,435 events
+    and the rest are MLr_1, MLr_2 and MLv; "M2.5 (MLr_2) · Chaparral, Tolima" was built, and the
+    owner dropped it for the shorter line. The mainshock keeps its "(Mw)", and the b card is where
+    the types are compared. "(M 2.5)" is written with a no-break space and stays whole. The place is `fmtPlace`, SGC's "Chaparral - Tolima" as "Chaparral, Tolima"; the table, the chart and the
+    map keep `fmtRegion`'s form. SGC writes no accents ("Choco", "Bolivar") and the page does not
+    add them. The time under it keeps the UTC form on hover.
+  - **A long place is one line and an ellipsis, at every width** (owner's request, 2026-09-28).
+    `admitEvent` stores SGC's region as it comes, with no length limit, and the first version let it
+    wrap: tried on the page with four places (the longest real one, "El Litoral del San Juan
+    (Docordo), Choco"; "Providencia y Santa Catalina Islas, Archipielago de San Andres, Providencia y
+    Santa Catalina"; one 70-letter word; ~200 characters), a phone's card grew to 428 px against 260,
+    a long row pushed "Eventos" and "Sismo principal" under it at 1280 px, and the unbroken word
+    ran 817 px wide out of a 288 px card. Now the place is a `truncate` span that cuts at the
+    character, "(M 2.5)" is a separate span after it that never shrinks. How wide the place may be:
+    on a phone, the card's width; from `sm` to `lg`, where the row wraps, at most `max-w-xs`, the
+    room beside "Eventos" and the mainshock at 768 px; from `lg`, where the card is one row, whatever
+    the row leaves: the row stops wrapping, the other stats and the button block keep their width
+    (`shrink-0`), and the newest event alone shrinks, to no less than 160 px (`min-w-40`). A fixed cap
+    there was tried first: 320 px let a long place push the button block onto a second line in
+    Spanish at 1024 px, whose last-query note is longer than the old "Se actualiza sola…", and 240 px
+    cut "Bolivar, Valle del Cauca" with 100 px of the row empty. The full place stays the link's
+    accessible name, its `title` and SGC's own page. Also tried and dropped: two lines on a phone
+    (`line-clamp`), which cut at a word and left the magnitude floating up to a word's width away, in
+    a column of its own that pushed the real longest place into the cut at 320 px. One line also
+    means the card's height never depends on the next event's place. The underline breaks for
+    the space before "(M": the browser does not underline a flex item's leading space.
+  - **Declined in the code review** (2026-09-28): keeping `newestEventTime` and `newestEventId`
+    beside `newestEvent` for pages open across the deploy. Such a page shows "—" for the newest
+    event until it is reloaded, and nothing else breaks; the repo keeps no legacy shapes. Running
+    `status()`'s five D1 reads together rather than in turn is a fair follow-up, not this change.
+    **Declined in the interface review**: an sr-only "(ficha del SGC, abre otra pestaña)" on the
+    place link. The table's time and the mainshock's magnitude link to SGC the same way, and one
+    link out of three saying so would be the odd one; if it is wanted, it is a convention for all.
+  - **Why not the other two variants.** B set the magnitude as a headline figure beside the place;
+    it competed with the b-value's own large figure just below, and the b-value leads the page. C
+    listed the three newest events; on Tolima all three read "Chaparral, Tolima", and it cost 29 px
+    on a phone.
+  - **While a run has failed**, the note says "Última consulta correcta al SGC" ("Consulta
+    correcta" on a phone): its time is the last query that worked, and "Última consulta al SGC:
+    hace 2 horas" beside "La última consulta al SGC falló" read as a contradiction. The line stays
+    shown, unlike the old cadence note, which went quiet because it promised a cadence that had
+    stopped. It is outside the live region: it changes every minute and would be read out as news.
+- **The status bar is a grid on a phone and one wrapping row from `sm` up** (owner's call,
+  2026-09-27). Each phone form is a `*Short` key in `i18n.tsx` beside its wide one, and `ByWidth`
+  in `status-bar.tsx` shows one or the other in CSS at `sm` (as the scope bar does), so nothing
+  swaps in after the first paint, and the hidden form is out of the accessibility tree. PR #86 made
+  the phone's compact copy apply at every width, and the owner had it taken back off wider screens
+  the same day: keep a change meant for one width from reaching the other.
+  - **On a phone** the newest event spans both columns, since a place such as "El Litoral del San
+    Juan (Docordo), Choco" needs the width, and "Eventos" and "Sismo principal" share the row under
+    it. The time under the event leads with how long ago, in `relativeTimeShort` ("hace ~2 h"),
+    then the clock time, with the day only when it was not today (`fmtClock`). The last-query note
+    sits beside the button ("Consulta al SGC: hace 7 min"). A **hint** may wrap inside its column
+    (the mainshock's does, "el mayor, solo +0.3 sobre el 2.º"). Measured against `main` on
+    2026-09-28, 120 renders: both languages, both zones, the real place and the four long ones, at
+    320, 390, 640, 768, 1024 and 1280 px. The link never passes the card's edge, and the card is
+    never taller than on `main`; it is a row (88 px) shorter at 640 px on Tolima in English and at
+    768 px in Spanish, where the four stats used to wrap. Units that must not
+    part from their number take a no-break space ("el 2.º").
   - **From `sm` up** a stat is as wide as its own longest line, and one that no longer fits beside
     its neighbour takes the next line whole, so which stats share a line is a consequence of the
-    text. The newest event gives its full date with how long ago under it, the last query the other
-    way round. The refresh note sits under the button: at the start edge on its own line below `lg`,
-    and hugging the end edge beside the stats at `lg`.
+    text. The newest event gives how long ago, then the full date. The refresh note sits under the
+    button: at the start edge on its own line below `lg`, and hugging the end edge beside the stats
+    at `lg`.
 - **The filters card is three groups** (`filters.tsx`, owner's request, 2026-09-27): when (the two
   dates), which events (the smallest magnitude, "Solo revisados", "Excluir sismo principal"), and the
   Mc the b-value is fitted above, which selects no events. One column each from `lg`, dates and
@@ -1082,7 +1137,7 @@ colour, motion). Keep to them:
   nothing failed at all; `staleSince` counts a parked refetch too. On the monitor the line under the
   refresh button then says since when the figures are ("No se pudieron actualizar las cifras: son de
   las 12:35. Se actualizarán solas."; `fmtClock`, with the day only when it was not today), in the
-  slot of "Se actualiza sola cada N minutos", as a caution: neutral text with a warning icon, never
+  slot of what is now the last-query note (then "Se actualiza sola cada N minutos"), as a caution: neutral text with a warning icon, never
   red, inside the live region. It names no interval and no reload, and blames neither the connection
   nor the server any more than the load error does. **The time is when the figures were fetched, and
   the copy says only that**: a first version read "Sin conexión con el servidor desde las 08:00",

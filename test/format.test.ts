@@ -8,6 +8,7 @@ import {
   fmtDayRange,
   fmtIsoDay,
   fmtIsoDateTime,
+  fmtPlace,
   fmtRegion,
   fmtUtc,
   fmtYear,
@@ -57,6 +58,15 @@ describe("region names", () => {
     expect(fmtRegion("Sipi - Choco, Colombia")).toBe("Sipi - Choco");
     expect(fmtRegion("San Jose del Palmar - Choco,Colombia")).toBe("San Jose del Palmar - Choco");
     expect(fmtRegion("Colombia, Pacific Ocean")).toBe("Colombia, Pacific Ocean");
+  });
+
+  it("reads SGC's 'municipality - department' as a place, 'Chaparral, Tolima'", () => {
+    expect(fmtPlace("Chaparral - Tolima, Colombia")).toBe("Chaparral, Tolima");
+    expect(fmtPlace("El Litoral del San Juan (Docordo) - Choco, Colombia")).toBe(
+      "El Litoral del San Juan (Docordo), Choco",
+    );
+    expect(fmtPlace("Medio Baudo(Boca de Pepe) - Choco, Colombia")).toBe("Medio Baudo(Boca de Pepe), Choco");
+    expect(fmtPlace("Colombia, Pacific Ocean")).toBe("Colombia, Pacific Ocean");
   });
 });
 
