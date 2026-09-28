@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MapPreview } from "@/components/map-preview";
 import type { Dict } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n";
 
@@ -49,11 +49,13 @@ export function MapLegend() {
   );
 }
 
-/** What stands in for the map until it loads: the canvas's box, and the key it will have. */
+/** What stands in for the map until it loads: the canvas's box with a picture of its view, and the key it will have. */
 export function MapPlaceholder() {
   return (
     <div className="flex flex-col gap-3">
-      <Skeleton className="h-96 w-full" />
+      <div className="relative h-96 w-full overflow-hidden rounded-lg border">
+        <MapPreview lazy />
+      </div>
       <MapLegend />
     </div>
   );

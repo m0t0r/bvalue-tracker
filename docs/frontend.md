@@ -27,8 +27,10 @@ groups card and the b card take. `App.tsx` is layout.
   daily strips in the groups card — untouched. Checked in a browser: after four steps of the Mc
   slider the MapLibre canvas and the table's first row are the same DOM nodes.
 - The `page` vitest project runs on `happy-dom` with `@testing-library/react`, for that seam and
-  one other: `InfoTip`'s wiring to Radix (see the filters card, below). Everything else it holds is
-  a pure function; do not reach for a renderer where `pageView` will do.
+  two others: `InfoTip`'s wiring to Radix (see the filters card, below), and the map's hand-over
+  (`Deferred`'s margin, `MapPreview` and `EventMap` against a stand-in for MapLibre; see the card
+  bullet under Interface conventions).
+  Everything else it holds is a pure function; do not reach for a renderer where `pageView` will do.
 
 ## Events per day
 
@@ -1101,6 +1103,33 @@ colour, motion). Keep to them:
   too (`BTimeCsvButton`), with its key (`BTimeKey`, from 2026-09-28). Measured 2026-09-26 at 320,
   390, 768, 1024 and 1280 on both zones: the placeholder equals the loaded card, with CLS 0 while
   scrolling; before, the magnitude card grew from 410 px to as much as 610.
+  - **From `lg` the map waits until it is on screen, and shows a picture of itself until then**
+    (issue #72, owner's call, 2026-09-28). There it shares a row just under the fold, and `Deferred`
+    fetches it with a margin of 0 (every other card, and the map below `lg`, 600 px; [Performance](performance.md)
+    has why). So a reader who scrolls to it sees it arrive, and a grey box for the second that takes
+    would have been the page's biggest empty space. `MapPreview` is instead a soft picture of the
+    zone's opening view in the reader's theme, without the events, with a spinner ("Cargando el mapa…")
+    in the middle. It is the placeholder's drawing at every width, and a layer over the live map.
+  - **The picture leaves once MapLibre has drawn every tile, the relief and the events** (its first
+    `idle`): it fades out in 300 ms and leaves the page (at once under reduced motion), so the reader
+    never sees a blank or half-tiled canvas, nor the zoom buttons before they work. Until then the map
+    under it is `inert`: it takes no focus and no drag, which would move a view the reader cannot see
+    and hold `idle` back. It also leaves when the style fails to load, and after 10 s at most
+    (`MAP_WAIT_MS`, for a tile that never answers): the reader then gets what they had before the
+    picture, the map as it is, rather than a spinner for good. A new theme or language rebuilds the map,
+    and the picture comes back over it until the new one has drawn, however quickly the reader toggles
+    back. Over the live map the picture loads eagerly: it is on screen, and a lazy image waits a frame
+    for its intersection check, showing the grey under it. Only the placeholder's, which may be screens
+    away, is lazy. `event-map.test.ts` holds all of this against a stand-in for MapLibre; each case was
+    removed in turn and a test failed (code review, 2026-09-28).
+  - **The picture lands exactly under the map.** It is baked at the widest the map's box gets
+    (1024 × 384, one column just under `lg`) at half density, and drawn at that size centred, which
+    is how MapLibre crops its view to a narrower box; the towns and rivers stay put when the map
+    replaces it, and only the dots appear. Checked at 1350 px light on Tolima and 390 px dark on
+    Chocó. The bake and the live map draw from one module, `map-style.ts` (the view, the style, the
+    relief). How to bake it again is in [development](development.md#the-maps-placeholder-pictures);
+    redo it whenever `VIEW`, the basemap or the relief changes.
+    The dots are left out on purpose: the catalogue is live, and a baked picture of it would be stale.
 - **The status bar appears with the page, not before it** (2026-09-26). Until both `/api/status` and
   the catalogue have answered, it is one skeleton block with no stats. Its stats wrap by their own
   width, so each value landing re-wrapped the row: on a phone "Sismo principal"'s hint took it from

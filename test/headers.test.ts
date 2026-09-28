@@ -30,7 +30,10 @@ describe("public/_headers", () => {
     // A host missing here fails silently in production only: `pnpm dev` does not apply
     // _headers, and the map just draws without that layer.
     // Every URL the map fetches from; an attribution's `href` is a link, not a fetch.
-    const map = readFileSync(new URL("../src/components/event-map.tsx", import.meta.url), "utf8");
+    // The component and the style module it draws from (shared with the placeholder's bake).
+    const map = ["event-map.tsx", "map-style.ts"]
+      .map((f) => readFileSync(new URL(`../src/components/${f}`, import.meta.url), "utf8"))
+      .join("\n");
     const hosts = new Set([...map.matchAll(/(?<!href=")https:\/\/([a-z0-9.-]+)/g)].map((m) => m[1]!));
     expect([...hosts].sort()).toEqual(["tiles.mapterhorn.com", "tiles.openfreemap.org"]);
     // MapLibre fetches its style, tiles and sprites, so connect-src is the directive that must allow them.

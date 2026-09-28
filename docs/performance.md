@@ -129,7 +129,8 @@ practices stayed at 100.
     phone 9.55 → 8.94 s, 9.71 → 9.07 s, 9.32 → 8.69 s (TBT 157 → 146, 212 → 210, 157 → 176 ms: the 3D
     scene now builds inside the measured window); on a desktop 425 → 124 ms, 497 → 200 ms, 495 → 167 ms.
   - What was left was issues #69 (static header, done 2026-09-28, above), #70 (the story's render cost: 1,261 SVG paths in one
-    group), #71 (a validator for `/api/events`) and #72 (the map at first paint on desktop `/`).
+    group), #71 (a validator for `/api/events`) and #72 (the map at first paint on desktop `/`, done
+    2026-09-28: the bullet on the map's relief below).
 - **Nothing is drawn under the loading skeleton** (`settled` in `App.tsx`). The skeleton is a
   viewport tall so that nothing below it is on screen when the dashboard replaces it. A failed
   load replaces it with a short alert instead, and whatever sat underneath was pulled up into
@@ -230,7 +231,39 @@ practices stayed at 100.
   has no groups card, so its map row is within `Deferred`'s 600 px at 1350 × 940, and MapLibre, the
   tiles and the relief (~1.5 MB) load at first paint. It does not delay the paint in a browser, but
   Lighthouse's default simulated mode counts it against LCP: desktop `/` scores 86 there, `/choco`
-  93. Whether to keep it is issue #72.
+  93.
+  - **Since issue #72 (2026-09-28), from `lg` the map is fetched only once it is on screen**
+    (`margin="0px"` on its `Deferred` from 64rem; below that it keeps the 600 px), and its placeholder
+    is a 5–13 kB picture of the view it opens on (see [the page](frontend.md#interface-conventions)). The map's top is at 1117 px on `/` at
+    1350 × 940, 177 px under the fold; on `/choco` at 1604. Measured against a build of `main`,
+    `pnpm preview`, same data, runs interleaved, medians, `/` at 1350 × 940 unless said:
+
+    | Setting (runs each) | LCP | TBT | Score | Speed Index |
+    |---|---|---|---|---|
+    | Desktop preset, devtools throttling (5) | 99 → 106 ms | 56 → 35 ms | 100 → 100 | 241 → 243 ms |
+    | Same, CPU ×4 (5) | 256 → 256 ms | 462 → 356 ms | 80 → 85 | 578 → 532 ms |
+    | Phone, devtools throttling (3) | 5.35 → 5.36 s | 220 → 239 ms | 60 → 59 | 7.19 → 7.22 s |
+
+    The desktop page downloads 1602 kB before any scrolling instead of 3157. At CPU ×4 the five runs
+    scored 83–85, against 78–82 on `main`. A phone is unchanged within noise: it gets the picture (13.8 kB, at
+    8.3 s, long after the paint) and 1.1 kB more in the first chunk. It keeps the 600 px margin: those
+    phone runs had a margin of 0 at every width, which Lighthouse cannot see, since it never scrolls.
+    The code review saw it: five screens down, the map would have started loading only when the reader
+    reached it, over a mobile connection, where 600 px of scrolling had given it a head start before. An earlier A/B without the picture (a plain skeleton, same margin) gave similar
+    desktop figures (CPU ×4: TBT 578 → 396 ms, score 77 → 83), and at 1.6 Mbps / 150 ms (devtools
+    throttling, 5 runs) the same first paint (5.45 s both), Speed Index 6.88 → 6.52 s. Scrolled to on a fast connection, the map took ~0.55–0.6 s
+    to finish its tiles, the time the picture now covers.
+  - **The 86 above no longer reproduces.** Default simulated mode scored desktop `/` 95 on `main`
+    with the map loading at first paint, and 95 without it (simulated LCP 1.31 s both, 3 runs each),
+    after the perf review's preloads. It is the CPU ×4 runs, not the default ones, that tell the two
+    builds apart: MapLibre's start-up work (~220 ms of script at ×4 in a DevTools trace, in tasks
+    under 50 ms each) lands in the load window.
+  - **Check which build a port serves before trusting an A/B.** The first run of this one compared
+    `main` with `main`: the variant's `pnpm preview --strictPort` had failed on a port another
+    session's preview held, and every request went to that one. Compare the `index-*.js` the page
+    names with the one in `dist/client/assets/`. And a rebuild under a running `pnpm preview` is
+    not served: it keeps the asset list it started with, and the new bundle answers 404 (a blank page
+    with no error in the console). Restart it after every build.
 - The console must stay empty. The basemap style names sprite images OpenFreeMap does not
   ship (`circle-11`), which MapLibre warns about twice per load, so `event-map.tsx` answers
   `styleimagemissing` with an empty pixel. Real map errors still reach `console.error`.

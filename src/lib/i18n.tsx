@@ -300,6 +300,8 @@ const es = {
   statusManual: "manual",
   statusAutomatic: "automático",
   scrollHint: "Desliza la tabla para ver más columnas",
+  /** The map placeholder's spinner, while the map loads over its picture. */
+  mapLoading: "Cargando el mapa…",
   zoomIn: "Acercar",
   zoomOut: "Alejar",
   toggleAttribution: "Mostrar u ocultar la atribución",
@@ -570,6 +572,7 @@ const en: Dict = {
   statusManual: "manual",
   statusAutomatic: "automatic",
   scrollHint: "Swipe the table to see more columns",
+  mapLoading: "Loading the map…",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   toggleAttribution: "Toggle attribution",

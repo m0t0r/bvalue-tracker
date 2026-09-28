@@ -8,37 +8,20 @@ import {
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEPTH_STOPS, MapLegend, mapDescription } from "@/components/map-legend";
+import { MapPreview } from "@/components/map-preview";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
 import { fmtDateTime, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useIsDark } from "@/lib/theme";
 import { useZone } from "@/lib/zone";
-import type { ZoneId } from "../../core/zones";
+import { VIEW, addRelief, quietMissingImages, styleUrl } from "./map-style";
 
 // MapLibre 6 ships its worker as a separate module that imports a shared chunk,
 // so it must go through the bundler (`?worker&url`), not be copied as a plain asset.
 setWorkerUrl(workerUrl);
-
-/**
- * Relief shading per theme, hex for the same reason. On the dark basemap a shadow has nothing
- * darker to fall to, so the highlight carries the relief.
- */
-const RELIEF_COLOURS = {
-  light: { shadow: "#5c5c58", highlight: "#ffffff" },
-  dark: { shadow: "#000000", highlight: "#5a5a56" },
-};
-
-/**
- * Where each zone's map opens. Chocó's two groups sit ~50 km apart and need the wider view;
- * Chaparral's swarm fits in ~20 km, and at Chocó's zoom it would be one blot.
- */
-const VIEW: Record<ZoneId, { center: [number, number]; zoom: number }> = {
-  choco: { center: [-76.6, 4.75], zoom: 7.6 },
-  tolima: { center: [-75.63, 3.85], zoom: 10 },
-};
 
 /** OpenFreeMap's attribution as its TileJSON gives it, with "Data from" in the page's language. */
 const openFreeMapCredit = (dataFrom: string) =>
@@ -52,6 +35,9 @@ const toGeoJson = (events: readonly StoredEvent[], mainshockId: string | null) =
     properties: { id: e.id, mag: e.mag, depth: e.depthKm, time: e.time, region: e.region, main: e.id === mainshockId },
   })),
 });
+
+/** How long the picture may cover a map that has not finished drawing. */
+const MAP_WAIT_MS = 10_000;
 
 /** `mainshockId` is the zone's detected mainshock (`core/mainshock.ts`), drawn with a ring; null draws none. */
 export default function EventMap({
@@ -68,8 +54,15 @@ export default function EventMap({
   const map = useRef<MapLibreMap | null>(null);
   const latest = useRef({ events, mainshockId });
   latest.current = { events, mainshockId };
+  // The placeholder's picture stays over the canvas until MapLibre has drawn its first full frame,
+  // and comes back while a new theme or language rebuilds the map. `drawn` names the build that has
+  // drawn, and is cleared when a map is torn down, so returning to an earlier theme or language
+  // before the new map has drawn does not find it already marked.
+  const build = `${dark ? "dark" : "light"}-${lang}`;
+  const [drawn, setDrawn] = useState<string | null>(null);
+  const ready = drawn === build;
 
-  // Rebuilt when the theme changes (basemap + outline colours); the parent re-keys it on language change.
+  // Rebuilt when the theme or the language changes (basemap, outline colours, the controls' names).
   useEffect(() => {
     const ring = getComputedStyle(document.documentElement).getPropertyValue("--chart-2").trim();
     const m = new MapLibreMap({
@@ -87,18 +80,13 @@ export default function EventMap({
         "CooperativeGesturesHandler.MobileHelpText": t.gestureMobile,
       },
     });
-    // OpenFreeMap's styles name sprite images their sprite sheet does not carry (circle-11),
-    // and MapLibre warns for each one, twice per load. Nothing of ours is missing, so hand it
-    // an empty pixel and keep the console readable for real errors.
-    m.on("styleimagemissing", (e) => {
-      if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
-    });
+    quietMissingImages(m);
     // OpenFreeMap credits OpenStreetMap as "Data from …" in English whatever the page's language. The
     // credit comes from the tiles' TileJSON, which the style only points at, so it cannot be edited
     // on the way in; an attribution written into the style's source wins over the TileJSON's
     // (MapLibre's `loadTileJson`). This is OpenFreeMap's own credit, links and all, with that one
     // phrase in the page's language.
-    m.setStyle(`https://tiles.openfreemap.org/styles/${dark ? "dark" : "positron"}`, {
+    m.setStyle(styleUrl(dark), {
       transformStyle: (_, next) => {
         const tiles = next.sources.openmaptiles;
         if (!tiles || tiles.type !== "vector") return next;
@@ -112,43 +100,18 @@ export default function EventMap({
     const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 10 });
     let shownId: string | null = null;
 
-    m.on("error", (e) => console.error("map:", e.error?.message ?? e));
+    // The picture leaves on the map's first full frame (`idle`, below), or sooner if that will not
+    // come: a style that failed to load never fires `load`, and a tile that never answers holds
+    // `idle` back. The reader then gets what they had before the picture existed, the map as it is.
+    const reveal = () => setDrawn(build);
+    const giveUp = setTimeout(reveal, MAP_WAIT_MS);
+    m.on("error", (e) => {
+      console.error("map:", e.error?.message ?? e);
+      if (!m.isStyleLoaded()) reveal();
+    });
 
     m.on("load", () => {
-      // Relief from Mapterhorn: terrarium-encoded 512 px WebP. Colombia's data ends at z12 (z13
-      // answers 404, checked 2026-09-24), so MapLibre overzooms past it. Declared 1024, so MapLibre
-      // fetches one zoom coarser and stretches them: a quarter of the tiles for a soft background
-      // that looked the same (the weights are in docs/performance.md).
-      m.addSource("relief", {
-        type: "raster-dem",
-        tiles: ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"],
-        tileSize: 1024,
-        encoding: "terrarium",
-        maxzoom: 12,
-        attribution: '<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a>',
-      });
-      // Over the basemap's land fills (wood, towns, parks, ice), which would otherwise wash it out
-      // from z10, and under its first line, so every road, border and label stays on top. Then
-      // the water goes back over it, so the sea hides the sea floor's relief. Both OpenFreeMap
-      // styles draw all their fills first; a style that lost `water` fails loudly in `error`.
-      const colours = RELIEF_COLOURS[dark ? "dark" : "light"];
-      const firstLine = m.getStyle().layers.find((l) => l.type !== "background" && l.type !== "fill")?.id;
-      m.addLayer(
-        {
-          id: "relief",
-          type: "hillshade",
-          source: "relief",
-          paint: {
-            // Chaparral's map opens at z10, where the same strength turned busy behind the swarm.
-            "hillshade-exaggeration": ["interpolate", ["linear"], ["zoom"], 7, 0.35, 11, 0.22],
-            "hillshade-shadow-color": colours.shadow,
-            "hillshade-highlight-color": colours.highlight,
-            "hillshade-accent-color": colours.shadow,
-          },
-        },
-        firstLine,
-      );
-      m.moveLayer("water", firstLine);
+      addRelief(m, dark);
       m.addSource("events", { type: "geojson", data: toGeoJson(latest.current.events, latest.current.mainshockId) });
       m.addLayer({
         id: "events",
@@ -192,13 +155,17 @@ export default function EventMap({
         m.getCanvas().style.cursor = "";
         popup.remove();
       });
+      // Every tile, the relief and the events drawn: the picture over the canvas can go.
+      m.once("idle", reveal);
     });
     map.current = m;
     return () => {
+      clearTimeout(giveUp);
       m.remove();
       map.current = null;
+      setDrawn(null);
     };
-  }, [dark, t, lang, zone]);
+  }, [build, dark, t, lang, zone]);
 
   useEffect(() => {
     const src = map.current?.getSource("events") as GeoJSONSource | undefined;
@@ -213,10 +180,11 @@ export default function EventMap({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* The canvas is a keyboard stop (arrows pan, +/- zoom); its own outline is clipped, so the frame shows focus. */}
-        <div
-          ref={el}
-          className="h-96 w-full overflow-hidden rounded-lg border has-[canvas:focus-visible]:outline-2 has-[canvas:focus-visible]:outline-offset-2 has-[canvas:focus-visible]:outline-ring"
-        />
+        <div className="relative h-96 w-full overflow-hidden rounded-lg border has-[canvas:focus-visible]:outline-2 has-[canvas:focus-visible]:outline-offset-2 has-[canvas:focus-visible]:outline-ring">
+          {/* Inert under the picture: a map the reader cannot see must not take focus or a drag. */}
+          <div ref={el} inert={!ready} className="size-full" />
+          <MapPreview key={build} ready={ready} />
+        </div>
         {/* Shared with the placeholder (`MapPlaceholder`), so the card keeps its height when the map lands. */}
         <MapLegend />
       </CardContent>

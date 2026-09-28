@@ -92,6 +92,21 @@ refuses to run if it does not. `test/relief.test.ts` holds the committed file to
   y up; `?cam=-30,45,120,-170,0,10` is low over the open sea). `agent-browser`'s mouse wheel does not
   reach the canvas, so this is how to get a close-up.
 
+## The map's placeholder pictures
+
+`src/components/map-preview/{choco,tolima}-{light,dark}.webp` are the monitor map's placeholder: each
+zone's opening view, without the events (see [the page](frontend.md#interface-conventions)). Redo them
+when `VIEW`, the basemap style or the relief changes (all three in `map-style.ts`, which the live map
+draws from too):
+
+1. `pnpm dev --port <p>`, then open
+   `/src/components/bake-map-preview.html?zone=choco&theme=light` in `agent-browser` (any viewport over
+   1024 × 384). It reads OpenFreeMap and Mapterhorn directly, in dev only, and calls no API.
+2. Wait until `get title` is `ready`, then write `window.baked` (a WebP data URL, quality 0.7) to
+   `src/components/map-preview/choco-light.webp`; `eval 'window.baked'` prints it as a JSON string, and
+   the part after the comma is base64. The same for each zone and theme.
+3. Look at each before committing: 512 × 192, 5–13 kB, no dots.
+
 ## Tooling gotchas
 
 - **`packages/seismo` is a pnpm workspace package consumed as TypeScript source** (`exports` points
