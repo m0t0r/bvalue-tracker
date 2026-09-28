@@ -107,6 +107,17 @@ Dead ends, do not retry:
   and a two-minute window around that MLv 4.9 (2026-09-14 20:01–20:03 UTC), both with that
   parameter; both answered 404, the FDSN code for "no data". The catalogue page shows one magnitude
   per event and the form has no other. The remaining route is asking SGC by email.
+- **The per-event QuakeML has one magnitude too** (2026-09-28). The event page's "Descargas" tab
+  (`www.sgc.gov.co/detallesismo/<id>/descargas`) offers files from
+  `archive.sgc.gov.co/events/<id>/`, such as `<id>.kml` and `<id>.xml`. The repo owner downloaded
+  `SGC2026tcthzl.xml`, a 3 kB SeisComP export. It holds the preferred origin and the preferred
+  magnitude only, unrounded (4.1036 where the catalogue shows 4.1). It has no other magnitude
+  types, station magnitudes, amplitudes or picks, so it cannot measure the MLv–MLr_1 offset
+  either. The `org.gfz-potsdam.de/geofon` in its IDs is SeisComP's default prefix, not GEOFON data.
+  Both hosts answer 403 to the agent's fetch and to headless agent-browser: CloudFront on the page,
+  S3 `AccessDenied` on the archive. Do not fetch one file per event: that is ~800 requests for a
+  rounding digit. For the email, the useful request is a SeisComP XML export of the Chocó events
+  with amplitudes and station magnitudes, or every network magnitude per event.
 - `node-html-parser` (and DOM builders in general) **do not finish** on this page:
   it never closes its `<center>` tags, so the tree nests ~1,500 deep. `htmlparser2`
   in streaming mode parses the same 0.8 MB in ~25 ms. Keep it.
