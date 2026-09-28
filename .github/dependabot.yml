@@ -16,7 +16,7 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # @cloudflare/vitest-pool-workers does not support vitest 5 (docs/development.md).
+      # @cloudflare/vitest-plugin does not support vitest 5 yet (docs/development.md).
       - dependency-name: vitest
         update-types: [version-update:semver-major]
       # Follows the Node LTS that CI and engines.node run, not the newest Node.
