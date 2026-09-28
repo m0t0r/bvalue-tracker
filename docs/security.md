@@ -68,7 +68,12 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   `tiles.mapterhorn.com` in `connect-src` only: MapLibre fetches elevation tiles and decodes
   them with `createImageBitmap` (or, where that is missing, through a `blob:` URL, which
   `img-src` already allows), never from the host through an `<img>`.
-  Re-check the map and the chart axis labels if you touch it. `test/headers.test.ts` fails
+  Re-check the map and the chart axis labels if you touch it.
+  **There is no inline script, and none is allowed** (no `'unsafe-inline'`, hash or nonce in
+  `script-src`). The head script that sets the page's language and theme before the first paint
+  (`src/boot.ts`, 2026-09-28) is a same-origin file under `/assets/`, which `'self'` already covers.
+  The static header written into each zone's HTML is React's own render of the header at build time,
+  from the page's fixed strings, with nothing from the catalogue or the request in it. `test/headers.test.ts` fails
   if `event-map.tsx` names a tile host the CSP does not allow: `pnpm dev` ignores
   `_headers`, so a missing host would only show in production, as a map without that layer.
   The 3D tab (`src/insights/block3d`) needs nothing more: WebGL is not a CSP directive, and its map

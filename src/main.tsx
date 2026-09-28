@@ -5,10 +5,10 @@ import { App } from "@/App";
 import { shouldRetry } from "@/lib/api";
 import { I18nProvider } from "@/lib/i18n";
 import { installErrorReporting } from "@/lib/report-error";
-import { initTheme } from "@/lib/theme";
+import { followSystemTheme } from "@/lib/theme";
 import "./index.css";
 
-initTheme();
+followSystemTheme();
 // Before the first render, so a crash while mounting is reported too.
 installErrorReporting();
 

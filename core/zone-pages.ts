@@ -89,3 +89,20 @@ export function withZoneMeta(html: string, zone: ZoneId): string {
   swap(metaTag("property", "og:url"), "og:url", (current) => new URL(ZONE_PATHS[zone], current).href);
   return out;
 }
+
+/**
+ * The static header's slot inside `#root` in index.html. What is between the two comments is the
+ * build's, and is replaced whole, so a page already filled for one zone can be filled for another.
+ */
+const SHELL_SLOT = /(<!--static-shell-->)[\s\S]*?(<!--\/static-shell-->)/g;
+
+/**
+ * `html` with `markup` in the static header's slot (`src/static-shell.tsx` draws it). The slot must be
+ * there exactly once: a page built without its header would still work, only slower, and nothing
+ * else would notice.
+ */
+export function withStaticShell(html: string, markup: string): string {
+  const found = [...html.matchAll(SHELL_SLOT)].length;
+  if (found !== 1) throw new Error(`index.html: expected one static-shell slot, found ${found}`);
+  return html.replace(SHELL_SLOT, (_m, open: string, close: string) => open + markup + close);
+}

@@ -31,7 +31,9 @@
     <meta name="twitter:card" content="summary" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The build draws the header into the slot below, in both languages, so a phone paints it
+         before the bundle has run; React replaces it with the same header (src/static-shell.tsx). -->
+    <div id="root"><!--static-shell--><!--/static-shell--></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

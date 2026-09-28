@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { SHARE_META } from "../../core/zone-pages.ts";
 import { ZONE_IDS } from "../../core/zones.ts";
 import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
-import { browserLang, dicts, type Lang } from "./i18n.tsx";
+import { dicts, type Lang } from "./i18n.tsx";
+import { browserLang } from "./startup.ts";
 
 /** The cron in wrangler.jsonc, in minutes. Chocó is asked on every tick, and the page quotes it. */
 const CRON_EVERY_MIN = 15;

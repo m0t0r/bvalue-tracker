@@ -1,6 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { HOME_ZONE, SHARE_META, ZONE_PATHS, withZoneMeta, zonePageFile, zonePath } from "../core/zone-pages.ts";
+import {
+  HOME_ZONE,
+  SHARE_META,
+  ZONE_PATHS,
+  withStaticShell,
+  withZoneMeta,
+  zonePageFile,
+  zonePath,
+} from "../core/zone-pages.ts";
 import { ZONE_IDS } from "../core/zones.ts";
 import { CADENCE } from "../worker/plan.ts";
 
@@ -63,6 +71,20 @@ describe("each zone's page", () => {
 
   it("escapes the copy it writes into attributes", () => {
     expect(withZoneMeta(INDEX, "choco")).not.toMatch(/content="[^"]*<[^"]*"/);
+  });
+
+  it("fills the static header's slot inside #root, and fills it again for another zone", () => {
+    const tolima = withStaticShell(INDEX, "<header>Tolima</header>");
+    expect(tolima).toContain('<div id="root"><!--static-shell--><header>Tolima</header><!--/static-shell--></div>');
+    const choco = withStaticShell(tolima, "<header>Chocó</header>");
+    expect(choco).toContain("<!--static-shell--><header>Chocó</header><!--/static-shell-->");
+    expect(choco).not.toContain("Tolima</header>");
+  });
+
+  it("refuses a template that has lost the header's slot", () => {
+    expect(() => withStaticShell(INDEX.replace("<!--static-shell-->", ""), "<header></header>")).toThrow(
+      /static-shell/,
+    );
   });
 
   it("names a file the asset layer serves at the zone's path", () => {

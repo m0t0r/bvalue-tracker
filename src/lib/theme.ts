@@ -1,23 +1,16 @@
 import { useSyncExternalStore } from "react";
+import { DARK_QUERY, THEME_KEY, startTheme, storedTheme } from "@/lib/startup";
 
 /**
  * Theme follows the operating system unless the visitor picks one. Picking the
  * theme the system already uses clears the override, so auto-switching resumes.
+ * The theme the page opens in is set before the first paint by the head script
+ * (`src/lib/startup.ts`); this module only changes it afterwards.
  */
-const STORAGE_KEY = "sgc-swarm:theme";
-const system = window.matchMedia("(prefers-color-scheme: dark)");
+const system = window.matchMedia(DARK_QUERY);
 const listeners = new Set<() => void>();
 
-function stored(): "light" | "dark" | null {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    return v === "light" || v === "dark" ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-const isDark = () => (stored() ?? (system.matches ? "dark" : "light")) === "dark";
+const isDark = () => startTheme(storedTheme(), system.matches) === "dark";
 
 function apply() {
   // Every control carries colour transitions; firing them all at once on a theme flip smears.
@@ -30,16 +23,21 @@ function apply() {
   for (const l of listeners) l();
 }
 
-export function initTheme() {
-  document.documentElement.classList.toggle("dark", isDark());
+/** Follows a change of the system's theme while the page is open, unless the visitor chose one. */
+export function followSystemTheme() {
   system.addEventListener("change", apply);
 }
 
+/**
+ * Switches away from the theme on screen. Read from the page, not decided again: if the head script
+ * never ran, the page is light whatever the system says, and deciding here would make the first press
+ * store the theme already showing and change nothing.
+ */
 export function toggleTheme() {
-  const next = isDark() ? "light" : "dark";
+  const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
   try {
-    if (next === (system.matches ? "dark" : "light")) localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, next);
+    if (next === (system.matches ? "dark" : "light")) localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, next);
   } catch {
     /* private mode: the choice lasts for this visit only */
   }

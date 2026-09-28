@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { LANG_KEY, browserLang, navigatorLanguages, storedLang, type Lang } from "@/lib/startup";
 
 /** Said the same way about both zones. */
 const esCommon = {
@@ -586,33 +587,18 @@ const en: Dict = {
   timeNote: "Dates and times are Colombia time (UTC−5). Downloaded CSVs use UTC.",
 };
 
-export type Lang = "es" | "en";
 /** Exported for the tests, which assert on strings without mounting the page. */
 export const dicts: Record<Lang, Dict> = { es, en };
-const STORAGE_KEY = "sgc-swarm:lang";
+export type { Lang };
+
+const preferred = () => browserLang(navigatorLanguages(navigator));
 
 /**
- * The browser's first preferred language the page has, by its primary subtag ("es-CO" is Spanish),
- * or English when it has none of them. Exported for the tests.
+ * The language the head script opened the page in (`src/lib/startup.ts`), read back from `<html>`,
+ * so the page is drawn in the language the static header already showed. It is decided there alone;
+ * if that script never ran, the HTML's own `lang="es"` stands, and the static header is Spanish too.
  */
-export function browserLang(languages: readonly string[]): Lang {
-  for (const tag of languages) {
-    const primary = tag.toLowerCase().split("-")[0];
-    if (primary === "es" || primary === "en") return primary;
-  }
-  return "en";
-}
-
-const preferred = () => browserLang(navigator.languages?.length ? navigator.languages : [navigator.language ?? ""]);
-
-function stored(): Lang | null {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    return v === "es" || v === "en" ? v : null;
-  } catch {
-    return null;
-  }
-}
+const openedIn = (): Lang => (document.documentElement.lang === "en" ? "en" : "es");
 
 const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({
   lang: "en",
@@ -626,7 +612,7 @@ const Ctx = createContext<{ lang: Lang; t: Dict; setLang: (l: Lang) => void }>({
  * followed again.
  */
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(() => stored() ?? preferred());
+  const [lang, setLangState] = useState<Lang>(openedIn);
   // Also on first load, so the page is announced in the language it is drawn in. The document's
   // title names the zone, so the page sets that itself.
   useEffect(() => {
@@ -634,7 +620,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [lang]);
   useEffect(() => {
     const follow = () => {
-      if (stored() === null) setLangState(preferred());
+      if (storedLang() === null) setLangState(preferred());
     };
     window.addEventListener("languagechange", follow);
     return () => window.removeEventListener("languagechange", follow);
@@ -643,14 +629,20 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const setLang = (l: Lang) => {
       setLangState(l);
       try {
-        if (l === preferred()) localStorage.removeItem(STORAGE_KEY);
-        else localStorage.setItem(STORAGE_KEY, l);
+        if (l === preferred()) localStorage.removeItem(LANG_KEY);
+        else localStorage.setItem(LANG_KEY, l);
       } catch {
         /* private mode: keep the choice for this visit only */
       }
     };
     return { lang, t: dicts[lang], setLang };
   }, [lang]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** One language and no way to change it: the build draws the static header in each (`src/static-shell.tsx`). */
+export function FixedLang({ lang, children }: { lang: Lang; children: ReactNode }) {
+  const value = useMemo(() => ({ lang, t: dicts[lang], setLang: () => {} }), [lang]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
