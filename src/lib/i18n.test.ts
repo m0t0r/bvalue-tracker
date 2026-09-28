@@ -17,8 +17,7 @@ const each = langs.flatMap((lang) => ZONE_IDS.map((zone) => [lang, zone] as cons
  * was changed to fifteen, and then SGC started refusing us and the probe dropped to an
  * hour, so fifteen was wrong too. A cadence the reader cannot act on is not worth a number
  * that has to be kept in step with three lane rules: the alert says it retries by itself
- * and stops there. `autoUpdate`, under the button, is the ordinary cadence and keeps its
- * five — it is hidden while anything has failed.
+ * and stops there. The ordinary cadence is stated once, in the footer (`autoUpdateLong`).
  */
 describe("the failed-ingest alert", () => {
   it.each(langs)("promises a retry without naming an interval, in %s", (lang) => {
@@ -30,21 +29,25 @@ describe("the failed-ingest alert", () => {
   });
 });
 
-describe("the standing note under the refresh button", () => {
+/**
+ * The note under the refresh button gives the last query that worked. Beside "La última consulta al
+ * SGC falló" it must say so, or the two lines read as a contradiction.
+ */
+describe("the last-query note while a run has failed", () => {
+  it.each(langs)("says the query it dates was the one that worked, at both widths, in %s", (lang) => {
+    for (const label of [dicts[lang].lastUpdateOk, dicts[lang].lastUpdateOkShort])
+      expect(label).toMatch(/correcta|successful|good/i);
+  });
+});
+
+describe("the update interval in the footer", () => {
   // The interval is the Worker's, read from worker/plan.ts, never written into the copy.
   it("quotes the cron's own interval for Chaparral, and the wide tick's for Chocó", () => {
     expect(updateEveryMin("tolima")).toBe(CRON_EVERY_MIN);
     expect(updateEveryMin("choco")).toBe(30);
   });
 
-  // The phone's short form beside the button is the same claim, and is held to the same number.
   it.each(each)("names the zone's interval, in %s for %s", (lang, zone) => {
-    for (const note of [dicts[lang].autoUpdate, dicts[lang].autoUpdateShort])
-      expect(note(updateEveryMin(zone))).toMatch(new RegExp(`\\b${updateEveryMin(zone)}\\smin`));
-  });
-
-  // The long form in the footer says the same thing at length, and drifted from it once.
-  it.each(each)("says the same interval in the footer, in %s for %s", (lang, zone) => {
     expect(dicts[lang].autoUpdateLong(updateEveryMin(zone))).toMatch(new RegExp(`\\b${updateEveryMin(zone)} min`));
   });
 });

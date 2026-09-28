@@ -197,7 +197,7 @@ All JSON, all reads from D1 only. Exclude `removed_at IS NOT NULL` rows by defau
 |---|---|
 | `GET /api/events?from&to&minMag&status&includeRemoved` | Event array, ascending by time. The whole set is small; no pagination needed below ~20k rows. |
 | `GET /api/stats?from&to&mc&status&excludeMainshock` | `{ count, fmd, mcMaxc, mcGft, b: {maxc, gft, given}, windows }` computed with `src/gr.ts`. |
-| `GET /api/status` | Last ingest run, last successful run, newest event time, total events. |
+| `GET /api/status` | Last ingest run, last successful run, newest event (time, magnitude, place), total events. |
 | `POST /api/refresh` | Rate-limited ingest (§5.6), then the same body as `/api/status`. |
 | `GET /api/events.csv` | Same filters as `/api/events`, via `toCsv`. |
 

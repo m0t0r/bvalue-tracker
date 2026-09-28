@@ -38,6 +38,12 @@ export const sgcEventUrl = (id: string) => `https://www.sgc.gov.co/detallesismo/
 /** SGC ends every region with ", Colombia", which is a given on this page. */
 export const fmtRegion = (region: string) => region.replace(/,\s*Colombia$/, "");
 
+/**
+ * The region as a place in a sentence or a headline: SGC's "Chaparral - Tolima" (municipality -
+ * department) as "Chaparral, Tolima". The table and the chart keep `fmtRegion`'s form.
+ */
+export const fmtPlace = (region: string) => fmtRegion(region).replace(/\s+-\s+/, ", ");
+
 /** "18 sept 2026, 17:43", Colombian time. Unlabelled: the footer says so once for the whole page. */
 export const fmtDateTime = (at: string | number, lang: Lang) => DATE_TIME[lang].format(new Date(at));
 /** "18 sept 2026" */

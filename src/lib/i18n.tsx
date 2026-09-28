@@ -91,15 +91,15 @@ const es = {
   events: "Eventos",
   newestEvent: "Evento más reciente",
   lastUpdate: "Última consulta al SGC",
-  /** The status bar's labels on a phone, where each stat has half the width (`*Short` below `sm`). */
-  newestEventShort: "Último evento",
+  /** The last-query note beside the refresh button on a phone (`*Short` below `sm`). */
   lastUpdateShort: "Consulta al SGC",
+  /** The same note while the last run has failed: the time is the last query that worked. */
+  lastUpdateOk: "Última consulta correcta al SGC",
+  lastUpdateOkShort: "Consulta correcta",
   never: "nunca",
   refresh: "Actualizar ahora",
-  autoUpdate: (min: number) => `Se actualiza sola cada ${min} minutos`,
-  autoUpdateShort: (min: number) => `Se actualiza sola cada ${min}\u00A0min`,
   /**
-   * Replaces `autoUpdate` while a refetch over data on screen has failed or waits offline
+   * Replaces the last-query note under the refresh button while a refetch over data on screen has failed or waits offline
    * (`staleSince`). It dates the figures, which is all the page knows: the time is when they were
    * fetched, not when anything was lost (a status poll may still be answering), and `day` is set only
    * when that was not today. It blames neither the connection nor the server. No interval and no
@@ -386,12 +386,11 @@ const en: Dict = {
   events: "Events",
   newestEvent: "Newest event",
   lastUpdate: "Last SGC query",
-  newestEventShort: "Latest event",
   lastUpdateShort: "Last SGC query",
+  lastUpdateOk: "Last successful SGC query",
+  lastUpdateOkShort: "Last good query",
   never: "never",
   refresh: "Refresh now",
-  autoUpdate: (min) => `Updates itself every ${min} minutes`,
-  autoUpdateShort: (min) => `Updates itself every ${min}\u00A0min`,
   staleSince: (time, day) =>
     `The figures could not be updated: they are from ${time}${day === null ? "" : ` on ${day}`}. They will update by themselves.`,
   loading: "Loading…",

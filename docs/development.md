@@ -242,9 +242,12 @@ draws from too):
     `refreshPlan` measures it from the newest run's `started_at`, the claim in `ingest()` from any
     run's `finished_at`. Setting `finished_at` to now (the old advice here) holds for fifteen
     minutes and then lets a focus refresh through to SGC. For a session, put both columns of each
-    zone's newest row a month ahead (`started_at` a second before `finished_at`). The status bar
-    then reads "Última consulta al SGC: dentro de N días" ("Consulta al SGC: dentro de ~N d" on a
-    phone), which is the copy saying so.
+    zone's newest row a month ahead (`started_at` a second before `finished_at`). The line under
+    the refresh button then reads "Última consulta al SGC: dentro de N días" ("Consulta al SGC:
+    dentro de ~N d" on a phone), which is the copy saying so. For screenshots with a realistic
+    time, answer `/api/status` through `fault.js` with the real body and `finishedAt` moved back.
+    Its rules are set from `localStorage`, so an init script that sets them and then runs
+    `fault.js` (both in one file) needs no `eval`.
   - **A copy goes stale by itself.** `backfill.total` counts sweep chunks from the zone's start
     to *now* (`sweepChunks`; Chaparral's are one day), so a copy that was complete yesterday is
     `done < total` today, and opening the page starts the back-fill loop against SGC. An empty
