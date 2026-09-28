@@ -59,7 +59,8 @@ practices stayed at 100.
 - **On a phone the LCP element is the header subtitle, and it is in the HTML** (issue #69,
   2026-09-28). Drawn by React, it could not paint before the whole bundle had downloaded and run.
   The build now writes the header into each zone's page (`src/static-shell.tsx`; how, in
-  [the page](frontend.md)), and React replaces it with the same header at the same size. It had
+  [the page](frontend.md)), and React hydrates it (issue #97, below; until then React replaced it
+  with the same header, which proved to be the LCP again on a real connection). It had
   waited for a way to show the reader's own language without an inline script, which the CSP does
   not allow (no `'unsafe-inline'`, hash or nonce, and none added): the header is there in both
   languages, and a render-blocking classic script, a 0.5 kB file under `/assets/` (`src/boot.ts`),
@@ -210,11 +211,75 @@ practices stayed at 100.
   runs) FCP and LCP 3344 → 3230 ms (every run: 3327–3355 against 3224–3247), Speed Index 6573 →
   6542 ms, TBT 265 → 268 ms, score 75 → 76; desktop (three runs) FCP 56 → 49 ms, LCP 186 → 179 ms.
   The first version, first in the head, measured the same through a proxy (3339 → 3226 ms).
-  - **Inlining the header's CSS was tried and not kept** (issue #97). With the rules the static
-    header uses inlined (34 kB) and the stylesheet moved to the end of the body (the one `beasties`
-    strategy that needs no inline script under our CSP), a phone's first paint came at 1377 ms instead
-    of 3339, but LCP at 5422: the header painted in the fallback face, since Geist arrives ~1.7 s in,
-    and React's copy of the subtitle, drawn in Geist and larger, became a new LCP.
+  - **A first try at inlining the header's CSS was not kept** (issue #97, then done: the next
+    bullet). With the rules the static header uses inlined by `beasties` (34 kB) and the stylesheet
+    moved to the end of the body, a phone's first paint came at 1377 ms instead of 3339, but LCP at
+    5422: the header painted in the fallback face, since Geist arrives ~1.7 s in, and React's copy of
+    the subtitle, drawn in Geist and larger, became a new LCP.
+- **The header paints from the HTML alone, and stays the phone's LCP** (issue #97, 2026-09-28).
+  - **Production's phone LCP was React's header, not the static one.** `pnpm preview` serves the
+    stylesheet uncompressed (131 kB), and it arrived after Geist, so the static header painted in Geist
+    and React's copy, the same size, did not count again. With brotli, as the edge sends it (20 kB),
+    the stylesheet lands first, the header paints in the bare `sans-serif` fallback, and React's copy
+    in Geist is larger: 22,110 against 23,529 px², mostly the line height (a line is 1.3 em in Geist,
+    ~1.0 in Helvetica or Arial). One cold load of production `/` (Slow 4G, 4× CPU, DevTools MCP): first
+    paint 2228 ms, Geist at 2314 ms, LCP 2972 ms on React's subtitle. **Measure load order behind a
+    brotli proxy**, or `preview` hides this kind of race (below, "Measuring").
+  - **A stand-in face cut to Geist's measure** (`index.css`, see [the page](frontend.md)) made the two
+    copies nearly the same size but could not make them equal: a wrapped paragraph's box is as wide as
+    its longest line, and the two faces break lines at different words, so the stand-in's box ranged
+    0.90–1.13 of Geist's across 320–1350 px and the four strings. `/choco` in English at 412 px (25,185
+    against 25,392 px²) still took LCP at React's mount, 3156 ms. It stays, for the font swap: the
+    header's lines break alike and nothing moves when Geist arrives.
+  - **So React hydrates the static header** (`src/lib/hydrate.ts`): no new element, no second LCP
+    entry, whatever the widths. `/choco`, same load: one LCP entry, at first paint, 1692 ms, its
+    element still in the page.
+  - **And the header's CSS is inlined** (`withInlineStylesheet` in `core/page-data.ts`, `headerCss` in
+    `vite.config.ts`): `index.css` compiled by Tailwind for exactly the class names in the static
+    header, 32 kB (6.2 kB more HTML with brotli: 3.2 → 9.4 kB), in a `<style>` where the stylesheet
+    was; the stylesheet at the end of the body, where it holds up only the module scripts, which wait
+    for it. The page's CSP already allowed inline styles, and a `<link>` in the body needs no script to
+    load it. Checked in DevTools with the stylesheet disabled against it enabled, every header element
+    and its `::before` and `::after`: the same computed style in both themes at 412 px (touch) and 1350
+    px. A first build missed the buttons' `[&_svg…]` rules, since React writes `&` as `&amp;` in the
+    HTML (`classAttributes`), and the link to `/insights` shifted 4 px when the stylesheet landed. `/choco`,
+    same load: FCP = LCP 1348 ms.
+  - **Lighthouse A/B** against a build of `main` at `1fe45c5`, devtools throttling, both builds behind
+    the same brotli proxy, same `.wrangler/` copy, interleaved, every run checked for the build it
+    loaded (its stylesheet's hash); medians, phone five runs, desktop seven:
+
+    | | FCP | LCP | Speed Index | TBT | CLS | Score |
+    |---|---|---|---|---|---|---|
+    | phone `/` | 1672 → 1343 ms | 3165 → 1343 ms | 3208 → 3106 ms | 249 → 227 ms | 0 → 0 | 87 → 95 |
+    | phone `/choco` | 1676 → 1344 ms | 3166 → 1344 ms | 3469 → 3229 ms | 306 → 269 ms | 0 → 0 | 85 → 93 |
+    | phone `/insights` | 3050 → 3063 ms | 4723 → 4729 ms | 4128 → 4135 ms | 38 → 38 ms | 0 → 0 | 76 → 76 |
+    | desktop `/` | 56 → 52 ms | 187 → 190 ms | 331 → 333 ms | 33 → 46 ms | 0 → 0 | 100 → 100 |
+    | desktop `/choco` | 57 → 56 ms | 203 → 197 ms | 289 → 290 ms | 7 → 5 ms | 0 → 0 | 100 → 100 |
+    | desktop `/insights` | 113 → 102 ms | 145 → 134 ms | 136 → 125 ms | 0 → 0 ms | 0 → 0 | 100 → 100 |
+
+    Every phone run of the branch had its LCP between 1326 and 1382 ms, against 3132–3183 on `main`.
+    The desktop differences are within the runs' spread (`main`'s `/choco` alone ran 177–229 ms), and
+    its LCP is the page's, not the header's (above). The phone rows are from the build before the
+    scrollbar's room (below) and before `useHydrated` became a layout effect, so the page commits in
+    hydration's frame; three phone runs after both gave the same (`/` 3154 → 1343, `/choco` 3153 →
+    1342 ms).
+  - **A hydrated header can shift where a redrawn one could not.** The first A/B read CLS 0.005 on
+    both zones on a desktop: when the page mounted under the header, the scrollbar appeared and the
+    centred header moved ~8 px aside. React's new header had been drawn in that same frame, and a new
+    element is not a shift. The monitor now keeps the scrollbar's room from the first paint
+    (`scrollbar-gutter: stable`, on the monitor only: /insights locks scrolling in its 3D viewer, and
+    Radix's lock adds that room itself). A phone's scrollbar takes none.
+  - **Declined in the code review (2026-09-28):** *inlining only what the header uses.* About a
+    third of the 32 kB is `index.css`'s page rules (the map's controls, the charts', the entry
+    animations), which a split of `index.css` into a header part and a page part would leave out; the
+    brotli'd HTML is 9.4 kB with them, and the split would put the header's rules in a second file to
+    keep in step. *Fixing Radix's scroll lock rather than scoping the gutter to the monitor:* the
+    monitor has no modal; `index.css` says what to do when one is added.
+  - **What a phone paints first is unchanged**: `agent-browser` as an iPhone 14, `main` with its bundle
+    blocked against the branch with its bundle and its stylesheet blocked, in {light, dark} × {es, en}
+    × {`/`, `/choco`}: 0 pixels differ in all eight. With a desktop's scrollbar at 390 px the branch's
+    header sits the scrollbar's width in, which is where both builds' headers end up once the page
+    scrolls.
 - **The story draws only the scenes the reader is near** (issue #70, 2026-09-28). The story renders
   twice at load: the hero and every step's text when the data arrives (the LCP is the hero's intro,
   at every width), then the pinned drawing once a `ResizeObserver` has measured its box. That second
@@ -253,7 +318,11 @@ practices stayed at 100.
   three times, median. Give the local database data and close the refresh guard first, as under
   [Tooling gotchas](development.md#tooling-gotchas), or the page queries SGC. `preview` serves assets
   **uncompressed**, so its absolute numbers are pessimistic against production — compare runs
-  with each other, not with a production score. Add `--blocked-url-patterns='*/api/refresh*'` as
+  with each other, not with a production score. Worse, it can turn a race around: uncompressed, the
+  131 kB stylesheet arrived after the 29 kB font on `preview`, and on production (20 kB) before it,
+  which hid for a day that production's phone LCP was React's header (issue #97). For a change to
+  what loads when, put a small proxy in front of `preview` that brotli-compresses text responses, as
+  the edge does, and measure through it. Add `--blocked-url-patterns='*/api/refresh*'` as
   a second guard: refresh is the one route that reaches SGC. Lighthouse's simulated LCP on preview
   is bimodal (4.4 s or 6.5 s for the same build, first run usually the low one), so take five runs
   and compare medians. The load-error state is not reachable this way — Lighthouse ends the trace

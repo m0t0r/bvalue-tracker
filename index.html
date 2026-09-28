@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-page="monitor">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -32,7 +32,7 @@
   </head>
   <body>
     <!-- The build draws the header into the slot below, in both languages, so a phone paints it
-         before the bundle has run; React replaces it with the same header (src/static-shell.tsx). -->
+         before the bundle has run; React hydrates it (src/static-shell.tsx, src/lib/hydrate.ts). -->
     <div id="root"><!--static-shell--><!--/static-shell--></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
