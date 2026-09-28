@@ -200,6 +200,21 @@ practices stayed at 100.
     and the page's CSV button builds its file in the browser. Half a millisecond per request is far
     from the CPU limit; making the field optional would put a flag on the one statistics pipeline
     the page, the API and the CLI share so they cannot disagree.
+- **The stylesheet comes before the bundle in every page's head** (`stylesheetBeforeBundle` in
+  `core/page-data.ts`, 2026-09-28, from a PageSpeed run on production `/`). Vite writes it last, after
+  the entry script and a dozen module preloads, so on a slow connection the one file the first paint
+  waits for shared the line with all of them. It now sits just before the first module script, and
+  still after the head script, which would otherwise wait for it (`withBootScript` in `vite.config.ts`;
+  the code review caught a first version that put it above). Lighthouse, devtools throttling, `/`
+  against a build of `main` at `dfa1e36`, same `.wrangler/` copy, interleaved, medians: phone (five
+  runs) FCP and LCP 3344 → 3230 ms (every run: 3327–3355 against 3224–3247), Speed Index 6573 →
+  6542 ms, TBT 265 → 268 ms, score 75 → 76; desktop (three runs) FCP 56 → 49 ms, LCP 186 → 179 ms.
+  The first version, first in the head, measured the same through a proxy (3339 → 3226 ms).
+  - **Inlining the header's CSS was tried and not kept** (issue #97). With the rules the static
+    header uses inlined (34 kB) and the stylesheet moved to the end of the body (the one `beasties`
+    strategy that needs no inline script under our CSP), a phone's first paint came at 1377 ms instead
+    of 3339, but LCP at 5422: the header painted in the fallback face, since Geist arrives ~1.7 s in,
+    and React's copy of the subtitle, drawn in Geist and larger, became a new LCP.
 - **The story draws only the scenes the reader is near** (issue #70, 2026-09-28). The story renders
   twice at load: the hero and every step's text when the data arrives (the LCP is the hero's intro,
   at every width), then the pinned drawing once a `ResizeObserver` has measured its box. That second
