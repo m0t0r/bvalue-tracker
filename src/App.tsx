@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { InfoIcon, LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
+import { InfoIcon } from "lucide-react";
 import { lazy, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { BSummary } from "@/components/b-summary";
 import { BTimeKey } from "@/components/charts/b-over-time-key";
@@ -12,26 +12,25 @@ import { Deferred } from "@/components/deferred";
 import { EventsTable } from "@/components/events-table";
 import { FilterScope } from "@/components/filter-scope";
 import { FiltersCard } from "@/components/filters";
-import { LanguageButton } from "@/components/language-button";
 import { LoadError } from "@/components/load-error";
+import { MonitorShell } from "@/components/monitor-shell";
 import { MapPlaceholder, mapDescription } from "@/components/map-legend";
 import { StatusBar } from "@/components/status-bar";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
 import { getEvents, getStatus } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
 import { useDaySelection } from "@/lib/day-selection";
 import { otherReadingKey, scopeChips, useScope } from "@/lib/scope";
-import { toggleTheme, useIsDark } from "@/lib/theme";
+import { toggleTheme } from "@/lib/theme";
 import { ZoneProvider, useZoneState } from "@/lib/zone";
 import { mainshockId } from "../core/mainshock";
-import { ZONES, ZONE_IDS, isZoneId, type ZoneId } from "../core/zones";
+import { ZONES, ZONE_IDS, type ZoneId } from "../core/zones";
 import { updateEveryMin } from "../worker/plan.ts";
 
 // The three Recharts cards and the map are the page's heavy chunks; `Deferred` says why they
@@ -48,7 +47,6 @@ const EventMap = lazy(() => import("@/components/event-map"));
 
 export function App() {
   const { t } = useI18n();
-  const dark = useIsDark();
   const [zone, setZone] = useZoneState();
   const copy = t.zones[zone];
   useEffect(() => {
@@ -56,59 +54,17 @@ export function App() {
   }, [copy.docTitle]);
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
-      {/* One tab per zone. Only the chosen zone's panel is mounted, so switching throws away the
-          other zone's filters and scroll-linked state and starts this one from its own defaults. */}
-      <Tabs value={zone} onValueChange={(v) => isZoneId(v) && setZone(v)} className="gap-6">
-        <header className="flex flex-col gap-2">
-          {/* The zones and the page's two controls share the top row; the title and the subtitle
-              belong to the chosen zone and run the full width underneath. On a narrow phone the
-              controls wrap under the tabs rather than squeezing them. */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <TabsList aria-label={t.zoneLabel}>
-              {ZONE_IDS.map((z) => (
-                <TabsTrigger key={z} value={z}>
-                  {t.zones[z].tab}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <div className="ml-auto flex items-center gap-2">
-              {/* The explanations page, for a reader who wants the why rather than the figures. */}
-              <Button variant="outline" size="sm-touch" asChild>
-                <a href="/insights">
-                  <LightbulbIcon />
-                  {/* Icon only on a phone, so the tabs and the three controls still share one row at
-                      375 px; the words stay the link's name. */}
-                  <span className="max-sm:sr-only">{t.insightsLink}</span>
-                </a>
-              </Button>
-              {/* The `-touch` sizes: on touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
-              <LanguageButton />
-              <Button
-                variant="outline"
-                size="icon-sm-touch"
-                aria-label={dark ? t.themeToLight : t.themeToDark}
-                onClick={toggleTheme}
-              >
-                {dark ? <SunIcon /> : <MoonIcon />}
-              </Button>
-            </div>
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-balance">{copy.title}</h1>
-          <p className="text-muted-foreground text-pretty">{copy.subtitle}</p>
-        </header>
-
-        {/* Out of the tab order: the panel's first content is focusable (the refresh button, or the
-            load error's retry), so a stop on the panel itself would be one press that does nothing. */}
-        {ZONE_IDS.map((z) => (
-          <TabsContent key={z} value={z} tabIndex={-1} className="flex flex-col gap-6">
-            <ZoneProvider value={ZONES[z]}>
-              <ZonePage zone={z} />
-            </ZoneProvider>
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
+    <MonitorShell zone={zone} onZone={setZone} onToggleTheme={toggleTheme}>
+      {/* Out of the tab order: the panel's first content is focusable (the refresh button, or the
+          load error's retry), so a stop on the panel itself would be one press that does nothing. */}
+      {ZONE_IDS.map((z) => (
+        <TabsContent key={z} value={z} tabIndex={-1} className="flex flex-col gap-6">
+          <ZoneProvider value={ZONES[z]}>
+            <ZonePage zone={z} />
+          </ZoneProvider>
+        </TabsContent>
+      ))}
+    </MonitorShell>
   );
 }
 

@@ -4,11 +4,11 @@ import { createRoot } from "react-dom/client";
 import { shouldRetry } from "@/lib/api";
 import { I18nProvider } from "@/lib/i18n";
 import { installErrorReporting } from "@/lib/report-error";
-import { initTheme } from "@/lib/theme";
+import { followSystemTheme } from "@/lib/theme";
 import { InsightsApp } from "./app";
 import "../index.css";
 
-initTheme();
+followSystemTheme();
 installErrorReporting();
 
 // The monitor's settings (src/main.tsx), so the two pages behave alike.

@@ -3,10 +3,12 @@ import path from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { build, defineConfig, runnerImport, type Plugin } from "vite";
 import { INSIGHTS_LOAD, monitorLoad, preloadTags, swapPreloads } from "./core/page-data.ts";
-import { HOME_ZONE, ZONE_PATHS, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
-import { ZONE_IDS } from "./core/zones.ts";
+import { HOME_ZONE, ZONE_PATHS, withStaticShell, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
+import { ZONE_IDS, type ZoneId } from "./core/zones.ts";
+
+const alias = { "@": path.resolve(import.meta.dirname, "./src") };
 
 /**
  * Preload the one font subset the page actually uses. Everything on screen is text, so the
@@ -65,6 +67,102 @@ function preloadPageData(): Plugin {
 }
 
 /**
+ * The head script and the static header (issue #69; `docs/performance.md`). On a phone the header's
+ * subtitle is the largest paint, and drawn by React it waited for the whole bundle. The build writes
+ * the header into each zone's HTML instead (`src/static-shell.tsx`), in both languages, and a small
+ * classic script at the top of every page's head (`src/boot.ts`) sets `<html lang>` and the theme
+ * before the first paint, so the right language shows and nothing flashes. The CSP allows no inline
+ * script, so the script is a file: bundled on its own, into `/assets/` under a content hash, where
+ * `public/_headers` caches it for good. In dev it is served at `DEV_BOOT_PATH`, and the header is
+ * left out, since the stylesheet only arrives with the scripts there and the header would show
+ * unstyled, in both languages.
+ */
+const BOOT_ENTRY = path.resolve(import.meta.dirname, "src/boot.ts");
+const DEV_BOOT_PATH = "/__boot.js";
+/** Each zone's static header, rendered when the client build starts, for `zonePages` to write. */
+let shells: Record<ZoneId, string> | null = null;
+
+/** `src/boot.ts` and what it imports, as one classic script: no module loader, no import. */
+async function bundleBoot(): Promise<string> {
+  const result = await build({
+    configFile: false,
+    logLevel: "warn",
+    publicDir: false,
+    build: { write: false, minify: true, lib: { entry: BOOT_ENTRY, formats: ["iife"], name: "sgcBoot" } },
+  });
+  const output = Array.isArray(result) ? result[0] : result;
+  const chunk = output && "output" in output ? output.output[0] : undefined;
+  if (chunk?.type !== "chunk") throw new Error("sgc-startup: the head script did not bundle");
+  return chunk.code;
+}
+
+/** Renders `src/static-shell.tsx` in Node through Vite's module runner, which knows the `@` alias. */
+async function renderShells(): Promise<Record<ZoneId, string>> {
+  const { module } = await runnerImport<{ staticShell: (zone: ZoneId) => string }>(
+    path.resolve(import.meta.dirname, "src/static-shell.tsx"),
+    { configFile: false, logLevel: "warn", resolve: { alias } },
+  );
+  return Object.fromEntries(ZONE_IDS.map((zone) => [zone, module.staticShell(zone)])) as Record<ZoneId, string>;
+}
+
+/** The head script's tag, after the viewport, before the stylesheet: a script after a stylesheet waits for it. */
+const withBootScript = (html: string, src: string) => {
+  const viewport = /(<meta name="viewport"[^>]*>)/;
+  if (!viewport.test(html)) throw new Error("sgc-startup: no viewport meta to put the head script after");
+  return html.replace(viewport, `$1\n    <script src="${src}"></script>`);
+};
+
+function startup(): Plugin[] {
+  return [
+    {
+      name: "sgc-startup:dev",
+      apply: "serve",
+      enforce: "pre",
+      configureServer(server) {
+        // Bundled once and kept until one of its two files changes: every dev page waits on it.
+        let boot: Promise<string> | null = null;
+        const sources = [BOOT_ENTRY, path.resolve(import.meta.dirname, "src/lib/startup.ts")];
+        server.watcher.on("change", (file) => {
+          if (sources.includes(path.resolve(file))) boot = null;
+        });
+        server.middlewares.use(async (req, res, next) => {
+          if (req.url?.split("?")[0] !== DEV_BOOT_PATH) return next();
+          try {
+            boot ??= bundleBoot();
+            const code = await boot;
+            res.setHeader("content-type", "text/javascript; charset=utf-8");
+            res.end(code);
+          } catch (err) {
+            boot = null;
+            next(err);
+          }
+        });
+      },
+      transformIndexHtml: (html) => withBootScript(html, DEV_BOOT_PATH),
+    },
+    {
+      name: "sgc-startup:build",
+      apply: "build",
+      async buildStart() {
+        if (this.environment.name !== "client") return; // the Worker's environment has no page
+        this.emitFile({ type: "asset", name: "boot.js", source: await bundleBoot() });
+        shells = await renderShells();
+      },
+      transformIndexHtml: {
+        order: "post",
+        handler(html, ctx) {
+          const boot = Object.keys(ctx.bundle ?? {}).find((name) => /^assets\/boot-[\w-]+\.js$/.test(name));
+          if (boot === undefined || shells === null) throw new Error("sgc-startup: no head script in the bundle");
+          const page = withBootScript(html, `/${boot}`);
+          // The monitor's page has the header's slot; the insights page takes only the script.
+          return page.includes("<!--static-shell-->") ? withStaticShell(page, shells[HOME_ZONE]) : page;
+        },
+      },
+    },
+  ];
+}
+
+/**
  * One HTML file per zone, so a shared `/choco` link previews as Chocó (`core/zone-pages.ts`).
  * The build copies the finished `index.html` — hashed script, stylesheet and font preload already
  * in it — and swaps in each other zone's meta tags; the asset layer serves `choco.html` at
@@ -111,12 +209,12 @@ function zonePages(): Plugin[] {
         if (this.environment.name !== "client") return; // the Worker's environment has no page
         const index = bundle["index.html"];
         if (index?.type !== "asset") throw new Error("sgc-zone-pages: no index.html in the client bundle");
+        if (shells === null) throw new Error("sgc-zone-pages: no static header rendered");
         for (const zone of ZONE_IDS) {
           if (zone === HOME_ZONE) continue;
-          const source = swapPreloads(
-            withZoneMeta(String(index.source), zone),
-            monitorLoad(HOME_ZONE),
-            monitorLoad(zone),
+          const source = withStaticShell(
+            swapPreloads(withZoneMeta(String(index.source), zone), monitorLoad(HOME_ZONE), monitorLoad(zone)),
+            shells[zone],
           );
           this.emitFile({ type: "asset", fileName: zonePageFile(zone), source });
         }
@@ -155,9 +253,18 @@ function insightsPage(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare(), preloadLatinFont(), preloadPageData(), zonePages(), insightsPage()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    cloudflare(),
+    startup(),
+    preloadLatinFont(),
+    preloadPageData(),
+    zonePages(),
+    insightsPage(),
+  ],
   worker: { format: "es" },
-  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  resolve: { alias },
   environments: {
     // Two pages, two entries: the monitor and the explanations. The zone pages are copies of the
     // first, written by `zonePages` after the bundle.

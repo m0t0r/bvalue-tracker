@@ -56,14 +56,47 @@ practices stayed at 100.
   get the new body right after a refresh (every API route is `no-cache` for that reason), so
   there would be no way to invalidate a cached copy everywhere. A cached response would also
   be up to 15 minutes stale by design.
-- **On a phone the LCP element is the header subtitle**, and it is drawn by React, so LCP can never
-  beat "bundle downloaded and executed" (~1.0 s even unthrottled). Putting a static header in
-  `index.html` would fix that, and was left undone on purpose: the CSP has no `'unsafe-inline'`
-  for scripts, so the shell could not read the remembered language, and an English reader would
-  see the Spanish header until React mounted. A way round that without an inline script is issue
-  #69. **On a desktop it is "Valor b en el tiempo"'s description** (the card is on screen at load
-  and its two lines outweigh the one-line subtitle), which is why it is written into the card's
-  placeholder (below).
+- **On a phone the LCP element is the header subtitle, and it is in the HTML** (issue #69,
+  2026-09-28). Drawn by React, it could not paint before the whole bundle had downloaded and run.
+  The build now writes the header into each zone's page (`src/static-shell.tsx`; how, in
+  [the page](frontend.md)), and React replaces it with the same header at the same size. It had
+  waited for a way to show the reader's own language without an inline script, which the CSP does
+  not allow (no `'unsafe-inline'`, hash or nonce, and none added): the header is there in both
+  languages, and a render-blocking classic script, a 0.5 kB file under `/assets/` (`src/boot.ts`),
+  writes `<html lang>` and the theme before the first paint so the stylesheet shows the right one.
+  - **Lighthouse A/B** against a build of `main` at `2e2909d` (b over time's key), devtools
+    throttling, interleaved, same `.wrangler/` copy, every run checked for the build it loaded
+    (`network-requests`: only this build asks for `boot-*.js`); medians of three:
+
+    | | FCP | LCP | Speed Index | CLS |
+    |---|---|---|---|---|
+    | phone `/` | 5425 → 3283 ms | 5425 → 3283 ms | 6589 → 5897 ms | 0 → 0 |
+    | phone `/choco` | 5416 → 3298 ms | 5416 → 3298 ms | 7123 → 6427 ms | 0 → 0 |
+    | desktop `/` | 164 → 72 ms | 253 → 201 ms | 399 → 345 ms | 0 → 0 |
+    | desktop `/choco` | 114 → 74 ms | 200 → 192 ms | 295 → 296 ms | 0 → 0 |
+
+    The phone's LCP node is the static subtitle, reported detached once React has replaced it. Phone
+    TBT went 268 → 281 and 291 → 319 ms; against the `main` before `2e2909d` it was 227 → 237 and
+    277 → 276 ms, so it is at most React clearing the static copy, and within the runs' spread.
+  - **On a desktop the LCP is "Valor b en el tiempo"'s description**, as before (below), in both
+    builds. The static header paints first (FCP) but is not the LCP there even when it is the
+    largest text: with the bundle blocked the static title is the LCP entry at first paint, at
+    exactly React's size (19,851 px² at 1280 px); with it, React replaces that title within ~40 ms of
+    the paint and Chrome records only React's node (buffered `largest-contentful-paint` entries,
+    unthrottled). Against the `main` before `2e2909d`, where the header was desktop's LCP, it came
+    122 → 109 ms on `/` and 113 → 106 ms on `/choco` (n = 6).
+  - **`/insights` takes the head script and nothing else**, since its theme and language are decided
+    there too: phone FCP 4471 → 4438 ms and LCP 9235 → 9182 ms, desktop LCP 172 → 172 ms (n = 3). The
+    extra render-blocking request costs nothing measurable.
+  - **A first A/B was spoiled by another session**, which took the branch's preview port mid-run and
+    served `main` on it: five "branch" runs had no head script, and made desktop `/` read as 18 ms
+    slower. Check each run's requests for the build it loaded, and serve both builds on ports
+    nobody else uses.
+
+  **On a desktop the LCP element is "Valor b en el tiempo"'s description** (the card is on screen at
+  load and its two lines outweigh the one-line subtitle), which is why it is written into the card's
+  placeholder (below). Between 2026-09-26 and `2e2909d` the header's title and subtitle were larger at
+  1350 px and took its place.
 - **The 2026-09-26 review** (Chrome DevTools MCP traces, then a Lighthouse A/B against a build of
   `main`, same data, `--throttling-method=devtools`, three interleaved runs each; the numbers are
   medians):
@@ -95,7 +128,7 @@ practices stayed at 100.
     fallback, so the 300 ms hold does not come back through `use`. LCP, story / questions / 3D: on a
     phone 9.55 → 8.94 s, 9.71 → 9.07 s, 9.32 → 8.69 s (TBT 157 → 146, 212 → 210, 157 → 176 ms: the 3D
     scene now builds inside the measured window); on a desktop 425 → 124 ms, 497 → 200 ms, 495 → 167 ms.
-  - What is left is issues #69 (static header), #70 (the story's render cost: 1,261 SVG paths in one
+  - What was left was issues #69 (static header, done 2026-09-28, above), #70 (the story's render cost: 1,261 SVG paths in one
     group), #71 (a validator for `/api/events`) and #72 (the map at first paint on desktop `/`).
 - **Nothing is drawn under the loading skeleton** (`settled` in `App.tsx`). The skeleton is a
   viewport tall so that nothing below it is on screen when the dashboard replaces it. A failed

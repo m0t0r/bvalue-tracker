@@ -190,6 +190,48 @@ those, so an untouched tab shows no chips on either side.
   why the language button says "EN" / "ES" rather than the language's name (owner's call,
   2026-09-24). The button's accessible name is "EN (English)": the full name for a screen reader, with
   the visible code kept in it so a voice command for what is on screen still finds it.
+- **The header is in each zone's HTML before any JavaScript runs** (issue #69, 2026-09-28;
+  `MonitorShell` in `src/components/monitor-shell.tsx`). The build renders that component, the one
+  React draws, once per language (`src/static-shell.tsx`) into a slot in `#root`, and `zonePages`
+  gives each zone's file its own; React's first render replaces it with the same header at the same
+  size. So a change to the header is made in `MonitorShell`, never in `index.html`, and whatever it
+  shows must not depend on the browser or the theme: the theme button draws both halves, each an icon
+  with its own name ("Cambiar a tema claro" beside the sun), and shows one by the `dark` class
+  (`not-dark:hidden`, `dark:hidden`), since the static copy is drawn before anything knows the theme.
+  A first version kept the name in an `aria-label` from React's state, and the static copy offered
+  the dark theme to a reader already in it (code review).
+  - **The head script decides the language and the theme, and nothing else does**
+    (`src/boot.ts` over `src/lib/startup.ts`). It is a classic, render-blocking script at the top of
+    every page's head, a file because the CSP allows no inline script, and it writes `<html lang>`
+    and the `dark` class before the first paint. `index.css` shows the static copy in that language
+    (`[data-static-lang]`); `I18nProvider` opens in the language on `<html>` rather than deciding
+    again, and `theme.ts` only changes the theme afterwards (`followSystemTheme`, `toggleTheme`).
+    Before this, `initTheme()` decided the theme in the bundle. If the script never runs, the HTML's
+    own `lang="es"` stands and header and page agree on Spanish, in the light theme, and the theme
+    button still works: it switches away from the theme on screen rather than deciding again.
+  - **Declined in the code review (2026-09-28):**
+    - *React deciding the language itself when the head script did not run*, so that a French
+      browser gets English as the rule says. It would be the second decision the head script
+      replaced, and would swap the header's language as React mounted. The script is a 0.5 kB
+      same-origin file requested before the bundle; a load that loses it has usually lost the
+      bundle too, and a browser too old for its syntax cannot run the bundle either.
+    - *Making the static header `inert`* while its tabs and buttons do nothing (only the link to
+      `/insights` works until React mounts, ~1.7 s on a throttled phone). The page was blank for that
+      time before, and `inert` would also take the header's words away from a screen reader.
+    - *One copy of the header with the words swapped per language*, to halve what it adds to the
+      HTML (index.html 3.4 → 25.2 kB raw, but 1.0 → 2.9 kB with brotli, which the edge sends; most of
+      it is the two copies' repeated class lists, which compress well). It would need a script to swap
+      them, the one thing the CSP rules out, or a second hand-written header; the A/B already
+      includes the cost.
+  - **Checked in `agent-browser` on `pnpm preview`** with the monitor's bundle blocked, which shows
+    exactly what paints before React, then with it: all eight of {light, dark} × {es, en} × {`/`,
+    `/choco`} remembered against the opposite system theme and browser language, and a first visit
+    with nothing stored (an `es-CO` browser on a dark system, an `en-US` one on a light system). In
+    every case the static page and React's had the same language, theme, title, selected tab and
+    theme icon, and the title and subtitle the same top and height, at 390 px and at 320, 768, 1024 and
+    1280. The language and theme buttons still switch and remember. A second case in the same browser
+    measures nothing: the bundle is cached `immutable` and a cached request never reaches the route
+    that blocks it, so each case needs a fresh browser.
 - **What is a Chocó finding stays on Chocó's tab**: the depth-groups card and the magnitude chart's
   group legend and tooltip line (`depthClusters` in `core/zones.ts`). The copy that differs lives in
   `t.zones[zone]` — title, subtitle, back-fill text and the caveats — and the update interval is a
