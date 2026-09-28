@@ -5,8 +5,11 @@ import {
   bValueWindows,
   dominantMagType,
   fmd,
+  independentWindows,
   mcGoodnessOfFit,
   mcMaxCurvature,
+  readingsDiffer,
+  windowIncomplete,
 } from "../src/index.ts";
 
 function mulberry32(seed: number): () => number {
@@ -120,6 +123,55 @@ describe("bValueWindows", () => {
     expect(w[0]!.from).toBe(events[0]!.time);
     expect(w[1]!.from).toBe(events[50]!.time);
     expect(w[0]!.from < w[0]!.to).toBe(true);
+  });
+
+  it("gives each window the maximum-curvature Mc of every event in its span, small ones included", () => {
+    // Hourly events with a complete catalogue for the first 300 hours, then one that has lost
+    // everything below M2.5: the later windows' own Mc must climb while the fixed Mc stays at 2.0.
+    const rnd = mulberry32(5);
+    const mags = synthetic(800, 1.0, 2.0, 5).filter((m, i) => i < 300 || m >= 2.5 || rnd() < 0.1);
+    const events = mags.map((mag, i) => ({ mag, time: new Date(Date.UTC(2026, 7, 10) + i * 3_600_000).toISOString() }));
+    const w = bValueWindows(events, 2.0, 150, 10);
+    const span = (x: (typeof w)[number]) => events.filter((e) => e.time >= x.from && e.time <= x.to).map((e) => e.mag);
+    for (const x of w) expect(x.mcOwn).toBeCloseTo(mcMaxCurvature(span(x)), 9);
+    expect(w[0]!.mcOwn).toBeLessThanOrEqual(2.3);
+    expect(w.at(-1)!.mcOwn).toBeGreaterThanOrEqual(2.6);
+  });
+});
+
+describe("windowIncomplete", () => {
+  const w = (mc: number, mcOwn: number) => ({ mc, mcOwn });
+  it("flags a window whose own Mc is at least 0.2 above the fixed one, in whole tenths", () => {
+    expect(windowIncomplete(w(2.3, 2.5))).toBe(true);
+    expect(windowIncomplete(w(2.3, 2.6))).toBe(true);
+    // 2.3 + 0.2 in floating point is 2.4999999999999996; the comparison is in tenths.
+    expect(windowIncomplete(w(2.3, 2.3 + 0.2))).toBe(true);
+  });
+  it("leaves the one-tenth flicker between neighbouring windows alone, and a window below the fixed Mc", () => {
+    expect(windowIncomplete(w(2.3, 2.4))).toBe(false);
+    expect(windowIncomplete(w(2.3, 2.3))).toBe(false);
+    expect(windowIncomplete(w(2.7, 2.5))).toBe(false);
+  });
+});
+
+describe("independentWindows", () => {
+  it("picks the latest window and every one a full window before it, which share no events", () => {
+    // 150-event windows every 10 events: window i covers [10i, 10i + 150), so i and i − 15 touch but do not overlap.
+    expect(independentWindows(40, 150, 10)).toEqual([9, 24, 39]);
+    expect(independentWindows(15, 150, 10)).toEqual([14]);
+    expect(independentWindows(16, 150, 10)).toEqual([0, 15]);
+    expect(independentWindows(0, 150, 10)).toEqual([]);
+  });
+  it("rounds a size the step does not divide up, so that picked windows never share an event", () => {
+    expect(independentWindows(10, 100, 30)).toEqual([1, 5, 9]);
+  });
+});
+
+describe("readingsDiffer", () => {
+  it("says two b-values differ only when the gap is wider than both margins of error together", () => {
+    expect(readingsDiffer({ b: 0.73, sigmaB: 0.03 }, { b: 0.87, sigmaB: 0.04 })).toBe(true);
+    expect(readingsDiffer({ b: 1.05, sigmaB: 0.04 }, { b: 1.1, sigmaB: 0.05 })).toBe(false);
+    expect(readingsDiffer({ b: 0.87, sigmaB: 0.04 }, { b: 0.73, sigmaB: 0.03 })).toBe(true);
   });
 });
 

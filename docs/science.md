@@ -67,6 +67,70 @@
   sísmica"; "enjambre" would read as technically wrong to a seismologist. The repo
   name predates that.
 
+## How sure b over time is (from 2026-09-28)
+
+The owner asked why Tolima's b is above 1 and rising while Chocó's is low and falling, and whether
+b could be shown more accurately. Measured in Python on production's `/api/events` for both zones,
+2026-09-28 12:33 UTC; the page shows the same figures.
+
+- **Three things limit the figure, and only one is fixable on the page.** Missing small events
+  can be flagged (below), mixed magnitude types cannot be fixed from public data, and a small
+  sample can only be shown honestly.
+- **Neighbouring windows share 140 of their 150 events**, so the b-over-time line looks far surer
+  than it is: Chocó's 44 windows since 10 August hold **3** readings that share no event. The chart
+  puts a dot on those (`independentWindows` in `packages/seismo`: the latest window and every
+  `ceil(WINDOW_SIZE / WINDOW_STEP)`-th before it) and its description says why.
+- **Split into non-overlapping thirds, Tolima's rise is not significant**: 0.97 → 1.02 → 1.20 at
+  Mc 2.7, Utsu p = 0.065 first against last. With MLr_2 only it is flat, 1.23 → 1.18 → 1.31; the
+  rise comes from the swarm's M ≥ 4 events, mostly typed `M` and `MLr`, falling in its first third.
+  Chocó's shallow group's fall is significant (1.08 → 0.70 → 0.53, p ≈ 8 × 10⁻¹⁰), but with MLr_1
+  only it stops at about 0.8 (1.08 → 0.74 → 0.80): the fall from ~0.8 to ~0.5 rests on the MLv events
+  (19 of the 21 M ≥ 4 events from 11 to 20 September are MLv).
+- **Both magnitude readings are stated in words, not only behind the b card's tabs.** On
+  2026-09-28, Chocó: all types 0.73 over the whole period and 0.52 at the end, MLr_1 only 0.86 and
+  0.78. Tolima: all types 1.05 and 1.22, MLr_2 only 1.24 and 1.31. The sentence says which is nearer
+  the truth depends on how SGC's scales compare, which SGC has not published. It uses the "differ"
+  wording when the gap is wider than both margins of error together (`readingsDiffer`), for the
+  whole period or the end window; a formal test for independent samples does not fit, since one
+  sample holds the other. The b chart draws the other reading as a dashed line: Chocó's MLr_1 line
+  follows the all-types one until about 12 September, then levels off near 0.8.
+  - **The start and the end compare over the same span** (`otherEnds` in `scope.ts`): the other
+    reading is fitted to its own events inside this tab's first and last windows, so the gap is
+    one of magnitude type and not of period. The other reading's own windows count 150 events of
+    one type and cover other dates: on its own last window Chocó's MLr_1 end read 0.83, on the same
+    span 0.78 (code review, 2026-09-28). The dashed line keeps the other reading's own windows,
+    each at its own last event, as a time series should.
+  - With no b on the tab the reader is on (too few events above Mc), the sentence says nothing:
+    "almost the same" beside a card of dashes compared a figure with nothing.
+- **SGC's own magnitudes cannot settle it.** Only one magnitude per event is published, and the FDSN
+  event service holds none of this catalogue (see [the SGC data source](sgc-data-source.md)). The
+  one route left is asking SGC for the MLv–MLr_1 relation or for every magnitude it computed.
+- **A window may have lost small events when its own Mc is at least 0.2 above the fixed one**
+  (`mcOwn` on each window, the maximum-curvature Mc of every event in its span; `windowIncomplete`).
+  Neighbouring windows' own Mc flickers by 0.1 (2.3 ↔ 2.4 across Chocó's August windows) with nothing
+  changing, so one tenth is not enough. On 2026-09-28 the rule flags Chocó's windows ending
+  14–19 September (own Mc 2.6, right after the two MLv 4.9 of 14 September, when the larger events
+  mask the small ones) and Tolima's ending 23 September 09–13 UTC (3.1–3.3, the swarm's busiest
+  hours). The chart shades them and its tooltip gives both Mc; the b card marks a flagged start or
+  end row with ⚠ and explains it in "Detalle técnico". A Mc set by hand below completeness flags
+  every window, which is the rule working.
+  - **It does not catch the thin last week.** Chocó's shallow group had 40 events from 20 to 28
+    September, with almost none at M2.0–2.2 (1, 1, 2, against 18, 35, 30 in the first twelve
+    days), but its latest window reaches back to 12 September and its own Mc is 2.3. A check on the
+    latest days alone would rest on too few events for a maximum-curvature Mc.
+- **Incompleteness is not what makes Chocó's b low.** b-positive (van der Elst 2021, *JGR Solid
+  Earth* 126, from the positive differences between consecutive magnitudes, robust to short-term
+  incompleteness) and a higher fixed Mc agree with the page for the shallow group, period by period:
+  all types 1.19, 0.86, 0.57, 0.65 (b-positive) against 1.07, 0.73, 0.53, 0.55 (Aki, Mc 2.3) and
+  1.25, 0.80, 0.56, 0.64 (Mc 2.5), for 10–22 Aug, 22 Aug–11 Sep, 11–20 Sep and 20–28 Sep; MLr_1 only,
+  b-positive 1.23, 0.89, 0.98. The low figure comes from the mixed magnitude types. b-positive is
+  not on the page: it changes no conclusion and needs its own explanation.
+- **The b-over-time plot grows to its card's height at a fixed scale** (`bAxis`): extra height shows
+  more of the b axis, never a steeper version of the same fall. See [the page](frontend.md).
+- **Published methods that read a drop in b as a warning** (Gulia & Wiemer 2019, *Nature* 574) need
+  one magnitude scale and a stable Mc, which this catalogue lacks, and they are sensitive to the
+  analyst's choices. Nothing here uses them, and a b-value stays a description, not a forecast.
+
 ## The Chaparral swarm (second zone, from 2026-09-23)
 
 - **It is a swarm, and the page calls it one** ("enjambre sísmico"), which is also SGC's word: the

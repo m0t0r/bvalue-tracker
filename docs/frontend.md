@@ -929,20 +929,59 @@ colour, motion). Keep to them:
   14 px; `75ch` ran to about 107, because Geist's "0" is wide) and spans the header under the title
   and any `CardAction`, so an action never squeezes it into a column on a phone. A card that wants
   a full-width subtitle passes `max-w-none`.
-- **The b card's fine print is collapsed** — the magnitude-scale caveat and the goodness-of-fit
-  Mc. Open, it made the card half again as tall as "Valor b en el tiempo" beside it, and because
-  the two share a grid row the chart was stretched to match: 189 px of its card was empty. Folded,
-  the row is 569 px instead of 779 px. Fold nothing whose only other home is that card: the
-  mixed magnitude types and "no es un pronóstico" stay in the open under "Cómo leer estas cifras",
-  which is what makes hiding them here safe. The chart itself keeps its fixed `h-80` and stays
-  centred in whatever height the row has; letting it grow to fill would steepen the slope of a
-  b-value decline the page is careful not to oversell.
+- **The b card's fine print is collapsed** — the magnitude-scale caveat, the goodness-of-fit Mc and,
+  when the start or end window may have lost small events, what its ⚠ means. Open, it made the card
+  half again as tall as "Valor b en el tiempo" beside it: 189 px of the chart's card was empty.
+  Folded, the row is 569 px instead of 779 px. Fold nothing whose only other home is that card: the
+  mixed magnitude types and "no es un pronóstico" stay in the open under "Cómo leer estas cifras", and
+  the incomplete windows in the open on the chart (its shaded stretch, key and tooltip), which is
+  what makes hiding them here safe (owner's call, 2026-09-28). The ⚠ itself stays beside the row's
+  figure, inside the line, so it never changes the card's height, and names the caution for a screen
+  reader (`bWindowIncomplete`). The figure stays inline text with the icon `inline` in it: as a flex
+  row its height followed the icon, and each flagged row moved the slider 2 px. With the detail open, the caution line can come and go as Mc moves;
+  the detail's other lines already do, and it never happens while folded.
+- **Both magnitude readings are in the open** (2026-09-28; the figures and the rule are in
+  [the science](science.md#how-sure-b-over-time-is-from-2026-09-28)). Under the drift sentence, one
+  sentence gives the reading on the tab the reader is not on ("Solo con MLr_1, el valor b sale 0.86 en
+  todo el periodo y 0.83 al final…"), and each row of the b scale draws it as a hollow ring, named in
+  the scale's key. `measure` computes that reading (`other` in `scope.ts`) above the same shared Mc,
+  and a test holds each tab's `other` to what the other tab shows; the start and end rings and "…al
+  final" are the other reading over the same spans as this tab's windows (`otherEnds`, see
+  [the science](science.md#how-sure-b-over-time-is-from-2026-09-28)). The sentence sits over a hidden
+  copy of its longest form, with stand-in figures: without an end window it loses a clause, and the
+  card shrank a line when Mc ran the windows out. The reading's name in both keys comes from
+  `otherReadingKey`, each card passing the values it draws (the chart its deferred copy).
 - **A chart grows into the space beside it only where the extra height cannot mislead.**
   Cards in a two-column row are stretched to the taller one, so a fixed-height chart leaves a
   void under its legend. "Distribución frecuencia–magnitud" therefore fills its card (`flex-1`
   with `min-h-80`) instead of sitting at `h-80` with ~90 px blank beneath it: both of its axes
-  are read off the data, so the room only spreads its points out. "Valor b en el tiempo" is the
-  counter-example directly above — with a pinned y axis, height is a claim about the slope.
+  are read off the data, so the room only spreads its points out.
+  - **"Valor b en el tiempo" grows too, at a fixed scale** (owner's call, 2026-09-28; it used to keep
+    `h-80`, centred). Stretching it would steepen a b-value decline the page is careful not to
+    oversell, so `bAxis` (`charts/b-axis.ts`, tested) keeps the pixels per unit of b it has at 320 px
+    and turns extra height into more axis, split evenly above and below; what does not fit under
+    b = 0 goes on top. Ticks every 0.2. The plot's height is read in its ref callback, so the first
+    frame is already at the measured height (waiting for the `ResizeObserver` drew one frame of the
+    resting axis stretched over the taller plot: code review), and followed with the observer. The
+    chart sits `absolute` inside a wrapper that has only `flex-1` and `min-h-80`: in the flow, each
+    render measured 2 px taller than the last and the row crept down under the Mc slider. On a
+    phone the cards stack, nothing stretches it and it stays 320 px. On a desktop, Tolima's axis
+    runs 0.0–1.8 on 2026-09-28: its resting axis was already 1.0 wide, so the same scale needs that
+    much range to fill ~550 px, and the lower third is empty. That is the price of keeping the slope.
+- **"Valor b en el tiempo" says how few readings its line holds** (2026-09-28). A dot marks each window
+  that shares no event with another (`independentWindows`); the line between them is drawn through
+  windows that share 140 of 150 events, and the description says so, and that each point sits at its
+  window's last event. The other magnitude reading is a dashed line in the same blue, out of the
+  tooltip, drawn only while the key names it. Windows that may have lost small events are shaded
+  in `--caution-edge` (a run of one reaches halfway to its neighbours), and their tooltip adds both
+  Mc. The key is hidden from screen readers, so the chart's `desc` names those stretches by date
+  ("…las ventanas que terminan entre el 14 sept y el 18 sept…"), and the b card's caution names the
+  chart by its title, not as "beside" it: on a phone it is below. The key (`BTimeKey`,
+  `b-over-time-key.tsx`, apart from Recharts) is drawn in the card's
+  placeholder too, and over a hidden copy holding every entry it can have: its shaded-stretch entry
+  comes and goes with Mc, and the card is above the filters on a phone. It keeps that room when the
+  windows run out. Checked 2026-09-28 by stepping Mc from 2.0 to 4.0 on both zones at 320, 390, 1024
+  and 1280 px, in English, and at 320 and 1280 px in Spanish: the filters card's top did not move.
 - **Nothing above the filters changes height as Mc moves** (owner's report, 2026-09-27). The Mc
   slider sits under the b row and, on Chocó, the groups card, so every change of height there moved
   the slider under the reader's pointer (Chrome's scroll anchoring then moves the page instead).
@@ -1017,9 +1056,9 @@ colour, motion). Keep to them:
   code. The map's and the magnitude chart's placeholders draw their real legend beside skeletons of
   the drawing's exact height (`MapPlaceholder`, `MagnitudeTimePlaceholder`), since a legend wraps
   differently at each width, and "Valor b en el tiempo"'s CSV button is drawn in its placeholder
-  too (`BTimeCsvButton`). Measured 2026-09-26 at 320, 390, 768, 1024 and 1280 on both zones: the
-  placeholder equals the loaded card, with CLS 0 while scrolling; before, the magnitude card grew
-  from 410 px to as much as 610.
+  too (`BTimeCsvButton`), with its key (`BTimeKey`, from 2026-09-28). Measured 2026-09-26 at 320,
+  390, 768, 1024 and 1280 on both zones: the placeholder equals the loaded card, with CLS 0 while
+  scrolling; before, the magnitude card grew from 410 px to as much as 610.
 - **The status bar appears with the page, not before it** (2026-09-26). Until both `/api/status` and
   the catalogue have answered, it is one skeleton block with no stats. Its stats wrap by their own
   width, so each value landing re-wrapped the row: on a phone "Sismo principal"'s hint took it from

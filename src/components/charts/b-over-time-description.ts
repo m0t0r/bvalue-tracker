@@ -1,5 +1,5 @@
 import type { Dict } from "@/lib/i18n";
-import { WINDOW_SIZE, type Stats } from "@/lib/stats";
+import { WINDOW_SIZE, WINDOW_STEP, type Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
 
 /**
@@ -11,4 +11,4 @@ import type { Cluster } from "../../../core/clusters";
 export const bTimeDescription = (t: Dict, stats: Stats, magType: string | null, cluster: Cluster | null): string =>
   (cluster !== null ? `${t.clusterNote(t.clusterName[cluster])} ` : "") +
   (magType !== null ? `${t.bScopeNote(magType)} ` : "") +
-  t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—");
+  t.bTimeDesc(WINDOW_SIZE, stats.mc?.toFixed(1) ?? "—", WINDOW_SIZE - WINDOW_STEP);

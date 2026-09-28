@@ -123,6 +123,11 @@ export interface BWindow extends BValue {
   /** ISO times of the first and last event in the window. */
   from: string;
   to: string;
+  /**
+   * The maximum-curvature Mc of every event between `from` and `to`, those below the fixed Mc
+   * included. Well above the fixed Mc, the window has lost small events and its b reads low.
+   */
+  mcOwn: number;
 }
 
 export const WINDOW_SIZE = 150;
@@ -141,22 +146,65 @@ export function bValueWindows(
   dm = DEFAULT_DM,
 ): BWindow[] {
   const kc = bin(mc, dm);
-  const complete = events.filter((e) => bin(e.mag, dm) >= kc).sort((x, y) => x.time.localeCompare(y.time));
+  // Plain code-unit order, the same comparison the span pointers below use. ISO times in one format
+  // sort correctly this way, and a collation (`localeCompare`) that ordered them differently from
+  // `<` could send `lo` past the end.
+  const all = [...events].sort((x, y) => (x.time < y.time ? -1 : x.time > y.time ? 1 : 0));
+  const complete = all.filter((e) => bin(e.mag, dm) >= kc);
   const out: BWindow[] = [];
+  // Both ends only move forward, so the spans are found in one pass over `all`.
+  let lo = 0,
+    hi = 0;
   for (let i = 0; i + size <= complete.length; i += step) {
     const w = complete.slice(i, i + size);
+    const from = w[0]!.time,
+      to = w[w.length - 1]!.time;
+    while (lo < all.length && all[lo]!.time < from) lo++;
+    while (hi < all.length && all[hi]!.time <= to) hi++;
     out.push({
       ...bValue(
         w.map((e) => e.mag),
         mc,
         dm,
       ),
-      from: w[0]!.time,
-      to: w[w.length - 1]!.time,
+      from,
+      to,
+      mcOwn: mcMaxCurvature(
+        all.slice(lo, hi).map((e) => e.mag),
+        dm,
+      ),
     });
   }
   return out;
 }
+
+/**
+ * Whether a window has probably lost small events: its own Mc is at least two bins above the fixed
+ * one. One bin is not enough: on the real catalogues neighbouring windows' own Mc flickers by 0.1
+ * with no change in the network (docs/science.md).
+ */
+export const windowIncomplete = (w: { mc: number; mcOwn: number }, dm = DEFAULT_DM): boolean =>
+  bin(w.mcOwn, dm) - bin(w.mc, dm) >= 2;
+
+/**
+ * The windows that share no event with one another, as indexes into `count` sliding windows: the
+ * latest, and every one a whole window before it. Neighbouring windows share `size - step` events,
+ * so a line through all of them looks far surer than the few independent readings under it.
+ */
+export function independentWindows(count: number, size = WINDOW_SIZE, step = WINDOW_STEP): number[] {
+  const stride = Math.ceil(size / step);
+  const out: number[] = [];
+  for (let i = count - 1; i >= 0; i -= stride) out.unshift(i);
+  return out;
+}
+
+/**
+ * Whether two b-values from the same events read differently: the gap is wider than both margins
+ * of error together. Deliberately plain, so the page can say it in words; the two samples overlap,
+ * so a formal test for independent samples would not fit either.
+ */
+export const readingsDiffer = (x: { b: number; sigmaB: number }, y: { b: number; sigmaB: number }): boolean =>
+  Math.abs(x.b - y.b) > x.sigmaB + y.sigmaB;
 
 /**
  * The magnitude type most events carry, or null when every event already shares one type.
