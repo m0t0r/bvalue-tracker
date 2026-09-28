@@ -119,11 +119,16 @@ draws from too):
   (ICU 77) and "12 – 18 Sept" on CI's Node 24.21 (2026-09-26, PR #81). `fmtDayRange` builds the range
   from `fmtDay` and a bare day number instead. Pieces formatted one at a time (`format`, not
   `formatRange`) have been stable here.
-- **`vitest` is held at 4.x**: `@cloudflare/vitest-pool-workers` does not support 5.
-  For the same reason `compatibility_date` cannot be newer than the pool's bundled
-  runtime (it errored on 2026-09-01; 2026-08-20 works). Everything else is on latest.
-  `.github/dependabot.yml` ignores vitest majors for this reason; drop that rule when
-  the pool supports 5.
+- **`vitest` is held at 4.x**: `@cloudflare/vitest-plugin` (renamed from
+  `@cloudflare/vitest-pool-workers` in its 1.0; the old name gets no releases) does not
+  support 5 in 1.x. Support is [workers-sdk#15500](https://github.com/cloudflare/workers-sdk/pull/15500),
+  due as its 2.0, which also moves the Worker tests to workerd's new module registry. Vite+
+  1.0 pins Vitest 5, so moving to it waits for that too. `.github/dependabot.yml` ignores
+  vitest majors for this reason; drop that rule when the plugin supports 5. Everything else
+  is on latest.
+- **`compatibility_date` cannot be newer than the test plugin's bundled runtime.** On the old
+  pool (runtime 2026-08-15) 2026-09-01 errored. The plugin's 1.3.0 bundles 2026-09-26, and
+  the Worker tests pass with that date (2026-09-28); the configs still say 2026-08-20.
 - **Local D1 storage is keyed by `database_id`.** Change the id in `wrangler.jsonc`
   and local dev silently gets a new, empty database with no tables (`no such table:
   events`). Re-run `pnpm db:migrate:local` and refill.

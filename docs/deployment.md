@@ -92,9 +92,10 @@ other: when it is a patch or minor bump it merges and deploys the same way, with
 covers `dependencies` only, the code that ships in the Worker or the page. An advisory in
 dev tooling shows up as a Dependabot alert instead: it reaches neither, and one with no
 upstream fix would keep a check red for weeks (on 2026-09-24, `sharp` under
-`@cloudflare/vitest-pool-workers` was exactly that). It is a separate workflow so that it
-flags without blocking. Auto-merge follows CI's conclusion and the deploy needs CI's tests,
-and a new advisory must not hold back every Dependabot update or a production fix.
+`@cloudflare/vitest-pool-workers`, the Workers test package's old name, was exactly that).
+It is a separate workflow so that it flags without blocking. Auto-merge follows CI's
+conclusion and the deploy needs CI's tests, and a new advisory must not hold back every
+Dependabot update or a production fix.
 
 ## Scheduled checks
 
