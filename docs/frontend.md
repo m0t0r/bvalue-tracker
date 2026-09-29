@@ -1146,7 +1146,9 @@ colour, motion). Keep to them:
     frame is already at the measured height (waiting for the `ResizeObserver` drew one frame of the
     resting axis stretched over the taller plot: code review), and followed with the observer. The
     chart sits `absolute` inside a wrapper that has only `flex-1` and `min-h-80`: in the flow, each
-    render measured 2 px taller than the last and the row crept down under the Mc slider. On a
+    render measured 2 px taller than the last and the row crept down under the Mc slider. The same
+    read gives the width, which places the date labels (chosen as Recharts would choose them, without
+    its DOM measuring: [Performance](performance.md)), and the chart is drawn only once it has both. On a
     phone the cards stack, nothing stretches it and it stays 320 px. On a desktop, Tolima's axis
     runs 0.0–1.8 on 2026-09-28: its resting axis was already 1.0 wide, so the same scale needs that
     much range to fill ~550 px, and the lower third is empty. That is the price of keeping the slope.

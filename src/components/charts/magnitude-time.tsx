@@ -35,6 +35,7 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useZone } from "@/lib/zone";
 import { clusterOf } from "../../../core/clusters";
+import { NO_VERTICAL_LINES } from "./chart-grid";
 import { ClusterLegend, DailyLine, useFinePointer } from "./magnitude-time-legend";
 import type { ZoneId } from "../../../core/zones";
 
@@ -278,7 +279,7 @@ const DailyBars = memo(function DailyBars({
         <BarChart data={daily as Day[]} margin={BAR_MARGIN} barCategoryGap={2} title={t.dailyTitle} desc={t.dailyKeys}>
           <ActiveDay into={activeDay} />
           <InverseXProbe into={inverse} />
-          <CartesianGrid vertical={false} />
+          <CartesianGrid vertical={false} verticalCoordinatesGenerator={NO_VERTICAL_LINES} />
           {/* The scatter's band, behind the bars too: a chosen day of three events is a bar a few
               pixels tall, and the dimming alone left it hard to find. */}
           {lit ? <ReferenceArea x1={lit.from} x2={lit.to + DAY} fill="var(--foreground)" fillOpacity={0.07} /> : null}
@@ -508,7 +509,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
               </div>
               <ChartContainer config={config} className="aspect-auto h-64 w-(--plot-w) shrink-0">
                 <ScatterChart margin={SCATTER_MARGIN} title={t.magTimeTitle} desc={t.magTimeDesc}>
-                  <CartesianGrid vertical={false} />
+                  <CartesianGrid vertical={false} verticalCoordinatesGenerator={NO_VERTICAL_LINES} />
                   {xAxis(true)}
                   {yMag(false)}
                   <ZAxis range={[28, 28]} />

@@ -418,6 +418,62 @@ practices stayed at 100.
     canvas further along, because `main`'s glide starts after its long task. With reduced motion the
     shot mid-turn equals the one at rest on both. Switched with the page's theme button, the map is
     1 pixel from a page opened in dark.
+- **"Valor b en el tiempo" measures no text in the DOM, and draws once** (issue #96, 2026-09-29). On a
+  phone (412 × 823) the card's top is ~480 px under the fold, inside `Deferred`'s 600 px, so Recharts'
+  chunk is fetched and the chart drawn during the load. Its first render wrote every label it might draw
+  into a hidden span and read the span's box, a layout each time: 43 strings on Tolima's page at 412 px,
+  none now (counted by wrapping `getBoundingClientRect` in the page):
+  - **The date axis picks from every point, not from dates.** With `scale="time"` Recharts takes each
+    window's end as a candidate tick, then the dashed line's own windows, and keeps a label only where it
+    clears the next one by `minTickGap`, measured. `preserveEndTicks` (`charts/time-ticks.ts`, tested)
+    now runs the same rule over the same candidates in the same order, with widths from a canvas
+    (`measureText`, no layout), and the chart passes the result as `ticks` with `interval={0}`, which
+    Recharts draws as given. Without a 2D canvas it leaves the choice to Recharts, as before. A test
+    holds it to Recharts' own `getTicks` (its DOM measure stubbed) over 300 random cases, so a Recharts
+    release that changes the rule fails there; the candidates' order and the chart's margins are
+    Recharts' too, and are what the browser comparison below checks.
+  - **The grid ran that rule too**, for vertical lines the chart does not draw (`vertical={false}`): 23
+    measurements. `NO_VERTICAL_LINES` (`charts/chart-grid.ts`) asks for none, on all three charts.
+  - **Each tick's `Text` measured its words** to wrap a label that never wraps, because the axis hands it
+    its own width; `tick={{ width: undefined }}` stops that.
+  - **`ResponsiveContainer` drew the chart once at 320 × 200** (its first guess) before drawing it at its
+    real size. The plot's size was already read in the chart's ref callback; the chart is now drawn only
+    after it, with that size as `initialDimension`, so it is drawn once.
+  - The texts are unchanged: every label, tick value and "b = 1" at the same position and width as on
+    `main`, both zones and languages at 320, 390, 412, 768, 1024 and 1280 px (the SVG's `getBBox`), and
+    at 390 px after a resize, a language switch, the MLr_2 tab, Mc moved, Mc moved until the windows ran
+    out and back (the plot drawn again, which waits for its own size), one depth group, the web font
+    blocked, no canvas, and a four-day catalogue whose labels carry the hour, with the dashed line and
+    without it (one magnitude type: the last label then sits on the chart's right edge, where Recharts
+    pulls it back inside, and `preserveEndTicks` does the same). Screenshots of all three
+    charts, both themes, 320/390/1280 px: 72 of 72 identical to the pixel. The shared chunk is now
+    named `chart-grid-*.js` (it takes a name from one of its modules).
+  - **Lighthouse A/B** against a build of `main` at `f46512d`, devtools throttling, `pnpm preview` behind
+    a brotli proxy serving production's catalogues, interleaved, five runs each, every run checked for
+    the build it loaded; medians (the build before the code review, whose changes only took work away):
+
+    | | TBT | LCP | Score | CLS |
+    |---|---|---|---|---|
+    | phone `/` | 281 → 259 ms | 1351 → 1346 ms | 93 → 94 | 0 → 0 |
+    | phone `/choco` | 304 → 277 ms | 1350 → 1350 ms | 92 → 93 | 0 → 0 |
+    | desktop `/` | 23 → 19 ms | 199 → 198 ms | 100 → 100 | 0 → 0 |
+    | desktop `/choco` | 2 → 0 ms | 204 → 202 ms | 100 → 100 | 0 → 0 |
+
+  - **Not done: loading the chart only on screen on a phone** (owner's call, 2026-09-29). With
+    `Deferred`'s margin at 0 below `lg`, the chunk left the load: phone TBT 272 → 170 ms on `/` and
+    295 → 192 ms on `/choco` (score 94 → 97 and 93 → 96, same A/B, the chart fetched in none of the
+    branch's runs). But a reader scrolling to the card at 400 px/s then saw its skeleton for 0.44 s on
+    Fast 4G and 1.39 s on Slow 4G (4× CPU), where the chart had been drawn before they got there. The
+    chunk's evaluation (~35 ms at 4×, building Recharts' store) and the render (~150 ms) are what stays
+    in a phone's load window; issue #118 asks whether Recharts is worth them.
+  - **Declined in the code review (2026-09-29):** *choosing the labels again once Geist has loaded.* A
+    label measured before then is in the stand-in face, which is cut to Geist's width (with the font
+    blocked, both builds chose the same labels, 42 px wide against 43), and Recharts' span did not
+    measure again either; choosing again would draw the whole chart a second time, inside a phone's
+    load. *Sharing `src/insights/measure.ts`:* it pads widths by 3 % and guesses one without a canvas,
+    to reserve room, where this must match Recharts' measure exactly or fall back to it. *`clientWidth`
+    over `getBoundingClientRect`:* the latter is what `ResponsiveContainer` reads on mounting, and
+    matching it is what keeps the chart drawn once; the row's entry transition only translates.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

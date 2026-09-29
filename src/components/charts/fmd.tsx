@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
 import { fmdDescription } from "./fmd-description";
+import { NO_VERTICAL_LINES } from "./chart-grid";
 
 /** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
 export const FmdChart = memo(function FmdChart({
@@ -58,7 +59,7 @@ export const FmdChart = memo(function FmdChart({
       <CardContent className="flex flex-1 flex-col">
         <ChartContainer config={config} className="aspect-auto min-h-80 w-full flex-1">
           <ComposedChart data={data} margin={{ left: 0, right: 12, top: 16 }} title={t.fmdTitle} desc={t.fmdDesc}>
-            <CartesianGrid vertical={false} />
+            <CartesianGrid vertical={false} verticalCoordinatesGenerator={NO_VERTICAL_LINES} />
             <XAxis
               dataKey="mag"
               type="number"
