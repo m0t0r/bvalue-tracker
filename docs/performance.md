@@ -56,6 +56,29 @@ practices stayed at 100.
   get the new body right after a refresh (every API route is `no-cache` for that reason), so
   there would be no way to invalidate a cached copy everywhere. A cached response would also
   be up to 15 minutes stale by design.
+- **No `ETag` or 304 on `/api/events` either** (issue #71, declined 2026-09-29). `no-cache` with
+  a validator would let a repeat request skip the body. It is not worth it, as measured in
+  production over the 3 days Workers Logs keeps (`pnpm logs cpu --since 3d`, and the browser
+  against production):
+  - **The CPU is in the cron, not here.** `GET /api/events`: about 300 calls, a median of 7 ms
+    (p90 14, max 25). The `*/15` ticks: 289, a median of 68 ms (p90 153, max 264), and 24 of
+    them killed `exceededCpu`: 2026-09-27 07:30–12:00 and 09-27 23:30–09-28 05:30 UTC, nearly
+    all wide ticks, most stopped at 10–11 ms, so the 10 ms limit was being enforced as on
+    2026-09-20. All the catalogue reads together cost about a ninth of what the ticks cost, and
+    none of the ~900 requests in those days ended `exceededCpu`. (The
+    calculation counted 298 ticks where the invocation logs hold 289, the most `*/15` can fire in
+    72 h, so its counts run a few per cent high; the medians are unaffected.)
+  - **A 304 saves little.** It still needs a D1 read to compute the validator (`/api/context`,
+    one primary-key read, costs 1 ms), so it saves about 5 ms of CPU, and only on a call where
+    nothing changed. The page refetches events *because* status reports a new ingest, and at the
+    swarm's rate Tolima's catalogue changes on most ticks. Wall time is D1's round trip (a
+    median of 238 ms), which a 304 keeps. On the wire, Tolima's 1,018 rows are 427 kB raw and
+    54 kB compressed.
+  - **A wrong 304 is worse than the bytes.** It would show a researcher an old catalogue, so the
+    validator would have to move on every insert, update and removal (removal stamps only
+    `removed_at`) and cover every query parameter.
+  - **Revisit** when `/api/events` has a median above 10 ms (its cost grows with a zone's row
+    count), or when a request ends `exceededCpu`.
 - **On a phone the LCP element is the header subtitle, and it is in the HTML** (issue #69,
   2026-09-28). Drawn by React, it could not paint before the whole bundle had downloaded and run.
   The build now writes the header into each zone's page (`src/static-shell.tsx`; how, in
@@ -130,7 +153,7 @@ practices stayed at 100.
     phone 9.55 → 8.94 s, 9.71 → 9.07 s, 9.32 → 8.69 s (TBT 157 → 146, 212 → 210, 157 → 176 ms: the 3D
     scene now builds inside the measured window); on a desktop 425 → 124 ms, 497 → 200 ms, 495 → 167 ms.
   - What was left was issues #69 (static header, done 2026-09-28, above), #70 (the story's render cost: 1,261 SVG paths in one
-    group, done 2026-09-28: the bullet on the story's render below), #71 (a validator for `/api/events`) and #72 (the map at first paint on desktop `/`, done
+    group, done 2026-09-28: the bullet on the story's render below), #71 (a validator for `/api/events`, declined 2026-09-29: the bullet on it above) and #72 (the map at first paint on desktop `/`, done
     2026-09-28: the bullet on the map's relief below).
 - **Nothing is drawn under the loading skeleton** (`settled` in `App.tsx`). The skeleton is a
   viewport tall so that nothing below it is on screen when the dashboard replaces it. A failed
