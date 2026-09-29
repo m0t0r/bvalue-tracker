@@ -6,6 +6,7 @@ import { useIsDark } from "@/lib/theme";
 import type { Insights, QuakeLike } from "../claims";
 import { questionsCopy, type Named } from "./copy";
 import { fmtInt, roundSig } from "../shared";
+import { token } from "../tones";
 import { energyInUnits } from "./derive";
 import { Choice, Figure, Swatch, useWidth } from "./ui";
 
@@ -14,9 +15,6 @@ type Compare = "rest" | "swarm" | "m5" | "m6" | "m7";
 /** Cells the lens shows per side, and the lens's pixels per cell. */
 const LENS = 24;
 const PITCH = 6;
-
-/** A CSS custom property's current value, which a canvas can take as a colour. */
-const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 export const pct = (part: number, whole: number) => {
   const v = (100 * part) / whole;

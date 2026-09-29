@@ -408,6 +408,23 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   the active step a frame behind (`drawn`), so a scene reached by a jump (a fling, a reload with the
   scroll kept) is mounted hidden first and still fades and reveals in. The map's layer, the shared dots
   and the scene titles belong to the first scene.
+- **The dots the map and the cuts share are drawn on a canvas** (`DotLayer` in `story/dots.tsx`, issue
+  #94): as ~1,900 SVG circles, each on its own CSS transition, a scene turn froze a phone for most of
+  its glide ([Performance](performance.md) has the numbers). The drawing is three layers in one box: an
+  SVG with the map and the cuts, the canvas, and an SVG with everything drawn over the dots (legends,
+  titles, the other scenes). The box is the `role="img"` with the scene's text alternative, as the SVG
+  was; the layers inside it are presentation. `Graphic` says where each dot and the star sit in the
+  scene and how opaque (`marks`); `DotLayer` glides them there as the CSS did: 1 s on `EASE_MOVE`, each
+  dot held back by its depth (3 ms per km, at most 400 ms), a new target taken from wherever the dot
+  is, and a glide sent back where it came from shortened as CSS shortens a reversed transition
+  (`story/glide.ts`, tested). The colours are the theme's tokens (`TOKEN` and `token` in `tones.ts`),
+  read once per theme and drawn again on a switch; a new box or a reader who asked for less motion gets
+  the dots where they belong at once; the canvas is exactly the SVGs' box and follows the device pixel
+  ratio. Two things differ from the SVG on purpose: a dot hidden at both ends of a move goes there at
+  once (Chaparral's swarm waiting on its cut, which nobody sees travel), and the fading star is drawn as
+  one image at its opacity, since fill and outline faded one after the other showed the outline as a
+  ring (code review). The dots are no longer in the DOM: a check that counts `circle`s in the story now
+  finds only the scenes' own.
 - **Story step 2 draws squares true to energy, one per row, largest first** (`Ranks` in
   `story/scenes.tsx`, `rankLayout` in `history.ts`, 2026-09-25): the M7.4 in the mainshock's orange,
   past earthquakes in `muted-foreground`. Squares are right-aligned so each label sits beside its own
@@ -1327,7 +1344,9 @@ colour, motion). Keep to them:
 - **The b card's marks travel on that same roll**, because a mark and the figure
   written beside it are one fact and a mark that jumped while the digits were still
   turning read as two events. `--ease-move` and `--duration-move` in `index.css` are
-  `FlowNumber`'s `MOVE` written in CSS; change one and change the other. Every row
+  `FlowNumber`'s `MOVE` written in CSS; change one and change the other. The curve itself is
+  `EASE_MOVE` in `src/lib/ease.ts`, which `MOVE` and the story's dots read, and
+  `test/ease-token.test.ts` fails while it and `--ease-move` disagree. Every row
   figure on the scale is a `FlowNumber` too — the scale's end labels are not, since
   they are the ruler rather than a reading off it. Each mark rides a full-width layer
   moved by a percentage of its own width, so its position is a `transform`, and the

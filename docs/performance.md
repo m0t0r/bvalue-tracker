@@ -305,11 +305,10 @@ practices stayed at 100.
     the render: `preview`'s uncompressed catalogues (~770 kB for both zones) take seconds at 1.6 Mbps.
     Cold loads through the DevTools protocol, 4× CPU, no network throttling, seven interleaved runs
     each: the longest task 216 → 129 ms, the time from the data to the LCP 220 → 195 ms.
-  - **What is left is per dot, not per load**: each of the 1,825 dots carries its own inline position
+  - **What was left was per dot, not per load**: each of the 1,825 dots carried its own inline position
     and transition, which no two elements share. Inserted into a detached SVG at 1× CPU, the dots took
     21.7 ms of style, and 57.1 ms when every dot moves (a scene turn); positioned by `cx`/`cy`
-    attributes with no transition, 2.7 and 2.6 ms. A canvas, or attribute positions with the glide
-    animated only during a turn, is issue #94, since it changes how the turn is drawn.
+    attributes with no transition, 2.7 and 2.6 ms. Issue #94 moved them to a canvas: the next bullet.
   - **The forced reflows DevTools flags on this page add no work** (Radix's `useSize` in the felt
     step's slider, Presence in the tab panels): they pull the page's first layout forward into React's
     commit, and the frame's own layout after them is under a millisecond. They do make that task
@@ -354,6 +353,48 @@ practices stayed at 100.
     `/robots.txt` and brought back, each came back with a marker set on `window` before leaving still
     there. A page with an `unload` listener, as a control, was reported not restored
     (`UnloadHandlerExistsInMainFrame`).
+- **The story's dots are a canvas, and a scene turn no longer stalls a phone** (issue #94,
+  2026-09-29; `story/dots.tsx`, see [the page](frontend.md)). The cost was not where the issue put it.
+  Each dot was an SVG `<circle>` with a CSS transition on `translate`, and SVG children are not moved on
+  the compositor: every frame of the one-second glide, the renderer's Layerize step (sorting what was
+  painted into compositor layers) took ~230 ms on a 4× phone with all 1,874 dots gliding, on top of the
+  turn's first style pass (~140 ms). The glide showed about five frames. The dots are now drawn on one
+  `<canvas>` between two SVGs, glided in JavaScript on the same curve, delay and length, and nothing is
+  drawn between turns. A frame of the glide costs the canvas a median of 3.0 ms at 4× (p90 3.8 ms).
+  - **Chaparral's replay renders its ~1,000 dots once.** `useProgress` still sets state every frame
+    for 3.6 s, but `TolimaScene` builds each dot's two looks (shown, not yet) once per drawing and
+    only picks one per frame, so React skips every dot whose element has not changed. The DOM writes
+    are the same as before (2,036 `class` changes over the replay on both builds).
+  - Measured against a build of `main` at `bfa9024`, `pnpm preview` behind a proxy that served
+    production's `/api/events` of 2026-09-29 (1,875 events: 858 in Chocó, 1,017 in Chaparral), Chrome
+    DevTools MCP, 390 × 844 phone at 4× CPU. Frames the page drew (requestAnimationFrame) and long
+    animation frames in the 2.5 s after the scroll that turns the scene, three fresh loads per build,
+    interleaved:
+
+    | Turn | `main` | Canvas |
+    |---|---|---|
+    | map → Chocó's cut | 51–53 frames, 7–8 over 50 ms, up to 400 ms | 152 frames, none over 17 ms |
+    | Chocó's cut → the clocks | 56–60 frames, 6–8 over 50 ms, up to 433 ms | 150–152 frames, none over 33 ms |
+    | Chaparral's map → its cut | 102–120 frames, 2–4 over 50 ms, up to 233 ms | 145–149 frames, 0–1 over 50 ms, up to 83 ms |
+    | Chaparral's replay (4 s) | 218–236 frames, 0–1 over 50 ms | 239–240 frames, 0–1 over 50 ms |
+
+    One DevTools trace of each turn, the profiler's own start-up task left out: map → Chocó's cut
+    had seven tasks over 50 ms on `main` (119–451 ms; the first 140 ms of style and 237 of Layerize,
+    each later frame 263–366 ms) and none on the canvas (the step's two renders, 31 and 32 ms).
+    Chaparral's cut had five (62–241 ms, 336 ms of style in all) and none (39 ms at most, 59 ms of
+    style). The replay, two pairs taken back to back: 3.8–4.2 s of main thread on `main`, 1.8–2.0 s
+    of it paint, against 2.4–2.5 s and 0.74–0.78 s; the hidden dots no longer sit in the SVG the
+    replay repaints every frame. The one frame left over 50 ms at Chaparral's cut is the next scene
+    (the felt calendar) mounting as the reader nears it, not the dots.
+  - **Trust only back-to-back pairs here.** The Chrome the MCP drives is shared with other sessions,
+    and one replay trace of each build taken minutes apart read the other way round (paint 495 ms on
+    `main`, 922 on the canvas); counting the DOM writes on both showed they were the same work.
+  - **The turns look the same**: `agent-browser` at 390 × 844 in light, dark and light with reduced
+    motion, and at 1280 × 800, `main` against the canvas, the map, both cuts and the last step at rest:
+    at most 37 pixels differ (0.01 %, edges of the dots). 350 ms into a turn 0.3–1.3 % differ, the
+    canvas further along, because `main`'s glide starts after its long task. With reduced motion the
+    shot mid-turn equals the one at rest on both. Switched with the page's theme button, the map is
+    1 pixel from a page opened in dark.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

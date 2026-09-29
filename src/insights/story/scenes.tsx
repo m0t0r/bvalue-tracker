@@ -630,6 +630,10 @@ function Reveal({ on, children }: { on: boolean; children: React.ReactNode }) {
 // =============================================================================================
 // Chaparral: energy strips for both zones, then the swarm close up, replayed in time order.
 
+// The swarm's age by colour, not by opacity: faded dots fell to 1.3:1 against the page. Each step keeps
+// 3:1 (index.css), greyer and fainter in light mode, greyer and dimmer in dark, towards the oldest.
+const AGE = ["fill-chart-5-age-1", "fill-chart-5-age-2", "fill-chart-5-age-3", "fill-chart-5-age-4"];
+
 export function TolimaScene({
   data,
   model,
@@ -694,9 +698,25 @@ export function TolimaScene({
 
   const t0 = tolima[0]?.t ?? 0;
   const tSpan = Math.max(1, (tolima.at(-1)?.t ?? 0) - t0);
-  // Age by colour, not by opacity: faded dots fell to 1.3:1 against the page. Each step keeps 3:1
-  // (index.css), greyer and fainter in light mode, greyer and dimmer in dark, towards the oldest.
-  const age = ["fill-chart-5-age-1", "fill-chart-5-age-2", "fill-chart-5-age-3", "fill-chart-5-age-4"];
+  // Each dot's two looks, made once per drawing. The replay sets state every frame for 3.6 s; it now only
+  // picks a look per dot, and React skips every dot whose element is the same object as the frame before,
+  // where it used to project and redraw all of the swarm's ~970 dots each frame (issue #94).
+  const swarm = useMemo(() => {
+    if (!proj) return [];
+    return tolima.flatMap((e) => {
+      const xy = proj([e.lon, e.lat]);
+      if (!xy) return [];
+      const frac = (e.t - t0) / tSpan;
+      const at = { cx: xy[0], cy: xy[1], r: radius(e.mag, small ? 0.8 : 1) };
+      return [
+        {
+          frac,
+          shown: <circle key={e.id} {...at} className={AGE[Math.min(3, Math.floor(frac * 4))]} />,
+          hidden: <circle key={e.id} {...at} className="fill-chart-5 opacity-0" />,
+        },
+      ];
+    });
+  }, [proj, tolima, t0, tSpan, small]);
   const moved = data.tolimaDrift.case === "moved";
   const trackPts =
     proj && moved
@@ -767,21 +787,7 @@ export function TolimaScene({
             />
           </clipPath>
           <g clipPath="url(#story-tolima-clip)">
-            {tolima.map((e) => {
-              const xy = proj([e.lon, e.lat]);
-              if (!xy) return null;
-              const frac = (e.t - t0) / tSpan;
-              const visible = !drift || frac <= dotsProgress;
-              return (
-                <circle
-                  key={e.id}
-                  cx={xy[0]}
-                  cy={xy[1]}
-                  r={radius(e.mag, small ? 0.8 : 1)}
-                  className={visible ? age[Math.min(3, Math.floor(frac * 4))] : "fill-chart-5 opacity-0"}
-                />
-              );
-            })}
+            {swarm.map((d) => (!drift || d.frac <= dotsProgress ? d.shown : d.hidden))}
             {moved && trackPts.length > 1 && (
               <g>
                 <path

@@ -269,9 +269,10 @@
      pop rather than a slide. */
   --ease-slide: cubic-bezier(0.32, 0.72, 0, 1);
   /* For a value moving to a new value, where start and end are both on screen and both matter. It
-     leaves gently and lands softly, so nothing reads as a jump. Kept in step with `FlowNumber`'s
-     `MOVE` (`src/components/flow-number.tsx`), which is the same curve in JavaScript: a mark and
-     the digits beside it are the same fact, so they must travel together. Change one, change both. */
+     leaves gently and lands softly, so nothing reads as a jump. The same curve in JavaScript is
+     `EASE_MOVE` (`src/lib/ease.ts`), which `FlowNumber`'s digits and the story's dots move on: a mark
+     and the digits beside it are the same fact, so they must travel together. Change one, change
+     both; `test/ease-token.test.ts` fails until you do. */
   --ease-move: cubic-bezier(0.2, 0, 0, 1);
   --duration-move: 550ms;
   --pin-shadow: rgb(0 0 0 / 0.35);
@@ -331,12 +332,6 @@ html[lang="en"] [data-static-lang="es"] {
 }
 @utility transition-clip-path {
   transition-property: clip-path;
-  transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
-  transition-duration: var(--tw-duration, var(--default-transition-duration));
-}
-/* The story's marks glide and fade; only those two properties move, on hundreds of circles. */
-@utility transition-move {
-  transition-property: translate, opacity;
   transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
   transition-duration: var(--tw-duration, var(--default-transition-duration));
 }
