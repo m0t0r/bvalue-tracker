@@ -173,6 +173,15 @@ draws from too):
 - Recharts charts accept `title` and `desc`; we use them as the charts' text alternative.
 - The frequency–magnitude chart draws a cumulative dot only where an event exists.
   A dot at every 0.1 step turned the lone M7.4 into 25 dots at N = 1, which read as data.
+- **Recharts measures labels in the DOM wherever it is let**, a layout per string, into a hidden span
+  (`measureTextWithDOM`), and it is let more often than it looks (issue #96): an axis whose `interval`
+  is not a number thins its ticks by measuring them; a `CartesianGrid` places its vertical lines by the
+  x axis' own rule even with `vertical={false}` (pass `verticalCoordinatesGenerator={NO_VERTICAL_LINES}`);
+  and each tick's `Text` measures its words to wrap them, because the axis passes it its width (pass
+  `tick={{ width: undefined }}`). With `scale="time"` every data value is a tick candidate, the chart's
+  own data first and then each series' own `data`, unsorted. `ResponsiveContainer` draws the whole chart
+  once at `initialDimension` (shadcn's is 320 × 200) before it has measured. "Valor b en el tiempo" avoids
+  all of it; see [Performance](performance.md).
 - A `ScatterChart` with a time axis derives a single tick on its own. We pass
   explicit weekly `ticks`, shared with the bar chart below it — see the scrolling
   mobile chart under [Interface conventions](frontend.md#interface-conventions) for how the tick
