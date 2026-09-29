@@ -85,6 +85,33 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   interpolated from data: the pin's and the compass rose's (whose letters are set with `textContent`).
   Its sea's forecast comes from the Worker (`/api/sea`), and its sea's colour is committed data, so the
   sea adds nothing to the CSP either.
+  **The speculation rules come as a file named in a response header** (issue #107, 2026-09-29):
+  `Speculation-Rules: "/speculation-rules.json"` on the three pages, and the file served as
+  `application/speculationrules+json` (both in `public/_headers`), so the CSP is unchanged. Chrome
+  fetched and applied them with the CSP above in force (checked in Chrome 153 through the DevTools
+  protocol's `Preload.ruleSetUpdated` and a prerender that activated); the `'inline-speculation-rules'`
+  source is only for rules inline in the HTML, which this page has none of. The rules name the three
+  pages and nothing else, never `/api/*` (`test/headers.test.ts`). **A prerendered page runs its
+  scripts before the reader opens it**, so it must not reach SGC until it is opened
+  (`src/lib/prerender.ts`). Before that, a press on the monitor's link in `/insights` that slid off it
+  started the back-fill loop and posted `/api/refresh` from a page nobody saw, 151 ms after the press;
+  and opening a prerendered monitor counted as a return to the tab, so it sent a focus refresh an
+  ordinary load never sends. Two rules now, each at the one place it can hold:
+  - **`postRefresh` waits for activation** (`whenActivated`), whoever calls it, so no caller, present
+    or future, can send the request from an unopened page. The back-fill starts on a prerendered page
+    and its first request leaves when the reader opens it, as on an ordinary load.
+  - **A return to the tab is the tab shown again after being hidden** (`useReturnToTab`). Opening a
+    prerendered page makes it visible, which TanStack Query reports as focus, but no hide came first.
+    A first version subscribed to the focus signal only from the render after `prerenderingchange`,
+    which held in Chrome 153 (checked) but only because of the order Chrome sends the two events in;
+    the code review (2026-09-29) had it rest on nothing instead.
+  A prerender's other requests are reads, and carry `Sec-Fetch-Site: same-origin` like the page's own
+  (every one answered 200), within the same 120-a-minute limit. **Declined in the code review:**
+  *holding back the page's own error reports* (`POST /api/client-error`) until activation: a prerender
+  that fails is the same bug on the same code, the report writes a log line and nothing else, and one
+  held back would be lost whenever the reader slid off the link. *Not refetching `/api/status` on
+  opening* (its `refetchOnWindowFocus: "always"` fires then): it is 0.3 kB, and it keeps the line under
+  the refresh button current when the prerender is older than a press.
 - **The response headers are the two files below, and nothing else sets them**
   (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
 

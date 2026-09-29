@@ -38,3 +38,19 @@
 # points at the hashed ones.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Each page is its own entry, so a link between them is a full navigation. The rules let Chrome load the
+# page a link points to before the reader lets go of it (issue #107; docs/performance.md). A header
+# rather than a <script type="speculationrules">, which the CSP's script-src would have to allow. The
+# file must be served with this exact type, or Chrome ignores it. Safari and Firefox ignore both. It has
+# no hash in its name, so it is not under /assets/*; an hour's cache spares every page load a
+# revalidation, and an hour of the old rules after a deploy costs nothing.
+/
+  Speculation-Rules: "/speculation-rules.json"
+/choco
+  Speculation-Rules: "/speculation-rules.json"
+/insights
+  Speculation-Rules: "/speculation-rules.json"
+/speculation-rules.json
+  Content-Type: application/speculationrules+json
+  Cache-Control: public, max-age=3600
