@@ -23,10 +23,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabsContent } from "@/components/ui/tabs";
-import { getEvents, getStatus } from "@/lib/api";
+import { Spinner } from "@/components/ui/spinner";
+import { MAX_RETRIES, getEvents, getStatus } from "@/lib/api";
 import { useHydrated } from "@/lib/hydrate";
 import { useI18n } from "@/lib/i18n";
-import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
+import { loadError, loadFailed, retryAttempt, retrying, staleSince } from "@/lib/load-failed";
 import { useDaySelection } from "@/lib/day-selection";
 import { otherReadingKey, scopeChips, useScope } from "@/lib/scope";
 import { toggleTheme } from "@/lib/theme";
@@ -138,6 +139,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
   // are not arriving. /insights follows the same rule (`loadFailed`). Beside the load error there are
   // no figures to date.
   const catalogueFailed = loadFailed(events);
+  const attempt = retryAttempt(events);
   const stale = catalogueFailed ? null : staleSince([status, events]);
   const settled = (!events.isPending || catalogueFailed) && (!status.isPending || status.failureCount > 0);
   // What the b chart's dashed line is called, read off the same deferred copy as the line itself.
@@ -293,8 +295,22 @@ function ZonePage({ zone }: { zone: ZoneId }) {
         ) : !settled ? (
           // At least a viewport tall, so nothing below is on screen to be pushed away when content arrives.
           // The status role says so to a screen reader, which the skeleton alone leaves in silence.
-          <div role="status">
-            <span className="sr-only">{t.loading}</span>
+          // From the first failed attempt it says so while the retries run (`retryAttempt`), in the
+          // slot the load error takes if they all fail: amber while it is still trying, red once it
+          // has stopped. A caution alert, not a line of grey text, which the owner found easy to miss
+          // (2026-09-29). The attempt count is drawn only: read out, it would be news at every retry.
+          <div role="status" className="flex flex-col gap-4">
+            {attempt === null ? (
+              <span className="sr-only">{t.loading}</span>
+            ) : (
+              <Alert variant="caution" role={undefined}>
+                <Spinner aria-hidden="true" role={undefined} aria-label={undefined} />
+                <AlertTitle>{t.loadStruggling}</AlertTitle>
+                <AlertDescription>
+                  {t.loadStrugglingBody} <span aria-hidden="true">{t.loadAttempt(attempt, MAX_RETRIES + 1)}</span>
+                </AlertDescription>
+              </Alert>
+            )}
             <Skeleton className="min-h-svh w-full" />
           </div>
         ) : null}

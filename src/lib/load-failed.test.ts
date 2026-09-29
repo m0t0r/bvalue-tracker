@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadError, loadFailed, retrying, staleSince } from "./load-failed";
+import { loadError, loadFailed, retryAttempt, retrying, staleSince } from "./load-failed";
 
 const q = { data: undefined, errorUpdatedAt: 0, error: null, failureReason: null, fetchStatus: "idle" as const };
 
@@ -67,5 +67,24 @@ describe("staleSince", () => {
   // A catalogue the page never got is the load error's, not this notice's.
   it("ignores a query with no data", () => {
     expect(staleSince([{ ...ok, data: undefined, dataUpdatedAt: 0, status: "error" }])).toBeNull();
+  });
+});
+
+describe("retryAttempt", () => {
+  const first = { data: undefined, failureCount: 0, errorUpdatedAt: 0 };
+  it("is null while the first attempt is out", () => {
+    expect(retryAttempt(first)).toBeNull();
+  });
+  // The page says so from the first failed request rather than after the whole backoff (~7 s).
+  it("is the attempt under way once one has failed", () => {
+    expect(retryAttempt({ ...first, failureCount: 1 })).toBe(2);
+    expect(retryAttempt({ ...first, failureCount: 3 })).toBe(4);
+  });
+  // After the retries the load error takes over, and its own "Reintentar" says it is at work.
+  it("is null once the load has failed for good", () => {
+    expect(retryAttempt({ ...first, failureCount: 1, errorUpdatedAt: 1 })).toBeNull();
+  });
+  it("is null with data on screen", () => {
+    expect(retryAttempt({ ...first, data: [], failureCount: 1 })).toBeNull();
   });
 });

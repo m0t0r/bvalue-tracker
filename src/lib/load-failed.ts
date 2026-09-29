@@ -38,3 +38,16 @@ export function staleSince(
   const behind = queries.filter((q) => q.data !== undefined && (q.status === "error" || q.fetchStatus === "paused"));
   return behind.length === 0 ? null : Math.min(...behind.map((q) => q.dataUpdatedAt));
 }
+
+/**
+ * Which attempt a first load is on while its retries run, or null. The first response that fails
+ * comes back within a fraction of a second, but the load error waits for all of TanStack Query's
+ * retries (~7 s); until then the page would show only its skeleton. From the first failure it says
+ * so instead, with the count out of `MAX_RETRIES + 1` (docs/frontend.md). Only before the load has
+ * failed for good (`errorUpdatedAt`): after that the load error and its own retry button speak.
+ */
+export function retryAttempt(query: { data: unknown; failureCount: number; errorUpdatedAt: number }): number | null {
+  return query.data === undefined && query.errorUpdatedAt === 0 && query.failureCount > 0
+    ? query.failureCount + 1
+    : null;
+}

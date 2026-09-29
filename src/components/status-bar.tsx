@@ -3,7 +3,7 @@ import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FlowNumber } from "@/components/flow-number";
 import { TechnicalDetail } from "@/components/technical-detail";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -484,14 +484,14 @@ export function StatusBar({
         <Alert variant="caution" role="status">
           {backfill.isPending ? <Spinner aria-label={t.backfillShort} /> : <AlertTriangleIcon />}
           <AlertTitle>{t.zones[zone].backfillTitle(status.backfill.done, status.backfill.total)}</AlertTitle>
-          <AlertDescription>
-            {t.zones[zone].backfillBody}
-            {backfill.isPending ? null : (
+          <AlertDescription>{t.zones[zone].backfillBody}</AlertDescription>
+          {backfill.isPending ? null : (
+            <AlertAction>
               <Button variant="outline" size="sm-touch" onClick={() => backfill.mutate()}>
                 {t.backfillAction}
               </Button>
-            )}
-          </AlertDescription>
+            </AlertAction>
+          )}
         </Alert>
       ) : null}
       {alert === "ingest" && failed ? (

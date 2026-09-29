@@ -128,6 +128,14 @@ const es = {
   loadFailedBody: "Puede ser la conexión o el servidor. Vuelve a intentarlo en un momento.",
   loadRetry: "Reintentar",
   loadRetrying: "Reintentando…",
+  /**
+   * While the first load's retries run, before `loadFailed` (`retryAttempt`). "Aún": it may still
+   * work. It blames neither the connection nor the server, like the load error it hands over to.
+   */
+  loadStruggling: "Aún no se pudieron cargar los datos",
+  loadStrugglingBody: "La página lo vuelve a intentar sola.",
+  /** Drawn only: read out, the count would be news at every retry. */
+  loadAttempt: (n: number, of: number) => `Intento ${n} de ${of}`,
   backfillAction: "Cargar ahora",
   backfillShort: "Historial incompleto",
   scopeTitle: (shown: string, total: string) => `Mostrando ${shown} de ${total} eventos`,
@@ -417,6 +425,9 @@ const en: Dict = {
   loadFailedBody: "It may be the connection or the server. Try again in a moment.",
   loadRetry: "Try again",
   loadRetrying: "Trying again…",
+  loadStruggling: "Couldn't load the data yet",
+  loadStrugglingBody: "The page is trying again by itself.",
+  loadAttempt: (n, of) => `Attempt ${n} of ${of}`,
   backfillAction: "Load now",
   backfillShort: "History incomplete",
   scopeTitle: (shown, total) => `Showing ${shown} of ${total} events`,

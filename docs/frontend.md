@@ -1162,6 +1162,29 @@ colour, motion). Keep to them:
   `aria-disabled` `Button` takes no pointer events; while it is also `aria-busy` it keeps its full
   colour: the retry and refresh buttons say they are busy in their label or spinner, and 50 % would
   take "Reintentando…" under AA. One that is only `aria-disabled` is off, and dims like `disabled`.
+- **The monitor says it is struggling from the first failed request** (`retryAttempt` in
+  `load-failed.ts`, owner's call, 2026-09-29). A 503 comes back in a fraction of a second, but the load
+  error waits out TanStack Query's retries (1, 2 and 4 s), so for ~7 s the reader had only the
+  skeleton. Now a caution alert takes the load error's slot above the skeleton: "Aún no se pudieron
+  cargar los datos · La página lo vuelve a intentar sola. Intento 2 de 4", with a spinner. If the
+  retries all fail, the same slot turns into the red load error; if one works, the page replaces it.
+  Amber while it is still trying and red once it has stopped keeps "red means something failed". The
+  first load only: after the load error, its own "Reintentando…" speaks. It is read out once, from
+  the skeleton's `role="status"` (the alert's own `role="alert"` is dropped, one live region is
+  enough), and the attempt count is `aria-hidden`, or each retry would be news. **A grey line with a
+  spinner was tried beside it and dropped**: the owner found plain text easy to miss above a
+  full-height skeleton. Also weighed and not built: fewer or faster retries (less resilience), and a
+  "Probar ahora" button during them (it restarts the chain and adds requests, the problem the refresh
+  backoff exists for).
+- **An alert's button is its `AlertAction`** (shadcn's slot; owner's report, 2026-09-29). The
+  back-fill notice's "Cargar ahora" sat at the end of its sentence, and the load error's "Reintentar"
+  under its text. Upstream pins the action top-right over 72 px of padding, which fits an `xs` button
+  and not these (`sm-touch`), so `ui/alert.tsx` makes it a grid column beside the title and
+  description from `sm`, top-aligned so the technical detail opening does not move it, and a row under
+  the text on a phone. It takes `foreground`, not the alert's colour: inside the destructive alert
+  "Reintentar" came out red, which reads as a destructive action. `AlertDescription` keeps to the text
+  column like `AlertTitle`, so the load error's technical detail can follow the button on a phone
+  as a second description.
 - **Data a failed refetch left behind is dated, not hidden** (`staleSince` in `load-failed.ts`,
   interface review 2026-09-26). Kept silent, the monitor went on saying "Se actualiza sola cada 15
   minutos" with every request failing, and only "Última consulta al SGC: hace N min" grew, blaming
