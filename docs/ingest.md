@@ -263,13 +263,20 @@ limit and the 2026-09-20 outage can repeat at any time, with the only warning be
 `reaped abandoned runs` in the logs and the stale-catalogue alarm in
 `.github/workflows/ingest-health.yml`.
 
-`pnpm logs cpu --since 24h` reproduces the table above. Note `p50` is not a valid operator
+`pnpm logs cpu --since 24h` gives the figures behind the table above, one row per route and per
+cron pattern rather than the table's `scheduled` and `fetch`; the successful-only row needs the
+invocation logs themselves (`$workers.outcome`). Note `p50` is not a valid operator
 in that API — it is `median`; `p90`, `p95`, `p99`, `avg`, `min`, `max`, `sum`, `stddev` and
-`count` all work.
+`count` all work. The script asked for `p50` until 2026-09-29, and every run answered a bare
+HTTP 400. A calculation also returns only 10 groups unless `parameters.limit` says otherwise, and
+it drops the rest silently: over 3 days there are 13 triggers, and the cron and
+`GET /api/events` were among those left out. The script now asks for 100 and says when a
+calculation comes back full.
 
-That figure is **per trigger — cron against fetch — and not per lane**, and no query gets
+That figure is **per trigger and not per lane**. A trigger is the route for a request
+(`GET /api/events`) and the cron pattern for a tick, so each route gets its own row. No query gets
 per-lane out of it: `cpuTimeMs` is on the invocation log, `lane` is on the lines the Worker
-writes, and all three lanes hang off the one `*/5` cron, so they share a trigger. The
+writes, and all three lanes hang off the one `*/15` cron, so they share a trigger. The
 sweep is the lane worth isolating, since it is the one with a `SWEEP_CHUNK_DAYS` knob;
 `pnpm logs lanes` gives its ticks, and their invocations can be matched by timestamp.
 Note that nothing inside the Worker can measure this: `Date.now()` does not advance between

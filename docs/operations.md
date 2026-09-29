@@ -41,7 +41,7 @@ pnpm logs                                  # the last hour, oldest first
 pnpm logs --since 12h --level error        # just the failures
 pnpm logs --since 3d --msg "ingest failed"
 pnpm logs lanes --since 24h                # how many runs each lane made
-pnpm logs cpu --since 24h                  # p50/p90/p99/max CPU per invocation
+pnpm logs cpu --since 24h                  # median/p90/p99/max CPU per route and per cron
 pnpm exec wrangler tail choco --format json  # live, for something happening now
 ```
 
@@ -49,9 +49,9 @@ pnpm exec wrangler tail choco --format json  # live, for something happening now
 
 One JSON object per line. `level`, `time` and `msg` are always there; a line about a run
 also carries `lane`, `trigger` and `zone`. The daily USGS job's lines carry `trigger: "usgs"`, and
-its invocation is the one at 11:07 UTC, so `pnpm logs cpu` counts it among the scheduled ones. A cron tick writes one `tick planned` / `tick stood
-down` line **per zone** — Chaparral's says `stood down` with `lanes: []` on the :15 and :45 ticks,
-which is its cadence, not a fault. The Analytics Engine point carries the zone in `blob7`.
+its invocation is the one at 11:07 UTC, which `pnpm logs cpu` shows on its own row, `7 11 * * *`. A cron tick writes one `tick planned` / `tick stood
+down` line **per zone** — Chocó's says `stood down` with `lanes: []` on the :15 and :45 ticks,
+which is its cadence (it has no fast lane), not a fault. The Analytics Engine point carries the zone in `blob7`.
 
 | `msg` | Level | When | The fields that matter |
 |---|---|---|---|
@@ -86,8 +86,8 @@ which is its cadence, not a fault. The Analytics Engine point carries the zone i
   plan or a smaller `SWEEP_CHUNK_DAYS`. If CPU is fine, the suspect is memory — `sgcMs` and
   `sgcChars` on the *last* successful run of that lane say how large the responses had got.
 - **"Nothing has reached SGC for ages and there are no failures."** `pnpm logs lanes
-  --since 24h`. A healthy day is roughly four `fast` runs per `wide` one and a `sweep` on
-  the hour. All `fast` and no `sweep` is the `tickMinute` fault returning; only `wide` and
+  --since 24h`. A healthy day at `*/15` is 96 `wide` runs (both zones on :00 and :30), 48
+  `sweep` runs (both zones on the hour) and 48 `fast` runs (Tolima on :15 and :45). All `fast` and no `sweep` is the `tickMinute` fault returning; only `wide` and
   `sweep` means `sgcUnwell` is holding the fast lane down, so look for the 429/503 or the
   failed run that did it.
 - **"The refresh button does nothing."** Usually correct behaviour: `refresh stood down`

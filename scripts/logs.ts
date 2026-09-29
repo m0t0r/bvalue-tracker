@@ -19,30 +19,32 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  calculationTable,
+  type CalculationResult,
+  isMode,
+  parseLimit,
+  queryBody,
+  type QueryBody,
+  sinceMs,
+  WORKER,
+} from "./logs-query";
 
-const WORKER = "bvalue-tracker";
 const API = "https://api.cloudflare.com/client/v4";
 
 const USAGE = `usage: pnpm logs [events|cpu|lanes] [options]
 
   events   (default) the log lines themselves, oldest first
-  cpu      p50/p90/p99/max CPU time per invocation — the free plan's 10 ms limit
+  cpu      median/p90/p99/max CPU time per invocation, by route and cron — the free plan's 10 ms limit
   lanes    how many ingest runs each lane made, and how many failed
 
 options:
   --since 90m|6h|3d   how far back to look (default 1h)
-  --limit N           lines to return, max 2000 (default 100)
+  --limit N           lines to return in the events view, max 2000 (default 100)
   --level LEVEL       only lines at this level: debug, info, warn, error
-  --msg TEXT          only lines whose msg contains TEXT
+  --msg TEXT          only lines whose msg contains TEXT (not with cpu)
   --json              print the raw API response and nothing else
 `;
-
-/** "90m", "6h", "3d" — the shapes anyone types when something has gone wrong. */
-function sinceMs(v: string): number {
-  const m = /^(\d+)(m|h|d)$/.exec(v.trim());
-  if (!m) throw new Error(`--since wants something like 90m, 6h or 3d, not ${JSON.stringify(v)}`);
-  return Number(m[1]) * { m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as "m" | "h" | "d"];
-}
 
 interface Creds {
   token: string;
@@ -125,9 +127,7 @@ function credentials(): Creds {
   return { token: oauth, accountId, how: "your wrangler login" };
 }
 
-type Filter = { key: string; operation: string; type: string; value: string | number };
-
-async function query(creds: Creds, body: Record<string, unknown>): Promise<Record<string, any>> {
+async function query(creds: Creds, body: QueryBody): Promise<Record<string, any>> {
   const res = await fetch(`${API}/accounts/${creds.accountId}/workers/observability/telemetry/query`, {
     method: "POST",
     headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json" },
@@ -184,18 +184,12 @@ function printEvents(result: Record<string, any>): void {
 }
 
 function printCalculations(result: Record<string, any>): void {
-  const calcs: Record<string, any>[] = result.calculations ?? [];
-  if (calcs.length === 0) {
+  const calcs: CalculationResult[] = result.calculations ?? [];
+  if (calcs.every((c) => (c.aggregates ?? []).length === 0)) {
     console.log("nothing in that window");
     return;
   }
-  for (const c of calcs) {
-    console.log(`\n${c.alias ?? c.name ?? "calculation"}`);
-    for (const row of c.aggregates ?? c.data ?? []) {
-      const group = (row.groups ?? []).map((g: { value: unknown }) => String(g.value)).join(" / ") || "all";
-      console.log(`  ${group.padEnd(28)} ${row.value ?? row.count ?? ""}`);
-    }
-  }
+  for (const line of calculationTable(calcs)) console.log(line);
 }
 
 async function main(argv: string[]): Promise<void> {
@@ -205,7 +199,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   const mode = argv[0] && !argv[0].startsWith("--") ? argv[0] : "events";
-  if (!["events", "cpu", "lanes"].includes(mode)) {
+  if (!isMode(mode)) {
     console.error(USAGE);
     process.exit(2);
   }
@@ -217,62 +211,9 @@ async function main(argv: string[]): Promise<void> {
   const creds = credentials();
   const to = Date.now();
   const from = to - sinceMs(flag("since") ?? "1h");
-  const limit = Math.min(Number(flag("limit") ?? 100), 2000);
+  const limit = parseLimit(flag("limit"));
 
-  // Every query is scoped to this Worker: the account has others, and a question about
-  // this one must never be answered with another one's lines.
-  const filters: Filter[] = [{ key: "$metadata.service", operation: "eq", type: "string", value: WORKER }];
-  const level = flag("level");
-  if (level !== undefined) filters.push({ key: "level", operation: "eq", type: "string", value: level });
-  const msg = flag("msg");
-  if (msg !== undefined) filters.push({ key: "msg", operation: "includes", type: "string", value: msg });
-
-  const body: Record<string, unknown> =
-    mode === "cpu"
-      ? {
-          queryId: "sgc-cpu",
-          timeframe: { from, to },
-          // The standing open item in docs/ingest.md, "The CPU budget": the free plan allows 10 ms of CPU per
-          // invocation and this has never been measured. The runtime is the only thing
-          // that can see it, and it publishes it on the invocation log.
-          //
-          // Grouped by trigger — cron against fetch — and **not** by lane, which is not
-          // obtainable here however the query is written: cpuTimeMs lives on the
-          // invocation log, `lane` lives on the lines the Worker itself writes, and all
-          // three lanes hang off the one */5 cron, so they share a trigger. To separate
-          // them, take the wide ticks (minute divisible by 15) from `pnpm logs lanes` and
-          // compare their invocations' CPU against the rest by timestamp.
-          parameters: {
-            filters,
-            calculations: (["p50", "p90", "p99", "max"] as const).map((op) => ({
-              operator: op,
-              key: "$workers.cpuTimeMs",
-              keyType: "number",
-              alias: `cpuMs ${op}`,
-            })),
-            groupBys: [{ value: "$metadata.trigger", type: "string" }],
-          },
-          view: "calculations",
-          limit,
-        }
-      : mode === "lanes"
-        ? {
-            queryId: "sgc-lanes",
-            timeframe: { from, to },
-            // Four fast ticks for every wide one, and a sweep on the hour. Anything else —
-            // all fast, or no sweeps at all — is the 2026-09-20 tickMinute fault.
-            parameters: {
-              filters: [...filters, { key: "lane", operation: "exists", type: "string", value: "" }],
-              calculations: [{ operator: "count", alias: "runs" }],
-              groupBys: [
-                { value: "lane", type: "string" },
-                { value: "msg", type: "string" },
-              ],
-            },
-            view: "calculations",
-            limit,
-          }
-        : { queryId: "sgc-events", timeframe: { from, to }, parameters: { filters }, view: "events", limit };
+  const body = queryBody(mode, { from, to, limit, level: flag("level"), msg: flag("msg") });
 
   const result = await query(creds, body);
   if (argv.includes("--json")) {
