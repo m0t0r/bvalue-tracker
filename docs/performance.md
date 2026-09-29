@@ -126,13 +126,16 @@ practices stayed at 100.
   medians):
   - **On a wide screen the page's API requests start from the HTML** (`core/page-data.ts`,
     `preloadPageData` in `vite.config.ts`): `<link rel="preload" as="fetch" crossorigin>` with
-    `media="(min-width: 1024px)"`, the zone's own on each zone page and all five on `/insights`.
+    `media="(min-width: 1024px)"`, the zone's own on each zone page and all five on `/insights`
+    (on `/insights` at every width since issue #108: the last sentence of this bullet).
     `src/lib/api.ts` builds its URLs from the same functions, since the browser hands a preload
     over only to a request for the identical URL. Desktop LCP on `/` went 544 → 173 ms and on
     `/choco` 512 → 183 ms. **Not on a phone:** preloaded there, the catalogue took the connection
     the scripts needed, and first paint came 1.0 s later on both zones (5.1 → 6.1 s) and 2.2 s later
     on `/insights` (4.2 → 6.4 s), for a story 1.3 s sooner. `fetchpriority="low"` did not help.
-    With the `media` query, a phone's first paint is where it was (5.10 s on both builds).
+    With the `media` query, a phone's first paint is where it was (5.10 s on both builds). **`/insights`
+    has preloaded at every width since issue #108** (2026-09-29, below): with brotli, and with its
+    story's chunk preloaded too, the trade came out the other way.
   - **"Valor b en el tiempo" brings its description into the placeholder**
     (`b-over-time-description.ts`, `Deferred`'s `description`), so the desktop's LCP text is drawn
     with the data rather than with the 300 kB chart chunk.
@@ -474,6 +477,68 @@ practices stayed at 100.
     to reserve room, where this must match Recharts' measure exactly or fall back to it. *`clientWidth`
     over `getBoundingClientRect`:* the latter is what `ResponsiveContainer` reads on mounting, and
     matching it is what keeps the chart drawn once; the row's entry transition only translates.
+- **`/insights` asks for everything its hero needs from the HTML, at every width** (issue #108,
+  2026-09-29). On a phone the story's hero (its intro, the LCP at every width) came ~1.7 s after the
+  first paint. It needs three things: the bundle, the data and the story tab's chunk. Only the bundle
+  started from the HTML: the data waited for the bundle to run (the `media` query above), and so did
+  the story's chunk, which `app.tsx` imports when its module runs (`chunks[readTab()]()`). Vite
+  preloads only what an entry imports statically.
+  - **The data alone moved nothing.** Preloaded at every width (A/B on one build, the HTML rewritten by
+    the proxy, three runs each), the catalogues were in by 3.3 s instead of 4.7, and LCP went 4.80 →
+    4.76 s: the story's chunk, asked for at 3.4 s, was now the last thing to arrive. The chunk alone
+    gave 4.54 s, both together 4.28. `fetchpriority="low"` on the data changed nothing: Chrome held the
+    requests back to ~2.1 s, and first paint was as late.
+  - **So the page preloads both**: the five API requests with no `media` (`preloadTags(INSIGHTS_LOAD,
+    null)`), and the story's chunk with every chunk it imports that the entry does not
+    (`chunkPreloads` in `core/page-data.ts`, `preloadStoryTab` in `vite.config.ts`, which reads them off
+    the bundle, so a new import is preloaded with no change here). The monitor's pages are
+    byte-for-byte what they were.
+  - **It is always the story's chunk, whatever the tab.** The HTML is the same file for all three tabs,
+    and only a script could choose by the query string. The other two tabs gain anyway: the questions
+    chunk shares most of the story's imports (d3's time and scale modules, the projection, the region
+    outlines). **Declined in the code review (2026-09-29):** having the head script (`src/boot.ts`)
+    preload the tab in `?tab=`. It is the one script that decides the language and the theme and nothing
+    else ([the page](frontend.md)), and it is bundled before the page's chunks exist, so the build would
+    have to hand it their names in the HTML. The 3D tab, which uses least of the story's code, still
+    paints its LCP 0.24 s sooner (below); its Speed Index is 31 ms later, within the runs' spread.
+  - **Lighthouse A/B** against a build of `main` at `3e3d5a2`, devtools throttling, both behind the
+    brotli proxy, same `.wrangler/` copy, interleaved, every run checked for the build it loaded (only
+    the branch starts `/api/events` and `story-*.js` at ~0.6 s; the two builds' assets are identical);
+    medians, five runs unless said:
+
+    | | FCP | LCP | Speed Index | TBT | CLS | Score |
+    |---|---|---|---|---|---|---|
+    | phone `/insights`, English | 3102 → 3482 ms | 4952 → 4326 ms | 4242 → 3930 ms | 0 → 0 ms | 0 → 0 | 74 → 77 |
+    | phone `/insights`, Spanish | 3103 → 3492 ms | 4960 → 4330 ms | 4268 → 3938 ms | 0 → 0 ms | 0 → 0 | 74 → 77 |
+    | phone `?tab=questions` (3) | 3107 → 3485 ms | 5277 → 5004 ms | 4449 → 4472 ms | 166 → 159 ms | 0 → 0 | 70 → 71 |
+    | phone `?tab=3d` (3) | 3098 → 3485 ms | 5030 → 4790 ms | 4965 → 4996 ms | 278 → 283 ms | 0 → 0 | 67 → 66 |
+    | desktop `/insights` | 114 → 113 ms | 159 → 156 ms | 146 → 142 ms | 0 → 0 ms | 0 → 0 | 100 → 100 |
+    | phone `/` | 1352 → 1346 ms | 1352 → 1346 ms | 3163 → 3155 ms | 276 → 274 ms | 0 → 0 | 93 → 93 |
+
+    Every phone story run of the branch had its LCP between 4318 and 4355 ms, against 4932–4990 on
+    `main`. Spanish needs `--accept-lang=es-CO` in the Chrome flags; `--lang` does not reach
+    `navigator.languages` in headless Chrome, and a first Spanish set measured English (checked by the
+    LCP element's text). On a desktop `main` ran 145–159 ms three times and 436–450 ms twice, when the
+    story's chunk came in after the data; the branch, 143–159 ms every time.
+  - **The price is the skeleton, ~0.38 s later on a phone**, on every tab: the catalogues (64 kB with
+    brotli) and the story's chunks (~85 kB) now share the connection with the bundle. The reader's
+    wait is for the story, not for the skeleton, and it comes 0.6 s sooner.
+  - **What is left is bytes.** With everything preloaded the main thread idled from 3.5 to 4.2 s
+    (a trace of a cold load at Lighthouse's phone settings): every request starts at ~0.6 s and they
+    share 1.6 Mbps, the last one ends at 4.16 s, and the hero paints ~130 ms later. The issue's other
+    two ideas were not built. *Painting the hero's text from the HTML* would need a static `/insights`
+    shell hydrated by React, as the monitor's header is (issues #69, #97): the page's header and tabs,
+    and the hero's kicker and intro, with slots of their final height for the count and the sentences
+    the data decides. It is the step left if the story must come sooner. *A smaller request for the
+    hero* would save at most the catalogues' 64 kB (~0.35 s at 1.6 Mbps), for a new route and a second
+    source of the same figures.
+  - **A load that fails is unchanged** (checked in `agent-browser` at 412 px, with `/api/*` answering 503
+    through the proxy): the preloaded 503 is handed to the page's first request, which TanStack then
+    retries at 1, 3 and 7 s as before, and the load error follows; with the API back, "Reintentar" draws
+    the story. The console stays empty on all three tabs at 412 and 1350 px (no unused preload), and each
+    load makes five API requests, one per URL.
+  - A prerender of `/insights` from the monitor (issue #107, above) fetches what it did (the catalogues
+    and the story's chunks), now from its HTML.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

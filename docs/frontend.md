@@ -336,7 +336,9 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   `src/insights/questions`, `src/insights/block3d`). The tab the page opens on is fetched at startup,
   beside the data, and read with `use`, not `lazy`: `lazy` suspends once even on a chunk that has
   already arrived, and React then holds the tab back 300 ms (see [Performance](performance.md)).
-  A tab opened later still loads when it is opened.
+  The story's chunk is also preloaded from the HTML, with the data, at every width (issue #108;
+  `preloadStoryTab` in `vite.config.ts`): the hero needs both, and the story is the bare URL. A tab
+  opened later still loads when it is opened.
 - **Live data, kept current like the monitor.** `useInsights` reads `/api/events` for both zones under
   `["events", zone]`, and computes every claim with `insights()` over them and a clock rounded to
   the minute. Status is polled every minute and on returning to the tab, and a zone's events are

@@ -36,19 +36,66 @@ export const INSIGHTS_LOAD: string[] = [
  * same-origin URL (CORS mode, same-origin credentials); a preload that differs in either is kept
  * apart from the page's request and downloaded twice. It carries `Sec-Fetch-Site: same-origin`
  * like any request the page makes, so the Worker's same-origin check answers it (docs/api.md).
+ * `media` null preloads at every width: the insights page's (issue #108).
  */
-export const preloadTags = (paths: readonly string[]): string =>
-  paths.map((p) => `<link rel="preload" href="${p}" as="fetch" crossorigin media="${PRELOAD_MEDIA}">`).join("\n    ");
+export const preloadTags = (paths: readonly string[], media: string | null = PRELOAD_MEDIA): string =>
+  paths
+    .map((p) => `<link rel="preload" href="${p}" as="fetch" crossorigin${media === null ? "" : ` media="${media}"`}>`)
+    .join("\n    ");
 
 /**
- * Wide screens only, where there is bandwidth to spare and the largest paint waits on the data. On a
- * phone the monitor's largest paint is the header, which waits on the scripts alone, and a catalogue
- * preloaded beside them took the connection those scripts needed: with real throttling on a slow
- * phone the first paint came 1.0 s later on both zones and 2.2 s later on /insights, and
+ * The monitor preloads its data on wide screens only, where there is bandwidth to spare and the
+ * largest paint waits on the data. On a phone its largest paint is the header, which is in the HTML
+ * and waits on nothing, and a catalogue preloaded beside the scripts took the connection they
+ * needed: with real throttling on a slow phone the first paint came 1.0 s later on both zones, and
  * `fetchpriority="low"` did not help (docs/performance.md). `lg`, where "Valor b en el tiempo" moves
- * up beside the b-value and is on screen at load.
+ * up beside the b-value and is on screen at load. The insights page preloads at every width: its
+ * largest paint is the story's hero, which waits on the data everywhere.
  */
 export const PRELOAD_MEDIA = "(min-width: 1024px)";
+
+/** The part of a Rollup output chunk (or asset) that `chunkPreloads` reads. */
+export interface BundleFile {
+  type: "chunk" | "asset";
+  fileName: string;
+  imports?: readonly string[];
+  facadeModuleId?: string | null;
+}
+
+/**
+ * The chunk built from `module` and every chunk it imports statically, at any depth, less those the
+ * page's own entry (the chunk built from `entry`) imports: Vite already preloads those. Dynamic imports
+ * are not followed: they are other tabs' code, loaded when opened. The module's own chunk comes first.
+ * How the insights page fetches the story tab's code beside its bundle rather than once the bundle has
+ * run (issue #108, docs/performance.md). Throws when either module is no chunk's own, or when the
+ * entry already loads all of it, so a change that moves the code fails the build instead of shipping a
+ * page that preloads nothing.
+ */
+export function chunkPreloads(bundle: Record<string, BundleFile>, module: string, entry: string): string[] {
+  const files = Object.values(bundle);
+  const own = (id: string) => {
+    const found = files.find((f) => f.type === "chunk" && f.facadeModuleId === id);
+    if (!found) throw new Error(`chunkPreloads: no chunk is built from ${id}`);
+    return found;
+  };
+  const closure = (from: BundleFile, seen = new Set<string>()): Set<string> => {
+    if (seen.has(from.fileName)) return seen;
+    seen.add(from.fileName);
+    for (const name of from.imports ?? []) {
+      const next = bundle[name];
+      if (next) closure(next, seen);
+    }
+    return seen;
+  };
+  const preloaded = closure(own(entry));
+  const needed = [...closure(own(module))].filter((name) => !preloaded.has(name));
+  if (needed.length === 0) throw new Error(`chunkPreloads: ${entry} already loads everything ${module} needs`);
+  return needed;
+}
+
+/** `<link rel="modulepreload">` tags written as Vite writes the ones for the page's entry. */
+export const modulePreloadTags = (files: readonly string[]): string =>
+  files.map((f) => `<link rel="modulepreload" crossorigin href="/${f}">`).join("\n    ");
 
 /**
  * `html` with the preloads for `from` replaced by those for `to`: how the build turns the home zone's

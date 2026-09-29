@@ -8,9 +8,9 @@ import { useInsights } from "./use-insights";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("useInsights", () => {
-  // insights.html preloads INSIGHTS_LOAD on a wide screen. A request the page makes that is not in
-  // it is simply not preloaded; one in it that the page no longer makes is downloaded for nothing
-  // and warned about in the console. So the two must be the same set.
+  // insights.html preloads INSIGHTS_LOAD at every width. A request the page makes that is not in
+  // it is simply not preloaded; one in it that the page no longer makes is downloaded for nothing,
+  // on a phone's connection too, and warned about in the console. So the two must be the same set.
   it("asks for exactly what insights.html preloads", async () => {
     const asked: string[] = [];
     // Never answers: only the requests matter here, not what the page computes from them.

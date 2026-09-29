@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   INSIGHTS_LOAD,
   PRELOAD_MEDIA,
+  chunkPreloads,
   classAttributes,
+  modulePreloadTags,
   monitorLoad,
   preloadTags,
   stylesheetBeforeBundle,
@@ -24,11 +26,19 @@ describe("the pages' data preloads", () => {
     );
   });
 
-  // On a phone they cost the first paint a second (docs/performance.md).
-  it("are for wide screens only", () => {
-    const tags = preloadTags(INSIGHTS_LOAD).split("\n");
-    expect(tags).toHaveLength(INSIGHTS_LOAD.length);
+  // On a phone they cost the monitor's first paint a second (docs/performance.md).
+  it("are for wide screens only on the monitor", () => {
+    const tags = preloadTags(monitorLoad(HOME_ZONE)).split("\n");
+    expect(tags).toHaveLength(monitorLoad(HOME_ZONE).length);
     for (const tag of tags) expect(tag).toContain('media="(min-width: 1024px)"');
+  });
+
+  // /insights's largest paint waits on its data at every width (issue #108).
+  it("are for every width on /insights", () => {
+    const tags = preloadTags(INSIGHTS_LOAD, null).split("\n");
+    expect(tags).toHaveLength(INSIGHTS_LOAD.length);
+    for (const tag of tags) expect(tag).not.toContain("media=");
+    expect(tags[0]).toBe('<link rel="preload" href="/api/events?zone=choco" as="fetch" crossorigin>');
   });
 
   it.each(ZONE_IDS)("give the %s page its own zone's data, and no other zone's", (zone) => {
@@ -52,6 +62,82 @@ describe("the pages' data preloads", () => {
       expect(INSIGHTS_LOAD).toContain(`/api/status?zone=${zone}`);
     }
     expect(new Set(INSIGHTS_LOAD).size).toBe(INSIGHTS_LOAD.length);
+  });
+});
+
+describe("chunkPreloads", () => {
+  // The shape of Rollup's output bundle that matters here: the page's entry imports the shared chunks
+  // statically (Vite preloads those itself) and each tab dynamically.
+  const chunk = (
+    fileName: string,
+    imports: string[] = [],
+    facadeModuleId: string | null = null,
+    dynamicImports: string[] = [],
+  ) => ({
+    type: "chunk" as const,
+    fileName,
+    imports,
+    dynamicImports,
+    facadeModuleId,
+  });
+  const bundle = {
+    "assets/insights-a.js": chunk(
+      "assets/insights-a.js",
+      ["assets/react-b.js", "assets/shared-c.js"],
+      "/r/insights.html",
+    ),
+    "assets/react-b.js": chunk("assets/react-b.js"),
+    "assets/shared-c.js": chunk("assets/shared-c.js", ["assets/react-b.js"]),
+    // The story links to the questions tab's code by a dynamic import, which is not the story's own.
+    "assets/story-d.js": chunk(
+      "assets/story-d.js",
+      ["assets/shared-c.js", "assets/time-e.js", "assets/region-f.js"],
+      "/r/src/insights/story/index.tsx",
+      ["assets/questions-h.js"],
+    ),
+    "assets/time-e.js": chunk("assets/time-e.js", ["assets/interp-g.js"]),
+    "assets/interp-g.js": chunk("assets/interp-g.js"),
+    "assets/region-f.js": chunk("assets/region-f.js", ["assets/interp-g.js"]),
+    "assets/questions-h.js": chunk(
+      "assets/questions-h.js",
+      ["assets/time-e.js"],
+      "/r/src/insights/questions/index.tsx",
+    ),
+    "assets/src-i.css": { type: "asset" as const, fileName: "assets/src-i.css" },
+  };
+
+  it("gives the tab's chunk and everything it imports that the entry does not, each once, the tab first", () => {
+    expect(chunkPreloads(bundle, "/r/src/insights/story/index.tsx", "/r/insights.html")).toEqual([
+      "assets/story-d.js",
+      "assets/time-e.js",
+      "assets/interp-g.js",
+      "assets/region-f.js",
+    ]);
+  });
+
+  it("never gives another tab's chunk", () => {
+    expect(chunkPreloads(bundle, "/r/src/insights/story/index.tsx", "/r/insights.html")).not.toContain(
+      "assets/questions-h.js",
+    );
+  });
+
+  it("refuses a module that is no chunk's own, rather than ship a page that preloads nothing", () => {
+    expect(() => chunkPreloads(bundle, "/r/src/insights/story/gone.tsx", "/r/insights.html")).toThrow(/story\/gone/);
+    expect(() => chunkPreloads(bundle, "/r/src/insights/story/index.tsx", "/r/gone.html")).toThrow(/gone\.html/);
+  });
+
+  it("refuses a tab whose code the entry already loads, rather than ship a page that preloads nothing", () => {
+    const merged = {
+      ...bundle,
+      "assets/insights-a.js": { ...bundle["assets/insights-a.js"], imports: ["assets/story-d.js"] },
+    };
+    expect(() => chunkPreloads(merged, "/r/src/insights/story/index.tsx", "/r/insights.html")).toThrow(/already/);
+  });
+
+  it("writes the tags as Vite writes its own", () => {
+    expect(modulePreloadTags(["assets/story-d.js"])).toBe(
+      '<link rel="modulepreload" crossorigin href="/assets/story-d.js">',
+    );
   });
 });
 
