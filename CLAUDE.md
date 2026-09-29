@@ -33,6 +33,11 @@ and interface conventions. Most of it cannot be inferred from the code.
 - A PR that changes what the page looks like gets a before/after block from the `before-and-after`
   skill when it is opened, without being asked. Capture the "before" on `main` at the same
   viewport and state as the "after" (the `verify` skill does this).
+- A PR for a new feature or a behaviour change gets an "Unhappy paths" section when it is opened,
+  without being asked: each error, retry and edge case the change can reach, how it was provoked,
+  what happened, and the evidence (screenshot, command output, test name, or at least a
+  description). A change with nothing new to fail says so in one line. The `verify` skill,
+  section 4, says how.
 - `src/components/ui/*` is shadcn source with deliberate local modifications; do not
   overwrite it with the shadcn CLI without diffing.
 - Do not loop requests against SGC (`bdrsnc.sgc.gov.co`). It is a government server;
