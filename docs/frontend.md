@@ -782,7 +782,8 @@ colour, motion). Keep to them:
   within the last five minutes, so it may only appear when nothing has failed;
   `refreshStillFailing` replaces it beside the alert and must not tell the reader to press
   again, because while SGC is refusing us the Worker's own wait is an hour; `refreshFailed`
-  is for the request from the *page* failing, which is a different thing again. While the data is
+  is for the request from the *page* failing, which is a different thing again, and so names no SGC
+  ("No se pudo actualizar", not "No se pudo consultar al SGC": that request never reached it). While the data is
   stale (`staleSince`), the stale line takes priority over all three: `refreshWait` would claim
   fresh data, and `refreshFailed` blames SGC for what is usually the connection.
 - **The refresh button standing down is good news, not a countdown.** The throttle is the
@@ -1158,8 +1159,9 @@ colour, motion). Keep to them:
   both pages only a catalogue the page never got is an error (`loadFailed`): a background refetch
   that fails keeps what is drawn, with no alert, and the next refetch tries again. The button stays
   focusable while it retries (`aria-disabled`), and a retry parked offline counts as running. An
-  `aria-disabled` `Button` takes no pointer events but keeps its full colour: the retry and refresh
-  buttons say they are busy in their label or spinner, and 50 % would take "Reintentando…" under AA.
+  `aria-disabled` `Button` takes no pointer events; while it is also `aria-busy` it keeps its full
+  colour: the retry and refresh buttons say they are busy in their label or spinner, and 50 % would
+  take "Reintentando…" under AA. One that is only `aria-disabled` is off, and dims like `disabled`.
 - **Data a failed refetch left behind is dated, not hidden** (`staleSince` in `load-failed.ts`,
   interface review 2026-09-26). Kept silent, the monitor went on saying "Se actualiza sola cada 15
   minutos" with every request failing, and only "Última consulta al SGC: hace N min" grew, blaming
@@ -1220,6 +1222,30 @@ colour, motion). Keep to them:
   width, so each value landing re-wrapped the row: on a phone "Sismo principal"'s hint took it from
   two lines to three and pushed the refresh button down on every load (0.03 of CLS). A status
   request that fails is not waited for through its retries.
+  - **A status that never loaded fills nothing in** (2026-09-29, found with `/api/*` answering 503).
+    The newest event reads "—", like the catalogue's two stats, rather than a placeholder that
+    shimmered for good, and the last-query note says the time is unknown ("desconocida"): "nunca"
+    claimed SGC had never been queried, which the page cannot know. "nunca" stays for a status that
+    loaded with no successful run.
+- **"Actualizar ahora" rests after a failed press, for longer each time** (`src/lib/refresh-backoff.ts`,
+  owner's call, 2026-09-29). Unlimited, a reader pressed it about 40 times in a minute through an
+  outage, each a request to a Worker that was already failing. Now each failed press dims the button
+  (`aria-disabled`, so it keeps focus) for 5 s, then 10, 20, 40 and at most 60 s, the status poll's own
+  interval, and the line under it counts down: "No se pudo actualizar. Inténtalo de nuevo en 20 s."
+  The countdown is drawn only (`aria-hidden`); a screen reader hears the whole wait once in words, since
+  a live region that changed every second would be read out every second. A refresh that works ends the
+  run, and so do two quiet minutes between failures, so a tab left open overnight starts again from
+  5 s. A status answer does not: a first version forgot the failures whenever a status poll answered,
+  but `GET /api/status` can answer from D1 while `POST /api/refresh` fails (an ingest killed for CPU,
+  2026-09-20), and then the backoff restarted at 5 s every minute and "No se pudo actualizar" vanished
+  while every press was still failing (code review, 2026-09-29). Only presses count: a refresh the page started on a return to the tab rests
+  nothing, and none starts while the button rests. The countdown outranks the stale-data line, since it
+  is what explains the dimmed button. **A five-press lock came first and was dropped** (owner's call):
+  off after five failures until the next status answer, its line had to promise when the button would
+  return ("…volverá solo cuando la página pueda cargar datos de nuevo"), which the owner did not like; a
+  countdown states a fact instead. `Button` dims an `aria-disabled` button unless it is also
+  `aria-busy`: the refresh and retry buttons at work keep their colour and say so in their spinner, as
+  before. Checked with `/api/*` at 503 behind a proxy.
 - Charts and the map redraw on every filter change, so they do not animate. The
   headline numbers do (`FlowNumber`, wrapping `@number-flow/react`): digits roll to
   the new value in 550 ms with `cubic-bezier(0.2, 0, 0, 1)` so the reader sees which

@@ -263,3 +263,31 @@ describe("the language a first visit opens in", () => {
     expect(browserLang(languages)).toBe("en");
   });
 });
+
+/**
+ * A press that fails never reached SGC: the request from the page to the Worker failed, which is the
+ * connection or the Worker (an SGC failure comes back as a 200 with a failed run). The old copy, "No se
+ * pudo consultar al SGC", blamed SGC for it.
+ */
+describe("a failed press on the refresh button", () => {
+  it.each(langs)("does not blame SGC, in %s", (lang) => {
+    expect(dicts[lang].refreshFailed).not.toMatch(/SGC/);
+  });
+
+  // The button rests after a failure (`refresh-backoff.ts`); the line says for how long, on screen as a
+  // countdown and to a screen reader once, in words it does not read as a letter ("s").
+  it.each(langs)("says how long the button rests, without blaming SGC, in %s", (lang) => {
+    for (const line of [dicts[lang].refreshCooldown(20), dicts[lang].refreshCooldownSr(20)]) {
+      expect(line).toContain("20");
+      expect(line).not.toMatch(/SGC|recarga|reload/i);
+    }
+    expect(dicts[lang].refreshCooldownSr(20)).toMatch(/segundos|seconds/);
+  });
+});
+
+/** With no status the page does not know when SGC was last queried; "nunca" claimed it never was. */
+describe("the last-query note without a status", () => {
+  it.each(langs)("does not say never, in %s", (lang) => {
+    expect(dicts[lang].lastUpdateUnknown).not.toBe(dicts[lang].never);
+  });
+});

@@ -154,6 +154,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           shown={events.data ? view.shown.length : null}
           mainshock={events.data ? view.mainshock : null}
           catalogueFailed={catalogueFailed}
+          statusFailed={loadFailed(status)}
           staleSince={stale}
         />
         {settled && events.data ? (

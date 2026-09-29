@@ -40,6 +40,7 @@ export function LoadError({
             variant="outline"
             size="sm-touch"
             aria-disabled={retrying}
+            aria-busy={retrying}
             onClick={() => {
               if (!retrying) onRetry();
             }}
