@@ -39,3 +39,6 @@ Thumbs.db
 .idea/
 *.swp
 *~
+
+# PR screenshots, uploaded by gh --attach
+captures/
