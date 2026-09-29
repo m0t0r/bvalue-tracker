@@ -22,6 +22,7 @@ import {
 } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
+import { recordFailure, retryAt } from "@/lib/refresh-backoff";
 import { useNow } from "@/lib/use-now";
 import { useZone } from "@/lib/zone";
 import type { ZoneMainshock } from "../../core/mainshock";
@@ -143,6 +144,7 @@ export function StatusBar({
   mainshock,
   loading,
   catalogueFailed = false,
+  statusFailed = false,
   staleSince = null,
 }: {
   /** The page is still waiting for its status or its catalogue: draw a placeholder, not the stats. */
@@ -156,6 +158,11 @@ export function StatusBar({
    * fills, and the page's load error is the only alert: this bar draws neither of its own.
    */
   catalogueFailed?: boolean;
+  /**
+   * `/api/status` has failed and never answered. The newest event reads "—" rather than a placeholder
+   * that never fills, and the last SGC query is unknown, not "nunca".
+   */
+  statusFailed?: boolean;
   /**
    * When the data on screen was fetched, if a refetch over it has since failed or waits offline
    * (`staleSince` in load-failed.ts); null while the page is current. The line under the button then
@@ -178,12 +185,47 @@ export function StatusBar({
   // five-minute cron is most of the time. That is good news, not a countdown, so the message
   // says the reader already has the newest data rather than asking them to wait.
   const [stoodDown, setStoodDown] = useState(false);
+  // When the reader's presses failed. After each, the button rests for a wait that doubles with every
+  // failure in a row (`refresh-backoff.ts`): pressing on through an outage only adds to it. Only a
+  // refresh that works clears them; a status answer does not, since status can answer while the
+  // refresh route fails (code review, 2026-09-29).
+  const [failures, setFailures] = useState<number[]>([]);
+  const until = retryAt(failures);
+  // The countdown's own clock, a second at a time and only while the button rests; `useNow` ticks every
+  // 30 s. Set with the failure itself, so the first frame counts from the full wait.
+  const [clockMs, setClockMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (until === null) return;
+    const tick = () => setClockMs(Date.now());
+    const id = setInterval(tick, 1000);
+    const end = setTimeout(
+      () => {
+        clearInterval(id);
+        tick();
+      },
+      Math.max(0, until - Date.now()),
+    );
+    return () => {
+      clearInterval(id);
+      clearTimeout(end);
+    };
+  }, [until]);
+  const restS = until === null ? 0 : Math.max(0, Math.ceil((until - clockMs) / 1000));
+  const resting = restS > 0;
 
   // `auto` is a refresh the page started by itself on return to the tab. If the server stands down
   // because SGC was queried recently, that is the expected outcome and is not reported to the reader.
   const refresh = useMutation({
     mutationFn: (_vars: { auto: boolean }) => postRefresh(zone),
+    // Only a press rests the button: the reader should not wait out a request they did not make.
+    onError: (_err, { auto }) => {
+      if (auto) return;
+      const at = Date.now();
+      setFailures((f) => recordFailure(f, at));
+      setClockMs(at);
+    },
     onSuccess: (res, { auto }) => {
+      setFailures([]);
       setStoodDown(!res.refreshed && !auto);
       // Events follow by themselves: App refetches them when status reports a newer successful ingest.
       qc.setQueryData(["status", zone], res);
@@ -225,9 +267,10 @@ export function StatusBar({
 
   // Coming back to the tab asks SGC again, through the library's own focus signal. Only when the last
   // query is older than the server's five-minute limit, so a return never costs a pointless request;
-  // the server enforces the same limit for everyone, which is what protects SGC.
+  // the server enforces the same limit for everyone, which is what protects SGC. Not while the button
+  // rests after a failed press: the page would send what it has just asked the reader to wait for.
   const lastQueryMs = ok?.finishedAt ? Date.parse(ok.finishedAt) : null;
-  const busy = refresh.isPending || backfill.isPending || incomplete;
+  const busy = refresh.isPending || backfill.isPending || incomplete || resting;
   const autoRefresh = refresh.mutate;
   useEffect(
     () =>
@@ -260,27 +303,40 @@ export function StatusBar({
       <span className="sr-only sm:not-sr-only">{t.refreshWait(waitMin)}</span>
     </>
   );
+  // The countdown is drawn only: inside the live region it would be read out every second. A screen
+  // reader hears the whole wait once, and the button's own state says when it is back.
+  const lastFailure = failures.at(-1);
+  const cooldown =
+    until === null || lastFailure === undefined ? null : (
+      <>
+        <span aria-hidden="true">{t.refreshCooldown(restS)}</span>
+        <span className="sr-only">{t.refreshCooldownSr(Math.round((until - lastFailure) / 1000))}</span>
+      </>
+    );
   const message: ReactNode = refresh.isPending
     ? t.refreshing
-    : refresh.isError
-      ? t.refreshFailed
-      : stoodDown && failed
-        ? // It explains itself only beside "La última consulta al SGC falló"; with the load error
-          // shown instead (`pageAlert`), a retry "already on the way" would have no context.
-          alert === "ingest"
-          ? t.refreshStillFailing
-          : ""
-        : stoodDown
-          ? wait
-          : "";
+    : resting && cooldown
+      ? cooldown
+      : refresh.isError
+        ? t.refreshFailed
+        : stoodDown && failed
+          ? // It explains itself only beside "La última consulta al SGC falló"; with the load error
+            // shown instead (`pageAlert`), a retry "already on the way" would have no context.
+            alert === "ingest"
+            ? t.refreshStillFailing
+            : ""
+          : stoodDown
+            ? wait
+            : "";
 
   // While a refetch over the figures has failed, the line says since when they are, and that outranks
   // every answer to a press but a request under way: "Ya tienes los datos más recientes" would be stale
   // itself, and "No se pudo consultar al SGC" blames SGC for what is the connection as often as not.
   // A press parked offline (`isPaused`) is not under way, so "Consultando al SGC…" does not sit there
-  // for as long as the connection is down.
+  // for as long as the connection is down. A button resting after a failed press outranks it too: the
+  // line is then what says why the button is off, and for how long.
   const stale = staleSince === null ? null : fmtClock(staleSince, lang, now);
-  const staleNote = stale !== null && !(refresh.isPending && !refresh.isPaused);
+  const staleNote = stale !== null && !resting && !(refresh.isPending && !refresh.isPaused);
   const live = staleNote ? t.staleSince(stale.time, stale.day) : message;
   const pending = refresh.isPending || backfill.isPending;
 
@@ -338,8 +394,10 @@ export function StatusBar({
           phone={<Ago iso={ok.finishedAt} now={now} />}
           wide={`${relativeTime(ok.finishedAt, lang, now)} · ${clock(ok.finishedAt)}`}
         />
-      ) : (
+      ) : status ? (
         t.never
+      ) : (
+        t.lastUpdateUnknown
       )}
     </>
   );
@@ -369,7 +427,12 @@ export function StatusBar({
               (`Stat`'s `wide`). From lg the card is one row that does not wrap: every stat and the
               button block keep their width, and the newest event's place shrinks into what is left. */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10 lg:min-w-0 lg:flex-nowrap">
-            <Stat wide label={t.newestEvent} value={status ? (newestEvent ?? "—") : null} hint={newestWhen} />
+            <Stat
+              wide
+              label={t.newestEvent}
+              value={status ? (newestEvent ?? "—") : statusFailed ? "—" : null}
+              hint={newestWhen}
+            />
             <Stat
               label={t.events}
               value={shown === null ? catalogueFailed ? "—" : null : <FlowNumber value={shown} lang={lang} />}
@@ -382,12 +445,14 @@ export function StatusBar({
               stats at lg it hugs the end edge. */}
           <div className="flex items-center gap-3 sm:flex-col sm:items-start sm:gap-2 lg:shrink-0 lg:items-end">
             {/* One label and one icon: the button keeps its width while it works. `aria-disabled`, not
-                `disabled`: a disabled button drops the keyboard focus it holds to the page. */}
+                `disabled`: a disabled button drops the keyboard focus it holds to the page. Busy, it
+                keeps its colour and spins; off after failed presses, it dims (`aria-busy` in `Button`). */}
             <Button
               size="default-touch"
-              aria-disabled={pending}
+              aria-disabled={pending || resting}
+              aria-busy={pending}
               onClick={() => {
-                if (!pending) refresh.mutate({ auto: false });
+                if (!pending && !resting) refresh.mutate({ auto: false });
               }}
             >
               <RefreshCwIcon data-icon="inline-start" className={refresh.isPending ? "animate-spin" : undefined} />

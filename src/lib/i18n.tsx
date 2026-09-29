@@ -97,6 +97,8 @@ const es = {
   lastUpdateOk: "Última consulta correcta al SGC",
   lastUpdateOkShort: "Consulta correcta",
   never: "nunca",
+  /** The note's value while `/api/status` has failed: the page does not know, and "nunca" would claim it. */
+  lastUpdateUnknown: "desconocida",
   refresh: "Actualizar ahora",
   /**
    * Replaces the last-query note under the refresh button while a refetch over data on screen has failed or waits offline
@@ -111,7 +113,12 @@ const es = {
   refreshing: "Consultando al SGC…",
   refreshWait: (min: number) => `Ya tienes los datos más recientes: el SGC se consultó hace menos de ${min} minutos.`,
   refreshWaitShort: (min: number) => `Ya está al día: el SGC se consultó hace <${min}\u00A0min.`,
-  refreshFailed: "No se pudo consultar al SGC. Inténtalo de nuevo en unos minutos.",
+  /** A press whose request failed. It never reached SGC, so it names neither SGC nor a cause. */
+  refreshFailed: "No se pudo actualizar. Inténtalo de nuevo.",
+  /** The same, while the button rests after it (`refresh-backoff.ts`): a countdown, drawn only. */
+  refreshCooldown: (s: number) => `No se pudo actualizar. Inténtalo de nuevo en ${s} s.`,
+  /** What a screen reader hears instead, once: the countdown would be read out every second. */
+  refreshCooldownSr: (s: number) => `No se pudo actualizar. Inténtalo de nuevo en ${s} segundos.`,
   refreshStillFailing: "No se envió: ya hay un reintento en camino.",
   ingestFailed: "La última consulta al SGC falló",
   ingestFailedBody:
@@ -390,6 +397,7 @@ const en: Dict = {
   lastUpdateOk: "Last successful SGC query",
   lastUpdateOkShort: "Last good query",
   never: "never",
+  lastUpdateUnknown: "unknown",
   refresh: "Refresh now",
   staleSince: (time, day) =>
     `The figures could not be updated: they are from ${time}${day === null ? "" : ` on ${day}`}. They will update by themselves.`,
@@ -397,7 +405,9 @@ const en: Dict = {
   refreshing: "Querying SGC…",
   refreshWait: (min) => `You already have the latest data: SGC was queried less than ${min} minutes ago.`,
   refreshWaitShort: (min) => `Up to date: SGC was queried <${min}\u00A0min ago.`,
-  refreshFailed: "Unable to query SGC. Try again in a few minutes.",
+  refreshFailed: "Unable to refresh. Try again.",
+  refreshCooldown: (s) => `Unable to refresh. Try again in ${s} s.`,
+  refreshCooldownSr: (s) => `Unable to refresh. Try again in ${s} seconds.`,
   refreshStillFailing: "Not sent: a retry is already on the way.",
   ingestFailed: "The last SGC query failed",
   ingestFailedBody:
