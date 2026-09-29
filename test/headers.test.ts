@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { ZONE_PATHS } from "../core/zone-pages";
 
 /**
  * public/_headers is what every response for the page itself carries; nothing in the
@@ -9,6 +10,9 @@ import { describe, expect, it } from "vitest";
  * the basemap.
  */
 const HEADERS = readFileSync(new URL("../public/_headers", import.meta.url), "utf8");
+
+/** Every page the site serves: one per zone, and the explanations page. Each is its own entry. */
+const PAGES = [...Object.values(ZONE_PATHS), "/insights"];
 
 function value(name: string): string {
   const line = HEADERS.split("\n").find((l) => l.trim().toLowerCase().startsWith(`${name.toLowerCase()}:`));
@@ -57,6 +61,30 @@ describe("public/_headers", () => {
     expect(rule, "no /assets/* rule in public/_headers").toContain("/assets/*");
     expect(rule).toMatch(/Cache-Control:\s*public, max-age=31536000, immutable/i);
     expect(HEADERS.slice(0, HEADERS.indexOf("/assets/*"))).not.toMatch(/^\s*Cache-Control:/im);
+  });
+
+  it("gives every page the speculation rules, as a file the CSP need not allow", () => {
+    // Blocks of a path line and its indented headers, in file order.
+    const rules = new Map<string, string[]>();
+    let path = "";
+    for (const line of HEADERS.split("\n")) {
+      if (line.startsWith("/")) rules.set((path = line.trim()), []);
+      else if (/^\s+[A-Za-z-]+:/.test(line) && path) rules.get(path)!.push(line.trim());
+    }
+    // Every page, since each is its own entry and a link between them is a full navigation.
+    for (const page of PAGES)
+      expect(rules.get(page), `Speculation-Rules on ${page}`).toContain('Speculation-Rules: "/speculation-rules.json"');
+    // Chrome ignores a rule set served as anything else.
+    expect(rules.get("/speculation-rules.json")).toContain("Content-Type: application/speculationrules+json");
+  });
+
+  it("speculates only on the pages, never on the API", () => {
+    // A prerender runs the page it loads; /api/refresh is the one request that reaches SGC.
+    const file = readFileSync(new URL("../public/speculation-rules.json", import.meta.url), "utf8");
+    const set = JSON.parse(file) as Record<string, { where: { href_matches: string[] } }[]>;
+    const targets = Object.values(set).flatMap((list) => list.flatMap((r) => r.where.href_matches));
+    expect(targets.length).toBeGreaterThan(0);
+    for (const t of targets) expect(PAGES).toContain(t);
   });
 
   it("denies the device permissions the page never asks for", () => {

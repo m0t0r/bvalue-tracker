@@ -1,0 +1,3 @@
+{
+  "prerender": [{ "where": { "href_matches": ["/", "/choco", "/insights"] }, "eagerness": "conservative" }]
+}

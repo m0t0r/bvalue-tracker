@@ -1,4 +1,4 @@
-import { focusManager, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FlowNumber } from "@/components/flow-number";
@@ -22,6 +22,7 @@ import {
 } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
+import { useReturnToTab } from "@/lib/prerender";
 import { recordFailure, retryAt } from "@/lib/refresh-backoff";
 import { useNow } from "@/lib/use-now";
 import { useZone } from "@/lib/zone";
@@ -254,6 +255,8 @@ export function StatusBar({
     onSettled: () => void qc.invalidateQueries({ queryKey: ["events", zone] }),
   });
   const incomplete = !!status && status.backfill.done < status.backfill.total;
+  // On a prerendered page this starts too, and its first request waits until the reader opens the page
+  // (`postRefresh`), so the back-fill begins where it would on an ordinary load.
   const started = useRef(false);
   const startBackfill = backfill.mutate;
   useEffect(() => {
@@ -271,15 +274,11 @@ export function StatusBar({
   // rests after a failed press: the page would send what it has just asked the reader to wait for.
   const lastQueryMs = ok?.finishedAt ? Date.parse(ok.finishedAt) : null;
   const busy = refresh.isPending || backfill.isPending || incomplete || resting;
-  const autoRefresh = refresh.mutate;
-  useEffect(
-    () =>
-      focusManager.subscribe((focused) => {
-        if (focused && !busy && lastQueryMs !== null && Date.now() - lastQueryMs > autoRefreshAfterMs)
-          autoRefresh({ auto: true });
-      }),
-    [busy, lastQueryMs, autoRefresh, autoRefreshAfterMs],
-  );
+  // A return is the tab shown again after being hidden: opening a prerendered page is not one, and a load
+  // asks SGC nothing (`useReturnToTab`).
+  useReturnToTab(() => {
+    if (!busy && lastQueryMs !== null && Date.now() - lastQueryMs > autoRefreshAfterMs) refresh.mutate({ auto: true });
+  });
 
   const failed = status?.lastRun && !status.lastRun.ok ? status.lastRun : null;
   const alert = pageAlert({ catalogueFailed, ingestFailed: failed !== null, incomplete });

@@ -314,6 +314,46 @@ practices stayed at 100.
     step's slider, Presence in the tab panels): they pull the page's first layout forward into React's
     commit, and the frame's own layout after them is under a millisecond. They do make that task
     longer, which TBT counts; on the monitor it is larger (issue #95).
+- **A link between the pages is prerendered from the moment it is pressed** (issue #107, 2026-09-29).
+  Each page is its own entry, so the monitor's link to `/insights` (and `/insights`' link back) was a
+  full navigation: new HTML, the bundle's start-up, new API requests. `public/speculation-rules.json`,
+  named by a `Speculation-Rules` header on the three pages (`public/_headers`; why a header, in
+  [Security](security.md)), has Chrome prerender a link to `/`, `/choco` or `/insights` at
+  `conservative` eagerness: on pointer or touch down, ~100 ms before the click. The page it opens has
+  begun loading, and its HTML is already there. Safari and Firefox ignore it.
+  - **Click A/B, monitor → `/insights`**, against a build of `main` at `bfa9024`, same `.wrangler/`
+    copy, both behind the brotli proxy, interleaved, five runs each; LCP counted from the navigation
+    (`main`) or from activation (the branch). A private headless Chrome driven over the DevTools
+    protocol (why not the shared one: [development](development.md#tooling-gotchas)), a press held
+    100 ms, and on a desktop a 400 ms hover first. Every branch run activated a prerender
+    (`activationStart` ≈ 105 ms); no run of `main` did. Medians:
+
+    | | `main` | prerender, conservative (kept) | prefetch, moderate | prerender, moderate |
+    |---|---|---|---|---|
+    | desktop, 40 ms / 10 Mbps | LCP 508, FCP 176 ms | LCP 379, FCP 21 ms | LCP 456, FCP 124 ms | LCP 32, FCP 32 ms |
+    | phone, 150 ms / 1.6 Mbps, CPU ×4 | LCP 2788, FCP 1308 ms | LCP 2142, FCP 695 ms | LCP 2260, FCP 776 ms | LCP 2139, FCP 695 ms |
+
+    On the phone the 100 ms head start covers the HTML's round trip and little else: `/insights`
+    still waits for its catalogues on the slow connection, so LCP is 2.1 s after activation. Its
+    `moderate` column is `conservative` again, since there was no hover to wait on; Chrome for
+    Android reads `moderate` from where the reader stops scrolling instead, which headless Chrome
+    does not do, so that column says nothing about a real phone. `moderate` on a desktop is a
+    200 ms hover, and the page was whole before the click (LCP at activation).
+  - **What a prerender the reader never opens costs** (pressed, then slid off the link; desktop, same
+    browser, shared chunks already cached by the page it came from): `/insights` from the monitor,
+    139 kB (both catalogues, 65 kB, and the story's chunks); the monitor from `/insights`, 109 kB (its
+    bundle and its zone's catalogue). No `/api/refresh`: see the gate in [Security](security.md).
+  - **The monitor's own load does not change.** Lighthouse, phone `/`, devtools throttling, through
+    the proxy, interleaved, five runs each, every run checked for the build it loaded (its
+    `index-*.js`, and whether it asked for `speculation-rules.json`): FCP = LCP 1353 → 1353 ms, Speed
+    Index 3182 → 3166 ms, TBT 322 → 329 ms, score 92 → 92, CLS 0 on both. The rules are one 0.3 kB
+    request after the page's own, cached for an hour (the code review: on the asset layer's default
+    every load revalidated it, a round trip on a phone).
+  - **All three pages stay eligible for the back/forward cache**, `/insights` on its story, questions
+    and 3D tabs too, each scrolled through so its map, charts or scene had mounted: left for
+    `/robots.txt` and brought back, each came back with a marker set on `window` before leaving still
+    there. A page with an `unload` listener, as a control, was reported not restored
+    (`UnloadHandlerExistsInMainFrame`).
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

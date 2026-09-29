@@ -281,6 +281,20 @@ draws from too):
   covers only its own session's pages**, not tabs the MCP opens, so the D1 guard above is what
   keeps those away from SGC. Trace against `pnpm build && pnpm preview`, not `pnpm dev`: dev
   serves unbundled modules and says nothing about the shipped page.
+  **Neither tool can show a prerender** (issue #107, 2026-09-29). Chrome refuses to prerender while a
+  DevTools-protocol session is attached to the page's own target rather than through its tab target
+  (`PrerenderingDisabledByDevTools`; `HasSessionsWithoutTabTargetSupport` in Chromium's
+  `devtools_instrumentation.cc`), and on the shared Chrome something always is: a click then uses
+  the prefetched HTML and reports `activationStart` 0. What worked is a private headless Chrome on
+  another port and a small script on Node's own `WebSocket` that attaches to the tab
+  (`Target.getTargets` with `filter: [{ type: "tab" }]`, then `Target.setAutoAttach` on that session,
+  which also brings the prerender's own target). Resume a prerender target
+  (`Runtime.runIfWaitingForDebugger`) before enabling anything on it: `Network.enable` on a paused
+  one never answered, and the click waited for it. To fake a state, answer `/api/status` and
+  `/api/refresh` with the `Fetch` domain on every session, the prerender's included, before it runs.
+  **Never make the back-fill incomplete in the copied D1 to test this**: an incomplete back-fill
+  skips the refresh throttle (`fastLane` in `worker/plan.ts`), so the closed guard above no longer
+  holds and a refresh goes to SGC.
   **`getComputedStyle` returns `oklch()` here, not `rgb()`**, so anything parsing it for
   channel numbers silently reads the lightness as a red channel and reports nonsense
   ratios. Rasterise instead: `ctx.fillStyle = <colour>; ctx.fillRect(0,0,1,1)` on a 1×1
