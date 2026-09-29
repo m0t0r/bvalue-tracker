@@ -230,7 +230,8 @@ practices stayed at 100.
     its longest line, and the two faces break lines at different words, so the stand-in's box ranged
     0.90–1.13 of Geist's across 320–1350 px and the four strings. `/choco` in English at 412 px (25,185
     against 25,392 px²) still took LCP at React's mount, 3156 ms. It stays, for the font swap: the
-    header's lines break alike and nothing moves when Geist arrives.
+    header breaks into as many lines in both faces in 42 of 44 cases, so it keeps its height when Geist
+    arrives ([the page](frontend.md) lists the two it does not, and why fontaine could not replace it).
   - **So React hydrates the static header** (`src/lib/hydrate.ts`): no new element, no second LCP
     entry, whatever the widths. `/choco`, same load: one LCP entry, at first paint, 1692 ms, its
     element still in the page.
