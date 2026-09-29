@@ -5,7 +5,7 @@
  */
 import { geoCircle, geoMercator, geoPath, type GeoProjection } from "d3-geo";
 import { quantileSorted } from "d3-array";
-import { useId, useMemo, type CSSProperties } from "react";
+import { useId, useMemo } from "react";
 import type { Lang } from "@/lib/i18n";
 import { fmtDateTime, fmtDay } from "@/lib/format";
 import { SOURCES, type Insights, type Source } from "../claims";
@@ -19,6 +19,7 @@ import { fmtKm, fmtMag, fmtTimes, roundSig } from "../shared";
 import { shakingParts } from "../durations";
 import { FILL, STROKE } from "../tones";
 import { flowRow } from "./layout";
+import { DotLayer, type Mark } from "./dots";
 import { Layer, SceneTitle, radius, star } from "./marks";
 import { textWidth } from "../measure";
 import type { Ev, StoryModel } from "./model";
@@ -147,18 +148,37 @@ export function Graphic({
   const onSecT = scene === "tolimaSection";
   const main = model.main;
 
-  const pos = (e: Ev): [number, number] => {
-    if (onSec && e.source !== "tolima") return [sec.x(e.lon), sec.y(e.depthKm)];
-    // The swarm's dots wait on its cut while its own scene shows (they are hidden, and that scene draws
-    // its own map), so on the turn they fade in where they belong rather than fly in from a map the
-    // reader is not looking at.
-    if ((onSecT || scene === "tolima") && e.source === "tolima") return [secT.x(e.lon), secT.y(e.depthKm)];
-    return map.proj([e.lon, e.lat]) ?? [0, 0];
-  };
-  // On a cross-section, only its own zone's events inside the cut: the few beyond it would sit off the axes.
-  const inCut = (e: Ev, s: Section) => e.lon >= s.lon0 && e.lon <= s.lon1 && e.depthKm <= s.maxDepth;
-  const shown = (e: Ev) =>
-    onMap || (onSec && e.source !== "tolima" && inCut(e, sec)) || (onSecT && e.source === "tolima" && inCut(e, secT));
+  const dim = scene === "unknown";
+  // The swarm's dots wait on its cut while its own scene shows (they are hidden, and that scene draws
+  // its own map), so on the turn they fade in where they belong rather than fly in from a map the
+  // reader is not looking at.
+  const swarmOnCut = onSecT || scene === "tolima";
+
+  // Where every dot and the star sit in this scene, and how opaque; `DotLayer` glides them there. Kept
+  // while the scene's layout is, so a step that changes nothing here draws nothing.
+  const marks = useMemo(() => {
+    const pos = (e: Ev): [number, number] => {
+      if (onSec && e.source !== "tolima") return [sec.x(e.lon), sec.y(e.depthKm)];
+      if (swarmOnCut && e.source === "tolima") return [secT.x(e.lon), secT.y(e.depthKm)];
+      return map.proj([e.lon, e.lat]) ?? [0, 0];
+    };
+    // On a cross-section, only its own zone's events inside the cut: the few beyond it would sit off the axes.
+    const inCut = (e: Ev, s: Section) => e.lon >= s.lon0 && e.lon <= s.lon1 && e.depthKm <= s.maxDepth;
+    const shown = (e: Ev) =>
+      onMap || (onSec && e.source !== "tolima" && inCut(e, sec)) || (onSecT && e.source === "tolima" && inCut(e, secT));
+    const out: Mark[] = [];
+    for (const e of model.all) {
+      if (e.id === main?.id) continue;
+      const [x, y] = pos(e);
+      const a = shown(e) ? (dim ? 0.25 : 0.6) : 0;
+      out.push({ id: e.id, x, y, r: radius(e.mag, k), a, tone: e.source, delay: Math.min(400, e.depthKm * 3) });
+    }
+    if (main) {
+      const [x, y] = pos(main);
+      out.push({ id: main.id, x, y, r: small ? 9 : 12, a: onMap || onSec ? 1 : 0, tone: "mainshock", delay: 300 });
+    }
+    return out;
+  }, [model.all, main, map, sec, secT, onMap, onSec, onSecT, swarmOnCut, dim, k, small]);
 
   const depthMedian = (s: Source) => data.distances[s]?.depthKm ?? null;
   // One text alternative for the whole drawing, for whichever scene is showing.
@@ -189,152 +209,127 @@ export function Graphic({
     felt: sub === "waves" ? c.wavesAria : c.calendarAria,
   };
 
+  // Three layers, one box: the map and the cuts, the dots on a canvas, and everything drawn over the
+  // dots. The box is the image, named for the scene; the layers inside it are presentation.
+  const viewBox = `0 0 ${width} ${height}`;
   return (
-    <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      className="block overflow-hidden select-none"
-      role="img"
-      aria-label={aria[scene]}
-    >
-      <Layer on={onMap}>
-        <g>
-          {REGION.features.map((f) => (
-            <path key={f.properties.name} d={map.path(f) ?? undefined} className="fill-muted stroke-border" />
-          ))}
-        </g>
-        <OceanLabel proj={map.proj} small={small} label={c.ocean} data={model} />
-      </Layer>
+    <div role="img" aria-label={aria[scene]} className="relative size-full overflow-hidden select-none">
+      <svg width={width} height={height} viewBox={viewBox} className="absolute inset-0 block overflow-hidden">
+        <Layer on={onMap}>
+          <g>
+            {REGION.features.map((f) => (
+              <path key={f.properties.name} d={map.path(f) ?? undefined} className="fill-muted stroke-border" />
+            ))}
+          </g>
+          <OceanLabel proj={map.proj} small={small} label={c.ocean} data={model} />
+        </Layer>
 
-      <Layer on={onSec}>
-        {near("section") && (
-          <>
-            <SectionFrame sec={sec} small={small} lang={lang} />
-            <SectionBase data={data} model={model} sec={sec} small={small} sub={sub} lang={lang} />
-          </>
-        )}
-      </Layer>
-      <Layer on={onSecT}>
-        {near("tolimaSection") && (
-          <>
-            <SectionFrame sec={secT} small={small} lang={lang} />
-            <TolimaSectionBase data={data} model={model} sec={secT} small={small} lang={lang} />
-          </>
-        )}
-      </Layer>
-
-      {/* The dots the map and the cross-section share. Each slides on the compositor, deeper ones a
-          little later, so the turn reads as the earth tipping rather than a cut. */}
-      <g>
-        {model.all.map((e) => {
-          if (e.id === main?.id) return null;
-          const [x, y] = pos(e);
-          return (
-            <circle
-              key={e.id}
-              r={radius(e.mag, k)}
-              data-on={shown(e) || undefined}
-              data-dim={scene === "unknown" || undefined}
-              className={`${FILL[e.source]} translate-x-(--x) translate-y-(--y) opacity-0 transition-move delay-(--d) duration-1000 ease-(--ease-move) data-on:opacity-60 data-on:data-dim:opacity-25 motion-reduce:transition-none`}
-              style={{ "--x": `${x}px`, "--y": `${y}px`, "--d": `${Math.min(400, e.depthKm * 3)}ms` } as CSSProperties}
-            />
-          );
-        })}
-        {main && (
-          <path
-            d={star(small ? 9 : 12)}
-            data-on={onMap || onSec || undefined}
-            className="translate-x-(--x) translate-y-(--y) fill-chart-2 stroke-background opacity-0 transition-move delay-300 duration-1000 ease-(--ease-move) data-on:opacity-100 motion-reduce:transition-none"
-            strokeWidth={1.5}
-            style={{ "--x": `${pos(main)[0]}px`, "--y": `${pos(main)[1]}px` } as CSSProperties}
-          />
-        )}
-      </g>
-
-      <Layer on={scene === "where"}>
-        <WhereOverlay
-          data={data}
-          model={model}
-          proj={map.proj}
-          small={small}
-          lang={lang}
-          top={map.top}
-          width={width}
-          height={height}
-        />
-      </Layer>
-      <Layer on={scene === "unknown"}>
-        {near("unknown") && <UnknownOverlay model={model} proj={map.proj} small={small} />}
-      </Layer>
-      <Layer on={onMap || onSec || onSecT}>
-        <SceneTitle small={small}>
-          {onSec ? (
-            c.sectionTitle
-          ) : onSecT ? (
-            c.tolimaSectionTitle
-          ) : (
-            <Rich text={c.mapTitle} parts={{ from: fmtDay(model.start, lang), to: fmtDay(data.now, lang) }} />
+        <Layer on={onSec}>
+          {near("section") && (
+            <>
+              <SectionFrame sec={sec} small={small} lang={lang} />
+              <SectionBase data={data} model={model} sec={sec} small={small} sub={sub} lang={lang} />
+            </>
           )}
-        </SceneTitle>
-        <GroupLegend
-          small={small}
-          width={width}
-          lang={lang}
-          sources={onSec ? ["shallow", "deep"] : onSecT ? ["tolima"] : SOURCES}
-          mainLabel={main && !onSecT ? `M${main.mag.toFixed(1)}` : null}
-        />
-      </Layer>
+        </Layer>
+        <Layer on={onSecT}>
+          {near("tolimaSection") && (
+            <>
+              <SectionFrame sec={secT} small={small} lang={lang} />
+              <TolimaSectionBase data={data} model={model} sec={secT} small={small} lang={lang} />
+            </>
+          )}
+        </Layer>
+      </svg>
 
-      <Layer on={scene === "energy"}>
-        {near("energy") && (
-          <EnergyScene data={data} model={model} width={width} height={height} sub={sub} small={small} lang={lang} />
-        )}
-      </Layer>
-      <Layer on={scene === "clocks"}>
-        {near("clocks") && (
-          <ClocksScene
+      {/* The dots the map and the cross-sections share. */}
+      <DotLayer marks={marks} width={width} height={height} />
+
+      <svg width={width} height={height} viewBox={viewBox} className="absolute inset-0 block overflow-hidden">
+        <Layer on={scene === "where"}>
+          <WhereOverlay
             data={data}
             model={model}
-            width={width}
-            height={height}
-            sub={sub}
+            proj={map.proj}
             small={small}
             lang={lang}
-            active={scene === "clocks"}
-          />
-        )}
-      </Layer>
-      <Layer on={scene === "tolima"}>
-        {near("tolima") && (
-          <TolimaScene
-            data={data}
-            model={model}
+            top={map.top}
             width={width}
             height={height}
-            sub={sub}
-            small={small}
-            lang={lang}
-            active={scene === "tolima"}
           />
-        )}
-      </Layer>
-      <Layer on={scene === "felt"}>
-        {near("felt") && (
-          <FeltScene
-            data={data}
-            model={model}
+        </Layer>
+        <Layer on={scene === "unknown"}>
+          {near("unknown") && <UnknownOverlay model={model} proj={map.proj} small={small} />}
+        </Layer>
+        <Layer on={onMap || onSec || onSecT}>
+          <SceneTitle small={small}>
+            {onSec ? (
+              c.sectionTitle
+            ) : onSecT ? (
+              c.tolimaSectionTitle
+            ) : (
+              <Rich text={c.mapTitle} parts={{ from: fmtDay(model.start, lang), to: fmtDay(data.now, lang) }} />
+            )}
+          </SceneTitle>
+          <GroupLegend
+            small={small}
             width={width}
-            height={height}
-            sub={sub}
-            small={small}
             lang={lang}
-            threshold={state.threshold}
-            active={scene === "felt"}
+            sources={onSec ? ["shallow", "deep"] : onSecT ? ["tolima"] : SOURCES}
+            mainLabel={main && !onSecT ? `M${main.mag.toFixed(1)}` : null}
           />
-        )}
-      </Layer>
-    </svg>
+        </Layer>
+
+        <Layer on={scene === "energy"}>
+          {near("energy") && (
+            <EnergyScene data={data} model={model} width={width} height={height} sub={sub} small={small} lang={lang} />
+          )}
+        </Layer>
+        <Layer on={scene === "clocks"}>
+          {near("clocks") && (
+            <ClocksScene
+              data={data}
+              model={model}
+              width={width}
+              height={height}
+              sub={sub}
+              small={small}
+              lang={lang}
+              active={scene === "clocks"}
+            />
+          )}
+        </Layer>
+        <Layer on={scene === "tolima"}>
+          {near("tolima") && (
+            <TolimaScene
+              data={data}
+              model={model}
+              width={width}
+              height={height}
+              sub={sub}
+              small={small}
+              lang={lang}
+              active={scene === "tolima"}
+            />
+          )}
+        </Layer>
+        <Layer on={scene === "felt"}>
+          {near("felt") && (
+            <FeltScene
+              data={data}
+              model={model}
+              width={width}
+              height={height}
+              sub={sub}
+              small={small}
+              lang={lang}
+              threshold={state.threshold}
+              active={scene === "felt"}
+            />
+          )}
+        </Layer>
+      </svg>
+    </div>
   );
 }
 

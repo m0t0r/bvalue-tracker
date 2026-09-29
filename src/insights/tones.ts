@@ -5,7 +5,21 @@
  */
 import type { Source } from "./claims";
 
-type Tone = Source | "mainshock";
+export type Tone = Source | "mainshock";
+/**
+ * A theme token's current value, which a canvas can take as a colour. Reading it makes the browser work
+ * out the page's styles on the spot, so a drawing reads its tokens once per theme, not per frame.
+ */
+export const token = (name: string, el: Element = document.documentElement) =>
+  getComputedStyle(el).getPropertyValue(name).trim();
+
+/** The same colours as the theme tokens behind them, for what is drawn on a canvas. */
+export const TOKEN: Record<Tone, string> = {
+  shallow: "--chart-1",
+  deep: "--chart-4",
+  tolima: "--chart-5",
+  mainshock: "--chart-2",
+};
 export const FILL: Record<Tone, string> = {
   shallow: "fill-chart-1",
   deep: "fill-chart-4",
