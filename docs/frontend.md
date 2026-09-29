@@ -220,11 +220,46 @@ those, so an untouched tab shows no chips on either side.
     static header, so there it is a plain `createRoot`.
   - **Until Geist has loaded, the page is in a stand-in cut to Geist's measure** ("Geist Fallback" in
     `index.css`): Arial, or Liberation Sans on Linux and Roboto on Android, with Geist's ascent and
-    descent and scaled to its width on the header's own strings, rounded up. The header's lines break
-    alike in both faces (43 of 44 cases across 320–1350 px and both languages; the other, Tolima's
-    Spanish subtitle at 360 px, takes a fourth line in the stand-in and gives it back), and nothing
-    moves when Geist arrives. With a bare `sans-serif` a line was 1.0 em tall to Geist's 1.3. Roboto's
-    faces are from its published files; not checked on an Android device.
+    descent and scaled to its width on the header's own strings, rounded up. The header breaks into as
+    many lines in both faces in 42 of 44 cases (11 widths from 320 to 1350 px, both zones and both
+    languages, 2026-09-29). In the other two the stand-in takes one more line, and gives it back when
+    Geist arrives: Tolima's Spanish subtitle at 360 px, and Chocó's English one at 1024 px in a browser
+    whose scrollbars take room. The second came with the scrollbar's room above (`scrollbar-gutter`),
+    which was added after the first count, 43 of 44: it narrows that column from 976 to 961 px, and the
+    subtitle's one line is 962.5 px in the stand-in against 959.3 in Geist. Otherwise the header keeps its
+    height when Geist arrives; what still moves is text below it redrawn where it stands (0.0003 of CLS on
+    `/choco` in English at 390 px, with Geist held back 3 s). With a bare `sans-serif` a line was 1.0 em
+    tall to Geist's 1.3. Roboto's faces are from its published files; not checked on an Android device.
+    - **fontaine does not replace them** (issue #101, 2026-09-29, fontaine 1.0.0 with `fallbacks: ["Arial",
+      "Roboto"]`, wired into the Vite build and into `headerCss`, whose Tailwind compile no Vite transform
+      reaches). It writes one face per system font from [Capsize](https://github.com/seek-oss/capsize)'s
+      metrics, scaled by average character width, and that loses on every count the hand-written faces
+      were measured on:
+      - **Width.** Its Arial face is 104.76 % of Arial, and the header's subtitle came out 3.0–3.5 %
+        wider than in Geist (the hand-written face: 0.3–0.8 %). Measured in the page, `agent-browser` at
+        11 widths from 320 to 1350 px, both zones and both languages, the header broke into the same
+        number of lines as in Geist in 38 of 44 cases, against 42 of 44 for the hand-written faces in the
+        same run. Four of the six misses are phone widths (320, 360 and 390 px). On `/choco` in English
+        at 390 px, with Geist held back 3 s behind the brotli proxy, the page shifted 0.0036 when Geist
+        arrived, against 0.0003 on `main`.
+      - **Bold.** It copies each face's own descriptors, and Geist's variable face declares
+        `font-weight: 100 900`, so a single fallback face serves every weight. The semibold title then
+        paints in Arial *regular*: the face claims to cover 600, so the browser does not even synthesise
+        a bold. It has no option for a face per weight. Capsize does have Arial's and Roboto's bold
+        (`variants["700"]`); fontaine reads only each family's regular.
+      - **Linux.** Capsize has no metrics for Liberation Sans, and fontaine skips a fallback it has no
+        metrics for, so Linux gets a bare `sans-serif`.
+      - **Our setup.** It reads a face's metrics from its file, one per `@font-face`, and keeps only its
+        weight, style and stretch, not its `unicode-range`. Geist's non-Latin subsets lack most of the
+        letters the average is taken over, so it also writes faces at 122.7 % for every character, and
+        Chrome uses the Latin one only because it comes last in the stylesheet. It rewrites literal
+        `font-family` declarations, not `--font-sans` in `@theme`, so the family must still be named by
+        hand, and its CommonJS build fails to load (`magic_string.default is not a constructor`).
+
+      The Lighthouse A/B and the first-paint comparison were not run, since it failed these first.
+      Retrying it needs all four fixed: a face per weight, a Liberation Sans face, no faces from other
+      subsets, and then the width checked again against the header's own strings, since an average over
+      a whole alphabet is what put it 3 % off.
   - **The head script decides the language and the theme, and nothing else does**
     (`src/boot.ts` over `src/lib/startup.ts`). It is a classic, render-blocking script at the top of
     every page's head, a file because the CSP allows no inline script, and it writes `<html lang>`

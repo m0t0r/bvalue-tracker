@@ -16,7 +16,8 @@
    1.2-1.7 % wider than Arial and 2.1-2.7 % than Roboto; Geist semibold is 0.98-1.01 times Arial
    Bold and 1.05-1.07 times Roboto Bold. Arial on Windows, macOS and iOS; Liberation Sans, which has
    Arial's metrics, on Linux; Roboto on Android, which has no Arial. A face none of whose `local()`
-   names exists is skipped. */
+   names exists is skipped. fontaine, which writes such faces itself, was tried and is ~3 % too wide
+   with no bold face (docs/frontend.md). */
 @font-face {
   font-family: "Geist Fallback";
   src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("LiberationSans");
