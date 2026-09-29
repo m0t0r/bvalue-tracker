@@ -4,10 +4,12 @@ import path from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { build, defineConfig, runnerImport, type Plugin } from "vite";
+import { build, defineConfig, normalizePath, runnerImport, type Plugin } from "vite";
 import {
   INSIGHTS_LOAD,
+  chunkPreloads,
   classAttributes,
+  modulePreloadTags,
   monitorLoad,
   preloadTags,
   stylesheetBeforeBundle,
@@ -110,12 +112,12 @@ async function headerCss(markup: string, assets: string[]): Promise<string> {
 }
 
 /**
- * On a wide screen, start each page's API requests from the HTML, beside its scripts, instead of once
- * the scripts have run (`core/page-data.ts`, which says why not on a phone). The monitor's figures and
- * the insights page's drawings all wait on the data, and without this the data waited on the bundle.
- * At the end of the head, after the
- * stylesheet, the font and the scripts, which the first paint needs more. In dev the zone comes from
- * the path; the build writes the home zone's page and `zonePages` swaps in each other zone's.
+ * Start each page's API requests from the HTML, beside its scripts, instead of once the scripts have
+ * run: the monitor's on a wide screen only, the insights page's at every width (`core/page-data.ts`
+ * says why). The monitor's figures and the insights page's drawings all wait on the data, and without
+ * this the data waited on the bundle. At the end of the head, after the stylesheet, the font and the
+ * scripts, which the first paint needs more. In dev the zone comes from the path; the build writes the
+ * home zone's page and `zonePages` swaps in each other zone's.
  */
 function preloadPageData(): Plugin {
   return {
@@ -129,12 +131,40 @@ function preloadPageData(): Plugin {
         // Only the pages that make these requests: in dev any other HTML file (the 3D block's
         // `bake-basemap.html`) would otherwise preload a catalogue it never reads.
         const monitor = route.endsWith("/index.html") || Object.values(ZONE_PATHS).includes(route);
-        const paths = /^\/insights$|\/insights\.html$/.test(route)
-          ? INSIGHTS_LOAD
+        const tags = /^\/insights$|\/insights\.html$/.test(route)
+          ? preloadTags(INSIGHTS_LOAD, null)
           : monitor
-            ? monitorLoad(ctx.server ? zonePath(route) : HOME_ZONE)
+            ? preloadTags(monitorLoad(ctx.server ? zonePath(route) : HOME_ZONE))
             : null;
-        return paths === null ? html : html.replace("</head>", `  ${preloadTags(paths)}\n  </head>`);
+        return tags === null ? html : html.replace("</head>", `  ${tags}\n  </head>`);
+      },
+    },
+  };
+}
+
+/**
+ * The story tab's code, fetched from the insights page's HTML beside its bundle (issue #108). The page
+ * opens on the story (the bare URL, which the monitor links to), and its hero, the largest paint at
+ * every width, needs the story's chunk as well as the data. Imported by the entry, that chunk was only
+ * asked for once the bundle had run: on a slow phone at ~3.4 s of a 4.8 s LCP. Vite preloads only what
+ * the entry imports statically, so this adds the story's chunk and what it imports beyond that. Every
+ * tab gains from it: the questions tab shares most of those chunks (docs/performance.md has the A/B).
+ */
+// Forward slashes on every system, as Rollup writes a chunk's `facadeModuleId` and Vite an HTML page's
+// `filename`.
+const STORY_TAB = normalizePath(path.resolve(import.meta.dirname, "src/insights/story/index.tsx"));
+const INSIGHTS_ENTRY = normalizePath(path.resolve(import.meta.dirname, "insights.html"));
+
+function preloadStoryTab(): Plugin {
+  return {
+    name: "sgc-preload-story-tab",
+    apply: "build",
+    transformIndexHtml: {
+      order: "post",
+      handler(html, ctx) {
+        if (normalizePath(ctx.filename) !== INSIGHTS_ENTRY) return html;
+        const files = chunkPreloads(ctx.bundle ?? {}, STORY_TAB, INSIGHTS_ENTRY);
+        return html.replace("</head>", `  ${modulePreloadTags(files)}\n  </head>`);
       },
     },
   };
@@ -335,6 +365,7 @@ export default defineConfig({
     preloadLatinFont(),
     stylesheetPlacement(),
     preloadPageData(),
+    preloadStoryTab(),
     zonePages(),
     insightsPage(),
   ],
@@ -348,7 +379,7 @@ export default defineConfig({
         rollupOptions: {
           input: {
             index: path.resolve(import.meta.dirname, "index.html"),
-            insights: path.resolve(import.meta.dirname, "insights.html"),
+            insights: INSIGHTS_ENTRY,
           },
         },
       },
