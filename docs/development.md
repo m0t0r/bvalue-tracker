@@ -9,9 +9,9 @@
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
 | `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, D3's maths with React's SVG for the monitor's three charts (`components/charts/fmd.tsx`, `b-over-time.tsx`, `magnitude-time.tsx`; Recharts left the repo on 2026-09-30, issue #126), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
-| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `fixture-server.ts` serves a build with no Worker behind it, for [render profiles](#profiling-react-renders); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
+| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `fixture-server.ts` serves a build with no Worker behind it, for [render profiles](#profiling-react-renders); `react-compiler.ts` lists what React Compiler skips and prints a file as it compiles it ([Tooling gotchas](#tooling-gotchas)); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
-| `src/**/*.test.ts` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
+| `src/**/*.test.{ts,tsx}` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec, kept for history. Its §3 lists every verified fact about the SGC endpoint. |
 
 ## Local setup
@@ -188,7 +188,74 @@ Driving the page for a profile:
     `git diff pnpm-lock.yaml` after touching it, and keep a change of tool versions out of a PR that
     is about something else.
   - **It does not report what the compiler skips for its own limitations**, only what breaks React's
-    rules. Those skips show in the build's log once the compiler is on (issue #130).
+    rules. Those skips show only in the compiler's logger, which `test/react-compiler.test.ts` reads
+    (the next bullet).
+
+- **React Compiler compiles the pages, through Babel** (issue #130; what it buys is in
+  [Performance](performance.md), how to write for it in [the page](frontend.md#writing-for-react-compiler)).
+  `babel-plugin-react-compiler` runs through `@rolldown/plugin-babel` with `reactCompilerPreset()` from
+  `@vitejs/plugin-react`. Babel is the stable route, and the only one that says what it skipped; the
+  native compiler (`react({ compiler: true })`) is issue #134. **A function the compiler cannot handle
+  is left exactly as written, and nothing is printed.** Everything below follows from that silence.
+  - **One file holds the setup, `react-compiler.config.ts`**: the compiler's options, which files it
+    compiles (`src/` only; `core/` and `packages/seismo` have no component or hook) and the plugin.
+    The build, the `page` test project and the skipped-list test all read it, so an option added for
+    one cannot leave the tests passing on code the reader does not get (code review).
+  - **`@babel/core` stays on 7.** `pnpm add @babel/core` installs 8, and with it
+    `babel-plugin-react-compiler` 1.0 skips every component that has a destructured prop with a
+    default (`Expected object property value to be an LVal, got: AssignmentPattern`): 65 functions
+    instead of 15 when it was tried (2026-09-30), with no error. `.github/dependabot.yml` ignores its
+    majors; lift that when the compiler supports Babel 8, and let the skipped-list test say whether it
+    does.
+  - **The skipped list is held by a test**: `test/react-compiler.test.ts` runs the same plugin over
+    `src/**/*.{ts,tsx}` with a `logger` and compares what it skips with `ALLOWED` in that file. It
+    fails on a skip that is not listed **and** on a listed one that no longer happens, so a new
+    component cannot quietly lose its optimisation, and the list can only shrink on purpose. The list
+    started at 11 in 7 files (214 compiled): issues #131 and #132 empty it.
+    - **An entry is a file and a function of ours, and nothing of the compiler's** (owner's rule,
+      2026-09-30: no test of a third party's implementation details). A first version also matched
+      the compiler's reason, word for word, internal messages such as
+      `[Codegen] Internal error: MethodCall::property…` included: a release that reworded one would
+      have failed the test with nothing of ours changed. The reason and the line are printed in a
+      failure and by the command below, for a person to read, and never compared. No line number
+      either: an edit above the function would move it.
+    - **A compiler release can still fail it**, by skipping another of our functions or starting to
+      compile a listed one, and should: both change what ships. So Dependabot sends
+      `babel-plugin-react-compiler` in a PR of its own, outside the weekly group, where a red test
+      waits for a person and holds back nothing else.
+  - **Only the client environment is compiled** (the preset's `applyToEnvironmentHook`). The static
+    headers are rendered once at build time by `renderShells`, with no config file, and the Worker has
+    no React; memoisation does nothing for a single server render, and the markup is the same, so
+    hydration still matches. **That rests on the browser, not on the tests**: every walk of the built
+    pages ended with no hydration error reported (`installErrorReporting` posts one). The two
+    hydration tests (`src/page-root.test.ts`, `src/insights/hydration.test.ts`) compile both sides,
+    the header's render and React's, where production pairs an uncompiled header with a compiled
+    page; they still hold what they were written for, that the two renders are the same tree. The
+    head script (`src/boot.ts`) has no React.
+  - **A build that compiled nothing fails**: `reactCompilerRan` in `vite.config.ts` stops the client
+    build unless a file under `src/` imports `react/compiler-runtime`, React's public entry for
+    compiled code (a dependency published already compiled imports it too, so any module would not
+    do). Checked by building with the Babel plugin taken out.
+  - **Vitest does not read `vite.config.ts`**, so the `page` project is given the same plugin in
+    `vitest.config.ts`. Without it every page test would pass against code no reader runs.
+    `src/lib/react-compiler.test.tsx` fails if that project stops compiling, **by what React does,
+    not by what compiled code looks like**: a parent renders again and a child with unchanged props
+    does not, with no `memo` written. (A first version matched the compiler's cache variable in a
+    component's source text, which is the compiler's to rename.) It is the project's one `.tsx` test:
+    the compiler memoises JSX elements, and the same tree written as `createElement` calls is not
+    memoised apart from its parent. Issue #130 expected the preset's client-only check to keep the
+    compiler out of a test run; it does not, the `page` project is a client environment (checked:
+    the test passes with the preset as it is, and fails with the plugin removed). Test files are
+    compiled too, as any file with a component or a hook in it is.
+  - **To see what the compiler makes of a file**: `pnpm tsx scripts/react-compiler.ts show
+    src/components/theme-button.tsx` prints it with its JSX and types kept. A compiled function opens
+    with `const $ = _c(n)`, its cache of n slots, and each `if ($[i] !== dep)` block is one memoised
+    value; a skipped one looks as it does in the source. `pnpm tsx scripts/react-compiler.ts skips`
+    lists every skipped function with its line and reason.
+  - **The build is slower**: `vite build` went from 1.0 to 4.4 s, nearly all of it Babel parsing and
+    printing the ~120 files of `src/` (leaving `core/` and the library out saved 18 files and no
+    time worth the name), and Rolldown now prints a `PLUGIN_TIMINGS` note saying so on every build.
+    It is a note, not an error.
 
 - **`packages/seismo` is a pnpm workspace package consumed as TypeScript source** (`exports` points
   at `src/index.ts`; there is no build step). Vite, the Worker bundle, `tsx` and vitest all compile

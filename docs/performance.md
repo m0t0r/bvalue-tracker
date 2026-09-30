@@ -740,6 +740,86 @@ practices stayed at 100.
   (`test/fixtures/recharts-3.10.1-ticks.json`, made before the package went: 300 cases of label
   thinning, and all 1,897 axis domains of the test's 2,000 where Recharts gave whole tenths). No
   Lighthouse A/B was run: nothing a page fetches changed but 0.6 kB of CSS.
+- **Both pages are compiled by React Compiler** (issue #130, 2026-09-30; the research is issue #127, the
+  setup in [development](development.md#tooling-gotchas), the conventions in
+  [the page](frontend.md#writing-for-react-compiler)). Every component and hook is memoised at build
+  time, so a render redoes only what its changed inputs reach. No component was rewritten for it (one hook was added, `useTextWidth`: see
+  [the page](frontend.md#writing-for-react-compiler)). It buys render time
+  on `/insights`, little on the monitor, and costs bytes, which a phone's `/insights` pays for in LCP.
+  All of it measured against a build of `main` at `6ed13c5`, both served by `scripts/fixture-server.ts`
+  (brotli, one captured catalogue: 452 events in Tolima, 809 in Chocó).
+  - **Render time per interaction** (the method of
+    [development](development.md#profiling-react-renders): profiling builds, 1280 × 900, no CPU
+    throttle; a slider step is five arrow presses; medians of three runs on `/insights`, of five on
+    the monitor; the components rendered are exact, the same in every run):
+
+    | `/insights` | `main` | compiled | | components rendered |
+    |---|---|---|---|---|
+    | Scroll the whole story (48 commits) | 339 ms | 55 ms | −84 % | 8519 → 557 |
+    | Questions: magnitude slider | 30.8 ms | 3.8 ms | −88 % | 760 → 155 |
+    | Questions: distance slider | 24.6 ms | 6.6 ms | −73 % | 760 → 170 |
+    | Questions: "I notice them from" slider | 37.5 ms | 6.5 ms | −83 % | 1640 → 200 |
+    | Back to the story tab | 31.2 ms | 25.5 ms | −18 % | 902 → 340 |
+
+    | Monitor, Tolima (Chocó) | `main` | compiled | | components rendered |
+    |---|---|---|---|---|
+    | Mc slider, up | 26.7 ms (41.5) | 14.3 ms (23.9) | −46 % (−42 %) | 3399 → 796 (4191 → 1001) |
+    | Minimum-magnitude slider, up | 39.3 ms (49.5) | 25.4 ms (44.3) | −35 % (−11 %) | 9160 → 6311 (9885 → 6571) |
+    | "Reviewed only" switch | 12.4 ms (11.1) | 5.6 ms (14.7) | within the spread | 1828 → 1275 (1979 → 1328) |
+    | Magnitude-type tabs | 11.2 ms (7.1) | 3.2 ms (5.0) | −71 % (−30 %) | 586 → 136 (710 → 160) |
+    | Sort the catalogue | 2.0 ms (2.3) | 2.1 ms (2.5) | 0 | 1110 → 1110 |
+    | Switch language | 5.9 ms (6.4) | 11.0 ms (6.1) | within the spread | 1522 → 1450 (1588 → 1512) |
+
+    On `/insights` the cost was our own components rendering again on every scroll step and slider
+    step (`Ranks` alone was 127 of the story's 339 ms, `MiniMap` 18 of the magnitude slider's 31), and
+    the compiler removes nearly all of it. The monitor's interactions were already short: since the
+    three charts left Recharts (issues #118, #125, #126) a filter change is 25–50 ms, against the
+    363 ms issue #127 measured. **Times under ~15 ms here are inside the run-to-run spread**: single
+    runs of one build ranged 5–16 ms, and two rows read slower compiled in one set and faster in the
+    other zone's. Repeated 15 times each on Tolima, the language switch was 8.4 ms on `main` (5.2–13.9)
+    and 9.2 ms compiled (5.1–12.6), and the "Reviewed only" switch 10.5 and 8.9 ms. The components
+    rendered fell in every row but the sort, which renders the table's rows either way.
+  - **Bytes** (`vite build`, brotli 11, every JS chunk): 678.6 → 724.7 kB, +46.1 kB (gzip 804 → 863 kB).
+    The compiled code is longer: each memoised value is a cache slot and a comparison. Per chunk: the
+    story 29.8 → 42.3 kB, the questions 24.3 → 34.6, the monitor's entry 46.7 → 56.1, the three
+    charts together 11.2 → 18.0, the 3D block 49.7 → 51.6, the insights entry 12.1 → 13.8, the shared
+    chunk 83.4 → 84.6. MapLibre's chunk does not change: `node_modules` is not compiled.
+  - **The load** (Lighthouse 13, emulated mobile, devtools throttling, five interleaved runs each,
+    every run checked for the build it loaded by its entry script; medians, with the range):
+
+    | | FCP | LCP | TBT | Speed Index | Score |
+    |---|---|---|---|---|---|
+    | phone `/` | 1311 → 1312 ms | 1311 → 1312 ms | 141 → 139 ms (126–145 against 127–166) | 2901 → 2945 ms | 98 → 98 |
+    | phone `/choco` | 1317 → 1315 ms | 1317 → 1315 ms | 196 → 185 ms (176–205 against 159–188) | 3029 → 3065 ms | 96 → 96 |
+    | phone `/insights` | 1309 → 1309 ms | 4071 → 4175 ms (4050–4083 against 4170–4189) | 0 → 0 ms | 2865 → 2928 ms | 86 → 86 |
+    | phone `?tab=questions` | 1315 → 1312 ms | 4694 → 4699 ms | 162 → 155 ms | 3300 → 3302 ms | 80 → 80 |
+
+    CLS 0 on all. **The story's hero paints about 0.1 s later on a throttled phone** (every compiled
+    run was later than every run of `main`). The hero waits for the last of the bundle, the data and
+    the story's chunks, which share 1.6 Mbps (issue #108, above), and the story's path is ~16 kB
+    heavier with brotli: about 80 ms of download at that rate. Issue #127's trial read +20 ms, before
+    #119's preloads put everything on the connection at once. The monitor's paint is the static
+    header's and does not move; its TBT is inside the spread. The absolute figures are lower than the
+    tables above because this catalogue is smaller than production's; the differences are what count.
+  - **The build** takes 4.4 s instead of 1.0 (Babel over the ~120 files of `src/`).
+  - **Nothing stopped updating.** A scripted walk ran on both builds side by side, recording the
+    page's text, a hash of every drawing and the node count after each step, in English light and
+    Spanish dark: the monitor's filters, tabs, a depth group, a day chosen on the bars, sorting,
+    paging, clearing, the language, the theme and the zone (31 steps, Tolima and Chocó at 1280 px,
+    Tolima at 390 px: identical at every step); `/insights`' story scroll, questions and 3D viewer
+    (77 steps at 1280 and 390 px: identical except at the 11–16 steps that catch an animation
+    mid-flight, the same steps that differ between two walks of `main`; sampled every 200 ms to their
+    end, Chaparral's replay and the wave race pass through as many states on both builds and end in
+    the same one). The relative times tick ("less than a minute ago" to "3 minutes ago" over 2.5
+    minutes), the refresh backoff counts down from 5 s and then from 10, and the stale-data line
+    comes and goes, the same on both. No console error and no hydration mismatch on either page.
+    - One trap in comparing two builds' DOM: **React's own ids (`useId`) count components in mount
+      order**, and the chart's and the tooltip's chunks arrive in either order, so "Valor b en el
+      tiempo"'s clip path was `r_c_` on one load and `r_d_` on the next of the same build.
+      Normalise them before hashing.
+  - **What is left** is in issue #127's list: #131 and #132 refactor the 11 functions the compiler
+    skips, #133 removes the manual `useMemo`, `useCallback` and `memo` the compiler makes redundant,
+    and #134 moves to the native compiler when it is stable (a 0.8 s build in #127's trial).
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

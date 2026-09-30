@@ -1865,3 +1865,44 @@ for the design-system rules:
 - **Until their issue lands**, each naming it: a ref written during render in
   `components/event-map.tsx` (#131), and three written and one read in `insights/block3d/index.tsx`
   (#132). Those issues remove the line with its cause.
+
+## Writing for React Compiler
+
+Both pages are compiled by React Compiler (issue #130; the setup and its traps are in
+[development](development.md#tooling-gotchas), the numbers in [Performance](performance.md)). It
+memoises every component and hook at build time: a render redoes only what its changed props, state
+and context reach, and hands React the same elements for the rest. A function it cannot prove safe
+is left as written, silently, which is why these are conventions and not only lint rules:
+
+- **No ref is read or written during render** (`ref.current` belongs in an event handler or an
+  effect), **and no prop, state or hook result is mutated.** The lint above reports both; the
+  compiler skips the whole component for either.
+- **No `useMemo`, `useCallback` or `memo` by default.** The compiler does their work, with finer
+  grain. Reach for one only where a measurement shows a need the compiler does not meet, and say
+  which in a comment. The ones already in the code stay until issue #133 removes them area by area:
+  the compiler keeps a manual memo it can prove it preserves, and skips the component when it cannot
+  (`preserve-manual-memoization` above).
+- **A default parameter is a plain value**, not an expression over another parameter or JSX
+  (`of = events.length`, `placeholder = <Skeleton />`): default those in the body. And a few shapes
+  trip compiler bugs, such as a method call nested in `Math.round(…)`: hoist the inner call to a
+  `const`. The lint reports none of these; `test/react-compiler.test.ts` does, by failing on a
+  skipped function that is not in its list.
+- **`"use no memo"` is the escape hatch**: as the first statement of a function, it tells the
+  compiler to leave that function alone. Use it only for a component that misbehaves compiled, with
+  a comment that says what went wrong, and add it to the test's list with the issue that will
+  remove it. None is in the code today.
+- **What to check after a change to something that updates over time**: the compiler changes *when*
+  a component renders again, so a value read from outside React during render (a clock, a DOM
+  measurement, a module variable) can freeze. `useNow` is the pattern: the time is state, so
+  everything drawn from it follows. Walked compiled on 2026-09-30: `Ago`'s relative times, the
+  refresh backoff's countdown, the stale-data line and the 3D viewer's panel all went on updating.
+  - **The one place that did freeze was found by the code review, not by the walk**: `textWidth`
+    (`insights/measure.ts`) measures a label in whatever face is loaded, and a width taken before
+    Geist arrives was to be taken again "on the next render". Compiled, a scene keeps its layout
+    until its inputs change, and a module's function is never one, so a drawing laid out before the
+    font stayed in the stand-in face's widths. (On `main` it healed only if something else rendered
+    the scene again.) A component now measures through **`useTextWidth()`**, which hands out a
+    different function once the font is in: the component renders again and every layout made from
+    it is redone, once (`measure.test.ts`). A local walk cannot show this: the font is there at once.
+    The same goes for any function that answers differently over time without an argument changing:
+    give the change to React as state or as a hook's result.

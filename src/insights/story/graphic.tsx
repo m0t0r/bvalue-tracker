@@ -21,7 +21,7 @@ import { FILL, STROKE } from "../tones";
 import { flowRow } from "./layout";
 import { DotLayer, type Mark } from "./dots";
 import { Layer, SceneTitle, radius, star } from "./marks";
-import { textWidth } from "../measure";
+import { useTextWidth } from "../measure";
 import type { Ev, StoryModel } from "./model";
 import { Rich, fill } from "./rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
@@ -373,6 +373,7 @@ function GroupLegend({
   sources: readonly Source[];
   mainLabel: string | null;
 }) {
+  const measure = useTextWidth();
   const l = storyCopy[lang].legend;
   const items: { key: string; label: string; source?: Source }[] = [
     ...sources.map((s) => ({ key: s, label: l[s], source: s })),
@@ -383,7 +384,7 @@ function GroupLegend({
   // at 320 px the four entries ran 37 px past the edge at 10 px.
   const place = (fs: number) => {
     const at = flowRow(
-      items.map((it) => 12 + textWidth(it.label, fs)),
+      items.map((it) => 12 + measure(it.label, fs)),
       small ? 8 : 14,
       width - 2 * x0,
     );

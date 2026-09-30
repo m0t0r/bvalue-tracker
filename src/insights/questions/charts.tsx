@@ -17,7 +17,7 @@ import { fmtKm, median, medianHorizontalErrorKm, timeWindows } from "../shared";
 import { BG, FILL } from "../tones";
 import { colombianDays, dailyCounts, dayIndexOf, kmFrom, omoriFromFirstDay } from "./derive";
 import { Figure, RangeField, Swatch, useWidth } from "./ui";
-import { textWidth } from "../measure";
+import { useTextWidth } from "../measure";
 
 const DAY = 86_400_000;
 
@@ -27,6 +27,7 @@ const DAY = 86_400_000;
 /** Daily counts of Chocó's two groups above Mc, on one shared scale, with the illustrative 1/t curve. */
 export function TwoClocks({ data, reference }: { data: Insights; reference: QuakeLike }) {
   const { lang } = useI18n();
+  const measure = useTextWidth();
   const c = questionsCopy[lang].stop;
   const [box, w] = useWidth();
   const [curve, setCurve] = useState(true);
@@ -68,7 +69,7 @@ export function TwoClocks({ data, reference }: { data: Insights; reference: Quak
   // Each band's label is kept inside the plot (a lull running to today would push it off the right
   // edge), and dropped where it would run into the previous one: at 320 px two narrow bands' labels
   // were clamped onto each other. The band still shows; the first one's label names them all.
-  const labelW = textWidth(c.lull, 10) + 6;
+  const labelW = measure(c.lull, 10) + 6;
   let lastEnd = -Infinity;
   const lullBands = lulls.flatMap((l) => {
     const a = dayIndexOf(days, l.from),

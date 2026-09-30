@@ -19,6 +19,7 @@ import {
 } from "./core/page-data.ts";
 import { HOME_ZONE, ZONE_PATHS, withStaticShell, withZoneMeta, zonePageFile, zonePath } from "./core/zone-pages.ts";
 import { ZONE_IDS, type ZoneId } from "./core/zones.ts";
+import { PAGE_SOURCE_ID, reactCompiler } from "./react-compiler.config.ts";
 
 const alias = { "@": path.resolve(import.meta.dirname, "./src") };
 
@@ -423,10 +424,42 @@ function reactProfiling(): Plugin {
   };
 }
 
+/**
+ * React Compiler (issue #130; docs/development.md, "React Compiler"): every component and hook of the
+ * pages is memoised at build time, so a render redoes only what its changed inputs reach. Through
+ * Babel, the stable route, where a function the compiler cannot handle shows in its logger
+ * (`test/react-compiler.test.ts` holds that list) and is left exactly as written. The plugin itself
+ * is `reactCompiler` in `react-compiler.config.ts`, shared with the tests. It compiles the client
+ * environment only: the static headers are rendered by `renderShells` and the head script built by
+ * `bundleBoot`, both with no config file, and the Worker has no React.
+ *
+ * The compiler skips silently, so a build where it compiled nothing would look like any other:
+ * `reactCompilerRan` fails such a build. It asks that one of the pages' own files imports the
+ * compiler's runtime, not any module: a dependency published already compiled imports it too.
+ */
+// React's public entry for compiled code, `react/compiler-runtime`, as a resolved module id.
+const COMPILER_RUNTIME = /[\\/]node_modules[\\/]react[\\/]compiler-runtime\.js$/;
+function reactCompilerRan(): Plugin {
+  return {
+    name: "sgc-react-compiler-ran",
+    apply: "build",
+    applyToEnvironment: (environment) => environment.name === "client",
+    generateBundle() {
+      for (const id of this.getModuleIds()) {
+        if (!COMPILER_RUNTIME.test(id)) continue;
+        if (this.getModuleInfo(id)?.importers.some((importer) => PAGE_SOURCE_ID.test(importer))) return;
+      }
+      this.error("no file under src/ imports react/compiler-runtime: React Compiler compiled nothing");
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     PROFILE && reactProfiling(),
     react(),
+    reactCompiler(),
+    reactCompilerRan(),
     tailwindcss(),
     !PROFILE && cloudflare(),
     startup(),

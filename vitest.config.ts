@@ -1,6 +1,7 @@
 import path from "node:path";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
+import { reactCompiler } from "./react-compiler.config.ts";
 
 export default defineConfig({
   test: {
@@ -20,7 +21,11 @@ export default defineConfig({
         // that a deferred card waits for its own margin and the map's picture leaves only once the
         // map has drawn, or cannot (issue #72, against a stand-in for MapLibre). Everything else
         // in this project is a pure function and does not touch the DOM.
-        test: { name: "page", include: ["src/**/*.test.ts"], environment: "happy-dom" },
+        test: { name: "page", include: ["src/**/*.test.{ts,tsx}"], environment: "happy-dom" },
+        // The pages ship compiled by React Compiler (vite.config.ts), so that is what these tests
+        // run: the build's own plugin. `src/lib/react-compiler.test.tsx` fails if this stops
+        // compiling.
+        plugins: [reactCompiler()],
       },
       {
         plugins: [
