@@ -518,6 +518,17 @@ const DailyBars = memo(function DailyBars({
   // It is dropped, choosing nothing, when the window loses focus, on Escape, and when a move arrives
   // with the button already up: each is a mouseup the page never got (a context menu, a switch of app,
   // a release over another frame), after which the next click anywhere would have chosen a range.
+  const latest = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void; cancel: () => void }>({
+    move: () => {},
+    up: () => {},
+    cancel: () => {},
+  });
+  const [on] = useState(() => ({
+    move: (e: MouseEvent) => latest.current.move(e),
+    up: (e: MouseEvent) => latest.current.up(e),
+    cancel: () => latest.current.cancel(),
+    key: (e: KeyboardEvent) => e.key === "Escape" && latest.current.cancel(),
+  }));
   const stop = () => {
     delete document.documentElement.dataset.dragDays;
     window.removeEventListener("mousemove", on.move);
@@ -527,11 +538,6 @@ const DailyBars = memo(function DailyBars({
     dragRef.current = null;
     setDrag(null);
   };
-  const latest = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void; cancel: () => void }>({
-    move: () => {},
-    up: () => {},
-    cancel: () => {},
-  });
   useLayoutEffect(() => {
     latest.current = {
       move: (e) => {
@@ -554,12 +560,6 @@ const DailyBars = memo(function DailyBars({
       cancel: stop,
     };
   });
-  const [on] = useState(() => ({
-    move: (e: MouseEvent) => latest.current.move(e),
-    up: (e: MouseEvent) => latest.current.up(e),
-    cancel: () => latest.current.cancel(),
-    key: (e: KeyboardEvent) => e.key === "Escape" && latest.current.cancel(),
-  }));
   useEffect(
     () => () => {
       delete document.documentElement.dataset.dragDays;

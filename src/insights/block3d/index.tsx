@@ -164,6 +164,7 @@ export function Block3D({ data }: { data: Insights }) {
             setView={setView}
             sea={sea}
             lang={lang}
+            // oxlint-disable-next-line react-hooks-js/refs -- Until issue #132 passes a stable function: the ref holds one, made once.
             onClose={close.current}
           />,
           document.body,
@@ -204,6 +205,7 @@ function Block({
   const handle = useRef<SceneHandle | null>(null);
   // What the scene is built from, read when it is built; later changes go through the handle.
   const latest = useRef({ data, view, sea, still, onReady });
+  // oxlint-disable-next-line react-hooks-js/refs -- Until issue #132 moves this off the render: the scene is built from it.
   latest.current = { data, view, sea, still, onReady };
   const built = useRef<Insights | null>(null);
 
@@ -240,7 +242,7 @@ function Block({
       h.dispose();
       handle.current = null;
     };
-  }, [lang, dark]);
+  }, [lang, dark, pressablePins]);
   useEffect(() => {
     if (data !== built.current) handle.current?.setData(data);
     built.current = data;
@@ -354,6 +356,7 @@ function Viewer({
   // A phone's sheet. It is a modal of its own: while it is open, Radix owns Escape and Tab.
   const [sheet, setSheet] = useState(false);
   const sheetOpen = useRef(false);
+  // oxlint-disable-next-line react-hooks-js/refs -- Until issue #132 moves this off the render: the viewer's key handler reads it.
   sheetOpen.current = sheet;
   const opener = useRef<HTMLButtonElement | null>(null);
   // Widening past the breakpoint unmounts the sheet without closing it; left open, the viewer's keys
@@ -670,6 +673,7 @@ function Replay({
   const last = model.events.at(-1)?.t ?? 0;
   // Read at each frame, so a refetch that adds an event neither restarts the replay nor stops it.
   const latest = useRef({ view, setView, first, last });
+  // oxlint-disable-next-line react-hooks-js/refs -- Until issue #132 moves this off the render: the replay reads it at each frame.
   latest.current = { view, setView, first, last };
   useEffect(() => {
     if (!playing) return;

@@ -1701,3 +1701,47 @@ a pointer to this section. What they ask, and how this page answers them:
 
 A new exception goes the same way: in the code, next to what it excuses, with the reason. Never
 switch a rule off for a file. `rg "oxlint-disable"` lists them all.
+
+## React's lint
+
+`pnpm lint` also runs React's own rules, from `eslint-plugin-react-hooks` 7 (issue #129; how it is
+loaded into oxlint, and why under the name `react-hooks-js`, is in
+[development](development.md#tooling-gotchas)). They are what React Compiler checks before it
+optimises a component, shown in the editor and in CI: the compiler leaves a component that breaks one
+as written, and several are bugs in waiting with or without it. All at `error`, in every file,
+`src/components/ui/` included (shadcn's components would be compiled like ours, and had no finding):
+`rules-of-hooks`, `exhaustive-deps`, and the compiler's set, `refs`, `immutability`, `purity`,
+`set-state-in-render`, `set-state-in-effect`, `static-components`, `use-memo`,
+`preserve-manual-memoization`, `incompatible-library`, `globals`, `error-boundaries`,
+`unsupported-syntax` and `component-hook-factories`.
+
+How this page answers them:
+
+- **State that follows a prop is set during render, not from an effect** (`set-state-in-effect`).
+  `if (was !== on) { setWas(on); setP(0); }` renders again before anything is drawn; the same reset in
+  an effect is drawn once with the old value first. Both places that did it had that frame: the
+  story's `useProgress` drew a scene that had just turned off once more at its last value, and gave a
+  reader who asked for less motion one frame of the empty drawing; the questions' wave race drew the
+  old clock against a new distance (`story/hooks.test.ts`, `questions/feel.test.ts`). What can be read
+  straight off the arguments is not state at all (`useProgress` is 0 while off).
+- **A memo lists what it reads, each a value React can compare** (`preserve-manual-memoization`): a
+  field of `data`, not `data`; and not a value another call is also handed, where the compiler cannot
+  tell that the call leaves it alone (`Stop` in `questions/index.tsx`, whose comment has the case).
+- **An effect lists every value it reads** (`exhaustive-deps`), including one that never changes for a
+  given caller (`pressablePins` in the 3D block's scene effect): listed, it costs nothing, and it is
+  right the day a caller does change it.
+- **What a function reads is declared above it** (`immutability`): the day bars' stable window
+  listeners (`on` in `charts/magnitude-time.tsx`) sat below the `stop` that removes them, which worked
+  only because `stop` never runs during render.
+
+**Approved exceptions**, each an `oxlint-disable-next-line react-hooks-js/<rule>` with its reason, as
+for the design-system rules:
+
+- `lib/hydrate.ts`, `useHydrated` (`set-state-in-effect`): the second render is what the hook is
+  for. The first must match the static header's HTML, and the layout effect puts the second in the
+  same frame (see "Zones" above).
+- `insights/app.tsx`, `tab()` (`static-components`): the component comes out of the tab's chunk,
+  read with `use`; it is that chunk's own export, the same one every render, not one made in render.
+- **Until their issue lands**, each naming it: a ref written during render in
+  `components/event-map.tsx` (#131), and three written and one read in `insights/block3d/index.tsx`
+  (#132). Those issues remove the line with its cause.

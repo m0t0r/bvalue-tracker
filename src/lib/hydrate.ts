@@ -56,6 +56,7 @@ export function mountPage(page: ReactNode): void {
  */
 export function useHydrated(): boolean {
   const [hydrated, setHydrated] = useState(false);
+  // oxlint-disable-next-line react-hooks-js/set-state-in-effect -- The second render is the point: see above.
   useLayoutEffect(() => setHydrated(true), []);
   return hydrated;
 }

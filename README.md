@@ -166,7 +166,7 @@ project is a guest on it.
 
 ```sh
 pnpm typecheck
-pnpm lint          # oxlint, with @shadcn/lint's design-system rules
+pnpm lint          # oxlint, with @shadcn/lint's design-system rules and React's own
 pnpm format:check  # oxfmt; `pnpm format` rewrites
 pnpm test          # offline; SGC is stubbed with captured responses
 pnpm test:live     # one test against the real SGC server

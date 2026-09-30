@@ -302,13 +302,20 @@ function Stop({ data, reference }: { data: Insights; reference: QuakeLike }) {
   // The shallow group through the same `decay` rule as the deep one, so "why has it not faded"
   // is only asked when it has not.
   const shallowDecay = mc === null ? null : decay(shallow, mc, t0, data.now);
+  // The memo lists what it reads, and takes the reference's time as written rather than `t0`: `decay`
+  // is handed `t0` as well, and React's compiler, which does not know `Date.parse` gives a number,
+  // then cannot tell that nothing changes it after the memo has read it (preserve-manual-memoization).
+  const { deep } = data.sources;
+  const { now } = data;
+  const since = reference.time;
   const share = useMemo(() => {
     if (mc === null) return null;
-    const after = (e: QuakeLike) => e.mag >= mc && Date.parse(e.time) >= t0 + 7 * DAY && Date.parse(e.time) <= data.now;
+    const from = Date.parse(since) + 7 * DAY;
+    const after = (e: QuakeLike) => e.mag >= mc && Date.parse(e.time) >= from && Date.parse(e.time) <= now;
     const s = shallow.filter(after).length,
-      all = s + data.sources.deep.filter(after).length;
+      all = s + deep.filter(after).length;
     return all === 0 ? null : { pct: fmtInt((100 * s) / all), mc };
-  }, [data, shallow, mc, t0]);
+  }, [shallow, deep, mc, since, now]);
   return (
     <>
       <P>{c.p1(data.distances.deep?.depthKm ?? 0)}</P>

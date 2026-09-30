@@ -63,6 +63,7 @@ const chunks = {
 function tab<M, P extends object>(chunk: () => ReactPromise<M>, pick: (m: M) => ComponentType<P>) {
   return memo(function Tab(props: P) {
     const View = pick(use(chunk()));
+    // oxlint-disable-next-line react-hooks-js/static-components -- Not created here: the chunk's own export, the same one every render.
     return <View {...props} />;
   });
 }
