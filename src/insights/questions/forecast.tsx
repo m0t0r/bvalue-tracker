@@ -5,6 +5,7 @@
  * Nothing of the page's own is drawn inside the box, and it points to SGC as the authority.
  */
 import { useId } from "react";
+import { Explain } from "@/components/explainer/explain";
 import { fmtDay, fmtDayLong, fmtNum } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type { Forecast } from "../claims";
@@ -107,14 +108,13 @@ export function ForecastBox({ forecast, named, feltShown }: { forecast: Forecast
           {forecast.usgsUrl ? (
             <>
               {" "}
-              <a
+              <Explain
+                id="usgs-forecast"
                 href={forecast.usgsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-2 hover:text-foreground"
+                linkClassName="underline underline-offset-2 hover:text-foreground"
               >
                 {c.sourceLink}
-              </a>
+              </Explain>
             </>
           ) : null}
         </p>

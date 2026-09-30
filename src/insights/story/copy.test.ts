@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { insightsCopy } from "../copy";
 import { questionsCopy } from "../questions/copy";
 import { storyCopy } from "./copy";
-import { placeholders } from "./rich";
+import { placeholders } from "@/lib/rich";
 
 /** Every argument any function in the copy is keyed by: counts and each claim's cases. */
 const ARGS = [

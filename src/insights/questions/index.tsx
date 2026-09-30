@@ -8,8 +8,10 @@
  */
 import { energyRatio, epicentralKm } from "@bvalue/seismo";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Explain } from "@/components/explainer/explain";
 import { dayStart, fmtDay, fmtDayLong } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { Rich } from "@/lib/rich";
 import { cn } from "@/lib/utils";
 import type { ContextResponse } from "@/lib/api";
 import {
@@ -150,7 +152,9 @@ function Layout({
         <header className="pb-6">
           <p className="text-sm font-medium text-muted-foreground">{q.kicker}</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">{q.title}</h2>
-          <p className="mt-4 max-w-xl text-lg text-pretty text-muted-foreground">{q.lede}</p>
+          <p className="mt-4 max-w-xl text-lg text-pretty text-muted-foreground">
+            <Rich text={q.lede} parts={{ sgc: <Explain id="sgc">{q.sgcName}</Explain> }} />
+          </p>
           <dl className="mt-8 flex flex-wrap gap-x-6 gap-y-4 border-y py-5">
             <Stat value={q.stats.km(stats.km)} label={q.stats.kmLabel} />
             <Stat value={fmtInt(stats.strong)} label={q.stats.strongLabel(named)} />
@@ -318,7 +322,12 @@ function Stop({ data, reference }: { data: Insights; reference: QuakeLike }) {
   }, [shallow, deep, mc, since, now]);
   return (
     <>
-      <P>{c.p1(data.distances.deep?.depthKm ?? 0)}</P>
+      <P>
+        <Rich
+          text={c.p1(data.distances.deep?.depthKm ?? 0)}
+          parts={{ aftershocks: <Explain id="aftershocks">{c.aftershocks}</Explain> }}
+        />
+      </P>
       {data.deepDecay ? (
         <P>
           <strong className="font-semibold">{c.deepLabel}</strong> {claims.decay(data.deepDecay)}
@@ -353,13 +362,19 @@ function Swarm({ data }: { data: Insights }) {
   return (
     <>
       <P>
-        {c.p1(
-          fmtDayLong(start, lang),
-          data.distances.tolima?.depthKm ?? 0,
-          crustal(data.distances.tolima),
-          perDay,
-          assessment.state,
-        )}
+        <Rich
+          text={c.p1(
+            fmtDayLong(start, lang),
+            data.distances.tolima?.depthKm ?? 0,
+            crustal(data.distances.tolima),
+            perDay,
+            assessment.state,
+          )}
+          parts={{
+            swarm: <Explain id="swarm">{c.swarm}</Explain>,
+            crust: <Explain id="crust">{c.crust}</Explain>,
+          }}
+        />
       </P>
       {assessment.largest ? <P>{c.state(assessment.state, assessment.largest.mag, assessment.gap)}</P> : null}
       <EnergyShare data={data} />

@@ -162,7 +162,8 @@ const es = {
   docTitle: "¿Qué está pasando? · sismos del Chocó y Tolima",
   title: "¿Qué está pasando?",
   subtitle:
-    "Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto, explicados en palabras sencillas con los datos del Servicio Geológico Colombiano.",
+    "Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto, explicados en palabras sencillas con los datos del {sgc}.",
+  sgcName: "Servicio Geológico Colombiano",
   back: "Volver al inicio",
   tabsLabel: "Forma de verlo",
   tabs: { story: "La historia", questions: "Preguntas", "3d": "En 3D" },
@@ -314,7 +315,8 @@ const en: Copy = {
   docTitle: "What is happening? · the Chocó and Tolima earthquakes",
   title: "What is happening?",
   subtitle:
-    "The earthquakes felt in Colombia's coffee region since 10 August, explained in plain words with data from the Servicio Geológico Colombiano.",
+    "The earthquakes felt in Colombia's coffee region since 10 August, explained in plain words with data from the {sgc}.",
+  sgcName: "Colombian Geological Survey (SGC)",
   back: "Back to home",
   tabsLabel: "How to look at it",
   tabs: { story: "The story", questions: "Questions", "3d": "In 3D" },

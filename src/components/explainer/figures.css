@@ -1,0 +1,89 @@
+/* The explainers' drawings (`figures.tsx`), in the card's own chunk: no page loads this at startup.
+   Each plays its explanation once, when its card opens, and rests on the finished picture; the
+   reader's replay button plays it again (owner's rule: nothing moves by itself, 2026-09-30). In CSS, off
+   the main thread. Every element's resting style is the finished picture, which is also what reduced
+   motion shows (below). */
+
+/* Swarm and aftershocks: each event appears where the sweep reaches it, `--d` into the sweep, and stays. */
+[data-seq="event"] {
+  animation: seq-event 300ms var(--ease-out) both;
+  animation-delay: var(--d);
+}
+@keyframes seq-event {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+[data-seq="sweep"] {
+  animation: seq-sweep 3.6s linear both;
+}
+@keyframes seq-sweep {
+  0% {
+    translate: 0 0;
+    opacity: 1;
+  }
+  96% {
+    translate: var(--w) 0;
+    opacity: 1;
+  }
+  100% {
+    translate: var(--w) 0;
+    opacity: 0;
+  }
+}
+
+/* The energy ladder: M6 grows out of M5, then M7 out of M6, each ×32 in area. */
+[data-energy="m6"] {
+  animation: energy-grow 900ms var(--ease-move) 300ms both;
+}
+[data-energy="m7"] {
+  animation: energy-grow 1000ms var(--ease-move) 1500ms both;
+}
+@keyframes energy-grow {
+  from {
+    opacity: 0;
+    scale: var(--from);
+  }
+  15% {
+    opacity: 1;
+  }
+}
+
+/* Waves leaving the hypocentre: three rings grow out of it, one after another, and stay as rings. */
+[data-wave] {
+  scale: var(--rest);
+  opacity: 0.5;
+  animation: quake-wave 1.4s var(--ease-out) both;
+  animation-delay: var(--d);
+}
+@keyframes quake-wave {
+  from {
+    scale: 0.2;
+    opacity: 0.9;
+  }
+}
+
+/* The sinking plate: its dashes travel under the continent for a few steps, then stop. The dash
+   pattern repeats every 20 units, so where they stop looks the same as where they started. */
+[data-drift] {
+  animation: plate-drift 1.2s linear 3;
+}
+@keyframes plate-drift {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-seq="event"],
+  [data-energy],
+  [data-wave],
+  [data-drift] {
+    animation: none;
+  }
+  [data-seq="sweep"] {
+    animation: none;
+    opacity: 0;
+  }
+}

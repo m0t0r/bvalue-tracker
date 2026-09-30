@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeStaticShell } from "@/lib/hydrate";
+import { fill } from "@/lib/rich";
 import { PageRoot } from "@/page-root";
 import { insightsStaticShell } from "@/static-shell";
 import captured from "../../test/fixtures/api-events-2026-09-24.json";
@@ -101,7 +102,7 @@ describe("/insights's first render", () => {
       expect(container).toBe(copy);
       for (const node of nodes) expect(node.isConnected).toBe(true);
       expect(document.querySelector("h1")).toBe(h1);
-      expect(subtitle.textContent).toBe(insightsCopy[lang].subtitle);
+      expect(subtitle.textContent).toBe(fill(insightsCopy[lang].subtitle, { sgc: insightsCopy[lang].sgcName }));
       expect(selected(container)?.textContent).toBe(insightsCopy[lang].tabs[tab]);
       // Still the skeleton: no data has come.
       expect([...container.querySelectorAll('[role="status"]')].map((s) => s.textContent)).toEqual([

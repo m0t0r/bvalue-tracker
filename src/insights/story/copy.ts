@@ -20,7 +20,7 @@ const es = {
         ? "evento de magnitud 4 o más en los últimos 7 días."
         : "eventos de magnitud 4 o más en los últimos 7 días.",
     intro:
-      "Con los datos del Servicio Geológico Colombiano, esta historia explica de dónde vienen los temblores que se sienten desde el {date}, cómo ha cambiado su ritmo y lo que nadie sabe todavía.",
+      "Con los datos del {sgc}, esta historia explica de dónde vienen los temblores que se sienten desde el {date}, cómo ha cambiado su ritmo y lo que nadie sabe todavía.",
     strip: "Cada raya es un evento de M4 o más desde el {date} ({n} en total). La más alta es el {main}.",
     stripAria: "Línea de tiempo con una raya por cada evento de magnitud 4 o más desde el {date}, coloreada por lugar.",
     scroll: "Sigue bajando",
@@ -36,6 +36,8 @@ const es = {
     shallow: "grupo superficial",
     deep: "grupo profundo",
     tolima: "enjambre de Chaparral",
+    /** SGC's name where the story first gives it, which then goes by "SGC". */
+    sgcFull: "Servicio Geológico Colombiano (SGC)",
   },
   /** How the prose names Chocó's largest event: the mainshock only when the page's rule finds one. */
   main: (state: MainshockState): string => (state === "found" ? "sismo principal" : "evento mayor"),
@@ -46,7 +48,7 @@ const es = {
     title: (similar: boolean): string =>
       similar ? "Tres lugares a distancias similares de Pereira" : "Tres lugares a distancias distintas de Pereira",
     p1: "Esta página sigue los eventos de tres lugares. Dos están en el Chocó, al occidente: un {shallow} cerca de Istmina y Sipí, y un {deep} alrededor del {main} del {date}. El tercero es el {tolima}, en el sur del Tolima.",
-    p2: "Cada punto del mapa es un evento del catálogo del Servicio Geológico Colombiano (SGC): {n} desde el {date}.",
+    p2: "Cada punto del mapa es un evento del catálogo del {sgc}: {n} desde el {date}.",
     p3: "Todo sismo se origina en un punto bajo tierra, el foco. Medida en línea recta hasta ese punto, la distancia desde Pereira es de unos {shallowKm} al grupo superficial, {deepKm} al grupo profundo y {tolimaKm} a Chaparral.",
     note: "Cada distancia es la mediana de los eventos de ese lugar, medida en línea recta desde Pereira hasta el foco de cada evento.",
   },
@@ -75,7 +77,9 @@ const es = {
             : "Aquel fue mayor: unas {x} veces más energía que el {magLabel}."
       }`,
     historyNote:
-      "Magnitudes de momento (Mw) del catálogo {source} ({from}–{to}), consultado a través del USGS; la del {magLabel} es la del SGC. Los sismos del dibujo son una selección de sismos conocidos, no todos los que ha habido, y la ubicación de los antiguos es aproximada. Es historia, no un pronóstico.",
+      "{mw} del {source} ({from}–{to}), consultado a través del {usgs}; la del {magLabel} es la del SGC. Los sismos del dibujo son una selección de sismos conocidos, no todos los que ha habido, y la ubicación de los antiguos es aproximada. Es historia, no un pronóstico.",
+    historyMw: "Magnitudes de momento (Mw)",
+    historySource: "catálogo ISC-GEM",
     largerTitle: "Pero Colombia ha tenido sismos más grandes",
     larger1: "Hubo sismos todavía mayores, y el dibujo los pone a la misma escala:",
     largerItem: "{name}, {date}: {pastMag}, unas {x} veces la energía del {magLabel}.",
@@ -84,7 +88,7 @@ const es = {
     duration1:
       "Además de qué tan fuerte fue un sismo, importa cuánto dura la sacudida. Una estación del {sgc} a unos {km} del centro de Pereira registró el {magLabel}: el movimiento llegó unos {arrival} segundos después de que empezó el sismo, fue creciendo hasta su punto más fuerte, hacia los {peak} segundos, y se siguió registrando durante unos {recMin} minutos. La parte fuerte, en la que llegó el 90\u00a0% de la energía del movimiento, duró unos {strong} segundos.",
     durationNear:
-      "Más cerca del epicentro, según el {sgc}, sus estaciones registraron entre {from} segundos y {toMin} minutos de movimiento significativo.",
+      "Más cerca del {epicentre}, las estaciones del SGC registraron entre {from} segundos y {toMin} minutos de movimiento significativo, según un {article}.",
     /** Keyed on Pereira's strongest second coming after the fault's model had stopped (`peakAfterRupture`). */
     durationRupture: (after: boolean): string =>
       `La falla misma se movió unos {rupture} segundos, según el modelo del USGS. ${
@@ -101,26 +105,32 @@ const es = {
     durationNote:
       "La estación es {station}, de la red del SGC. Las cifras de Pereira salen de su registro de aceleración y las calcula esta página: la parte fuerte es el tiempo entre el 5\u00a0% y el 95\u00a0% de la energía del movimiento (la intensidad de Arias) en las dos componentes horizontales, y los tiempos se cuentan desde que empezó el sismo. Lo que sintió cada persona pudo durar más o menos. La cifra de {from} segundos a {toMin} minutos es la que da el SGC para sus estaciones más cercanas al epicentro. La de la falla viene del {usgs}: el tiempo hasta que salió el 95\u00a0% de su momento sísmico (la medida del tamaño de la que sale la magnitud), contado desde que empezó a romperse.",
     durationUsgs: "modelo de falla finita del USGS",
+    epicentre: "epicentro",
+    /** The link to SGC's article on the duration: the words name where it goes. */
+    durationArticle: "artículo del SGC",
     ladderTitle: "Un punto más de magnitud: unas 32 veces más energía",
     ladder1:
-      "La escala de magnitud engaña: subir un punto no significa «un poco más fuerte», sino unas {x1} veces más energía y 10 veces más movimiento en un sismógrafo. Dos puntos significan {x2} veces más energía.",
+      "La escala de {magnitude} engaña: subir un punto no significa «un poco más fuerte», sino unas {x1} veces más energía y 10 veces más movimiento en un sismógrafo. Dos puntos significan {x2} veces más energía.",
     ladder2:
       "Para igualar el {magLabel} harían falta unos {nAfter} eventos como el mayor que vino después ({after}, el {afterDate}), o unos {nM4} de magnitud 4.",
     /** Only while the page's rule finds a mainshock: it then stands at least 1.0 above every other event. */
     ladder3:
       "Por eso, aunque se sigan sintiendo temblores, cada evento que vino después liberó al menos 30 veces menos energía que el de aquel día.",
-    note: "Las magnitudes mezclan tipos (MLr, MLv, Mw…) tal como las publica el SGC, así que estas comparaciones son aproximadas.",
+    note: "Las magnitudes mezclan {types} (MLr, MLv, Mw…) tal como las publica el SGC, así que estas comparaciones son aproximadas.",
+    magnitude: "magnitud",
+    types: "tipos",
   },
 
   section: {
     chapter: "3 · Bajo tierra",
     title: "Dos grupos a distinta profundidad",
     p1: "Ahora mira los mismos eventos del Chocó de perfil, como si cortáramos la tierra de oeste a este, sin exagerar la escala. Pereira queda en la superficie, a la derecha.",
-    p2: "Bajo el Pacífico, la placa de Nazca —un enorme trozo del fondo del mar— no choca de frente con Sudamérica: se mete por debajo, unos {rate} al año, y sigue bajando hacia el interior de la Tierra. Por eso en esta parte de Colombia hay sismos tan profundos.",
+    p2: "Bajo el Pacífico, la {nazca} —un enorme trozo del fondo del mar— no choca de frente con Sudamérica: se mete por debajo, unos {rate} al año, y sigue bajando hacia el interior de la Tierra. Por eso en esta parte de Colombia hay sismos tan profundos.",
     /** The rate in p2 and on the drawing's arrow, with its source (docs/science.md). */
     rateNote:
       "La cifra de {rate} al año es la velocidad a la que la placa de Nazca se acerca a Sudamérica, medida por GPS en la isla de Malpelo, que está sobre la propia placa ({source}).",
     rateSource: "Mora-Páez y otros, 2019",
+    nazca: "placa de Nazca",
     /** Keyed on the deep group's centre lying within 40 km of the largest event's epicentre. */
     p2Main: (near: boolean): string =>
       near
@@ -144,7 +154,7 @@ const es = {
   /** Where each source sits against the plate, from `plateSide` (docs/science.md). */
   plate: {
     title: "¿Dentro de la placa o encima?",
-    p1: "La franja gris es la placa de Nazca según Slab2, el modelo del USGS (Servicio Geológico de EE. UU.) de las placas que se hunden bajo los continentes: dónde está su borde superior y cuánto mide de grueso. La franja más tenue es el margen de error que el propio modelo declara para ese borde, de unos {unc} bajo estos eventos.",
+    p1: "La franja gris es la placa de Nazca según {slab2}, el modelo del USGS (Servicio Geológico de Estados Unidos) de las placas que se hunden bajo los continentes: dónde está su borde superior y cuánto mide de grueso. La franja más tenue es el margen de error que el propio modelo declara para ese borde, de unos {unc} bajo estos eventos.",
     p2: "Para decir que un grupo está encima de la placa o dentro de ella, la diferencia tiene que superar ese margen más el error de las propias profundidades.",
     /** Keyed on `plateSide`'s answer for the group or the event named by {who}. */
     side: (side: PlateSide): string =>
@@ -156,10 +166,11 @@ const es = {
             ? "El {who} está por debajo de la placa según el modelo, más allá del margen ({margin})."
             : "El {who} está justo a la profundidad del borde de la placa, dentro del margen ({margin}): el modelo por sí solo no permite saber si está dentro de la placa o encima.",
     /** Only while the page's mainshock is the event USGS assessed (`USGS_ASSESSED`). */
-    usgs: "El {usgs}, que estudió el {main} con sus propios datos, considera que por su profundidad probablemente ocurrió dentro de la placa de Nazca, y que los sismos a esa profundidad suelen deberse a las fuerzas que doblan la placa al hundirse.",
+    usgs: "El USGS estudió el {main} con sus propios datos. En su {usgs} considera que, por su profundidad, probablemente ocurrió dentro de la placa de Nazca, y que los sismos a esa profundidad suelen deberse a las fuerzas que doblan la placa al hundirse.",
     /** When the mainshock gets the same answer as the deep group around it. */
     same: "Lo mismo ocurre con el {who}.",
-    usgsLink: "USGS",
+    /** The link to USGS's page on the event: the words name where it goes. */
+    usgsLink: "resumen del sismo",
     /** Only with `usgs`: USGS's own words about where the event sits in the subduction zone. */
     usgsNorth:
       "El USGS añade que este sismo ocurrió cerca del extremo norte del área en que se observan sismos de profundidad intermedia (de 70 a 300\u00a0km) en la zona de subducción de Sudamérica.",
@@ -175,7 +186,8 @@ const es = {
           ? "Las réplicas no se apagan como es habitual"
           : "Las primeras réplicas",
     deep1:
-      "Después de un sismo grande vienen réplicas: eventos más pequeños en la misma zona, cada vez más espaciados. Una regla de 1894, la ley de Omori, dice que su número baja más o menos en proporción inversa al tiempo transcurrido: al doble de tiempo, la mitad de réplicas por día.",
+      "Después de un sismo grande vienen {aftershocks}: eventos más pequeños en la misma zona, cada vez más espaciados. Una regla de 1894, la ley de Omori, dice que su número baja más o menos en proporción inversa al tiempo transcurrido: al doble de tiempo, la mitad de réplicas por día.",
+    aftershocks: "réplicas",
     deep2: "Mira el {deep} en el dibujo. {claim}",
     deepNote:
       "Solo se cuentan eventos de {mc} o más: desde ese tamaño, el catálogo los registra todos. La línea discontinua es esa curva típica, anclada al primer día del grupo profundo: es una ilustración, no un ajuste a los datos.",
@@ -219,14 +231,16 @@ const es = {
       m === "found"
         ? "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido. Ahora uno de ellos destaca sobre todos los demás."
         : m === "awaiting-review"
-          ? "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido. Ahora uno destaca, aunque su magnitud todavía es automática y puede cambiar."
+          ? "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido. Ahora uno destaca, aunque su magnitud todavía es {automatic} y puede cambiar."
           : "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido, sin uno grande que domine.",
     stillSwarm: "Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre.",
+    automatic: "automática",
+    crust: "corteza",
     p2: "Compara las dos franjas: en el Chocó, el evento mayor liberó {chocoShare} de la energía; en Chaparral, el mayor ({mag}) liberó {tolimaShare}.",
     /** Keyed on the swarm's median depth being under 30 km, where it is certainly in the crust. */
     p3: (crustal: boolean): string =>
       crustal
-        ? "El enjambre registra en promedio unos {perDay} eventos al día, a unos {depth} de profundidad, dentro de la corteza."
+        ? "El enjambre registra en promedio unos {perDay} eventos al día, a unos {depth} de profundidad, dentro de la {crust}."
         : "El enjambre registra en promedio unos {perDay} eventos al día, a unos {depth} de profundidad.",
     driftTitle: (d: Drift["case"]): string =>
       d === "moved" ? "Parece desplazarse despacio" : d === "none" ? "No parece desplazarse" : "¿Se desplaza?",
@@ -392,13 +406,18 @@ const en: StoryCopy = {
         ? "event of magnitude 4 or more in the last 7 days."
         : "events of magnitude 4 or more in the last 7 days.",
     intro:
-      "Using data from the Servicio Geológico Colombiano, this story explains where the tremors felt since {date} come from, how their pace has changed, and what nobody knows yet.",
+      "Using data from the {sgc}, this story explains where the tremors felt since {date} come from, how their pace has changed, and what nobody knows yet.",
     strip: "Each line is one event of M4 or more since {date} ({n} in all). The tallest is the {main}.",
     stripAria: "Timeline with one line for each event of magnitude 4 or more since {date}, coloured by place.",
     scroll: "Keep scrolling",
   },
   legend: { shallow: "Chocó shallow", deep: "Chocó deep", tolima: "Chaparral", pereira: "Pereira" },
-  names: { shallow: "shallow group", deep: "deep group", tolima: "Chaparral swarm" },
+  names: {
+    shallow: "shallow group",
+    deep: "deep group",
+    tolima: "Chaparral swarm",
+    sgcFull: "Colombian Geological Survey (SGC)",
+  },
   main: (state) => (state === "found" ? "mainshock" : "largest event"),
 
   where: {
@@ -408,7 +427,7 @@ const en: StoryCopy = {
         ? "Three places, at a similar distance from Pereira"
         : "Three places, at different distances from Pereira",
     p1: "The events this page follows come from three places. Two are in Chocó, to the west: a {shallow} near Istmina and Sipí, and a {deep} around the {main} of {date}. The third is the {tolima}, in southern Tolima.",
-    p2: "Each dot on the map is an event in the catalogue of the Servicio Geológico Colombiano (SGC): {n} since {date}.",
+    p2: "Each dot on the map is an event in {sgc}'s catalogue: {n} since {date}.",
     p3: "An earthquake starts at a point underground. Counting that depth, in a straight line the shallow group is about {shallowKm} from Pereira, the deep group {deepKm} and Chaparral {tolimaKm}.",
     note: "Distances: each place's median, in a straight line from Pereira to the point underground where each event began.",
   },
@@ -432,7 +451,9 @@ const en: StoryCopy = {
             : "That one was larger: about {x} times the energy of the {magLabel}."
       }`,
     historyNote:
-      "Moment magnitudes (Mw) from the {source} catalogue ({from}–{to}), read through USGS; the {magLabel}'s is SGC's. The earthquakes drawn are a selection of well-known ones, not every one there has been, and the older ones' locations are approximate. This is history, not a forecast.",
+      "{mw} from the {source} ({from}–{to}), read through {usgs}; the {magLabel}'s is SGC's. The earthquakes drawn are a selection of well-known ones, not every one there has been, and the older ones' locations are approximate. This is history, not a forecast.",
+    historyMw: "Moment magnitudes (Mw)",
+    historySource: "ISC-GEM catalogue",
     largerTitle: "But Colombia has had larger earthquakes",
     larger1: "There have been larger ones still, and the drawing puts them at the same scale:",
     largerItem: "{name}, {date}: {pastMag}, about {x} times the energy of the {magLabel}.",
@@ -441,7 +462,7 @@ const en: StoryCopy = {
     duration1:
       "Besides how strong an earthquake is, how long the shaking lasts matters. An {sgc} station about {km} from the centre of Pereira recorded the {magLabel}: the motion arrived about {arrival} seconds after the earthquake began, grew to its strongest at around {peak} seconds, and kept being recorded for about {recMin} minutes. The strong part, in which 90% of the motion's energy arrived, lasted about {strong} seconds.",
     durationNear:
-      "Nearer the epicentre, according to {sgc}, its stations recorded between {from} seconds and {toMin} minutes of significant movement.",
+      "Nearer the {epicentre}, SGC's stations recorded between {from} seconds and {toMin} minutes of significant movement, according to an {article}.",
     durationRupture: (after) =>
       `The fault itself moved for about {rupture} seconds, according to USGS's model. ${
         after
@@ -457,24 +478,29 @@ const en: StoryCopy = {
     durationNote:
       "The station is {station}, in SGC's network. The Pereira figures come from its acceleration record and are worked out by this page: the strong part is the time between 5% and 95% of the motion's energy (the Arias intensity) on the two horizontal components, and times count from when the earthquake began. What each person felt may have lasted more or less. The {from} seconds to {toMin} minutes is SGC's figure for its stations nearest the epicentre. The fault's comes from {usgs}: the time until 95% of its seismic moment (the measure of size that magnitude comes from) was out, counted from when it started to break.",
     durationUsgs: "USGS's finite-fault model",
+    epicentre: "epicentre",
+    durationArticle: "SGC article",
     ladderTitle: "Each step of magnitude, about 32 times the energy",
     ladder1:
-      "The magnitude scale is deceptive: one step up is not “a bit stronger”. It is about {x1} times the energy, and on a seismograph 10 times the motion. Two steps: {x2} times the energy.",
+      "The {magnitude} scale is deceptive: one step up is not “a bit stronger”. It is about {x1} times the energy, and on a seismograph 10 times the motion. Two steps: {x2} times the energy.",
     ladder2:
       "Matching the {magLabel} would take about {nAfter} events like the largest one that came after it ({after}, on {afterDate}), or about {nM4} of magnitude 4.",
     ladder3:
       "So although tremors are still felt, every event that came after released at least 30 times less energy than the one that day.",
-    note: "Magnitudes mix types (MLr, MLv, Mw…) as SGC publishes them, so these comparisons are approximate.",
+    note: "Magnitudes mix {types} (MLr, MLv, Mw…) as SGC publishes them, so these comparisons are approximate.",
+    magnitude: "magnitude",
+    types: "types",
   },
 
   section: {
     chapter: "3 · Underground",
     title: "Two groups, at two depths",
     p1: "Now look at the same Chocó events from the side, as if the earth were cut from west to east, true to scale. Pereira sits on the surface, on the right.",
-    p2: "Under the Pacific, the Nazca plate — a huge slab of sea floor — does not crash head-on into South America: it slides beneath it, about {rate} a year, and keeps going down into the Earth. That is why this part of Colombia has earthquakes this deep.",
+    p2: "Under the Pacific, the {nazca} — a huge slab of sea floor — does not crash head-on into South America: it slides beneath it, about {rate} a year, and keeps going down into the Earth. That is why this part of Colombia has earthquakes this deep.",
     rateNote:
       "The {rate} a year is the speed at which the Nazca plate closes on South America, measured by GPS on Malpelo Island, which sits on the plate itself ({source}).",
     rateSource: "Mora-Páez and others, 2019",
+    nazca: "Nazca plate",
     p2Main: (near) =>
       near
         ? "The {main} began {depth} underground, and the {deep} ({n} events) lies around it."
@@ -494,7 +520,7 @@ const en: StoryCopy = {
 
   plate: {
     title: "Inside the plate, or above it?",
-    p1: "The grey band is the Nazca plate according to Slab2, the USGS (United States Geological Survey) model of the plates that sink beneath the continents: where its top is and how thick it is. The fainter band is the margin of error the model itself states for that top, about {unc} under these events.",
+    p1: "The grey band is the Nazca plate according to {slab2}, the USGS (United States Geological Survey) model of the plates that sink beneath the continents: where its top is and how thick it is. The fainter band is the margin of error the model itself states for that top, about {unc} under these events.",
     p2: "To say a group is above the plate or inside it, the difference has to exceed that margin plus the error in the depths themselves.",
     side: (side) =>
       side === "above"
@@ -504,9 +530,9 @@ const en: StoryCopy = {
           : side === "below"
             ? "The {who} is below the plate according to the model, beyond the margin ({margin})."
             : "The {who} sits right at the depth of the plate's top, within the margin ({margin}): the model alone cannot tell whether it is inside the plate or above it.",
-    usgs: "The {usgs}, which studied the {main} with its own data, considers that given its depth it likely occurred within the subducting Nazca plate, and that earthquakes at that depth are usually due to the forces that bend the plate as it sinks.",
+    usgs: "USGS studied the {main} with its own data. In its {usgs}, it considers that given its depth it likely occurred within the subducting Nazca plate, and that earthquakes at that depth are usually due to the forces that bend the plate as it sinks.",
     same: "The same holds for the {who}.",
-    usgsLink: "USGS",
+    usgsLink: "summary of the earthquake",
     usgsNorth:
       "USGS adds that this earthquake occurred near the northernmost extent where intermediate-depth earthquakes (70 to 300\u00a0km deep) are observed in the South America subduction zone.",
     note: "The drawing is a cut at {lat} latitude, between the two groups. Each group is compared with the plate at its own place, not with the drawing.",
@@ -521,7 +547,8 @@ const en: StoryCopy = {
           ? "The aftershocks are not dying away as expected"
           : "The first aftershocks",
     deep1:
-      "After a large earthquake come aftershocks: smaller events in the same area, ever further apart. A rule from 1894, Omori's law, says their rate falls roughly as one over the time elapsed: after twice the time, half as many aftershocks a day.",
+      "After a large earthquake come {aftershocks}: smaller events in the same area, ever further apart. A rule from 1894, Omori's law, says their rate falls roughly as one over the time elapsed: after twice the time, half as many aftershocks a day.",
+    aftershocks: "aftershocks",
     deep2: "Look at the {deep} in the drawing. {claim}",
     deepNote:
       "Only events of {mc} and up are counted, which the catalogue records completely. The dashed line is that typical curve, anchored to the deep group's first day: an illustration, not a fit.",
@@ -562,13 +589,15 @@ const en: StoryCopy = {
       m === "found"
         ? "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size. Now one of them stands out above all the others."
         : m === "awaiting-review"
-          ? "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size. Now one stands out, though its magnitude is still automatic and may change."
+          ? "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size. Now one stands out, though its magnitude is still {automatic} and may change."
           : "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size, with no large one dominating.",
     stillSwarm: "Until SGC describes it otherwise, this page keeps calling it a swarm.",
+    automatic: "automatic",
+    crust: "crust",
     p2: "Compare the two strips: in Chocó, the largest event released {chocoShare} of the energy; at Chaparral, the largest ({mag}) released {tolimaShare}.",
     p3: (crustal) =>
       crustal
-        ? "It has averaged about {perDay} events a day, about {depth} deep, inside the crust."
+        ? "It has averaged about {perDay} events a day, about {depth} deep, inside the {crust}."
         : "It has averaged about {perDay} events a day, about {depth} deep.",
     driftTitle: (d) =>
       d === "moved" ? "It seems to be moving, slowly" : d === "none" ? "No visible movement" : "Is it moving?",

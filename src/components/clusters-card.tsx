@@ -1,3 +1,4 @@
+import { Explain } from "@/components/explainer/explain";
 import { AlertTriangleIcon } from "lucide-react";
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FlowNumber } from "@/components/flow-number";
@@ -166,7 +167,9 @@ export function ClustersCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t.clustersTitle}</CardTitle>
+        <CardTitle>
+          <Explain id="depth-groups">{t.clustersTitle}</Explain>
+        </CardTitle>
         <CardDescription className="max-w-none">{t.clustersDesc(CLUSTER_DEPTH_KM)}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

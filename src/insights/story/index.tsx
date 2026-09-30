@@ -26,13 +26,14 @@ import { fmt, fmtKm, fmtMag, fmtPct, fmtTimes, roundSig } from "../shared";
 import { FILL } from "../tones";
 import { Graphic, type SceneId } from "./graphic";
 import { useActiveStep, useSize, useWide } from "./hooks";
-import { ExternalLink, MainName, Note, Num, SourceName } from "./marks";
+import { MainName, Note, Num, SourceName } from "./marks";
 import { RATE } from "./section";
 import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
 import { HISTORY, ISCGEM_URL, quakeYear } from "../history";
 import { SGC_DURATION_URL, USGS_FINITE_FAULT_URL, shakingParts } from "../durations";
 import { CONVERGENCE_SOURCE, CUTS } from "../plate";
-import { Rich, fill } from "./rich";
+import { Explain } from "@/components/explainer/explain";
+import { Rich, fill } from "@/lib/rich";
 
 interface Step {
   id: string;
@@ -159,7 +160,13 @@ function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: 
       </p>
       <p className="max-w-2xl text-lg leading-relaxed text-pretty">{claims.strongMix(mix, 4, 7)}</p>
       <p className="max-w-2xl text-lg leading-relaxed text-pretty text-muted-foreground">
-        <Rich text={c.intro} parts={{ date: fmtDayLong(model.start, lang) }} />
+        <Rich
+          text={c.intro}
+          parts={{
+            date: fmtDayLong(model.start, lang),
+            sgc: <Explain id="sgc">{storyCopy[lang].names.sgcFull}</Explain>,
+          }}
+        />
       </p>
 
       <figure className="flex flex-col gap-2">
@@ -169,7 +176,14 @@ function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: 
             parts={{
               date: fmtDayLong(model.start, lang),
               n: fmt(strong.length + (main ? 1 : 0)),
-              main: main ? `${mainWord} (${fmtMag(main.mag)})` : "",
+              main: main ? (
+                <>
+                  {data.mainshock.choco.state === "found" ? <Explain id="mainshock">{mainWord}</Explain> : mainWord} (
+                  {fmtMag(main.mag)})
+                </>
+              ) : (
+                ""
+              ),
             }}
           />
         </figcaption>
@@ -312,7 +326,11 @@ function useSteps(
         <p>
           <Rich
             text={c.where.p2}
-            parts={{ n: <Num>{fmt(model.all.length)}</Num>, date: fmtDayLong(model.start, lang) }}
+            parts={{
+              n: <Num>{fmt(model.all.length)}</Num>,
+              date: fmtDayLong(model.start, lang),
+              sgc: <Explain id="sgc">SGC</Explain>,
+            }}
           />
         </p>
         <p>
@@ -406,7 +424,13 @@ function useSteps(
             <Rich
               text={c.energy.historyNote}
               parts={{
-                source: <ExternalLink href={ISCGEM_URL}>ISC-GEM</ExternalLink>,
+                mw: <Explain id="magnitude-types">{c.energy.historyMw}</Explain>,
+                source: (
+                  <Explain id="iscgem-catalogue" href={ISCGEM_URL}>
+                    {c.energy.historySource}
+                  </Explain>
+                ),
+                usgs: <Explain id="usgs">USGS</Explain>,
                 magLabel,
                 from: String(HISTORY.region.from),
                 to: HISTORY.source.iscgemEnd.slice(0, 4),
@@ -476,7 +500,12 @@ function useSteps(
             <Rich
               text={c.energy.durationNear}
               parts={{
-                sgc: <ExternalLink href={SGC_DURATION_URL}>SGC</ExternalLink>,
+                epicentre: <Explain id="hypocentre">{c.energy.epicentre}</Explain>,
+                article: (
+                  <Explain id="sgc-duration" href={SGC_DURATION_URL}>
+                    {c.energy.durationArticle}
+                  </Explain>
+                ),
                 from: <Num>{d.from}</Num>,
                 toMin: <Num>{d.toMin}</Num>,
               }}
@@ -498,7 +527,11 @@ function useSteps(
                 station: d.station,
                 from: d.from,
                 toMin: d.toMin,
-                usgs: <ExternalLink href={USGS_FINITE_FAULT_URL}>{c.energy.durationUsgs}</ExternalLink>,
+                usgs: (
+                  <Explain id="usgs-finite-fault" href={USGS_FINITE_FAULT_URL}>
+                    {c.energy.durationUsgs}
+                  </Explain>
+                ),
               }}
             />
           </Note>
@@ -519,7 +552,11 @@ function useSteps(
           <p>
             <Rich
               text={c.energy.ladder1}
-              parts={{ x1: <Num>{fmt(energyRatio(5, 4), 1)}</Num>, x2: <Num>{fmt(energyRatio(6, 4))}</Num> }}
+              parts={{
+                x1: <Num>{fmt(energyRatio(5, 4), 1)}</Num>,
+                x2: <Num>{fmt(energyRatio(6, 4))}</Num>,
+                magnitude: <Explain id="magnitude">{c.energy.magnitude}</Explain>,
+              }}
             />
           </p>
           {model.largestAfter && eq.toLargestAfter !== null && (
@@ -537,7 +574,9 @@ function useSteps(
             </p>
           )}
           {mainState === "found" && <p>{c.energy.ladder3}</p>}
-          <Note>{c.energy.note}</Note>
+          <Note>
+            <Rich text={c.energy.note} parts={{ types: <Explain id="magnitude-types">{c.energy.types}</Explain> }} />
+          </Note>
         </>
       ),
     });
@@ -555,7 +594,10 @@ function useSteps(
         {main && (
           <>
             <p>
-              <Rich text={c.section.p2} parts={{ rate: RATE }} />{" "}
+              <Rich
+                text={c.section.p2}
+                parts={{ rate: RATE, nazca: <Explain id="subduction">{c.section.nazca}</Explain> }}
+              />{" "}
               <Rich
                 text={c.section.p2Main(f.deepNearMain)}
                 parts={{
@@ -584,7 +626,11 @@ function useSteps(
             text={c.section.rateNote}
             parts={{
               rate: RATE,
-              source: <ExternalLink href={CONVERGENCE_SOURCE}>{c.section.rateSource}</ExternalLink>,
+              source: (
+                <Explain id="gps-velocities" href={CONVERGENCE_SOURCE}>
+                  {c.section.rateSource}
+                </Explain>
+              ),
             }}
           />
         </Note>
@@ -633,7 +679,10 @@ function useSteps(
       body: (
         <>
           <p>
-            <Rich text={c.plate.p1} parts={{ unc: km(plate.deep.plate.uncertaintyKm) }} />
+            <Rich
+              text={c.plate.p1}
+              parts={{ unc: km(plate.deep.plate.uncertaintyKm), slab2: <Explain id="slab2">Slab2</Explain> }}
+            />
           </p>
           <p>{c.plate.p2}</p>
           <p>{side(names.shallow, plate.shallow)}</p>
@@ -653,7 +702,11 @@ function useSteps(
                 text={c.plate.usgs}
                 parts={{
                   main: mainWord,
-                  usgs: <ExternalLink href={USGS_ASSESSED.url}>{c.plate.usgsLink}</ExternalLink>,
+                  usgs: (
+                    <Explain id="usgs-summary" href={USGS_ASSESSED.url}>
+                      {c.plate.usgsLink}
+                    </Explain>
+                  ),
                 }}
               />{" "}
               {c.plate.usgsNorth}
@@ -676,7 +729,12 @@ function useSteps(
       title: c.clocks.deepTitle(deepDecay.case),
       body: (
         <>
-          <p>{c.clocks.deep1}</p>
+          <p>
+            <Rich
+              text={c.clocks.deep1}
+              parts={{ aftershocks: <Explain id="aftershocks">{c.clocks.aftershocks}</Explain> }}
+            />
+          </p>
           <p>
             <Rich text={c.clocks.deep2} parts={{ deep: names.deep, claim: claims.decay(deepDecay) }} />
           </p>
@@ -760,7 +818,8 @@ function useSteps(
                 date: fmtDayLong(data.start.tolima, lang),
                 km: km(model.chocoToTolimaKm === null ? null : roundSig(model.chocoToTolimaKm, 2)),
                 main: mainWord,
-                tolima: names.tolima,
+                tolima: <Explain id="swarm">{names.tolima}</Explain>,
+                automatic: <Explain id="reviewed">{c.tolima.automatic}</Explain>,
               }}
             />{" "}
             {tState !== "none" && c.tolima.stillSwarm}
@@ -781,11 +840,17 @@ function useSteps(
             <p>
               <Rich
                 text={c.tolima.p3(f.tolimaCrustal)}
-                parts={{ perDay: <Num>{fmt(model.tolimaPerDay)}</Num>, depth: km(model.tolimaDepth) }}
+                parts={{
+                  perDay: <Num>{fmt(model.tolimaPerDay)}</Num>,
+                  depth: km(model.tolimaDepth),
+                  crust: <Explain id="crust">{c.tolima.crust}</Explain>,
+                }}
               />
             </p>
           )}
-          <Note>{c.energy.note}</Note>
+          <Note>
+            <Rich text={c.energy.note} parts={{ types: <Explain id="magnitude-types">{c.energy.types}</Explain> }} />
+          </Note>
         </>
       ),
     });

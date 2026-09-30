@@ -1,3 +1,6 @@
+import { Explain } from "@/components/explainer/explain";
+import { Rich } from "@/lib/rich";
+import { SGC_QUERY_URL } from "@/lib/format";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
 import { lazy, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
@@ -323,7 +326,15 @@ function ZonePage({ zone }: { zone: ZoneId }) {
             <AlertDescription>
               <ul className="flex max-w-[75ch] list-disc flex-col gap-1 ps-4">
                 {t.zones[zone].caveats(view.mainshock.state).map((c) => (
-                  <li key={c}>{c}</li>
+                  <li key={c}>
+                    <Rich
+                      text={c}
+                      parts={{
+                        types: <Explain id="magnitude-types">{t.caveatTypes}</Explain>,
+                        automatic: <Explain id="reviewed">{t.caveatAutomatic}</Explain>,
+                      }}
+                    />
+                  </li>
                 ))}
               </ul>
             </AlertDescription>
@@ -334,14 +345,9 @@ function ZonePage({ zone }: { zone: ZoneId }) {
       {settled ? (
         <footer className="pb-8 text-sm text-muted-foreground">
           {t.source}{" "}
-          <a
-            className="underline underline-offset-4"
-            target="_blank"
-            rel="noreferrer"
-            href="https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php"
-          >
+          <Explain id="sgc-catalogue" href={SGC_QUERY_URL}>
             bdrsnc.sgc.gov.co
-          </a>
+          </Explain>
           <p className="mt-1 max-w-[75ch] text-pretty">{t.autoUpdateLong(updateEveryMin(zone))}</p>
           <p className="mt-1 max-w-[75ch] text-pretty">{t.timeNote}</p>
         </footer>

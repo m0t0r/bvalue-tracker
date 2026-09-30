@@ -1054,6 +1054,72 @@ colour, motion). Keep to them:
     load in the same way. One provider per tip costs nothing today: the delay is 0, so there is no
     skip-delay to share, and Radix closes any open tooltip when another opens, provider or not
     (declined in the code review).
+- **A word that explains itself is an explainer** (`src/components/explainer/`, issue #144,
+  2026-09-30). A source ("Servicio Geológico Colombiano"), a link ("artículo del SGC") or a term
+  ("réplicas", "Mc") opens a card: a source's logo or name tile, who they are and what this page takes
+  from them; a link's publisher, title, one line on what is there and the way out; a term's plain
+  definition, with a small animated drawing where movement is the explanation (`figures.tsx`: b tilting
+  between 1 and 0.7, Mc's missing small events, a swarm against aftershocks, the ×32 energy squares,
+  waves leaving the hypocentre, the plate sliding under the continent, the two depth groups). Chosen
+  from three prototype variants (branch `prototype/explainer-cards`, never merged; the verdict is on
+  #144): a compact card beside the word with a mouse (A) and a sheet from the bottom on touch (B's),
+  over the same card inline in the text (C).
+  - **One definition per thing, in `entries.ts`**, both languages; a page names an explainer by id
+    (`ids.ts`) and never repeats its words, so USGS cannot be expanded two ways again (the story said
+    "EE. UU." where the questions said "Estados Unidos"; both now say the latter). A link's address is
+    the page's, passed as `href`, and TypeScript requires one for every link explainer.
+  - **How it opens is `interaction.ts`, a pure function, tested path by path.** A mouse opens a preview
+    after 350 ms over the word and closes it 250 ms after the pointer has left both word and card, so the
+    pointer can travel into it; a click pins a term's card and a second click lets it go; a click on a
+    link follows it. On touch a tap opens the sheet instead of following a link (the sheet has a button
+    the width of the screen to leave by), and the next tap closes it. The keyboard's focus previews,
+    Enter on a term opens the card with focus on the card itself, where a screen reader starts at its
+    title; Escape closes and gives focus back to the word, without previewing it again, and Tab out of either end of the card returns to the word, since the card is
+    portalled to the end of the page. A card opened while another is open, or within 500 ms of one
+    closing, skips the pause and the entrance; so does one opened from the keyboard.
+  - **Radix's Popover, not its HoverCard**, which ignores touch and keeps its content from the keyboard.
+    The sheet is shadcn's `Sheet` with a `card` layout (a local addition in `ui/sheet.tsx`: flush, rounded
+    on top, scrolling past 85 % of the screen) and a close label in the page's language (`closeLabel`;
+    shadcn's was always "Close"). On a tap focus goes to the sheet itself, not its close button.
+  - **A term is a `span` with the button role**, answering Enter on the press and Space on the release:
+    a `<button>` stays one box and cannot wrap inside a sentence, and "Servicio Geológico Colombiano
+    (SGC)" wraps at 320 px. Dotted underline in `muted-foreground`, darker on hover and while open,
+    `cursor-help`; a link keeps its own look (`linkClassName`, the questions tab's tighter underline).
+  - **Where**: the first use in each story step and each question, never an SVG or WebGL label, a form
+    label, text already inside a link or a button, or an `aria-*` string. The monitor: the header's SGC,
+    "Sismo principal", "Valor b", the "Mc" badge (a word of its own before the rolling figure, whose custom
+    element no underline reaches), the depth groups' title, the caveats' magnitude types and automatic
+    events, and the footer's query form. Not the 3D viewer's links (Open-Meteo, ESA): the viewer is its
+    own modal with its own focus loop, which a card portalled outside it would fight. Not the per-event
+    links to SGC (status bar, table): their words already say which event they open.
+  - **The static headers hold one** (SGC in both subtitles): the word renders the same before and after
+    hydration, and `src/page-root.test.ts` and `src/insights/hydration.test.ts` compare the subtitle's text
+    with its template filled in. The monitor's words did not change, so its measured line breaks hold;
+    `/insights`' English subtitle now names SGC in English, as the monitor does.
+  - **Copy with an explainer is a template**: `{placeholder}` sentences rendered through `Rich`, moved to
+    `src/lib/rich.tsx` for both pages. The questions tab and the monitor's caveats use it too now; their
+    tests fill the template before reading the words.
+  - **A failed chunk leaves the page as it was**: a link is a plain link, a term a plain word
+    (`explain-failed.test.ts`). A tap that arrives before the chunk marks the word `aria-busy` and pulses
+    it, and a second tap then does not cancel it (`explain-slow.test.ts`). Focus moving into the card is
+    Radix's FocusScope, which happy-dom does not run: checked in Chrome (below). A second tap waits for
+    the card, but a link's click or Enter is always followed; after a failed download a hover or focus
+    opens nothing. **A failed download is final until a reload** (declined in the code review: retrying
+    it). Chrome keeps a failed module for the document's life: offline and back online, a second
+    `import()` sent no request at all (Chrome 154, the DevTools network log). The page is whole without
+    the cards. A word that goes while its card is open (a refetch
+    rewrote the sentence) still counts it closed. The sheet stays mounted, so it slides away and gives
+    focus back to its word; each drawing's SVG is hidden from a screen reader, never its caption or its
+    controls (code review, 2026-09-30).
+  - **A drawing plays once, when its card opens, and rests on the finished picture**; a replay button
+    (↻, "Repetir la animación") beside its caption plays it again (owner's call, 2026-09-30: nothing moves
+    by itself). The prototype looped; the owner chose this instead. b tilts once from 1 to 0.7 and its two
+    buttons are its replay; Mc's bars rise once, an entrance with nothing to replay; the depth groups are
+    still. Reduced motion gets the finished picture and no replay button (`figures.css`).
+  - **Logos**: SGC's alone, which is in the public domain on Wikimedia Commons; every other source is its
+    short name in a neutral tile, never in its own colours. Why, per source, is in
+    [Security](security.md). The drawings sit on the sheet's `muted` band, so their ground and land are
+    tints of `muted-foreground`: in `muted` they vanished.
   - **Set by hand, the line under the slider keeps its type and names the state first**:
     "Manual · Usar la Mc automática" / "Manual · Use automatic Mc", against "Automática (curvatura
     máxima)". The link is `Button` `link-inline` / `inline`: the line's own 14 px, regular weight

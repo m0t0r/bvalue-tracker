@@ -23,7 +23,7 @@ import { fitRanks, flowRow, type RankItem } from "./layout";
 import { useTextWidth } from "../measure";
 import { SceneTitle, diamond, radius } from "./marks";
 import type { StoryModel } from "./model";
-import { Rich, fill } from "./rich";
+import { Rich, fill } from "@/lib/rich";
 
 const DAY = 86_400_000;
 

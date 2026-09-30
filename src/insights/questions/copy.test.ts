@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { fill } from "@/lib/rich";
 import { questionsCopy } from "./copy";
 
 describe("the questions tab's copy", () => {
   it("says 'inside the crust' about Chaparral only when the crustal rule holds, as the story does", () => {
-    const es = questionsCopy.es.swarm.p1;
-    const en = questionsCopy.en.swarm.p1;
+    // The word is a placeholder the tab fills with the crust's explainer.
+    const es = (...a: Parameters<typeof questionsCopy.es.swarm.p1>) =>
+      fill(questionsCopy.es.swarm.p1(...a), {
+        swarm: questionsCopy.es.swarm.swarm,
+        crust: questionsCopy.es.swarm.crust,
+      });
+    const en = (...a: Parameters<typeof questionsCopy.en.swarm.p1>) =>
+      fill(questionsCopy.en.swarm.p1(...a), {
+        swarm: questionsCopy.en.swarm.swarm,
+        crust: questionsCopy.en.swarm.crust,
+      });
     expect(es("20 de septiembre", 19, true, 40, "none")).toContain("dentro de la corteza");
     expect(es("20 de septiembre", 45, false, 40, "none")).not.toContain("corteza");
     expect(en("20 September", 19, true, 40, "none")).toContain("inside the crust");

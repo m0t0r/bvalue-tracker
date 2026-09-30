@@ -36,6 +36,10 @@ const DAY_MONTH_TIME = formatters({
 /** SGC's own page for one event. Event ids are regex-constrained at the parser, so this cannot become a scheme. */
 export const sgcEventUrl = (id: string) => `https://www.sgc.gov.co/detallesismo/${id}/resumen`;
 
+/** SGC's public query form, the page this site reads its catalogue from, as a reader opens it. */
+export const SGC_QUERY_URL =
+  "https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php";
+
 /** SGC ends every region with ", Colombia", which is a given on this page. */
 export const fmtRegion = (region: string) => region.replace(/,\s*Colombia$/, "");
 
