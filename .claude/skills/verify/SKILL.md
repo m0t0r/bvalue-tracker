@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Run the page locally with data and drive it in agent-browser, without reaching SGC, then check performance (LCP, CLS via Chrome DevTools MCP), design-system use (shadcn), usability by dogfooding, and the unhappy paths (errors, retries, edge cases) with evidence for the PR. Use to verify any UI change at its real surface, and any new feature or behaviour change before its PR is opened.
+description: Run the page locally with data and drive it in agent-browser, without reaching SGC, then check performance (LCP, CLS via Chrome DevTools MCP), design-system use (shadcn), usability by dogfooding, the unhappy paths (errors, retries, edge cases) with evidence for the PR, and a show-me drawing of what changed for the PR. Use to verify any UI change at its real surface, and any new feature or behaviour change before its PR is opened.
 ---
 
 # Verifying a page change
@@ -180,6 +180,41 @@ Keep the images in `captures/` (untracked, no whitespace in names) and publish w
 `gh pr edit <n> --body-file <body> --attach ./captures/<file>.png ...`, which uploads them and
 rewrites the matching `./captures/...` references. Then open the rendered PR and confirm that no
 local path is left. When the PR is amended, rerun what the amend touched and replace the block.
+
+### 5. What changed, drawn for the PR (every PR)
+
+Read `.claude/skills/show-me/SKILL.md` and follow it; it cannot be called with the Skill tool
+(`disable-model-invocation`), and it is vendored, so do not edit it. Draw the change from the
+diff, not from memory: pick the smallest view that makes it clear (a `diff` of the component tree,
+call tree, file tree or control flow, or a Mermaid diagram), usually one, at most two. Use the
+repo's real component, file and function names.
+
+The visual goes in the PR only, as Markdown GitHub renders: fenced `diff`, `text` or `mermaid`
+blocks. Skip show-me's HTML option and do not open anything locally. After a Mermaid block is
+in, open the rendered PR and confirm it drew (a syntax error shows as a red box).
+
+A change with nothing worth drawing (a copy fix, a dependency bump) says so in one line:
+`What changed: nothing to draw, because <why>`.
+
+**In the PR**, above the before/after block, replace only this block (read the body first, as
+`before-and-after` does):
+
+````markdown
+<!-- what-changed:start -->
+## What changed
+
+<one sentence on the change>
+
+```diff
+ <MonitorShell> (src/components/monitor-shell.tsx)
+   <StatusBar> (src/components/status-bar.tsx)
+     <MainshockStat>
++    <Stat> newest event, as one link
+```
+<!-- what-changed:end -->
+````
+
+When the PR is amended, redraw from the new diff and replace the block.
 
 ### Before/after screenshots (UI changes)
 
