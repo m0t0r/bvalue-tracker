@@ -1,6 +1,6 @@
 /**
  * Layouts of the pinned drawing that depend on how wide their text is, kept apart from the drawing
- * so they can be tested. Widths come from `measure`, which is `textWidth` in the page.
+ * so they can be tested. Widths come from `measure`, which the page passes from `useTextWidth`.
  */
 import { rankLayout, type RankRow } from "../history";
 import { textWidth } from "../measure";

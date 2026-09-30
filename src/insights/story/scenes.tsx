@@ -20,7 +20,7 @@ import { fmt, fmtKm, fmtMag, fmtTimes, medianHorizontalErrorKm } from "../shared
 import { FILL, STROKE } from "../tones";
 import { useProgress } from "./hooks";
 import { fitRanks, flowRow, type RankItem } from "./layout";
-import { textWidth } from "../measure";
+import { useTextWidth } from "../measure";
 import { SceneTitle, diamond, radius } from "./marks";
 import type { StoryModel } from "./model";
 import { Rich, fill } from "./rich";
@@ -57,7 +57,8 @@ function Ranks({
   height: number;
   small: boolean;
 }) {
-  const fit = fitRanks(items, { width, height: height - top - (small ? 10 : 24), small });
+  const measure = useTextWidth();
+  const fit = fitRanks(items, { width, height: height - top - (small ? 10 : 24), small }, measure);
   if (!fit) return null;
   const { fs, rows, short, left, gap } = fit;
   // The largest square, which is not always the first: a mainshock in the same tenth as a past event
@@ -941,6 +942,7 @@ function Calendar({
   threshold: number;
   fs: number;
 }) {
+  const measure = useTextWidth();
   const c = storyCopy[lang].graphic;
   const hit = days.filter((d) => d.bySource.shallow + d.bySource.deep + d.bySource.tolima > 0).length;
   // Weeks start on Monday. A day start is the instant Colombian midnight falls, 05:00 UTC, which is
@@ -958,7 +960,7 @@ function Calendar({
   const order: Source[] = ["shallow", "deep", "tolima"];
   // Spaced by the names' measured widths, wrapping if the grid is narrower than the three of them.
   const legend = flowRow(
-    order.map((s) => 15 + textWidth(storyCopy[lang].legend[s], fs)),
+    order.map((s) => 15 + measure(storyCopy[lang].legend[s], fs)),
     small ? 12 : 20,
     width - gx - (small ? 4 : 8),
   );
@@ -1032,7 +1034,7 @@ function Calendar({
                 {/* The month goes with the first day and each 1st, when the tile has room for it; the
                     range over the grid names both months either way. */}
                 {(dom === 1 || i === 0) &&
-                textWidth(fmtDay(d.start, lang), labelFs, { weight: dom === 1 ? 700 : 400 }) <= cell - 4 - 2 * pad
+                measure(fmtDay(d.start, lang), labelFs, { weight: dom === 1 ? 700 : 400 }) <= cell - 4 - 2 * pad
                   ? fmtDay(d.start, lang)
                   : dom}
               </text>

@@ -15,9 +15,18 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+        # A PR of its own: test/react-compiler.test.ts holds the list of our functions the
+        # compiler skips, and fails when a release skips another or starts compiling one. That
+        # must wait for a person without holding back the week's other updates.
+        exclude-patterns: ["babel-plugin-react-compiler"]
     ignore:
       # @cloudflare/vitest-plugin does not support vitest 5 yet (docs/development.md).
       - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      # babel-plugin-react-compiler 1.0 on Babel 8 silently skips every component with a
+      # defaulted prop (docs/development.md, "React Compiler"); test/react-compiler.test.ts
+      # would fail the PR, so do not propose it until the compiler supports Babel 8.
+      - dependency-name: "@babel/core"
         update-types: [version-update:semver-major]
       # Follows the Node LTS that CI and engines.node run, not the newest Node.
       - dependency-name: "@types/node"
