@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
+import recorded from "../../../test/fixtures/recharts-3.10.1-ticks.json";
 import { magnitudeTicks } from "./magnitude-ticks";
 
-// Recharts' own rule, which the chart's labels followed before issue #118, to hold `magnitudeTicks` to it
-// wherever that rule already gave whole tenths.
-const { getTickValuesFixedDomain } = (await import("recharts/es6/util/scale/getNiceTickValues" as string)) as {
-  getTickValuesFixedDomain: (domain: [number, number], tickCount: number, allowDecimals?: boolean) => number[];
-};
+// Recharts 3.10.1's own rule (`getTickValuesFixedDomain`), which the chart's labels followed before issue
+// #118, recorded before the package was removed: for every one of `domains(2000)` where it gave whole
+// tenths (`fixedDomain`), and for the two below where it did not (`offTenths`). How it was recorded, and
+// why the generator here must not change without recording again: `recharts-3.10.1-ticks.recorder.txt`.
+const recharts: Record<string, string> = recorded.fixedDomain;
+const offTenths: Record<string, string> = recorded.offTenths;
 
 const tenths = (v: number) => Math.abs(v * 10 - Math.round(v * 10)) < 1e-9;
 
@@ -27,9 +29,10 @@ describe("the magnitude labels of 'Distribución frecuencia–magnitud'", () => 
 
   it("puts every label on a tenth, where Recharts' step of 0.95 or 0.09 did not", () => {
     // Chocó's whole catalogue: Recharts drew "1.8" at 1.75, "3.7" at 3.65.
-    expect(getTickValuesFixedDomain([0.8, 7.4], 8, true)).toEqual([0.8, 1.75, 2.7, 3.65, 4.6, 5.55, 6.5, 7.4]);
+    expect(offTenths["0.8,7.4,8"]).toBe("0.8,1.75,2.7,3.65,4.6,5.55,6.5,7.4");
     expect(magnitudeTicks([0.8, 7.4], 8)).toEqual([0.8, 1.8, 2.8, 3.8, 4.8, 5.8, 6.8, 7.4]);
     // A narrow catalogue: Recharts wrote "2.5" for both 2.45 and 2.54.
+    expect(offTenths["2,2.6,8"]).toBe("2,2.09,2.18,2.27,2.36,2.45,2.54,2.6");
     expect(magnitudeTicks([2, 2.6], 8)).toEqual([2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6]);
   });
 
@@ -47,13 +50,13 @@ describe("the magnitude labels of 'Distribución frecuencia–magnitud'", () => 
     }
   });
 
-  it("chooses what Recharts' own rule chooses wherever that was whole tenths", () => {
+  it("chooses what Recharts' own rule chose wherever that was whole tenths", () => {
     let compared = 0;
     for (const { lo, hi, count } of domains(2000)) {
-      const recharts = getTickValuesFixedDomain([lo, hi], count, true);
-      if (!recharts.every(tenths)) continue;
+      const theirs = recharts[`${lo},${hi},${count}`];
+      if (theirs === undefined) continue;
       compared++;
-      expect(magnitudeTicks([lo, hi], count), `[${lo}, ${hi}] × ${count}`).toEqual(recharts);
+      expect(magnitudeTicks([lo, hi], count).join(","), `[${lo}, ${hi}] × ${count}`).toBe(theirs);
     }
     expect(compared).toBeGreaterThan(1000);
   });

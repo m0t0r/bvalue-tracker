@@ -11,8 +11,8 @@ import { useZone } from "@/lib/zone";
 import { CLUSTER_DEPTH_KM } from "../../../core/clusters";
 
 /**
- * "Magnitud en el tiempo"'s key and placeholder, apart from Recharts so that `Deferred` can draw them
- * before the chart's chunk arrives. The key wraps to one, two or three lines with the width, so the
+ * "Magnitud en el tiempo"'s key and placeholder, apart from the chart itself so that `Deferred` can draw
+ * them before the chart's chunk arrives. The key wraps to one, two or three lines with the width, so the
  * placeholder carries the real one rather than guessing its height.
  */
 

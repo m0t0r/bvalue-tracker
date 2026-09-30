@@ -10,8 +10,9 @@ practices stayed at 100.
 
 - **The heavy cards are fetched when the reader nears them, not at load**
   (`src/components/deferred.tsx`). Recharts (~1.3 MB of sources, with its own redux/immer/d3
-  stack) and MapLibre (~1.0 MB) are most of what this page ships, and every card that needs
-  them sits below the b-value: on a phone the map's top edge is ~4,200 px down. `Deferred`
+  stack) and MapLibre (~1.0 MB) were most of what this page shipped when this was measured (the
+  charts have since left Recharts, below; MapLibre still is), and every card that needs them sits
+  below the b-value: on a phone the map's top edge is ~4,200 px down. `Deferred`
   mounts its child once an `IntersectionObserver` says it is within 600 px, so the shell and
   the b-value paint first. Deferring the map alone halved TTI; moving the three charts out as
   well took the main chunk from 922 kB to 472 kB (276 → 142 kB gzipped) and did the rest of
@@ -686,9 +687,8 @@ practices stayed at 100.
   Recharts' chunk was fetched in 0 of 40 Lighthouse runs of this build against 20 of 20 of `main`. That
   chart left Recharts the same day (issue #126, the bullet above), so **no chart imports Recharts now**:
   built together, no chunk of either page contains it (`b-over-time-*.js` 3.7 kB, `magnitude-time-*.js`
-  6.0 kB, `fmd-*.js` 2.5 kB gzipped). The package, `ui/chart.tsx` and the two tests that hold our tick
-  rules to Recharts' own are still in the repo; removing them is what is left of #126. The figures below
-  are this change's own, measured before the two met.
+  6.0 kB, `fmd-*.js` 2.5 kB gzipped). The package, `ui/chart.tsx` and `chart-grid.ts` left the repo the same day (the last bullet on the
+  charts, below). The figures below are this change's own, measured before the two met.
   - **Bytes** (`vite build`, each chunk's static imports beyond the monitor's entry, gzip 9): this chart
     fetched first on a page that has loaded no other chart, 112.9 → 14.4 kB; its own chunk 11.6 → 3.1 kB.
     All three charts together beyond startup 130.1 → 119.5 kB. The monitor's startup (182.0 kB) and
@@ -728,6 +728,18 @@ practices stayed at 100.
     On a desktop the LCP is this card's description, drawn with the data as before, and the medians'
     13–21 ms are within what one build's runs spread over: `/` ran 199–557 ms on `main` and 179–239 ms
     here, `/choco` 206–242 and 191–212 ms.
+- **Recharts is out of the repo** (2026-09-30, the last of issue #126): the package and the 20 it
+  brought (Redux Toolkit, react-redux, Immer, reselect, es-toolkit, victory-vendor, d3-ease, d3-timer
+  and their types; 188 lines of the lockfile), shadcn's `ui/chart.tsx`, which nothing imported, and
+  `chart-grid.ts`. No chunk held any of it already (the bullet above), so the JavaScript a page loads
+  is what it was: `vite build` against `main` at `fc0c638`, the monitor's entry 187.04 kB on both.
+  What did move is **the stylesheet, 134.4 → 130.8 kB (22.3 → 21.7 kB gzipped)**: Tailwind had been
+  compiling `ui/chart.tsx`'s `.recharts-*` selectors into it for every page, used or not. The inlined
+  header CSS and each page's HTML are byte for byte the same size. The two tests that held our tick
+  rules to Recharts' own functions now hold them to a recording of those functions
+  (`test/fixtures/recharts-3.10.1-ticks.json`, made before the package went: 300 cases of label
+  thinning, and all 1,897 axis domains of the test's 2,000 where Recharts gave whole tenths). No
+  Lighthouse A/B was run: nothing a page fetches changed but 0.6 kB of CSS.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

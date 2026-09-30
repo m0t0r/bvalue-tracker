@@ -231,15 +231,13 @@ export const FmdChart = memo(function FmdChart({
             ) : null}
           </svg>
           {at && p ? (
-            <ChartTip at={at} area={drawn.area}>
-              <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
-                <div className="font-medium">M{p.mag.toFixed(1)}</div>
-                <div>
-                  {t.cumulative}: {p.cumulativeAll}
-                </div>
-                <div>
-                  {t.perBin}: {p.count ?? 0}
-                </div>
+            <ChartTip at={at} area={drawn.area} className="tabular-nums">
+              <div className="font-medium">M{p.mag.toFixed(1)}</div>
+              <div>
+                {t.cumulative}: {p.cumulativeAll}
+              </div>
+              <div>
+                {t.perBin}: {p.count ?? 0}
               </div>
             </ChartTip>
           ) : null}

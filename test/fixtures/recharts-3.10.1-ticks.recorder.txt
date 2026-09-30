@@ -1,0 +1,87 @@
+// How test/fixtures/recharts-3.10.1-ticks.json was recorded (2026-09-30), kept as text because it
+// cannot run here: Recharts is no longer installed. To record again, in a scratch checkout:
+//
+//   pnpm add -D recharts@3.10.1
+//   cp test/fixtures/recharts-3.10.1-ticks.recorder.txt src/components/charts/record.test.ts
+//   pnpm exec vitest run --project page src/components/charts/record.test.ts
+//
+// and copy the JSON back. The two generators below are the ones in `time-ticks.test.ts` (seed 96)
+// and `magnitude-ticks.test.ts` (seed 118), call for call: `preserveEnd[run]` and the
+// "lo,hi,count" keys only mean anything while the tests draw the same numbers in the same order.
+// Change a generator there and this file together, and record again.
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import type { getTicks as GetTicks } from "recharts/types/cartesian/getTicks";
+import { expect, it, vi } from "vitest";
+
+// Recharts measures a label in the DOM; here its width is whatever the case says.
+const widths = new Map<string, number>();
+vi.mock("recharts/es6/util/DOMUtils", async (original) => ({
+  ...(await original<object>()),
+  getStringSize: (text: string) => ({ width: widths.get(text) ?? 0, height: 12 }),
+}));
+const { getTicks } = (await import("recharts/es6/cartesian/getTicks" as string)) as { getTicks: typeof GetTicks };
+const { getTickValuesFixedDomain } = (await import("recharts/es6/util/scale/getNiceTickValues" as string)) as {
+  getTickValuesFixedDomain: (domain: [number, number], tickCount: number, allowDecimals?: boolean) => number[];
+};
+
+const tenths = (v: number) => Math.abs(v * 10 - Math.round(v * 10)) < 1e-9;
+
+it("records", () => {
+  // `getTicks` with interval "preserveEnd": the values it keeps, for each of 300 cases.
+  let seed = 96;
+  let rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+  const preserveEnd: string[] = [];
+  for (let run = 0; run < 300; run++) {
+    const end = 200 + Math.floor(rand() * 900);
+    const n = 1 + Math.floor(rand() * 80);
+    const at = new Map<number, number>();
+    widths.clear();
+    const candidates = Array.from({ length: n }, (_, i) => {
+      at.set(i, -30 + rand() * (end + 60));
+      widths.set(`L${i}`, 20 + rand() * 70);
+      return i;
+    });
+    if (n >= 2 && at.get(0)! >= at.get(1)!) at.set(1, at.get(0)! + 1 + rand() * 50);
+    const gap = Math.floor(rand() * 60);
+    const kept = getTicks({
+      ticks: candidates.map((v, index) => ({ value: v, coordinate: at.get(v)!, index })),
+      tick: true,
+      tickFormatter: (v: number) => `L${v}`,
+      viewBox: { x: 0, y: 0, width: end, height: 300 },
+      minTickGap: gap,
+      orientation: "bottom",
+      interval: "preserveEnd",
+    }).map((t) => t.value);
+    preserveEnd.push(kept.join(","));
+  }
+
+  // `getTickValuesFixedDomain`: every one of 2000 domains where it gave whole tenths, which is
+  // where `magnitudeTicks` must agree with it.
+  seed = 118;
+  rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+  const fixedDomain: Record<string, string> = {};
+  for (let run = 0; run < 2000; run++) {
+    const lo = Math.round(rand() * 40) / 10;
+    const hi = Math.round((lo + rand() * 60) * 10) / 10;
+    const count = 2 + Math.floor(rand() * 10);
+    const ticks = getTickValuesFixedDomain([lo, hi], count, true);
+    if (ticks.every(tenths)) fixedDomain[`${lo},${hi},${count}`] = ticks.join(",");
+  }
+
+  // Where it did not: the two domains `magnitude-ticks.test.ts` names as the reason for our rule.
+  const offTenths = Object.fromEntries(
+    (
+      [
+        [0.8, 7.4, 8],
+        [2, 2.6, 8],
+      ] as const
+    ).map(([lo, hi, count]) => [`${lo},${hi},${count}`, getTickValuesFixedDomain([lo, hi], count, true).join(",")]),
+  );
+
+  expect(preserveEnd.length).toBe(300);
+  writeFileSync(
+    path.resolve(import.meta.dirname, "../../../test/fixtures/recharts-3.10.1-ticks.json"),
+    JSON.stringify({ preserveEnd, fixedDomain, offTenths }, null, 1) + "\n",
+  );
+});

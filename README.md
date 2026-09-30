@@ -124,7 +124,7 @@ flowchart LR
 - **Backend:** one Cloudflare Worker ([Hono](https://hono.dev)) serves the page and
   a JSON API, stores events in D1, and runs the ingest on a Cron Trigger. It fits the
   Workers free plan.
-- **Frontend:** React with shadcn/ui, TanStack Query, Form and Table, Recharts, D3 and
+- **Frontend:** React with shadcn/ui, TanStack Query, Form and Table, D3 and
   MapLibre GL for the monitor; D3 for the explanations page, and OGL (WebGL 2) for its
   [3D viewer](#3d-viewer).
 - **Statistics:** written and tested here, in the `packages/seismo` library.

@@ -2,7 +2,7 @@
  * What broke in the reader's browser, told to the Worker.
  *
  * The page was the one part of this system with no record of its own failures. A MapLibre
- * worker that never loads, a Recharts crash, a hashed chunk that 404s after a deploy — all
+ * worker that never loads, a chart that throws, a hashed chunk that 404s after a deploy — all
  * of those leave the reader looking at a broken page and leave us with nothing to read.
  * Nobody is watching this page's console: it is one researcher's tab.
  *

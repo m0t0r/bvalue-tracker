@@ -324,7 +324,7 @@ those, so an untouched tab shows no chips on either side.
 words for a reader in Pereira (the rules for what it may say are in
 [the science](science.md#the-insights-page-insights-from-2026-09-24)). D3's maths modules
 (`d3-geo`, `d3-scale`, `d3-shape`, `d3-array`) do the maths and React renders the SVG, so there is no
-`d3-selection`; the monitor's Recharts and MapLibre never load there. The monitor's frequency–magnitude
+`d3-selection`; the monitor's MapLibre never loads there. The monitor's frequency–magnitude
 chart is drawn the same way since issue #118, "Valor b en el tiempo" since #125 and "Magnitud en el
 tiempo" since #126 (see their bullets under Interface conventions), so `d3-scale` and `d3-shape` are now
 shared chunks of both pages.
@@ -1162,9 +1162,9 @@ colour, motion). Keep to them:
     the behaviour; each of 20 mutations of the component failed a test.
   - **Declined in the code review (2026-09-30):** *moving the keyboard walk, the pointer-moved rule,
     the tooltip's shell and the focus ring into `svg-chart.tsx`* for the three charts to share. It is
-    the right home, but "Valor b en el tiempo" is being moved in another branch at the same time
-    (issue #125) and edits that file; the two ports are to be folded together in the change that
-    removes Recharts, when both are in.
+    the right home, but "Valor b en el tiempo" was being moved in another branch at the same time
+    (issue #125) and edited that file. The tooltip's shell moved when Recharts was removed (`ChartTip`,
+    the dark-tooltip bullet below); the rest is issue #138.
 - **Choosing a cluster narrows the whole page**, like a filter: "Ver solo este grupo" in the
   "Dos grupos de eventos" card. It is one of the settings the scope notice below names, and it sits
   outside the cards because a cluster can be emptied by the other filters, and the control must not
@@ -1272,8 +1272,8 @@ colour, motion). Keep to them:
   - **The layout is Recharts'**: 40 px for the y axis, 12 px on the right, 16 on top, a 30 px x axis,
     the drawing a whole number of pixels wide from the plot box's left edge (Recharts rounds its
     container), and the key under it as wide as the drawing less its right margin. The key is
-    `ChartKey` (`charts/svg-chart.tsx`), drawn as shadcn's `ChartLegendContent` draws it; this chart no
-    longer goes through `ChartContainer`, which wraps Recharts' `ResponsiveContainer`, and takes its
+    `ChartKey` (`charts/svg-chart.tsx`), drawn as shadcn's `ChartLegendContent` drew it; this chart no
+    longer goes through `ChartContainer`, which wrapped Recharts' `ResponsiveContainer`, and takes its
     colours as the theme's own classes (`fill-chart-3`, `bg-chart-1`) rather than `--color-*` variables.
   - **The magnitude labels sit on their magnitudes** (`magnitudeTicks`, `charts/magnitude-ticks.ts`):
     Recharts' rule for a `tickCount` over a fixed domain, from the smallest magnitude to the largest,
@@ -1400,7 +1400,7 @@ colour, motion). Keep to them:
     outside it, a log or a linear axis, grid rows deduplicated or never coinciding, labels over the cursor
     or under it), and the third chart ("Magnitud en el tiempo", #126, moved the same day in another
     branch) has pinned axes and a scroll container: the shared shape is better cut from three than
-    guessed from two, in the change that removes Recharts, as that chart's own note says. What was the
+    guessed from two (issue #138, now that all three are in). What was the
     same is shared: `useReading`, `inPlot`,
     `labelWidth`, `ChartTip`, `usePlotSize`. *Moving the frequency–magnitude chart's reading into a child
     component too:* its hover was measured in #124 (~20 ms to the screen at 4× CPU) and is left alone.
@@ -1426,6 +1426,26 @@ colour, motion). Keep to them:
     the fixes above say (the arrows and Enter sent as in-page key events: see
     [development](development.md#tooling-gotchas)). Touch (drag, lift, three taps) through the DevTools
     protocol, not on a physical phone: the lift clears the tooltip, where Recharts left it over the chart.
+- **A chart's tooltip is dark in both themes** (owner's call, 2026-09-30: the dark theme's tooltip,
+  near-black with light text, in the light theme too). The surface is `ChartTip`'s own
+  (`charts/svg-chart.tsx`), so the three charts' four tooltips cannot differ: a box with the `dark`
+  class, which gives it and everything in it the dark theme's tokens (`bg-background`,
+  `text-foreground`, `text-muted-foreground`, the caution icon's `text-caution-strong`, the border).
+  A tooltip's content is therefore written with the theme's classes and no `dark:` variant, and a
+  chart passes `className` only for what its own tooltip adds (`tabular-nums`, the magnitude chart's
+  width cap). The text colour is set on the box: inherited, it would be the page's near-black. In the
+  dark theme nothing changed. The map's popup and the filters' info tip are not chart tooltips and
+  keep their own surfaces (the popover's, and shadcn's inverted `Tooltip`).
+  - Measured in the light theme at 320, 390 and 1280 px on both zones (2026-09-30): the box is
+    `rgb(10 10 10)`, its text `rgb(250 250 250)` (19:1) and its secondary line `rgb(161 161 161)`
+    (7.7:1), the dark theme's own values; every tooltip is inside the viewport and the page gains no
+    sideways scroll.
+  - **Declined in the code review (2026-09-30):** *a tooltip token or scope class of its own instead
+    of `dark`*, since inside the box every `dark:` variant and `.dark` rule now applies in the light
+    theme too. That is the request: the dark theme's tooltip, which a second set of tokens would have
+    to be kept equal to by hand. What goes in a chart tooltip is text and one icon. *A test of the
+    colours rather than the classes:* happy-dom compiles no Tailwind, so the colours are the browser
+    measurement above.
 - **A chart grows into the space beside it only where the extra height cannot mislead.**
   Cards in a two-column row are stretched to the taller one, so a fixed-height chart leaves a
   void under its legend. "Distribución frecuencia–magnitud" therefore fills its card (`flex-1`
@@ -1723,7 +1743,7 @@ colour, motion). Keep to them:
   `aria-labelledby` on the thumb, which is the element with `role="slider"`.
 - **Every tab stop shows focus at 3:1 or more** (interface review, 2026-09-26). Light `--ring` is
   `oklch(0.556)`, 4.74:1 on white (shadcn's 0.708 was 2.59:1), and nothing uses `ring-ring/50`. A
-  region that is a tab stop — a chart with a keyboard layer (Recharts' or ours), a Radix tab panel, the map
+  region that is a tab stop — a chart with a keyboard layer, a Radix tab panel, the map
   canvas — draws a 2 px `outline-ring` set off from it rather than a ring against its contents; a
   tab panel inside a sheet insets it. A page-level panel whose first child is focusable takes no stop
   of its own (`tabIndex={-1}`), and the magnitude chart's pinned y axes, which repeat the axis beside
@@ -1798,8 +1818,6 @@ a pointer to this section. What they ask, and how this page answers them:
 - `event-map.tsx`, the depth legend's gradient. It is drawn from `DEPTH_STOPS`, the same hex
   constants the map paints with (MapLibre cannot parse the `oklch` tokens), so the legend cannot
   disagree with the map.
-- `ui/chart.tsx`, shadcn's `ChartStyle` `<style>` element, which scopes each chart's colour
-  variables to that chart for each theme.
 
 A new exception goes the same way: in the code, next to what it excuses, with the reason. Never
 switch a rule off for a file. `rg "oxlint-disable"` lists them all.

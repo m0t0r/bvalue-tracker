@@ -354,7 +354,7 @@ app.post("/api/refresh", async (c) => {
  * What broke in the reader's browser.
  *
  * The page's own failures were the one part of this system with no record at all: a
- * MapLibre worker that never loads, a Recharts crash, a chunk that 404s after a deploy
+ * MapLibre worker that never loads, a chart that throws, a chunk that 404s after a deploy
  * all leave the reader with a broken page and leave us with nothing. This is the smallest
  * thing that fixes that — it writes a log line and touches no storage.
  *

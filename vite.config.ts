@@ -363,7 +363,7 @@ function zonePages(): Plugin[] {
 
 /**
  * `/insights`, the explanations page, is its own HTML file and its own bundle (`insights.html`,
- * `src/insights/main.tsx`), so D3 never loads with the monitor and Recharts and MapLibre never load
+ * `src/insights/main.tsx`), so its tabs never load with the monitor and MapLibre never loads
  * with it. The asset layer serves `insights.html` at `/insights` in production; in dev the
  * Cloudflare plugin would hand that path to the Worker, which answers 404 (see `zonePages`), so
  * this serves it first.

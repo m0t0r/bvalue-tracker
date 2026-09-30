@@ -173,7 +173,7 @@ function useTipArea(view: View, frame: Frame, height: number, live: boolean) {
   return [area, measure] as const;
 }
 
-const TIP = "max-w-(--tip-max) rounded-lg border bg-background px-3 py-2 text-xs wrap-anywhere shadow-xl";
+const TIP = "max-w-(--tip-max) wrap-anywhere";
 const DRAWING =
   "relative shrink-0 overflow-x-clip has-[svg:focus-visible]:rounded-sm has-[svg:focus-visible]:outline-2 has-[svg:focus-visible]:outline-offset-2 has-[svg:focus-visible]:outline-ring";
 
@@ -429,15 +429,13 @@ const Dots = memo(function Dots({
         ) : null}
       </svg>
       {at && p && reading ? (
-        <ChartTip at={at} area={area}>
-          <div data-chart-tip className={TIP}>
-            <div className="font-medium tabular-nums">
-              M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)}
-            </div>
-            <div className="text-muted-foreground">
-              {zone.depthClusters ? `${t.clusterName[p.cluster]} · ` : null}
-              {p.depthKm.toFixed(0)} km · {fmtRegion(p.region)}
-            </div>
+        <ChartTip at={at} area={area} className={TIP}>
+          <div className="font-medium tabular-nums">
+            M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)}
+          </div>
+          <div className="text-muted-foreground">
+            {zone.depthClusters ? `${t.clusterName[p.cluster]} · ` : null}
+            {p.depthKm.toFixed(0)} km · {fmtRegion(p.region)}
           </div>
         </ChartTip>
       ) : null}
@@ -725,17 +723,15 @@ const DailyBars = memo(function DailyBars({
         {bars}
       </svg>
       {p && reading ? (
-        <ChartTip at={{ x: frame.x(p.start + DAY / 2), y: reading.y }} area={area}>
-          <div data-chart-tip className={cn(TIP, "tabular-nums")}>
-            <div>
-              <span className="font-medium">{p.total}</span> · {fmtDate(p.start + DAY / 2, lang)}
-            </div>
-            {p.deep > 0 && p.shallow > 0 ? (
-              <div className="text-muted-foreground">
-                {t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}
-              </div>
-            ) : null}
+        <ChartTip at={{ x: frame.x(p.start + DAY / 2), y: reading.y }} area={area} className={cn(TIP, "tabular-nums")}>
+          <div>
+            <span className="font-medium">{p.total}</span> · {fmtDate(p.start + DAY / 2, lang)}
           </div>
+          {p.deep > 0 && p.shallow > 0 ? (
+            <div className="text-muted-foreground">
+              {t.clusterShort.shallow} {p.shallow} · {t.clusterShort.deep} {p.deep}
+            </div>
+          ) : null}
         </ChartTip>
       ) : null}
     </div>

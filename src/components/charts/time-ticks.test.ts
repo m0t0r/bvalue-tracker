@@ -1,15 +1,6 @@
-import type { getTicks as GetTicks } from "recharts/types/cartesian/getTicks";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import recorded from "../../../test/fixtures/recharts-3.10.1-ticks.json";
 import { preserveEndTicks } from "./time-ticks";
-
-// Recharts' own rule, with its DOM measure answered from `widths`, to hold `preserveEndTicks` to it: a
-// Recharts release that changes the rule fails here rather than moving the chart's labels unseen.
-const widths = new Map<string, number>();
-vi.mock("recharts/es6/util/DOMUtils", async (original) => ({
-  ...(await original<object>()),
-  getStringSize: (text: string) => ({ width: widths.get(text) ?? 0, height: 12 }),
-}));
-const { getTicks } = (await import("recharts/es6/cartesian/getTicks" as string)) as { getTicks: typeof GetTicks };
 
 // Candidates are their own coordinates here, and every label is 20 px wide unless said.
 const layout = { x: (v: number) => v, width: () => 20, start: 0, end: 300, gap: 40 };
@@ -53,7 +44,11 @@ describe("the labels 'Valor b en el tiempo' draws on its time axis", () => {
     expect(preserveEndTicks([0, 5, 10, 15, 20, 25], { ...layout, x, end: 308 })).toEqual([5, 15, 25]);
   });
 
-  it("chooses what Recharts' own preserveEnd rule chooses", () => {
+  it("chooses what Recharts' own preserveEnd rule chose", () => {
+    // Recharts 3.10.1's `getTicks` (its DOM measure answered from these widths), recorded over these 300
+    // cases before the package was removed: the rule the charts' labels were checked against. The
+    // recording is by run, so this generator must not change without recording again
+    // (`test/fixtures/recharts-3.10.1-ticks.recorder.txt`).
     // A small deterministic generator, so a failure names the case that differs.
     let seed = 96;
     const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
@@ -61,33 +56,24 @@ describe("the labels 'Valor b en el tiempo' draws on its time axis", () => {
       const end = 200 + Math.floor(rand() * 900);
       const n = 1 + Math.floor(rand() * 80);
       // Candidates in any order, some past either edge, labels 20–90 px wide. Except the first two:
-      // Recharts reads the axis' direction from them, and in the chart they are its first two windows.
+      // Recharts read the axis' direction from them, and in the chart they are its first two windows.
       const at = new Map<number, number>();
-      widths.clear();
+      const widths = new Map<number, number>();
       const candidates = Array.from({ length: n }, (_, i) => {
         at.set(i, -30 + rand() * (end + 60));
-        widths.set(`L${i}`, 20 + rand() * 70);
+        widths.set(i, 20 + rand() * 70);
         return i;
       });
       if (n >= 2 && at.get(0)! >= at.get(1)!) at.set(1, at.get(0)! + 1 + rand() * 50);
       const gap = Math.floor(rand() * 60);
-      const recharts = getTicks({
-        ticks: candidates.map((v, index) => ({ value: v, coordinate: at.get(v)!, index })),
-        tick: true,
-        tickFormatter: (v: number) => `L${v}`,
-        viewBox: { x: 0, y: 0, width: end, height: 300 },
-        minTickGap: gap,
-        orientation: "bottom",
-        interval: "preserveEnd",
-      }).map((t) => t.value);
       const ours = preserveEndTicks(candidates, {
         x: (v) => at.get(v)!,
-        width: (v) => widths.get(`L${v}`)!,
+        width: (v) => widths.get(v)!,
         start: 0,
         end,
         gap,
       });
-      expect(ours, `run ${run}`).toEqual(recharts);
+      expect(ours.join(","), `run ${run}`).toBe(recorded.preserveEnd[run]);
     }
   });
 

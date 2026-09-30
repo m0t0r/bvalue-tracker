@@ -7,7 +7,7 @@
 | `packages/seismo/` | `@bvalue/seismo`, the seismology library: Gutenberg–Richter statistics (`gr.ts`, including the one `computeStats` pipeline), mainshock detection (`mainshock.ts`), magnitude arithmetic in whole tenths (`magnitude.ts`), energy and moment ratios (`energy.ts`) and distances on the sphere (`distance.ts`). Knows nothing about SGC, zones or the page; tested on synthetic catalogues only. |
 | `core/` | Shared, runtime-neutral logic about *this* project: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), the zones, the depth groups, the zone's mainshock with SGC's meaning of "reviewed" (`mainshock.ts`), CSV, CLI. Used by the Worker, the browser and Node. |
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
-| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, D3's maths with React's SVG for the monitor's three charts (`components/charts/fmd.tsx`, `b-over-time.tsx`, `magnitude-time.tsx`; none uses Recharts any more, and removing the package is what is left of issue #126), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
+| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, D3's maths with React's SVG for the monitor's three charts (`components/charts/fmd.tsx`, `b-over-time.tsx`, `magnitude-time.tsx`; Recharts left the repo on 2026-09-30, issue #126), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
 | `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `fixture-server.ts` serves a build with no Worker behind it, for [render profiles](#profiling-react-renders); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
@@ -247,31 +247,29 @@ Driving the page for a profile:
   state via the selector passed as `useTable`'s second argument (`table.state`),
   `table.FlexRender`. The package ships its own guides under
   `node_modules/@tanstack/react-table/skills/`. shadcn does not depend on it.
-- **Recharts 3 renamed its tick class.** shadcn's chart CSS targets
-  `.recharts-cartesian-axis-tick text`, which no longer matches, so axis labels fall
-  back to `#666` and fail contrast in dark mode. `ui/chart.tsx` also targets
-  `.recharts-cartesian-axis-tick-value`. Re-check this after regenerating the component.
-- Recharts charts accept `title` and `desc`; we use them as the charts' text alternative.
+- **There is no chart library and no `ui/chart.tsx`** (2026-09-30, issue #126). The three charts are
+  `d3-scale` and `d3-shape` with React's SVG, sharing `charts/svg-chart.tsx`; shadcn's `chart`
+  component wraps Recharts, so `shadcn add chart` would bring the package back. Two tests still hold
+  our tick rules to what Recharts 3.10.1 chose, from `test/fixtures/recharts-3.10.1-ticks.json`,
+  recorded from its own functions before it was removed (`time-ticks.test.ts`,
+  `magnitude-ticks.test.ts`): 300 label-thinning cases, and every one of 2,000 axis domains where
+  Recharts gave whole tenths. The recording is tied to the tests' seeded generators, by run and by
+  domain, so a generator is changed only together with the recorder
+  (`test/fixtures/recharts-3.10.1-ticks.recorder.txt`, which says how to run it with the package
+  installed in a scratch checkout).
+- Each chart's `<title>` and `<desc>` are its text alternative.
 - The frequency–magnitude chart draws a cumulative dot only where an event exists.
   A dot at every 0.1 step turned the lone M7.4 into 25 dots at N = 1, which read as data.
-- **Recharts measures labels in the DOM wherever it is let**, a layout per string, into a hidden span
-  (`measureTextWithDOM`), and it is let more often than it looks (issue #96): an axis whose `interval`
-  is not a number thins its ticks by measuring them; a `CartesianGrid` places its vertical lines by the
-  x axis' own rule even with `vertical={false}` (pass `verticalCoordinatesGenerator={NO_VERTICAL_LINES}`);
-  and each tick's `Text` measures its words to wrap them, because the axis passes it its width (pass
-  `tick={{ width: undefined }}`). With `scale="time"` every data value is a tick candidate, the chart's
-  own data first and then each series' own `data`, unsorted. `ResponsiveContainer` draws the whole chart
-  once at `initialDimension` (shadcn's is 320 × 200) before it has measured. "Valor b en el tiempo" avoided
-  all of it while Recharts drew it (issue #96), and no longer uses Recharts (issue #125); see
-  [Performance](performance.md).
-- **A chart moved off Recharts is checked against the Recharts build pixel by pixel** (issue #118).
+- **A chart drawn a new way is checked against the old build pixel by pixel** (issues #118, #125 and
+  #126, when the three charts left Recharts; what Recharts cost, and its DOM measuring, is in
+  [Performance](performance.md)).
   Serve `main` and the branch with `pnpm preview` on the same catalogue, take each card in both, and
   count the pixels that differ and by how much: rasterisation alone leaves a few hundred at 1–3/255
   (a grid line a step lighter), and anything over ~8/255 is a real difference. In agent-browser
   `screenshot <selector>` came out blank (all white, or all black in dark mode) for these cards, and
   two blank shots compare identical: take the viewport and crop it to the card's
-  `getBoundingClientRect`, and look at one image before trusting a count. What a Recharts chart does
-  by default and has to be kept is in [the page](frontend.md) ("Distribución frecuencia–magnitud"),
+  `getBoundingClientRect`, and look at one image before trusting a count. What a Recharts chart did
+  by default and had to be kept is in [the page](frontend.md) ("Distribución frecuencia–magnitud"),
   including its keyboard layer, which only a keyboard walk shows. What issue #125 added to the method:
   - **Scan the tooltip a pixel at a time on both builds**, recording the cursor's x, the tooltip's text and
     the active dots wherever they change. Screenshots at a handful of points passed on "Valor b en el
@@ -334,10 +332,9 @@ Driving the page for a profile:
   rule of the same specificity needs `.maplibregl-map` in front.
 - tw-animate's `slide-in-from-bottom-10` is 10 % of the element, not 2.5rem.
 - `src/components/ui/*` is shadcn source that we **have modified** (focus rings,
-  slider naming, `CardTitle` as `h2`, chart tick selector, legend wrapping, touch hit
+  slider naming, `CardTitle` as `h2`, touch hit
   areas, press scale, no `transition-all`, the lint's extra `Button` sizes and variant and
-  `Table`'s `size`, the chart legend's swatch colour through `--color-bg`, focus outlines on charts
-  and tab panels, the Sheet's `motion-safe:` slides, default `name`s on Slider and Switch (#73), the
+  `Table`'s `size`, focus outlines on tab panels, the Sheet's `motion-safe:` slides, default `name`s on Slider and Switch (#73), the
   card header's grid). Re-adding a
   component with the shadcn CLI would overwrite those; use `--diff` first. oxfmt formats this
   directory in shadcn's own style (no semicolons, 80 columns) so that diff stays readable.

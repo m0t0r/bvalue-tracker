@@ -13,7 +13,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 
-/** A plot's box in whole pixels, as Recharts' `ResponsiveContainer` rounds its own, and the font its labels are in. */
+/** A plot's box in whole pixels, as Recharts' `ResponsiveContainer` rounded its own, and the font its labels are in. */
 export interface PlotSize {
   width: number;
   height: number;
@@ -249,16 +249,22 @@ export function tipPosition(
  * Recharts' did, but appears where it belongs rather than gliding in from where it was last shown.
  * Its size is read after each render to place it, one layout per move, as Recharts read its own.
  * `clear` is `tipPosition`'s.
+ *
+ * Its surface is the dark theme's in both themes (owner's call, 2026-09-30): the `dark` class on the box
+ * gives it and everything in it the dark theme's tokens, so a tooltip's content is written once, with
+ * the theme's own classes. `className` is for what one chart's tooltip adds (a width cap, `tabular-nums`).
  */
 export function ChartTip({
   at,
   area,
   clear,
+  className,
   children,
 }: {
   at: { x: number; y: number };
   area: PlotArea;
   clear?: readonly [number, number];
+  className?: string;
   children: ReactNode;
 }) {
   const el = useRef<HTMLDivElement>(null);
@@ -279,7 +285,12 @@ export function ChartTip({
       ref={el}
       className="pointer-events-none absolute top-0 left-0 translate-x-(--tip-x) translate-y-(--tip-y) data-glide:transition-transform data-glide:duration-400 motion-reduce:transition-none"
     >
-      {children}
+      <div
+        data-chart-tip
+        className={cn("dark rounded-lg border bg-background px-3 py-2 text-xs text-foreground shadow-xl", className)}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -291,7 +302,7 @@ const SWATCH = {
   foreground: "bg-foreground",
 } as const;
 
-/** A chart's key, drawn as shadcn's `ChartLegendContent` draws it: a small square of each series' colour and its name. */
+/** A chart's key, drawn as shadcn's `ChartLegendContent` drew it: a small square of each series' colour and its name. */
 export function ChartKey({ items }: { items: { label: ReactNode; colour: keyof typeof SWATCH }[] }) {
   return (
     // The right margin is the plot's, so the key is centred under the plot as Recharts centred it.

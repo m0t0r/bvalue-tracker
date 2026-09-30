@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { tipPosition } from "./svg-chart";
+import { cleanup, render } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, describe, expect, it } from "vitest";
+import { ChartTip, tipPosition } from "./svg-chart";
+
+afterEach(cleanup);
 
 // A plot from (40, 16), 500 × 300, as the frequency–magnitude chart's at 552 px.
 const area = { left: 40, top: 16, width: 500, height: 300 };
@@ -28,5 +32,20 @@ describe("where a chart's tooltip goes, as Recharts placed it", () => {
     // No room either way: inside the plot, as low as it fits.
     expect(tipPosition({ x: 100, y: 150 }, 120, 200, area, [60, 300])).toEqual({ x: 110, y: 116 });
     expect(tipPosition({ x: 480, y: 170 }, 120, 60, area, [150, 190]).x).toBe(350);
+  });
+});
+
+describe("a chart's tooltip", () => {
+  it("is on the dark theme's surface in either theme, and keeps what its chart adds", () => {
+    const view = render(
+      createElement(ChartTip, { at: { x: 100, y: 50 }, area, className: "tabular-nums", children: "M2.5" }),
+    );
+    const box = view.container.querySelector("[data-chart-tip]")!;
+    expect(box.textContent).toBe("M2.5");
+    // `dark` gives the box the dark theme's tokens; the text colour is set on it, not inherited from the page.
+    expect([...box.classList]).toEqual(expect.arrayContaining(["dark", "bg-background", "text-foreground"]));
+    expect(box.classList.contains("tabular-nums")).toBe(true);
+    // The box is inside the element that is placed and measured.
+    expect((box.parentElement as HTMLElement).style.getPropertyValue("--tip-x")).not.toBe("");
   });
 });
