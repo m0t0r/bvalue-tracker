@@ -426,6 +426,80 @@ shared chunks of both pages.
 - **SVG text is sized in screen pixels.** A drawing that scales with its column (the questions tab's
   map, `viewBox` 400) multiplies its font sizes by viewBox units per pixel; in viewBox units alone
   its town names were 7 px on a 320 px phone.
+- **A label stays inside its drawing and clear of the others, by measured width, or is left off**
+  (issue #154, 2026-09-30). The catalogue grows, so where a label falls moves by itself: the rule is
+  what holds, never a nudged number. Every decision measures through `useTextWidth()`, so a drawing
+  laid out in the stand-in face lays itself out again when Geist arrives. The helpers are
+  `src/insights/place.ts` (tested); the axis rule is the chart kit's.
+  - **An axis' labels go through `ownPlaceLabels`** (`@bvalue/charts`, used as it is): each drawing
+    still offers the ticks it chose by width, and a label is drawn only where, centred on its own
+    place, it clears the next one by `INSIGHTS_LABEL_GAP` (6 px) and both edges of the drawing. A tick's mark
+    stays when its label is left off. This is on every axis whose ticks move with the catalogue or the
+    clock: question 3's days, question 5's dates, the story's hero strip, its two clocks, its wave
+    race and its durations. Question 5 is where it showed: at 320 px d3's `ticks(4)` gave seven weekly
+    dates, each 1–7 px into the next, and at 390 px they stood 1.4–7.4 px apart; both now draw every
+    other week. The amplitude scale on question 1 is left as it was: its domain and ticks are fixed,
+    and with `textWidth`'s 3 % reserve its "1/100 000" measures 2 px past an edge it fits in, so the
+    rule would drop it at every width.
+  - **A row of labels read left to right goes through `forwardLabels`**: each is moved inside the
+    plot and dropped where it would start before the last one kept ends. Question 3's lull bands and
+    the story's two-clocks step both call it. The story's had no rule, and at 320 px read "cal calma
+    profundo", its two labels run together and into the deep line's name. Inside the plot also moves
+    the story's second "calma" about 3 px left at 768 and 1280 px in Spanish, where it ran 2 px past
+    the plot's end.
+  - **A label with somewhere else to go takes the first placement that is clear** (`firstClear`, over
+    `textBox`es: an SVG line's box in Geist is 1 em above the baseline and 0.3 em below, measured).
+    - Question 5's "20 sept: empieza Chaparral →" sat on "M7.4 · 10 ago" on a phone (70 px at 320,
+      21–27 px at 390). It is tried whole before the band, as on a desktop, then whole inside it without
+      the arrow, then as "Chaparral →" before it and "Chaparral" inside it, and is otherwise left off,
+      since the band and the key still say it; always within the plot, clear of the reference event's
+      label and its ringed dot. Chosen over moving it down a line, where it would sit among the largest
+      events' dots. On a phone the short form is the one that fits, at 320 and at 390 px.
+    - The story's lull labels are also kept off the lines: at the foot of their band, as before, where
+      no line crosses them, and otherwise at the top of the plot, which the rates have left by the time
+      of any lull. At 320 px the deep group's line, settled at the floor, ran through "calma" (the
+      scanner does not see it: it compares text with text). The height is chosen first and
+      `forwardLabels` then runs once per row, so a label left off, or one on the other row, takes no
+      room from its neighbours (code review). Every band is drawn before any label, here and on
+      question 3: a label may run on past its own band, and the next band covered its last letters.
+    - The drift step's "centro cada 12 horas" is tried beside the track's end, before it (as it was)
+      and after it, above and then below it, then centred on it, then at either margin at the same
+      heights; each must stay off the track itself (`crosses`, a line clipped against the label's
+      box, 3 px of room), off the error circle's dashed outline (`crossesRing`) and clear of the scale
+      bar and of both their labels. Failing all of
+      those it is centred above the end, moved inside the close-up, over the track if it must, and
+      otherwise left off. It was cut by the left edge at 320 px in English, and at 768 px in both
+      languages on the 2026-09-30 catalogue. A first version that only flipped it after the end put
+      it on the track at 768 px, where the track ends at its west side; at 320 px in English only
+      the left margin, below the end, is clear.
+  - **Question 1's map draws a town only where its dot is on the map**, and only where its measured
+    name stays inside the map and clear of the sources' labels, Pereira's and the towns kept before
+    it, in `TOWNS` order. The boxes may touch, with no gap: a line's box already reaches about a
+    quarter of an em past the letters, and at 768 px "Manizales" and "Pereira" are 1.5 px apart, which
+    a 2 px gap wrongly left off. Medellín and Bogotá lie off the map at every width and were drawn
+    outside it, clipped; at 320 px "Manizales" sat under "● M7.4 y réplicas profundas" and "Armenia"
+    touched "Ibagué", and both Manizales and Ibagué are left off there. The story's map still leaves
+    off a town near its right edge by a fixed 60 px (`graphic.tsx`), which nothing crosses today; #155
+    moves the two maps' town marks into one module. The map's three source labels are not placed by
+    this rule: each has a hand-chosen spot and is only kept inside the map, as before. They clear one
+    another and Pereira's label in every scan above; a longer reference name or a narrower column
+    than 320 px is where that could stop holding.
+  - **Declined in the code review (2026-09-30):** *offering the hero strip's ticks up to today*, instead
+    of stopping three days short, now that `ownPlaceLabels` guards the edge. The issue keeps which
+    ticks a drawing offers out of scope, and the change would add a label to wide layouts that are
+    meant to stay as they are. *Measuring the hero's labels lazily*: its start-anchored labels pass
+    their middle as their place, so each candidate is measured; there are at most eight, and the
+    measure is cached once Geist is in. *Giving the map's source labels a placement of their own*:
+    above.
+  - **Checked** with the scanner in the issue (every visible SVG `<text>` of the questions tab and of
+    each of the story's 17 steps, in es and en, at 320 × 700, 390 × 844, 768 × 800, 1280 × 800 and
+    667 × 375; both builds served by `scripts/fixture-server.ts` from one capture): 16 of 180 scans
+    had an overlap or a label past its drawing's edge on `main`, none here. At 768 and 1280 px, every
+    drawing of both tabs was screenshotted on both builds with the clock frozen (the axes that end at
+    "now" otherwise move between two runs) and reduced motion (so the wave race and the dots are at
+    rest): identical, or within the rasteriser's 1–17/255, apart from the drift label and the Spanish
+    "calma" above; the questions tab's markup is byte for byte `main`'s but for the map's two
+    off-map towns.
 - **"¿Qué tan fuerte se sintió?" is question 2** (`questions/shaking.tsx`, 2026-09-25), right after
   the distance question it answers for one real event. It appears only when `feltInPereira` has a
   figure (see [the science](science.md#the-insights-page-insights-from-2026-09-24)), so it is in the
