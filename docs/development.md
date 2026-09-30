@@ -9,7 +9,7 @@
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
 | `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, D3's maths with React's SVG for the monitor's three charts (`components/charts/fmd.tsx`, `b-over-time.tsx`, `magnitude-time.tsx`; none uses Recharts any more, and removing the package is what is left of issue #126), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
-| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
+| `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `fixture-server.ts` serves a build with no Worker behind it, for [render profiles](#profiling-react-renders); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
 | `src/**/*.test.ts` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec, kept for history. Its §3 lists every verified fact about the SGC endpoint. |
@@ -106,6 +106,68 @@ draws from too):
    `src/components/map-preview/choco-light.webp`; `eval 'window.baked'` prints it as a JSON string, and
    the part after the comma is base64. The same for each zone and theme.
 3. Look at each before committing: 512 × 192, 5–13 kB, no dots.
+
+## Profiling React renders
+
+What React DevTools' Profiler tab shows (which components rendered in each commit, how often and for
+how long) can be read from the terminal, so a change to how often components render comes with
+numbers (issue #128). A browser extension's panel cannot be read through `agent-browser` or the
+DevTools MCP, but everything in it comes from React itself. Three pieces:
+
+1. **A profiling build: `PROFILE=1 pnpm build`.** The production bundle of `react-dom` records no
+   render times. The flag swaps `react-dom/profiling` in for `react-dom/client`, in the page's code
+   only, and leaves that code unminified so components keep their names (`reactProfiling` in
+   `vite.config.ts`, which says why it is a `resolveId` hook with `enforce: "pre"` and not an alias).
+   Without the flag the build is what it was, byte for byte. A profiling build must never be
+   deployed, so it is made unable to be: it is the pages alone, in `dist-profile/`, built without the
+   Cloudflare plugin, so it has no Worker and leaves `dist/` and `.wrangler/deploy/` (what
+   `wrangler deploy` reads) as they were. A first version wrote it to `dist/client` with a warning in
+   the build log, and a bare `wrangler deploy` after it would have shipped it (code review).
+2. **A stand-in for the DevTools hook: `test/browser/react-profile.js`**, an `agent-browser`
+   `--init-script`, so it is there before React loads (which is also what makes React time its
+   renders). Its header has the commands: `__prof.on = true`, interact, `__prof.summary()`. It reads
+   React's fibers, which are not public API; `src/lib/react-profile.test.ts` holds it to the React
+   installed, so an upgrade that moves them fails a test rather than a profile.
+3. **A server with no Worker behind it: `scripts/fixture-server.ts`.** It serves a build's files with
+   brotli and answers `/api/*` from JSON captured once, by `GET`, from a dev server with a populated
+   local database (`capture`, then `serve`; its header has both). Nothing in that setup can reach SGC,
+   so the closed-guard bookkeeping of "Checking the page headlessly" below is not needed for a
+   profile, and both sides of an A/B read the same catalogue however long it takes. `POST
+   /api/refresh` is answered as the Worker answers when it stands down. It is for render profiles,
+   not a stand-in for production: of `public/_headers` it keeps only the cache rule for hashed assets
+   and the speculation rules' type, with no CSP, and it answers only as `localhost` or `127.0.0.1`.
+
+   ```sh
+   pnpm dev --port 5173 &                                  # a checkout whose .wrangler/ has data
+   pnpm tsx scripts/fixture-server.ts capture              # GETs only; writes data/api-fixtures.json
+   PROFILE=1 pnpm build
+   pnpm tsx scripts/fixture-server.ts serve --dir dist-profile --port 4180
+   agent-browser --session prof --init-script test/browser/react-profile.js open 'http://localhost:4180/insights?tab=questions'
+   ```
+
+**An A/B is the same steps on both builds**: `main` in a second checkout, built with the same flag
+and served with `--dir <that checkout>/dist-profile --port 4181` from the same fixtures. Report the
+median of three runs, with the commits and the components rendered beside the time. The counts are
+exact from run to run (the questions tab's distance slider, five steps: 780 updates in 10 commits on
+`main` at `aed8d13`, every run), while the time moved by 10–20 % between identical runs on an idle
+laptop. Times are of an unminified build with no CPU throttle: they compare two builds, and are not
+what a reader's phone spends.
+
+Driving the page for a profile:
+
+- **A synthetic `.click()` does not move a Radix tab or radio**: dispatch `pointerdown` and
+  `mousedown` first. A slider: `focus()` it from a script, then `agent-browser press ArrowRight`
+  (never a real Tab: see "Tooling gotchas").
+- **`agent-browser open --enable react-devtools` with `react renders start/stop` is not this.** On a
+  production build its names are minified and its time columns empty, and its mount counts did not
+  agree between two identical runs (2026-09-30). Fine for a first look at a tree, not for an A/B.
+- Let the page settle before turning the profile on (2.5 s after `open` was enough for `/insights`),
+  or it includes the load's own commits.
+- **A row of the summary is a component's name.** Components that share one are summed: every
+  insights tab is `Tab`, and an arrow function passed straight to `memo` is `Anonymous`. Name the
+  component before reading much into such a row.
+- With the React DevTools extension in the browser (or `--enable react-devtools`), the script leaves
+  the extension's hook alone and `__prof.summary()` says so in `err`. Use a browser without it.
 
 ## Tooling gotchas
 

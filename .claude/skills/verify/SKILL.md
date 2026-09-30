@@ -54,6 +54,11 @@ Earlier findings and method: `docs/performance.md`.
 - Compare against `main` under the same throttling (CPU 4×, Slow 4G), A/B, not one number.
   A regression goes in Findings with ⚠️ even when the feature works.
 - Note bundle weight a change adds (a new dependency, a new lazy chunk).
+- If the change touches how often components render (memoisation, state moved, a context split, a
+  chart rebuilt, React Compiler), attach a **render profile** of the interactions it touches, A/B
+  against `main`: commits, components rendered and React's render time, the median of three runs.
+  How: `docs/development.md`, "Profiling React renders" (`PROFILE=1 pnpm build`,
+  `test/browser/react-profile.js`, and `scripts/fixture-server.ts`, which needs no D1 guard).
 
 ### 2. Design-system use
 
