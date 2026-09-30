@@ -233,6 +233,12 @@ tick costs more than 10 ms.** That is observed safe, not guaranteed. The toleran
 unpublished, so cutting per-tick CPU is still the real fix. Full measurements are in the
 [2026-09-20 postmortem](incidents/2026-09-20-ingest-outage-and-sgc-refusal.md).
 
+**`*/15` stopped being safe once the ticks grew** (2026-09-30). With the Tolima zone the cron's
+CPU is median 67 ms, p90 156, max 264, and **39 wide ticks were killed between 2026-09-25 and
+09-28**, in four stretches of hours. Only the wide ticks died; the fast ticks between them
+survived. `*/15` is still the floor, but it is no longer enough by itself: see the
+[2026-09-30 postmortem](incidents/2026-09-30-sgc-refusal-returns.md).
+
 **The Tolima zone adds to every wide tick's work, and most to the hourly one** (2026-09-23,
 not yet measured). At the swarm's ~130 events a day the tick on the hour now parses Chocó's wide
 window and sweep chunk (~280 rows) *plus* Chaparral's (~330 + ~520), ~1,100 rows where it used to
