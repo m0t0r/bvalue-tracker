@@ -4,6 +4,7 @@ import { hydrateRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeStaticShell } from "@/lib/hydrate";
 import { dicts } from "@/lib/i18n";
+import { App } from "@/App";
 import { PageRoot } from "@/page-root";
 import { ZONE_IDS, type ZoneId } from "../core/zones";
 import { staticShell } from "./static-shell";
@@ -50,7 +51,7 @@ async function hydrate() {
   if (shell === null) throw new Error("no static header to hydrate");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
-    root = hydrateRoot(shell.container, createElement(PageRoot, { client }), {
+    root = hydrateRoot(shell.container, createElement(PageRoot, { client, children: createElement(App) }), {
       identifierPrefix: shell.identifierPrefix,
       onRecoverableError: recoverable,
     });

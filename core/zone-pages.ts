@@ -91,8 +91,9 @@ export function withZoneMeta(html: string, zone: ZoneId): string {
 }
 
 /**
- * The static header's slot inside `#root` in index.html. What is between the two comments is the
- * build's, and is replaced whole, so a page already filled for one zone can be filled for another.
+ * The static header's slot inside `#root` in index.html and insights.html. What is between the two
+ * comments is the build's, and is replaced whole, so a page already filled for one zone can be filled
+ * for another.
  */
 const SHELL_SLOT = /(<!--static-shell-->)[\s\S]*?(<!--\/static-shell-->)/g;
 
@@ -103,6 +104,6 @@ const SHELL_SLOT = /(<!--static-shell-->)[\s\S]*?(<!--\/static-shell-->)/g;
  */
 export function withStaticShell(html: string, markup: string): string {
   const found = [...html.matchAll(SHELL_SLOT)].length;
-  if (found !== 1) throw new Error(`index.html: expected one static-shell slot, found ${found}`);
+  if (found !== 1) throw new Error(`expected one static-shell slot in the page, found ${found}`);
   return html.replace(SHELL_SLOT, (_m, open: string, close: string) => open + markup + close);
 }

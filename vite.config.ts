@@ -48,27 +48,35 @@ function preloadLatinFont(): Plugin {
 }
 
 /**
- * The page's stylesheet out of the first paint's way. On a zone page the CSS the static header needs
- * is inlined and the stylesheet moves to the end of the body (`withInlineStylesheet`, issue #97): a
- * phone paints the header once the HTML and the head script are in. The insights page has nothing to
- * paint before its bundle, so it keeps the stylesheet, ahead of the bundle (`stylesheetBeforeBundle`).
+ * The page's stylesheet out of the first paint's way. On a page with a static header (the zone pages
+ * and, since issue #120, the insights page) the CSS that header needs is inlined and the stylesheet
+ * moves to the end of the body (`withInlineStylesheet`, issue #97): a phone paints the header once the
+ * HTML and the head script are in. A page with nothing to paint before its bundle would keep the
+ * stylesheet, ahead of the bundle (`stylesheetBeforeBundle`).
  */
 function stylesheetPlacement(): Plugin {
-  // Once per build, for every zone page: the static headers and the font files are the build's own.
-  let css: Promise<string> | null = null;
+  // Once per build and page: the static headers and the font files are the build's own. Each page
+  // inlines only what its own header uses, so the monitor's pages are what they were before
+  // /insights had one.
+  let css: Partial<Record<"monitor" | "insights", Promise<string>>> = {};
   return {
     name: "sgc-stylesheet-placement",
     apply: "build",
     buildStart() {
-      css = null;
+      css = {};
     },
     transformIndexHtml: {
       order: "post",
       async handler(html, ctx) {
-        if (!html.includes("<!--static-shell-->")) return stylesheetBeforeBundle(html);
+        const page = shellPage(ctx.filename);
+        if (page === null) return stylesheetBeforeBundle(html);
         if (shells === null) throw new Error("sgc-stylesheet-placement: no static header rendered");
-        css ??= headerCss(Object.values(shells).join(""), Object.keys(ctx.bundle ?? {}));
-        return withInlineStylesheet(html, await css);
+        // The monitor's CSS covers every zone's header, since the zone pages are copies of this one.
+        css[page] ??= headerCss(
+          page === "insights" ? shells.insights : Object.values(shells.zones).join(""),
+          Object.keys(ctx.bundle ?? {}),
+        );
+        return withInlineStylesheet(html, await css[page]);
       },
     },
   };
@@ -86,8 +94,8 @@ interface TailwindNode {
 }
 
 /**
- * The CSS the static header needs: `index.css` compiled by Tailwind for exactly the class names in the
- * header's HTML (both zones, both languages), minified, with its fonts pointed at the built files.
+ * The CSS a static header needs: `index.css` compiled by Tailwind for exactly the class names in the
+ * header's HTML (the monitor's for both zones, or the insights page's; both languages), minified, with its fonts pointed at the built files.
  * Every rule of `index.css` that is not a utility comes along whole: the tokens for both themes, the
  * base styles, the fallback faces and the rules that show the reader's language, so nothing depends on
  * the theme or the language the build happened to see. About 32 kB, 6 kB with brotli; about a third
@@ -99,6 +107,8 @@ interface TailwindNode {
  * header's class names as written (`classAttributes`); anything that is not a class it knows, it drops.
  */
 async function headerCss(markup: string, assets: string[]): Promise<string> {
+  // A compiler per call, not one per build: `build` keeps every candidate it has been given, so a
+  // second page's CSS would carry the first page's classes too (checked, Tailwind 4.3).
   const fromPlugin = createRequire(createRequire(import.meta.url).resolve("@tailwindcss/vite"));
   const { compile, optimize } = fromPlugin("@tailwindcss/node") as TailwindNode;
   const from = path.resolve(import.meta.dirname, "src/index.css");
@@ -154,6 +164,17 @@ function preloadPageData(): Plugin {
 // `filename`.
 const STORY_TAB = normalizePath(path.resolve(import.meta.dirname, "src/insights/story/index.tsx"));
 const INSIGHTS_ENTRY = normalizePath(path.resolve(import.meta.dirname, "insights.html"));
+const MONITOR_ENTRY = normalizePath(path.resolve(import.meta.dirname, "index.html"));
+/** Whether the page Vite is writing is the insights page, from `transformIndexHtml`'s `ctx.filename`. */
+const isInsights = (filename: string) => normalizePath(filename) === INSIGHTS_ENTRY;
+/**
+ * Which static header the page Vite is writing gets, or null for a page without one. The one place
+ * that decides it, for the header (`startup`) and for the CSS inlined for it (`stylesheetPlacement`).
+ */
+function shellPage(filename: string): "monitor" | "insights" | null {
+  if (isInsights(filename)) return "insights";
+  return normalizePath(filename) === MONITOR_ENTRY ? "monitor" : null;
+}
 
 function preloadStoryTab(): Plugin {
   return {
@@ -162,7 +183,7 @@ function preloadStoryTab(): Plugin {
     transformIndexHtml: {
       order: "post",
       handler(html, ctx) {
-        if (normalizePath(ctx.filename) !== INSIGHTS_ENTRY) return html;
+        if (!isInsights(ctx.filename)) return html;
         const files = chunkPreloads(ctx.bundle ?? {}, STORY_TAB, INSIGHTS_ENTRY);
         return html.replace("</head>", `  ${modulePreloadTags(files)}\n  </head>`);
       },
@@ -171,9 +192,10 @@ function preloadStoryTab(): Plugin {
 }
 
 /**
- * The head script and the static header (issue #69; `docs/performance.md`). On a phone the header's
- * subtitle is the largest paint, and drawn by React it waited for the whole bundle. The build writes
- * the header into each zone's HTML instead (`src/static-shell.tsx`), in both languages, and a small
+ * The head script and the static headers (issues #69 and #120; `docs/performance.md`). On a phone the
+ * monitor's header subtitle is the largest paint, and drawn by React it waited for the whole bundle;
+ * the insights page was blank until its bundle had run. The build writes each page's header into its
+ * HTML instead (`src/static-shell.tsx`), in both languages, and a small
  * classic script at the top of every page's head (`src/boot.ts`) sets `<html lang>` and the theme
  * before the first paint, so the right language shows and nothing flashes. The CSP allows no inline
  * script, so the script is a file: bundled on its own, into `/assets/` under a content hash, where
@@ -183,8 +205,11 @@ function preloadStoryTab(): Plugin {
  */
 const BOOT_ENTRY = path.resolve(import.meta.dirname, "src/boot.ts");
 const DEV_BOOT_PATH = "/__boot.js";
-/** Each zone's static header, rendered when the client build starts, for `zonePages` to write. */
-let shells: Record<ZoneId, string> | null = null;
+/**
+ * Each zone's static header and the insights page's, rendered when the client build starts, for
+ * `startup` and `zonePages` to write.
+ */
+let shells: { zones: Record<ZoneId, string>; insights: string } | null = null;
 
 /** `src/boot.ts` and what it imports, as one classic script: no module loader, no import. */
 async function bundleBoot(): Promise<string> {
@@ -201,12 +226,19 @@ async function bundleBoot(): Promise<string> {
 }
 
 /** Renders `src/static-shell.tsx` in Node through Vite's module runner, which knows the `@` alias. */
-async function renderShells(): Promise<Record<ZoneId, string>> {
-  const { module } = await runnerImport<{ staticShell: (zone: ZoneId) => string }>(
-    path.resolve(import.meta.dirname, "src/static-shell.tsx"),
-    { configFile: false, logLevel: "warn", resolve: { alias } },
-  );
-  return Object.fromEntries(ZONE_IDS.map((zone) => [zone, module.staticShell(zone)])) as Record<ZoneId, string>;
+async function renderShells(): Promise<NonNullable<typeof shells>> {
+  const { module } = await runnerImport<{
+    staticShell: (zone: ZoneId) => string;
+    insightsStaticShell: () => string;
+  }>(path.resolve(import.meta.dirname, "src/static-shell.tsx"), {
+    configFile: false,
+    logLevel: "warn",
+    resolve: { alias },
+  });
+  return {
+    zones: Object.fromEntries(ZONE_IDS.map((zone) => [zone, module.staticShell(zone)])) as Record<ZoneId, string>,
+    insights: module.insightsStaticShell(),
+  };
 }
 
 /** The head script's tag, after the viewport, before the stylesheet: a script after a stylesheet waits for it. */
@@ -258,8 +290,10 @@ function startup(): Plugin[] {
           const boot = Object.keys(ctx.bundle ?? {}).find((name) => /^assets\/boot-[\w-]+\.js$/.test(name));
           if (boot === undefined || shells === null) throw new Error("sgc-startup: no head script in the bundle");
           const page = withBootScript(html, `/${boot}`);
-          // The monitor's page has the header's slot; the insights page takes only the script.
-          return page.includes("<!--static-shell-->") ? withStaticShell(page, shells[HOME_ZONE]) : page;
+          // `withStaticShell` throws if the page has lost its slot: it would still work, only slower.
+          const shell = shellPage(ctx.filename);
+          if (shell === null) return page;
+          return withStaticShell(page, shell === "insights" ? shells.insights : shells.zones[HOME_ZONE]);
         },
       },
     },
@@ -318,7 +352,7 @@ function zonePages(): Plugin[] {
           if (zone === HOME_ZONE) continue;
           const source = withStaticShell(
             swapPreloads(withZoneMeta(String(index.source), zone), monitorLoad(HOME_ZONE), monitorLoad(zone)),
-            shells[zone],
+            shells.zones[zone],
           );
           this.emitFile({ type: "asset", fileName: zonePageFile(zone), source });
         }

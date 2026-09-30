@@ -109,8 +109,8 @@ practices stayed at 100.
     the paint and Chrome records only React's node (buffered `largest-contentful-paint` entries,
     unthrottled). Against the `main` before `2e2909d`, where the header was desktop's LCP, it came
     122 → 109 ms on `/` and 113 → 106 ms on `/choco` (n = 6).
-  - **`/insights` takes the head script and nothing else**, since its theme and language are decided
-    there too: phone FCP 4471 → 4438 ms and LCP 9235 → 9182 ms, desktop LCP 172 → 172 ms (n = 3). The
+  - **`/insights` took the head script and nothing else** (until issue #120, below), since its theme and
+    language are decided there too: phone FCP 4471 → 4438 ms and LCP 9235 → 9182 ms, desktop LCP 172 → 172 ms (n = 3). The
     extra render-blocking request costs nothing measurable.
   - **A first A/B was spoiled by another session**, which took the branch's preview port mid-run and
     served `main` on it: five "branch" runs had no head script, and made desktop `/` read as 18 ms
@@ -529,7 +529,8 @@ practices stayed at 100.
     two ideas were not built. *Painting the hero's text from the HTML* would need a static `/insights`
     shell hydrated by React, as the monitor's header is (issues #69, #97): the page's header and tabs,
     and the hero's kicker and intro, with slots of their final height for the count and the sentences
-    the data decides. It is the step left if the story must come sooner. *A smaller request for the
+    the data decides. It is the step left if the story must come sooner. (Issue #120 has since put the
+    header and the skeleton in the HTML, below; the hero is still drawn with the data.) *A smaller request for the
     hero* would save at most the catalogues' 64 kB (~0.35 s at 1.6 Mbps), for a new route and a second
     source of the same figures.
   - **A load that fails is unchanged** (checked in `agent-browser` at 412 px, with `/api/*` answering 503
@@ -539,6 +540,47 @@ practices stayed at 100.
     load makes five API requests, one per URL.
   - A prerender of `/insights` from the monitor (issue #107, above) fetches what it did (the catalogues
     and the story's chunks), now from its HTML.
+- **`/insights` paints its header and skeleton from the HTML** (issue #120, 2026-09-29), as the
+  monitor's header does (issues #69 and #97, above; how, in [the page](frontend.md)). Its HTML was an
+  empty `#root`, so a phone showed a blank screen until the bundle had downloaded and run, and #108's
+  preloads, sharing the connection with the bundle, made that ~3.5 s. The header's CSS is inlined
+  (33 kB, `headerCss` over this page's own header, so the monitor's inlined CSS is what it was), the
+  stylesheet moves to the end of the body, and React hydrates the copy. The HTML goes from 0.9 to 8.9 kB
+  with brotli. The monitor's pages keep their header and CSS; their HTML changes only in the hashes of
+  the chunks the two pages share and in the order of one module preload (the table's note).
+  - **Lighthouse A/B** against a build of #108's branch at `5a9ef9f` and of `main` at `f46512d`,
+    devtools throttling, all three behind the brotli proxy, same `.wrangler/` copy, interleaved, five
+    runs each, every run checked for the build it loaded (the entry script tells this branch from the
+    other two, and only #108 and this branch start `story-*.js` at ~0.6 s); medians, `main` → #108 →
+    this branch:
+
+    | | FCP | LCP | Speed Index | TBT | CLS | Score |
+    |---|---|---|---|---|---|---|
+    | phone `/insights`, English | 3098 → 3500 → 1352 ms | 4995 → 4348 → 4343 ms | 3318 → 2768 → 3100 ms | 0 → 0 → 7 ms | 0 | 75 → 78 → 84 |
+    | phone `/insights`, Spanish | 3125 → 3497 → 1357 ms | 5001 → 4350 → 4349 ms | 3342 → 2813 → 3099 ms | 0 → 0 → 9 ms | 0 | 75 → 78 → 84 |
+    | phone `?tab=questions` | 3105 → 3483 → 1352 ms | 5254 → 4994 → 4973 ms | 3530 → 3350 → 3427 ms | 154 → 151 → 172 ms | 0 | 72 → 72 → 78 |
+    | phone `?tab=3d` | 3110 → 3492 → 1360 ms | 5088 → 5000 → 4998 ms | 3672 → 3633 → 3455 ms | 251 → 243 → 252 ms | 0 | 70 → 69 → 76 |
+    | desktop `/insights` | 106 → 106 → 56 ms | 152 → 151 → 153 ms | 92 → 100 → 118 ms | 0 | 0 | 100 |
+    | phone `/` | — → 1372 → 1352 ms | — → 1372 → 1352 ms | — → 3119 → 3110 ms | — → 283 → 260 ms | 0 | — → 93 → 94 |
+
+    Every phone run of this branch painted between 1344 and 1404 ms, against 3462–3519 on #108. The
+    LCP is the story's hero at every width, as before, and waits on the data and the story's chunk, not
+    on the header. Hydrating the copy costs 7–21 ms of TBT on a phone. The monitor's row is from the
+    build after the code review, when both pages came to mount through one `mountPage` and the
+    monitor's HTML changed only in chunk hashes and in where `react-dom`'s module preload sits among
+    the others; five more story runs on that build gave the same (FCP 1357, LCP 4344 ms).
+  - **Speed Index reads the skeleton as a step back.** Speedline scores a frame by how far its colour
+    histogram has moved from the first frame's towards the last one's. The blank page before the
+    bundle is the page's own background, which the finished story mostly is, so #108's blank screen
+    scored 81 % complete from 1.6 s; the header and skeleton score 73 %, since the skeleton's grey
+    block is in no finished frame (#108's own skeleton drops to 73 % when it appears at 3.5 s). On the
+    story tab that is +0.3 s of Speed Index for a page that shows more at every moment from 1.35 s:
+    the filmstrips of the three builds, frame by frame, have the header on screen 2.1 s sooner and the
+    story at the same time.
+  - **Measured first on a trace** (Chrome DevTools MCP, 412 × 823, Slow 4G, CPU ×4, a cold context): the
+    first paint is the static subtitle, and the only render-blocking request left is the head script,
+    as on the monitor. The static subtitle stays the same node through hydration (its buffered
+    `largest-contentful-paint` entry's element is still connected once the story is up).
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

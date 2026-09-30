@@ -176,8 +176,6 @@ const es = {
   footer:
     "Página independiente, sin relación con el SGC. Las cifras que calcula esta página describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
   timeNote: "Fechas y horas de Colombia (UTC−5).",
-  themeToDark: "Cambiar a tema oscuro",
-  themeToLight: "Cambiar a tema claro",
   backToTop: "Volver arriba",
 
   source: {
@@ -328,8 +326,6 @@ const en: Copy = {
   footer:
     "An independent page, not affiliated with SGC. The figures this page computes describe what has already happened and are not a forecast. For official information, consult the Servicio Geológico Colombiano.",
   timeNote: "Dates and times are Colombia time (UTC−5).",
-  themeToDark: "Switch to dark theme",
-  themeToLight: "Switch to light theme",
   backToTop: "Back to top",
 
   source: {

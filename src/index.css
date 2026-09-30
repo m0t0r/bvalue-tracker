@@ -289,7 +289,7 @@
 @utility band-clip {
   clip-path: inset(0 var(--to) 0 var(--from) round 9999px);
 }
-/* The static header in each zone's HTML (`src/static-shell.tsx`) comes in both languages, and shows
+/* The static header in each page's HTML (`src/static-shell.tsx`) comes in both languages, and shows
    the one the head script wrote on `<html lang>` before the first paint. Spanish unless that says
    English, as the HTML's own `lang="es"` stands if the script never ran. React hydrates the shown
    one, which becomes `[data-static-live]` and keeps its box (none), and removes the other
@@ -301,7 +301,11 @@
 /* The monitor keeps room for a scrollbar from the first paint. The header is hydrated, not redrawn, so
    when the page mounts under it and a desktop's scrollbar appears, the centred header would move
    ~8 px to the side, a layout shift (0.005 at 1350 px). Not on /insights: its 3D viewer locks the
-   page's scroll, and Radix's lock adds its own room for the scrollbar, which would count it twice. A
+   page's scroll, and Radix's lock adds its own room for the scrollbar, which would count it twice.
+   /insights loads without it: its static copy has the skeleton under the header, a window tall, so
+   the page has its scrollbar from the first paint to the data (issue #120). A load that fails swaps the
+   skeleton for the short load error, and there a desktop's scrollbar goes and the header moves aside,
+   as it did before the static copy, when React drew the same header and skeleton first. A
    Radix modal (Dialog, Sheet, Select) added to the monitor would meet the same: the page would move
    by the scrollbar's width as it opens (code review). */
 html[data-page="monitor"] {

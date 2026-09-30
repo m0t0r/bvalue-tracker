@@ -1,6 +1,7 @@
-import { LightbulbIcon, MoonIcon, SunIcon } from "lucide-react";
+import { LightbulbIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { LanguageButton } from "@/components/language-button";
+import { ThemeButton } from "@/components/theme-button";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
@@ -57,19 +58,7 @@ export function MonitorShell({
               </Button>
               {/* The `-touch` sizes: on touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
               <LanguageButton />
-              <Button variant="outline" size="icon-sm-touch" onClick={onToggleTheme}>
-                {/* Icon and name are chosen by the theme class, not by React: the static header is
-                    drawn before anything knows the theme, and must show and say the right one from
-                    the first paint. The hidden half is out of the accessibility tree too. */}
-                <span className="contents not-dark:hidden">
-                  <SunIcon />
-                  <span className="sr-only">{t.themeToLight}</span>
-                </span>
-                <span className="contents dark:hidden">
-                  <MoonIcon />
-                  <span className="sr-only">{t.themeToDark}</span>
-                </span>
-              </Button>
+              <ThemeButton onClick={onToggleTheme} />
             </div>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance">{copy.title}</h1>

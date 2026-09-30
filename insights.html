@@ -28,7 +28,10 @@
     <meta name="twitter:card" content="summary" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The build draws the header and the skeleton into the slot below, in both languages, so a phone
+         paints them before the bundle has run; React hydrates them (src/static-shell.tsx,
+         src/lib/hydrate.ts). -->
+    <div id="root"><!--static-shell--><!--/static-shell--></div>
     <script type="module" src="/src/insights/main.tsx"></script>
   </body>
 </html>
