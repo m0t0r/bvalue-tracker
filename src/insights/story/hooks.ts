@@ -71,19 +71,24 @@ export function useActiveStep(count: number, isWide: boolean) {
  * A value that runs from 0 to 1 over `ms` each time `on` turns true, for drawings that replay
  * (the swarm filling in, the waves travelling). Stays at 1 for a reader who asked for less motion,
  * so they see the finished drawing at once.
+ *
+ * Only a run under way is state. Off and reduced motion are read straight from the arguments, and a
+ * new run (turned on, a new `ms`, motion allowed again) starts from 0 in the render that brings it:
+ * set from the effect, each was a render late, so a drawing turned off was drawn once more at its
+ * last value, and a reader who asked for less motion got one frame of the empty drawing first.
  */
 export function useProgress(on: boolean, ms: number) {
   const reduced = useReducedMotion();
   const [p, setP] = useState(0);
+  // The run `p` belongs to: its length, or null while nothing runs.
+  const run = on && !reduced ? ms : null;
+  const [was, setWas] = useState(run);
+  if (!Object.is(was, run)) {
+    setWas(run);
+    setP(0);
+  }
   useEffect(() => {
-    if (!on) {
-      setP(0);
-      return;
-    }
-    if (reduced) {
-      setP(1);
-      return;
-    }
+    if (!on || reduced) return;
     let raf = 0;
     const t0 = performance.now();
     const tick = (t: number) => {
@@ -94,5 +99,6 @@ export function useProgress(on: boolean, ms: number) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [on, ms, reduced]);
-  return p;
+  if (!on) return 0;
+  return reduced ? 1 : p;
 }

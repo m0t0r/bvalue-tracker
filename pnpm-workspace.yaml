@@ -6,3 +6,11 @@ allowBuilds:
   workerd: true
   sharp: true
   msw: false
+
+# oxlint loads eslint-plugin-react-hooks itself (`jsPlugins` in .oxlintrc.json), and the plugin never
+# imports ESLint. As a required peer, pnpm would install ESLint 10 and about 60 packages only to satisfy it.
+packageExtensions:
+  eslint-plugin-react-hooks:
+    peerDependenciesMeta:
+      eslint:
+        optional: true

@@ -383,13 +383,21 @@ const RACE_SPEED = 4;
 const RACE_STEP_MS = 900;
 
 /** P and S waves racing from the source to Pereira, sped up. Reduced motion steps through it. */
-function WaveRace({ km }: { km: number }) {
+export function WaveRace({ km }: { km: number }) {
   const { lang } = useI18n();
   const c = questionsCopy[lang].far;
   const reduced = useReducedMotion();
   const [ref, w] = useWidth();
   const { p, s } = arrivalSeconds(km);
-  const [elapsed, setElapsed] = useState(s);
+  // The race's clock, with the distance it runs over. A new distance shows its finished race, in the
+  // render that brings it (set from an effect, the old clock was drawn once against the new distance);
+  // the button runs it.
+  const [race, setRace] = useState({ s, elapsed: s });
+  // `Object.is`, as an effect's dependencies are compared: a distance that is not a number settles.
+  if (!Object.is(race.s, s)) setRace({ s, elapsed: s });
+  const elapsed = race.elapsed;
+  // A frame of the old distance's race that lands before that race is stopped changes nothing.
+  const setElapsed = (at: number) => setRace((r) => (Object.is(r.s, s) ? { s, elapsed: at } : r));
   const frame = useRef(0);
   const steps = useRef<number[]>([]);
   const stop = () => {
@@ -397,12 +405,8 @@ function WaveRace({ km }: { km: number }) {
     for (const id of steps.current) clearTimeout(id);
     steps.current = [];
   };
-  useEffect(() => stop, []);
-  // A new distance shows its finished race; the button runs it.
-  useEffect(() => {
-    stop();
-    setElapsed(s);
-  }, [s]);
+  // A race under way ends with its distance, and with the component.
+  useEffect(() => stop, [s]);
   const play = () => {
     stop();
     if (reduced) {

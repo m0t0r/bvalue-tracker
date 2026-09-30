@@ -28,7 +28,7 @@ curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 pnpm test                 # offline
 pnpm test:live            # one test against the real SGC server
 pnpm typecheck
-pnpm lint                 # oxlint + @shadcn/lint (see docs/frontend.md, "Design-system lint")
+pnpm lint                 # oxlint + @shadcn/lint + React's rules (docs/frontend.md, "Design-system lint", "React's lint")
 pnpm format               # oxfmt; CI runs `pnpm format:check`
 pnpm logs                 # production's own logs, from here (see docs/operations.md)
 ```
@@ -108,6 +108,25 @@ draws from too):
 3. Look at each before committing: 512 × 192, 5–13 kB, no dots.
 
 ## Tooling gotchas
+
+- **React's own lint rules run in oxlint as a JS plugin under another name** (issue #129). oxlint
+  implements `react-hooks` natively (rules of hooks, exhaustive deps) but not the rules backed by
+  React Compiler, and it reserves the name, so `eslint-plugin-react-hooks` is loaded in
+  `.oxlintrc.json` as `{ "name": "react-hooks-js", "specifier": "eslint-plugin-react-hooks" }` and its
+  rules are `react-hooks-js/<rule>`, in the config and in a disable line alike. `pnpm lint` takes
+  about 4 s with it, against 0.5 s before: the plugin runs the compiler's analysis over every
+  component. What the rules are and which exceptions stand is in [the page](frontend.md#reacts-lint).
+  The two classic rules run from the plugin as well: on oxlint's native `react/rules-of-hooks` and
+  `react/exhaustive-deps` the run took 3.6 s, not worth a second implementation beside React's own.
+  - **The plugin does not import ESLint**, but names it as a required peer, and pnpm then installs
+    ESLint 10 and about 60 packages for nothing. `packageExtensions` in `pnpm-workspace.yaml` marks
+    the peer optional. **Changing `packageExtensions` makes pnpm resolve every dependency again**, not
+    only the one named: adding this one also moved `wrangler` from 4.136.1 to 4.142.0 in the lockfile
+    (put back by hand, then checked with `pnpm install --frozen-lockfile`). Read
+    `git diff pnpm-lock.yaml` after touching it, and keep a change of tool versions out of a PR that
+    is about something else.
+  - **It does not report what the compiler skips for its own limitations**, only what breaks React's
+    rules. Those skips show in the build's log once the compiler is on (issue #130).
 
 - **`packages/seismo` is a pnpm workspace package consumed as TypeScript source** (`exports` points
   at `src/index.ts`; there is no build step). Vite, the Worker bundle, `tsx` and vitest all compile

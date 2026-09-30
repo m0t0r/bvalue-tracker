@@ -53,6 +53,7 @@ export default function EventMap({
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const latest = useRef({ events, mainshockId });
+  // oxlint-disable-next-line react-hooks-js/refs -- Until issue #131 moves this off the render: the map's long-lived listeners read it.
   latest.current = { events, mainshockId };
   // The placeholder's picture stays over the canvas until MapLibre has drawn its first full frame,
   // and comes back while a new theme or language rebuilds the map. `drawn` names the build that has
