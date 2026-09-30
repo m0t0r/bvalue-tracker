@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { P_WAVE_KMS, S_WAVE_KMS, SOURCES, arrivalSeconds, type Insights, type Source } from "../claims";
+import { P_WAVE_KMS, S_WAVE_KMS, SOURCES, arrivalSeconds, type Insights } from "../claims";
 import { PEREIRA } from "../../../core/places";
 import { REGION, TOWNS } from "../region";
 import { questionsCopy, type Named } from "./copy";
@@ -17,6 +17,7 @@ import { useReducedMotion } from "../use-reduced-motion";
 import { presets, ratioPhrase, relativeAmplitude, toPereira, type Preset } from "./derive";
 import { Choice, Figure, RangeField, Swatch, useWidth } from "./ui";
 import { useTextWidth } from "../measure";
+import { firstClear, textBox, type Box } from "../place";
 
 const KM_PER_DEG = 111.195;
 const MAP = 400;
@@ -205,16 +206,42 @@ function MiniMap({
   );
   const [px, py] = project(PEREIRA.lon, PEREIRA.lat);
   const sxy = source ? project(source.lon, source.lat) : null;
-  const towns = TOWNS.filter((t) => t.kind === "city");
-  const labels: { s: Source; lat: number; lon: number; text: string }[] = [
-    { s: "shallow", lat: 4.3, lon: -76.95, text: c.labelShallow },
-    { s: "deep", lat: 5.14, lon: -76.3, text: c.labelDeep(refNamed) },
-    { s: "tolima", lat: 3.6, lon: -75.55, text: c.labelTolima },
-  ];
-
   // The drawing scales with its column, so its text is sized in screen pixels: `k` viewBox units per
   // pixel. In viewBox units alone the town names came out at 7 px on a 320 px phone.
   const k = MAP / Math.max(1, w);
+  const map: Box = { x0: 0, x1: MAP, y0: 0, y1: MAP };
+  const labels = (
+    [
+      { s: "shallow", lat: 4.3, lon: -76.95, text: c.labelShallow },
+      { s: "deep", lat: 5.14, lon: -76.3, text: c.labelDeep(refNamed) },
+      { s: "tolima", lat: 3.6, lon: -75.55, text: c.labelTolima },
+    ] as const
+  ).map((l) => {
+    const [x, y] = project(l.lon, l.lat);
+    // Kept inside the map: centred on its point, "● Istmina–Sipí" began 8 px past the left edge
+    // at 320 px. Measured in screen pixels, then scaled to the map's viewBox units.
+    const width = measure(`● ${l.text}`, 12, { weight: 600 }) * k;
+    const at = Math.min(MAP - 4 - width / 2, Math.max(4 + width / 2, x));
+    return { ...l, x: at, y, box: textBox({ x: at, y, width, fontSize: 12 * k, anchor: "middle" }) };
+  });
+  const pereira = { x: px + 9, y: py - 8 };
+  // A town is drawn only where its dot is on the map, and its name only where it stays inside the map
+  // and clear of the sources' labels, Pereira's and the towns before it; otherwise the town is left
+  // off. Medellín and Bogotá lie off the map at every width, and at 320 px "Manizales" sat under the
+  // deep group's label and "Armenia" touched "Ibagué". The boxes may touch: a line's box already
+  // reaches about a quarter of an em past the letters above and below, so the words stay apart.
+  const avoid: Box[] = [
+    ...labels.map((l) => l.box),
+    textBox({ ...pereira, width: measure("Pereira", 14, { weight: 700 }) * k, fontSize: 14 * k }),
+  ];
+  const towns = TOWNS.filter((t) => t.kind === "city").flatMap((t) => {
+    const [x, y] = project(t.lon, t.lat);
+    if (x < 2 || x > MAP - 2 || y < 2 || y > MAP - 2) return [];
+    const name = textBox({ x: x + 5, y: y + 4, width: measure(t.name, 11) * k, fontSize: 11 * k });
+    if (!firstClear([name], map, avoid)) return [];
+    avoid.push(name);
+    return [{ ...t, x, y }];
+  });
 
   return (
     <div ref={box} className="min-w-0">
@@ -253,9 +280,8 @@ function MiniMap({
           />
         ) : null}
         {towns.map((t) => {
-          const [x, y] = project(t.lon, t.lat);
           return (
-            <g key={t.id} transform={`translate(${x},${y})`} className="fill-muted-foreground">
+            <g key={t.id} transform={`translate(${t.x},${t.y})`} className="fill-muted-foreground">
               <circle r={2} />
               {/* The halo lifts the grey off the grey land: 4.34:1 on it in light mode, 4.73:1 on the page. */}
               <text x={5} y={4} fontSize={11 * k} paintOrder="stroke" strokeWidth={3 * k} className="stroke-background">
@@ -265,15 +291,11 @@ function MiniMap({
           );
         })}
         {labels.map((l) => {
-          const [x, y] = project(l.lon, l.lat);
-          // Kept inside the map: centred on its point, "● Istmina–Sipí" began 8 px past the left edge
-          // at 320 px. Measured in screen pixels, then scaled to the map's viewBox units.
-          const half = (measure(`● ${l.text}`, 12, { weight: 600 }) * k) / 2;
           return (
             <text
               key={l.s}
-              x={Math.min(MAP - 4 - half, Math.max(4 + half, x))}
-              y={y}
+              x={l.x}
+              y={l.y}
               textAnchor="middle"
               fontSize={12 * k}
               fontWeight={600}

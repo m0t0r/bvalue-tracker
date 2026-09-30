@@ -4,6 +4,7 @@
  * claim from `../claims.ts` in its sentence from `../copy.ts`, or a figure computed here from the
  * same `Insights`; the story's own copy is in `copy.ts`.
  */
+import { ownPlaceLabels } from "@bvalue/charts";
 import { scaleLinear, scaleTime } from "d3-scale";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Slider } from "@/components/ui/slider";
@@ -28,6 +29,8 @@ import { Graphic, type SceneId } from "./graphic";
 import { useActiveStep, useSize, useWide } from "./hooks";
 import { MainName, Note, Num, SourceName } from "./marks";
 import { RATE } from "./section";
+import { useTextWidth } from "../measure";
+import { INSIGHTS_LABEL_GAP } from "../place";
 import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
 import { HISTORY, ISCGEM_URL, quakeYear } from "../history";
 import { SGC_DURATION_URL, USGS_FINITE_FAULT_URL, shakingParts } from "../durations";
@@ -130,6 +133,7 @@ export function Story({ data, forecastShown }: { data: Insights; forecastShown: 
 function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: Lang }) {
   const c = storyCopy[lang].hero;
   const claims = insightsCopy[lang].claims;
+  const measure = useTextWidth();
   const mix = recentStrong(data.sources, data.now, 4, 7);
   const [ref, size] = useSize<HTMLDivElement>();
   const h = 96;
@@ -141,9 +145,18 @@ function Hero({ data, model, lang }: { data: Insights; model: StoryModel; lang: 
   const y = scaleLinear()
     .domain([3.8, maxMag])
     .range([h - 22, 14]);
-  const ticks: number[] = [];
   const every = (size.width < 560 ? 14 : 7) * DAY;
-  for (let t = model.start; t < data.now - 3 * DAY; t += every) ticks.push(t);
+  const offered: number[] = [];
+  for (let t = model.start; t < data.now - 3 * DAY; t += every) offered.push(t);
+  // A label starts at its day, so its middle is half its width along.
+  const labelW = (t: number) => measure(fmtDay(t, lang), 11);
+  const ticks = ownPlaceLabels(offered, {
+    x: (t) => x(t) + labelW(t) / 2,
+    width: labelW,
+    start: 0,
+    end: size.width,
+    gap: INSIGHTS_LABEL_GAP,
+  });
   const main = model.main;
   const mainWord = storyCopy[lang].main(data.mainshock.choco.state);
 

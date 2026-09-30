@@ -231,6 +231,9 @@ const es = {
     legendDeep: "Chocó, profundo",
     legendTolima: "Chaparral",
     begins: (d: string) => `${d}: empieza Chaparral →`,
+    beginsInside: (d: string) => `${d}: empieza Chaparral`,
+    beginsShort: "Chaparral →",
+    beginsInsideShort: "Chaparral",
     aria: "Eventos de las dos zonas en el tiempo, por magnitud",
     caption:
       "Cada punto es un evento del catálogo del SGC, por fecha y magnitud. Poner dos zonas en un mismo eje muestra cuándo pasó cada cosa, no que una causara la otra.",
@@ -526,6 +529,9 @@ const en: Copy = {
     legendDeep: "Chocó, deep",
     legendTolima: "Chaparral",
     begins: (d) => `${d}: Chaparral begins →`,
+    beginsInside: (d) => `${d}: Chaparral begins`,
+    beginsShort: "Chaparral →",
+    beginsInsideShort: "Chaparral",
     aria: "Both zones' events over time, by magnitude",
     caption:
       "Each dot is an event in SGC's catalogue, by date and magnitude. Putting two zones on one axis shows when things happened, not that one caused the other.",

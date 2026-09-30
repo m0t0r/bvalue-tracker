@@ -1,4 +1,5 @@
 /** Questions 3–6: the two clocks, the swarm against the sequence, both zones in time, and the calendar. */
+import { ownPlaceLabels } from "@bvalue/charts";
 import { hypocentralKm } from "@bvalue/seismo";
 import { max as d3max } from "d3-array";
 import { scaleBand, scaleLinear, scaleTime } from "d3-scale";
@@ -18,6 +19,7 @@ import { BG, FILL } from "../tones";
 import { colombianDays, dailyCounts, dayIndexOf, kmFrom, omoriFromFirstDay } from "./derive";
 import { Figure, RangeField, Swatch, useWidth } from "./ui";
 import { useTextWidth } from "../measure";
+import { INSIGHTS_LABEL_GAP, firstClear, forwardLabels, textBox } from "../place";
 
 const DAY = 86_400_000;
 
@@ -66,22 +68,26 @@ export function TwoClocks({ data, reference }: { data: Insights; reference: Quak
   const top = y.domain()[1]!;
   const every = width < 520 ? 14 : 7;
   const mid = (i: number) => x(i)! + x.bandwidth() / 2;
+  // Every 7th or 14th day is offered a label, and keeps it where it fits at its own place.
+  const dateLabels = ownPlaceLabels(
+    days.flatMap((_, i) => (i % every === 0 ? [i] : [])),
+    { x: mid, width: (i) => measure(fmtDay(days[i]!, lang), 10), start: 0, end: width, gap: INSIGHTS_LABEL_GAP },
+  );
+  const bands = lulls.flatMap((l) => {
+    const a = dayIndexOf(days, l.from),
+      b = dayIndexOf(days, l.to);
+    if (b < 0 || a >= days.length) return [];
+    return [{ from: l.from, x0: x(Math.max(0, a))!, x1: x(Math.min(days.length - 1, b))! + x.bandwidth() }];
+  });
   // Each band's label is kept inside the plot (a lull running to today would push it off the right
   // edge), and dropped where it would run into the previous one: at 320 px two narrow bands' labels
   // were clamped onto each other. The band still shows; the first one's label names them all.
   const labelW = measure(c.lull, 10) + 6;
-  let lastEnd = -Infinity;
-  const lullBands = lulls.flatMap((l) => {
-    const a = dayIndexOf(days, l.from),
-      b = dayIndexOf(days, l.to);
-    if (b < 0 || a >= days.length) return [];
-    const x0 = x(Math.max(0, a))!,
-      x1 = x(Math.min(days.length - 1, b))! + x.bandwidth();
-    const at = Math.min(x0 + 3, width - m.r - labelW);
-    const labelX = at < lastEnd ? null : at;
-    if (labelX !== null) lastEnd = labelX + labelW;
-    return [{ from: l.from, x0, x1, labelX }];
-  });
+  const lullX = forwardLabels(
+    bands.map((b) => ({ at: b.x0 + 3, width: labelW })),
+    { start: m.l, end: width - m.r, gap: 0 },
+  );
+  const lullBands = bands.map((b, i) => ({ ...b, labelX: lullX[i]! }));
 
   return (
     <Figure caption={c.caption(mc)}>
@@ -117,23 +123,27 @@ export function TwoClocks({ data, reference }: { data: Insights; reference: Quak
                 )}
                 className="block"
               >
+                {/* Every band before any label: a label may run on over the next band. */}
                 {r.s === "shallow"
                   ? lullBands.map((l) => (
-                      <g key={l.from}>
-                        <rect
-                          x={l.x0}
-                          y={m.t - 12}
-                          width={l.x1 - l.x0}
-                          height={y(0) - m.t + 12}
-                          className="fill-muted"
-                        />
-                        {l.labelX !== null ? (
-                          <text x={l.labelX} y={m.t - 2} fontSize={10} className="fill-muted-foreground">
-                            {c.lull}
-                          </text>
-                        ) : null}
-                      </g>
+                      <rect
+                        key={l.from}
+                        x={l.x0}
+                        y={m.t - 12}
+                        width={l.x1 - l.x0}
+                        height={y(0) - m.t + 12}
+                        className="fill-muted"
+                      />
                     ))
+                  : null}
+                {r.s === "shallow"
+                  ? lullBands.map((l) =>
+                      l.labelX !== null ? (
+                        <text key={l.from} x={l.labelX} y={m.t - 2} fontSize={10} className="fill-muted-foreground">
+                          {c.lull}
+                        </text>
+                      ) : null,
+                    )
                   : null}
                 {y.ticks(3).map((t) => (
                   <g key={t} transform={`translate(0,${y(t)})`}>
@@ -174,20 +184,18 @@ export function TwoClocks({ data, reference }: { data: Insights; reference: Quak
                 {curve ? (
                   <path d={shape} fill="none" strokeWidth={1.5} strokeDasharray="3 3" className="stroke-foreground" />
                 ) : null}
-                {days.map((d, i) =>
-                  i % every === 0 ? (
-                    <text
-                      key={d}
-                      x={mid(i)}
-                      y={H + 16}
-                      textAnchor="middle"
-                      fontSize={10}
-                      className="fill-muted-foreground"
-                    >
-                      {fmtDay(d, lang)}
-                    </text>
-                  ) : null,
-                )}
+                {dateLabels.map((i) => (
+                  <text
+                    key={days[i]}
+                    x={mid(i)}
+                    y={H + 16}
+                    textAnchor="middle"
+                    fontSize={10}
+                    className="fill-muted-foreground"
+                  >
+                    {fmtDay(days[i]!, lang)}
+                  </text>
+                ))}
               </svg>
             </div>
           );
@@ -338,6 +346,7 @@ export function DriftMultiples({ data }: { data: Insights }) {
 export function BothZonesTimeline({ data, reference }: { data: Insights; reference: QuakeLike }) {
   const { lang } = useI18n();
   const c = questionsCopy[lang].linked;
+  const measure = useTextWidth();
   const [box, w] = useWidth();
   const width = Math.max(260, w);
   const H = 220;
@@ -354,7 +363,42 @@ export function BothZonesTimeline({ data, reference }: { data: Insights; referen
     () => SOURCES.flatMap((s) => data.sources[s].map((e) => ({ e, s }))).sort((a, b) => a.e.mag - b.e.mag),
     [data],
   );
-  const ticks = x.ticks(width < 500 ? 4 : 7);
+  const ticks = ownPlaceLabels(x.ticks(width < 500 ? 4 : 7).map(Number), {
+    x,
+    width: (t) => measure(fmtDay(t, lang), 10),
+    start: 0,
+    end: width,
+    gap: INSIGHTS_LABEL_GAP,
+  });
+  const refText = `M${reference.mag.toFixed(1)} · ${fmtDay(Date.parse(reference.time), lang)}`;
+  const refDot = { x: x(Date.parse(reference.time)), y: y(reference.mag) };
+  const refAt = { x: refDot.x + 12, y: refDot.y + 4 };
+  const refBox = textBox({ ...refAt, width: measure(refText, 11, { weight: 600 }), fontSize: 11 });
+  // "Chaparral begins" stays clear of the reference event's label, which on a phone sits on the same
+  // line: the whole label before the band, as on a desktop; inside the band, without the arrow; the
+  // short form before the band, then inside it; or nothing, since the band and the key still say it.
+  const begins = (() => {
+    if (tolimaStart === null) return null;
+    const at = x(tolimaStart);
+    const day = fmtDay(tolimaStart, lang);
+    const options = [
+      { text: c.begins(day), anchor: "end", x: at - 6 },
+      { text: c.beginsInside(day), anchor: "start", x: at + 6 },
+      { text: c.beginsShort, anchor: "end", x: at - 6 },
+      { text: c.beginsInsideShort, anchor: "start", x: at + 6 },
+    ] as const;
+    return firstClear(
+      options.map((o) => ({
+        ...o,
+        ...textBox({ ...o, y: m.t + 10, width: measure(o.text, 11, { weight: 600 }), fontSize: 11 }),
+      })),
+      // Within the plot: the band ends at its right edge, and the magnitude labels are left of it.
+      { x0: m.l, x1: width - m.r, y0: 0, y1: H },
+      // The reference event's label and its ringed dot.
+      [refBox, { x0: refDot.x - 9, x1: refDot.x + 9, y0: refDot.y - 9, y1: refDot.y + 9 }],
+      INSIGHTS_LABEL_GAP,
+    );
+  })();
   return (
     <Figure caption={c.caption}>
       <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -390,18 +434,20 @@ export function BothZonesTimeline({ data, reference }: { data: Insights; referen
                 height={H - m.t - m.b}
                 className="fill-chart-5 opacity-10"
               />
-              <text
-                x={x(tolimaStart) - 6}
-                y={m.t + 10}
-                textAnchor="end"
-                fontSize={11}
-                fontWeight={600}
-                className="fill-foreground"
-              >
-                {/* The band marks it in Chaparral's violet; the words stay in the text colour (3.5:1 in
-                    the violet on a dark card). */}
-                {c.begins(fmtDay(tolimaStart, lang))}
-              </text>
+              {begins ? (
+                <text
+                  x={begins.x}
+                  y={m.t + 10}
+                  textAnchor={begins.anchor}
+                  fontSize={11}
+                  fontWeight={600}
+                  className="fill-foreground"
+                >
+                  {/* The band marks it in Chaparral's violet; the words stay in the text colour (3.5:1 in
+                      the violet on a dark card). */}
+                  {begins.text}
+                </text>
+              ) : null}
             </>
           ) : null}
           {dots.map(({ e, s }) => (
@@ -414,18 +460,12 @@ export function BothZonesTimeline({ data, reference }: { data: Insights; referen
               className={cn(FILL[s], e.mag >= 4 ? "opacity-90" : "opacity-45", e === reference && "stroke-chart-2")}
             />
           ))}
-          <text
-            x={x(Date.parse(reference.time)) + 12}
-            y={y(reference.mag) + 4}
-            fontSize={11}
-            fontWeight={600}
-            className="fill-foreground"
-          >
-            {`M${reference.mag.toFixed(1)} · ${fmtDay(Date.parse(reference.time), lang)}`}
+          <text x={refAt.x} y={refAt.y} fontSize={11} fontWeight={600} className="fill-foreground">
+            {refText}
           </text>
           {ticks.map((t) => (
-            <text key={+t} x={x(t)} y={H - 8} textAnchor="middle" fontSize={10} className="fill-muted-foreground">
-              {fmtDay(+t, lang)}
+            <text key={t} x={x(t)} y={H - 8} textAnchor="middle" fontSize={10} className="fill-muted-foreground">
+              {fmtDay(t, lang)}
             </text>
           ))}
         </svg>

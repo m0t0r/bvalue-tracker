@@ -3,6 +3,7 @@
  * (the calendar and the waves). Each reads the page's `Insights` and the story's model; nothing
  * here is a fixed figure about the catalogue.
  */
+import { ownPlaceLabels } from "@bvalue/charts";
 import { max } from "d3-array";
 import { geoMercator } from "d3-geo";
 import { scaleLinear, scaleLog, scaleSymlog } from "d3-scale";
@@ -21,6 +22,7 @@ import { FILL, STROKE } from "../tones";
 import { useProgress } from "./hooks";
 import { fitRanks, flowRow, type RankItem } from "./layout";
 import { useTextWidth } from "../measure";
+import { INSIGHTS_LABEL_GAP, crosses, crossesRing, firstClear, forwardLabels, textBox, type Box } from "../place";
 import { SceneTitle, diamond, radius } from "./marks";
 import type { StoryModel } from "./model";
 import { Rich, fill } from "@/lib/rich";
@@ -176,6 +178,7 @@ function Durations({
   small: boolean;
   axis: string;
 }) {
+  const measure = useTextWidth();
   const left = small ? 12 : 24;
   const right = small ? 16 : 32;
   const layout = (fs: number) => {
@@ -197,6 +200,9 @@ function Durations({
     .domain([0, Math.max(10, Math.ceil(longest / 10) * 10)])
     .range([left, width - right]);
   const ticks = x.ticks(small ? 3 : 6);
+  const labelled = new Set(
+    ownPlaceLabels(ticks, { x, width: (t) => measure(fmt(t), axisFs), start: 0, end: width, gap: INSIGHTS_LABEL_GAP }),
+  );
   const axisY = top + rows.length * rowH;
   return (
     <g>
@@ -229,15 +235,17 @@ function Durations({
       {ticks.map((t) => (
         <g key={t}>
           <line x1={x(t)} x2={x(t)} y1={axisY} y2={axisY + 4} className="stroke-border" />
-          <text
-            x={x(t)}
-            y={axisY + fs + 4}
-            textAnchor="middle"
-            fontSize={axisFs}
-            className="fill-muted-foreground tabular-nums"
-          >
-            {fmt(t)}
-          </text>
+          {labelled.has(t) && (
+            <text
+              x={x(t)}
+              y={axisY + fs + 4}
+              textAnchor="middle"
+              fontSize={axisFs}
+              className="fill-muted-foreground tabular-nums"
+            >
+              {fmt(t)}
+            </text>
+          )}
         </g>
       ))}
       <text x={x(0)} y={axisY + 2 * fs + 10} fontSize={axisFs} className="fill-muted-foreground">
@@ -397,6 +405,7 @@ export function ClocksScene({
   active,
 }: SceneProps & { active: boolean }) {
   const c = storyCopy[lang].graphic;
+  const measure = useTextWidth();
   const mc = data.mc.choco;
   const span = Math.max(1, (data.now - model.start) / DAY);
   const bins = useMemo(
@@ -438,6 +447,9 @@ export function ClocksScene({
   }
   const omoriPath = line()(omoriPts) ?? "";
   const xt = [0, 1, 2, 5, 10, 20, 40, 80].filter((d) => d <= span);
+  const xtLabels = new Set(
+    ownPlaceLabels(xt, { x, width: (d) => measure(String(d), fs), start: 0, end: width, gap: INSIGHTS_LABEL_GAP }),
+  );
   const yt = [0.1, 1, 10, 100, 1000].filter((v) => v <= y.domain()[1]!);
   const showShallow = active && (sub === "shallow" || sub === "pace");
   const showLulls = active && sub === "pace";
@@ -450,6 +462,54 @@ export function ClocksScene({
           ...(pace.quietSince !== null ? [{ from: dayOf(pace.quietSince), to: span }] : []),
         ]
       : [];
+  // A lull label sits at the foot of its band, unless a line runs through it there: the deep group's
+  // rate settles at the floor, and at 320 px its line crossed out "calma". Then it goes to the top of
+  // the plot, which the lines leave by the time of any lull, or is left off. Each row then takes
+  // question 3's rule: inside the plot, and left off where one would run into the one before it. At
+  // 320 px two lulls' labels and the deep line's own ran together.
+  const lullFs = fs - 0.5;
+  const lullW = measure(c.lull, lullFs);
+  const plot = { start: m.l, end: width - m.r };
+  const lines: Box[] = [
+    ...[bins.deep, bins.shallow].flatMap((bs) =>
+      bs.flatMap((b, i) => {
+        const at = y(floor(b.perDay));
+        const before = i > 0 ? y(floor(bs[i - 1]!.perDay)) : at;
+        return [
+          { x0: x(b.fromDay), x1: x(b.toDay), y0: at - 2, y1: at + 2 },
+          { x0: x(b.fromDay) - 2, x1: x(b.fromDay) + 2, y0: Math.min(at, before), y1: Math.max(at, before) },
+        ];
+      }),
+    ),
+    ...omoriPts.slice(1).map(([x1, y1], i) => {
+      const [x0, y0] = omoriPts[i]!;
+      return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1) - 1, y1: Math.max(y0, y1) + 1 };
+    }),
+  ];
+  const lullRows = [height - m.b - 8, m.t + lullFs + 4];
+  const lullRow = lulls.map((l) => {
+    // Where the row's rule will put it, so the line test is made at its final place.
+    const lx = Math.max(plot.start, Math.min(x(l.from) + 4, plot.end - lullW));
+    const fits = firstClear(
+      lullRows.map((ly) => ({ ly, ...textBox({ x: lx, y: ly, width: lullW, fontSize: lullFs }) })),
+      { x0: 0, x1: width, y0: m.t, y1: height - m.b },
+      lines,
+    );
+    return fits?.ly ?? null;
+  });
+  // A label left off, or on the other row, takes no room from its neighbours.
+  const lullAt: ({ x: number; y: number } | null)[] = lulls.map(() => null);
+  for (const ly of lullRows) {
+    const onRow = lulls.flatMap((l, i) => (lullRow[i] === ly ? [i] : []));
+    const xs = forwardLabels(
+      onRow.map((i) => ({ at: x(lulls[i]!.from) + 4, width: lullW })),
+      { ...plot, gap: INSIGHTS_LABEL_GAP },
+    );
+    onRow.forEach((i, k) => {
+      const lx = xs[k];
+      if (lx != null) lullAt[i] = { x: lx, y: ly };
+    });
+  }
   const lastDeep = bins.deep.at(-1);
   const lastShallow = bins.shallow.at(-1);
   const rowY = m.t - (small ? 24 : 32);
@@ -471,15 +531,17 @@ export function ClocksScene({
       {xt.map((d) => (
         <g key={d}>
           <line x1={x(d)} x2={x(d)} y1={height - m.b} y2={height - m.b + 5} className="stroke-muted-foreground" />
-          <text
-            x={x(d)}
-            y={height - m.b + (small ? 16 : 20)}
-            textAnchor="middle"
-            fontSize={fs}
-            className="fill-muted-foreground tabular-nums"
-          >
-            {d}
-          </text>
+          {xtLabels.has(d) && (
+            <text
+              x={x(d)}
+              y={height - m.b + (small ? 16 : 20)}
+              textAnchor="middle"
+              fontSize={fs}
+              className="fill-muted-foreground tabular-nums"
+            >
+              {d}
+            </text>
+          )}
         </g>
       ))}
       <text
@@ -496,20 +558,25 @@ export function ClocksScene({
         data-on={showLulls || undefined}
         className="opacity-0 transition-opacity duration-500 data-on:opacity-100 data-on:delay-200 motion-reduce:transition-none"
       >
+        {/* Every band before any label: a label may run on over the next band. */}
         {lulls.map((l) => (
-          <g key={l.from}>
-            <rect
-              x={x(l.from)}
-              y={m.t}
-              width={Math.max(2, x(l.to) - x(l.from))}
-              height={height - m.b - m.t}
-              className="fill-muted"
-            />
-            <text x={x(l.from) + 4} y={height - m.b - 8} fontSize={fs - 0.5} className="fill-muted-foreground">
+          <rect
+            key={l.from}
+            x={x(l.from)}
+            y={m.t}
+            width={Math.max(2, x(l.to) - x(l.from))}
+            height={height - m.b - m.t}
+            className="fill-muted"
+          />
+        ))}
+        {lulls.map((l, i) => {
+          const at = lullAt[i];
+          return at ? (
+            <text key={l.from} x={at.x} y={at.y} fontSize={lullFs} className="fill-muted-foreground">
               {c.lull}
             </text>
-          </g>
-        ))}
+          ) : null;
+        })}
       </g>
 
       <path d={omoriPath} fill="none" className="stroke-muted-foreground" strokeWidth={1.5} strokeDasharray="5 5" />
@@ -647,6 +714,7 @@ export function TolimaScene({
 }: SceneProps & { active: boolean }) {
   const c = storyCopy[lang].graphic;
   const share = insightsCopy[lang].claims.share;
+  const measure = useTextWidth();
   const drift = active && sub === "drift";
   const progress = useProgress(drift, 3600);
   const tolima = model.bySrc.tolima;
@@ -744,6 +812,64 @@ export function TolimaScene({
     data.tolimaDrift.case === "too-few" ? (medianHorizontalErrorKm(tolima) ?? null) : data.tolimaDrift.errorKm;
   const end = model.tolimaWindows.at(-1)?.centre;
   const endXY = proj && end ? proj([end.lon, end.lat]) : null;
+  const errText = err !== null && Number.isFinite(err) ? fill(c.errorCircle, { km: fmtKm(err, 1) }) : null;
+  // The track's label stays wholly inside the close-up, off the track and clear of the close-up's other
+  // labels: beside the track's end, before it (as it was) or after it, above and then below; centred
+  // on it; at either margin, at the same heights; never on the error circle's outline or the scale
+  // bar. Failing all of those it is centred above the end, moved inside, over the track if it must,
+  // and otherwise left off. At 320 px the first cut "centre
+  // of each half-day" to "entre of each half-day"; at 768 px, where the track ends at its west side,
+  // "after the end" is the track itself. The halo reaches 2 px past the words.
+  const trackLabel = (() => {
+    if (!moved || !endXY) return null;
+    const [ex, ey] = endXY;
+    const w = measure(c.track, fs, { weight: 600 });
+    const frame = { x0: 2, x1: width - 2, y0: mapTop + 4, y1: height };
+    // The error circle's dashed outline; the label may sit inside it or outside, not on it.
+    const ring =
+      errText !== null && err !== null
+        ? { cx: width - padX - err * kmPx, cy: mapBottom - err * kmPx - 4, r: err * kmPx }
+        : null;
+    const offRing = (b: Box) => ring === null || !crossesRing(b, ring, 2);
+    const others = [
+      // The scale bar, its end ticks and its label.
+      { x0: padX - 2, x1: padX + kmPx + 2, y0: mapBottom - 10, y1: mapBottom + 2 },
+      textBox({ x: padX + kmPx + 6, y: mapBottom, width: measure(fmtKm(1), fs - 1), fontSize: fs - 1 }),
+      ...(errText !== null && err !== null
+        ? [
+            textBox({
+              x: width - padX,
+              y: mapBottom - 2 * err * kmPx - 10,
+              width: measure(errText, fs - 1.5),
+              fontSize: fs - 1.5,
+              anchor: "end",
+            }),
+          ]
+        : []),
+    ];
+    const place = (x: number, y: number, anchor: "start" | "middle" | "end") => ({
+      x,
+      y,
+      anchor,
+      ...textBox({ x, y, width: w, fontSize: fs, anchor }),
+    });
+    const above = ey - 14;
+    const below = ey + 14 + fs;
+    const offTrack = (b: Box) =>
+      !crosses(b, endXY, endXY, 6) && trackPts.slice(1).every((p, i) => !crosses(b, trackPts[i]!, p, 3));
+    const beside = [above, below].flatMap((y) => [place(ex - 10, y, "end"), place(ex + 10, y, "start")]);
+    const centred = [above, below].map((y) => place(ex, y, "middle"));
+    const margins = [above, below].flatMap((y) => [place(padX, y, "start"), place(width - padX, y, "end")]);
+    const inside = place(Math.min(width - 2 - w, Math.max(2, ex - w / 2)), above, "start");
+    return (
+      firstClear(
+        [...beside, ...centred, ...margins].filter((b) => offTrack(b) && offRing(b)),
+        frame,
+        others,
+        2,
+      ) ?? firstClear([inside].filter(offRing), frame, others, 2)
+    );
+  })();
 
   return (
     <g>
@@ -813,11 +939,11 @@ export function TolimaScene({
               </g>
             )}
           </g>
-          {moved && endXY && (
+          {trackLabel && (
             <text
-              x={endXY[0] - 10}
-              y={endXY[1] - 14}
-              textAnchor="end"
+              x={trackLabel.x}
+              y={trackLabel.y}
+              textAnchor={trackLabel.anchor}
               fontSize={fs}
               fontWeight={600}
               data-on={!drift || trackProgress >= 1 || undefined}
@@ -836,7 +962,7 @@ export function TolimaScene({
               {fmtKm(1)}
             </text>
           </g>
-          {err !== null && Number.isFinite(err) && (
+          {errText !== null && err !== null && (
             <g transform={`translate(${width - padX - err * kmPx}, ${mapBottom - err * kmPx - 4})`}>
               <circle r={err * kmPx} fill="none" className="stroke-muted-foreground" strokeDasharray="3 3" />
               <text
@@ -849,7 +975,8 @@ export function TolimaScene({
                 paintOrder="stroke"
                 strokeWidth={3}
               >
-                <Rich text={c.errorCircle} parts={{ km: fmtKm(err, 1) }} />
+                {/* The string the drift label was kept clear of. */}
+                {errText}
               </text>
             </g>
           )}
@@ -1091,6 +1218,7 @@ function Waves({
 }) {
   const c = storyCopy[lang].graphic;
   const l = storyCopy[lang].legend;
+  const measure = useTextWidth();
   const rows: { key: string; label: string; km: number; cls: string; fill: string }[] = [
     ...(model.main && model.mainHypoKm !== null
       ? [
@@ -1123,6 +1251,16 @@ function Waves({
   const now = progress * axisMax;
   const ticks: number[] = [];
   for (let s = 0; s <= axisMax; s += 10) ticks.push(s);
+  // Every line is drawn; its label only where it fits at its own place.
+  const labelled = new Set(
+    ownPlaceLabels(ticks, {
+      x: tx,
+      width: (s) => measure(`${s} s`, fs),
+      start: 0,
+      end: width,
+      gap: INSIGHTS_LABEL_GAP,
+    }),
+  );
 
   return (
     <g>
@@ -1145,15 +1283,17 @@ function Waves({
       {ticks.map((s) => (
         <g key={s}>
           <line x1={tx(s)} x2={tx(s)} y1={wTop - 20} y2={wTop + rowH * rows.length - 20} className="stroke-border" />
-          <text
-            x={tx(s)}
-            y={wTop + rowH * rows.length}
-            textAnchor="middle"
-            fontSize={fs}
-            className="fill-muted-foreground tabular-nums"
-          >
-            {`${s} s`}
-          </text>
+          {labelled.has(s) && (
+            <text
+              x={tx(s)}
+              y={wTop + rowH * rows.length}
+              textAnchor="middle"
+              fontSize={fs}
+              className="fill-muted-foreground tabular-nums"
+            >
+              {`${s} s`}
+            </text>
+          )}
         </g>
       ))}
       {rows.map((r, i) => {
