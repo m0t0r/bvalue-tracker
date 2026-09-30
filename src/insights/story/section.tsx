@@ -11,7 +11,7 @@ import { CONVERGENCE_CM_PER_YEAR, plateAlong, type Cut, type Plate } from "../pl
 import { REGION } from "../region";
 import { fmtKm } from "../shared";
 import { storyCopy } from "./copy";
-import { Rich } from "./rich";
+import { Rich } from "@/lib/rich";
 
 export const KM_PER_DEG = 111.2;
 /** The plate's rate as the copy's `{rate}` writes it, with a no-break space before the unit. */

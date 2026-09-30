@@ -48,10 +48,19 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  closeLabel = "Close",
+  layout = "panel",
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  /**
+   * A local addition: "card" is one card's worth of content (an explainer on touch), flush to the
+   * sheet's edges with its own spacing inside, rounded on top and scrolling past 85 % of the screen.
+   */
+  layout?: "panel" | "card"
+  /** The close button's name, in the page's language (a local change: shadcn's is always "Close"). */
+  closeLabel?: string
 }) {
   return (
     <SheetPortal>
@@ -61,6 +70,8 @@ function SheetContent({
         data-side={side}
         className={cn(
           "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg duration-200 ease-(--ease-slide) data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-[side=bottom]:data-open:motion-safe:slide-in-from-bottom-10 data-[side=left]:data-open:motion-safe:slide-in-from-left-10 data-[side=right]:data-open:motion-safe:slide-in-from-right-10 data-[side=top]:data-open:motion-safe:slide-in-from-top-10 data-closed:animate-out data-closed:fade-out-0 data-[side=bottom]:data-closed:motion-safe:slide-out-to-bottom-10 data-[side=left]:data-closed:motion-safe:slide-out-to-left-10 data-[side=right]:data-closed:motion-safe:slide-out-to-right-10 data-[side=top]:data-closed:motion-safe:slide-out-to-top-10",
+          layout === "card" &&
+            "max-h-[85svh] gap-0 overflow-y-auto rounded-t-2xl",
           className
         )}
         {...props}
@@ -74,7 +85,7 @@ function SheetContent({
               size="icon-sm"
             >
               <XIcon />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{closeLabel}</span>
             </Button>
           </SheetPrimitive.Close>
         )}

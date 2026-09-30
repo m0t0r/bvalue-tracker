@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FlowNumber } from "@/components/flow-number";
+import { Explain } from "@/components/explainer/explain";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -101,13 +102,14 @@ function MainshockStat({
   catalogueFailed: boolean;
 }) {
   const { t, lang } = useI18n();
-  if (m === null) return <Stat label={t.mainshock.label} value={catalogueFailed ? "—" : null} />;
-  if (m.largest === null || m.runnerUp === null || m.gap === null) return <Stat label={t.mainshock.label} value="—" />;
+  const label = <Explain id="mainshock">{t.mainshock.label}</Explain>;
+  if (m === null) return <Stat label={label} value={catalogueFailed ? "—" : null} />;
+  if (m.largest === null || m.runnerUp === null || m.gap === null) return <Stat label={label} value="—" />;
   const gap = m.gap.toFixed(1);
   if (m.state === "none")
     return (
       <Stat
-        label={t.mainshock.label}
+        label={label}
         value={t.mainshock.none}
         hint={<ByWidth phone={t.mainshock.noneHintShort(gap)} wide={t.mainshock.noneHint(gap)} />}
       />
@@ -116,7 +118,7 @@ function MainshockStat({
   const day = fmtDay(Date.parse(e.time), lang);
   return (
     <Stat
-      label={t.mainshock.label}
+      label={label}
       value={
         <a
           className="underline underline-offset-4"

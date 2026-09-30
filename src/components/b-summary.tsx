@@ -1,3 +1,4 @@
+import { Explain } from "@/components/explainer/explain";
 import { AlertTriangleIcon } from "lucide-react";
 import type { CSSProperties } from "react";
 import { FlowNumber } from "@/components/flow-number";
@@ -319,7 +320,10 @@ export function BSummary({
         <p className="-mt-2 text-sm text-pretty text-muted-foreground">{t.bDesc}</p>
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">
-            {mc !== null ? <FlowNumber value={mc} digits={1} prefix="Mc = " /> : "Mc = —"}
+            {/* "Mc" is its own word, outside the rolling figure, so it can open its explainer. */}
+            <span>
+              <Explain id="mc">Mc</Explain> = {mc !== null ? <FlowNumber value={mc} digits={1} /> : "—"}
+            </span>
           </Badge>
           {/* Cautions, not failures: red stays reserved for things that actually broke. Under 50
               events the n badge carries the caution itself rather than a third badge beside it, which
@@ -423,7 +427,9 @@ export function BSummary({
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle>{t.bTitle}</CardTitle>
+        <CardTitle>
+          <Explain id="b-value">{t.bTitle}</Explain>
+        </CardTitle>
         {cluster !== null ? <CardDescription>{t.clusterNote(t.clusterName[cluster])}</CardDescription> : null}
       </CardHeader>
       {magType === null ? (

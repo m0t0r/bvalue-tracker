@@ -23,7 +23,7 @@ import { DotLayer, type Mark } from "./dots";
 import { Layer, SceneTitle, radius, star } from "./marks";
 import { useTextWidth } from "../measure";
 import type { Ev, StoryModel } from "./model";
-import { Rich, fill } from "./rich";
+import { Rich, fill } from "@/lib/rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
 import { KM_PER_DEG, RATE, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
 

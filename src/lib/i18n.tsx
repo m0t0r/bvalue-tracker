@@ -7,9 +7,9 @@ const esCommon = {
     "Un valor b menor que 1 describe la secuencia: los eventos grandes pesan más de lo habitual. No es un pronóstico ni una alerta.",
   floor: "El SGC no publica eventos por debajo de M2.0 en este catálogo, así que el rango M0–M2 no existe aquí.",
   magTypes:
-    "Las magnitudes mezclan tipos (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite comparar el cálculo con todos los tipos y con uno solo.",
+    "Las magnitudes mezclan {types} (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite comparar el cálculo con todos los tipos y con uno solo.",
   revisions:
-    "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar todo el historial a lo largo del día para recoger esos cambios.",
+    "Los eventos recientes pueden ser {automatic} y cambiar tras la revisión de un analista. La página vuelve a consultar todo el historial a lo largo del día para recoger esos cambios.",
   /** The rule `core/mainshock.ts` applies, in one sentence a reader can check against the table. */
   mainshockRule:
     "La página llama sismo principal al evento más grande solo si un analista del SGC lo ha revisado y supera en al menos 1 unidad de magnitud a todos los demás, comparando las magnitudes tal como las publica el SGC. Es una etiqueta a posteriori: si después llegara un evento mayor, el anterior pasaría a ser un sismo premonitor.",
@@ -27,6 +27,11 @@ export type CaveatState = "found" | "awaiting-review" | "none";
 
 const es = {
   zoneLabel: "Zona",
+  /** How the header names SGC, the `{sgc}` in each zone's subtitle, where its card opens. */
+  sgcName: "Servicio Geológico Colombiano",
+  /** The words in the caveats that open an explainer (`{types}`, `{automatic}`). */
+  caveatTypes: "tipos",
+  caveatAutomatic: "automáticos",
   /**
    * What differs between the two places the page follows. The tabs are named by department, as
    * SGC's daily bulletin names the pair ("Chocó y Tolima"); the Tolima tab's title names the
@@ -39,8 +44,7 @@ const es = {
       tab: "Chocó",
       docTitle: "Secuencia sísmica del Chocó · valor b",
       title: "Secuencia sísmica del Chocó",
-      subtitle:
-        "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del Servicio Geológico Colombiano.",
+      subtitle: "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del {sgc}.",
       backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} semanas`,
       backfillBody:
         "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
@@ -58,8 +62,7 @@ const es = {
       tab: "Tolima",
       docTitle: "Enjambre sísmico de Chaparral (Tolima) · valor b",
       title: "Enjambre sísmico de Chaparral (Tolima)",
-      subtitle:
-        "Enjambre de eventos en Chaparral, Tolima, desde el 20 de septiembre de 2026. Datos del Servicio Geológico Colombiano.",
+      subtitle: "Enjambre de eventos en Chaparral, Tolima, desde el 20 de septiembre de 2026. Datos del {sgc}.",
       backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} días`,
       backfillBody:
         "Todavía faltan días desde el 20 de septiembre. El valor b y los gráficos no son representativos hasta que termine.",
@@ -83,7 +86,7 @@ const es = {
         "El SGC plantea como hipótesis preliminar que el sismo M7.4 del 10 de agosto en el Chocó cambió los esfuerzos en la corteza y favoreció que se reactivaran fallas de la zona de Chaparral. Es una hipótesis, no una conclusión.",
         // Not `esCommon.revisions`: with one-day chunks and one sweep an hour, "todo el historial a lo
         // largo del día" stops being true once the swarm is 24 days old.
-        "Los eventos recientes pueden ser automáticos y cambiar tras la revisión de un analista. La página vuelve a consultar el historial por partes, un día de eventos cada hora, para recoger esos cambios.",
+        "Los eventos recientes pueden ser {automatic} y cambiar tras la revisión de un analista. La página vuelve a consultar el historial por partes, un día de eventos cada hora, para recoger esos cambios.",
         esCommon.mainshockRule,
       ],
     },
@@ -345,23 +348,25 @@ const enCommon = {
     "A b-value below 1 describes the sequence: large events weigh more than usual. It is not a forecast or an alert.",
   floor: "SGC publishes no events below M2.0 in this catalogue, so the M0–M2 range does not exist here.",
   magTypes:
-    "Magnitudes mix several types (MLr, MLv, Mw, M), and that moves b by more than its margin of error. The b-value card lets you compare all types against a single one.",
+    "Magnitudes mix several {types} (MLr, MLv, Mw, M), and that moves b by more than its margin of error. The b-value card lets you compare all types against a single one.",
   revisions:
-    "Recent events may be automatic and can change after analyst review. The page re-reads the whole history over the course of each day to pick up those changes.",
+    "Recent events may be {automatic} and can change after analyst review. The page re-reads the whole history over the course of each day to pick up those changes.",
   mainshockRule:
     "The page calls the largest event the mainshock only if an SGC analyst has reviewed it and it exceeds every other event by at least 1 magnitude unit, comparing magnitudes as SGC publishes them. The label is retrospective: if a larger event came later, the earlier one would become a foreshock.",
   afterMainshock: "Right after the mainshock small events are missed; the earliest windows are the least reliable.",
 };
 
 const en: Dict = {
+  sgcName: "Colombian Geological Survey (SGC)",
+  caveatTypes: "types",
+  caveatAutomatic: "automatic",
   zoneLabel: "Zone",
   zones: {
     choco: {
       tab: "Chocó",
       docTitle: "Chocó earthquake sequence · b-value",
       title: "Chocó earthquake sequence",
-      subtitle:
-        "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the Colombian Geological Survey (SGC).",
+      subtitle: "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the {sgc}.",
       backfillTitle: (a, b) => `Loading history: ${a} of ${b} weeks`,
       backfillBody:
         "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
@@ -379,8 +384,7 @@ const en: Dict = {
       tab: "Tolima",
       docTitle: "Chaparral earthquake swarm (Tolima) · b-value",
       title: "Chaparral earthquake swarm (Tolima)",
-      subtitle:
-        "Swarm of events at Chaparral, Tolima, since 20 September 2026. Data from the Colombian Geological Survey (SGC).",
+      subtitle: "Swarm of events at Chaparral, Tolima, since 20 September 2026. Data from the {sgc}.",
       backfillTitle: (a, b) => `Loading history: ${a} of ${b} days`,
       backfillBody:
         "Days since 20 September are still missing. The b-value and charts are not representative until this finishes.",
@@ -396,7 +400,7 @@ const en: Dict = {
         ...(m === "none" ? [] : ["Until SGC describes it differently, this page keeps calling it a swarm."]),
         ...(m === "found" ? [enCommon.afterMainshock] : []),
         "SGC's preliminary hypothesis is that the M7.4 of 10 August in Chocó changed the stresses in the crust and helped reactivate faults around Chaparral. It is a hypothesis, not a conclusion.",
-        "Recent events may be automatic and can change after analyst review. The page re-reads the history in parts, one day of events each hour, to pick up those changes.",
+        "Recent events may be {automatic} and can change after analyst review. The page re-reads the history in parts, one day of events each hour, to pick up those changes.",
         enCommon.mainshockRule,
       ],
     },

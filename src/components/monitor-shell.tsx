@@ -1,10 +1,12 @@
 import { LightbulbIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Explain } from "@/components/explainer/explain";
 import { LanguageButton } from "@/components/language-button";
 import { ThemeButton } from "@/components/theme-button";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
+import { Rich } from "@/lib/rich";
 import { ZONE_IDS, isZoneId, type ZoneId } from "../../core/zones";
 
 /**
@@ -62,7 +64,9 @@ export function MonitorShell({
             </div>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance">{copy.title}</h1>
-          <p className="text-muted-foreground text-pretty">{copy.subtitle}</p>
+          <p className="text-muted-foreground text-pretty">
+            <Rich text={copy.subtitle} parts={{ sgc: <Explain id="sgc">{t.sgcName}</Explain> }} />
+          </p>
         </header>
         {children}
       </Tabs>

@@ -31,7 +31,8 @@ export interface Named {
 const es = {
   kicker: "Desde Pereira",
   title: "Lo que nos preguntamos sobre los sismos",
-  lede: "Desde el 10 de agosto, en el Eje Cafetero se han sentido temblores una y otra vez. Aquí respondemos, una por una, las preguntas que nos hacemos, en palabras sencillas y con los datos del Servicio Geológico Colombiano.",
+  lede: "Desde el 10 de agosto, en el Eje Cafetero se han sentido temblores una y otra vez. Aquí respondemos, una por una, las preguntas que nos hacemos, en palabras sencillas y con los datos del {sgc}.",
+  sgcName: "Servicio Geológico Colombiano (SGC)",
   stats: {
     km: (km: number) => `~${f0(km)}\u00A0km`,
     kmLabel: "de Pereira a las tres fuentes, en línea recta",
@@ -102,14 +103,17 @@ const es = {
   shaking: {
     short: "¿Qué tan fuerte se sintió?",
     q: (ref: Named) => `¿Qué tan fuerte se sintió en Pereira el ${mag(ref.mag)} del ${ref.date}?`,
-    p1: "La magnitud mide el sismo donde se origina; la intensidad mide cuánto se sacudió el suelo en un lugar. Esta página no calcula intensidades: las cifras de abajo las publica el Servicio Geológico de Estados Unidos (USGS).",
+    p1: "La magnitud mide el sismo donde se origina; la intensidad mide cuánto se sacudió el suelo en un lugar. Esta página no calcula intensidades: las cifras de abajo las publica el {usgs}.",
+    usgsName: "Servicio Geológico de Estados Unidos (USGS)",
+    dyfi: "«Did You Feel It?»",
+    pager: "PAGER",
     reportedTitle: "Lo que reportó la gente",
     reportedDetail: (n: string) =>
-      `${n} personas lo contaron en la encuesta «Did You Feel It?» del USGS, en el cuadro de 10\u00A0km que incluye Pereira.`,
+      `${n} personas lo contaron en la encuesta {dyfi} del USGS, en el cuadro de 10\u00A0km que incluye Pereira.`,
     reportedFew: (min: number) =>
       `En el cuadro de 10\u00A0km que incluye Pereira respondieron menos de ${min} personas: muy pocas para dar una cifra.`,
     modelledTitle: "Lo que estima el modelo",
-    modelledDetail: "La calcula el modelo PAGER del USGS para la ciudad: es una estimación, no un reporte.",
+    modelledDetail: "La calcula el modelo {pager} del USGS para la ciudad: es una estimación, no un reporte.",
     figureAria: "Intensidad del sismo en Pereira según el USGS",
     total: (n: number) =>
       n === 1
@@ -152,12 +156,13 @@ const es = {
 
   stop: {
     short: "¿Por qué no para?",
+    aftershocks: "réplicas",
     /** `still`: Chocó had events above Mc in the last 7 days, which the tab checks. */
     q: (weeks: number, still: boolean) =>
       `¿Por qué ${still ? "sigue" : "siguió"} temblando ${WORDS_ES[weeks] ?? f0(weeks)} semanas después?`,
     qSoon: (still: boolean) => `¿Por qué ${still ? "sigue" : "siguió"} temblando?`,
     p1: (deepKm: number) =>
-      `Aquí está lo más interesante. Los eventos del Chocó forman dos grupos, y basta la profundidad para distinguirlos. El grupo profundo, a unos ${f0(deepKm)}\u00A0km de profundidad alrededor del sismo grande, reúne sus réplicas.`,
+      `Aquí está lo más interesante. Los eventos del Chocó forman dos grupos, y basta la profundidad para distinguirlos. El grupo profundo, a unos ${f0(deepKm)}\u00A0km de profundidad alrededor del sismo grande, reúne sus {aftershocks}.`,
     /** `share`: of Chocó's events above Mc since the second week, the percentage from this group. */
     p2: (shallowKm: number, fromRef: number, share: { pct: string; mc: number } | null) =>
       `El grupo superficial está a unos ${f0(shallowKm)}\u00A0km de profundidad bajo Istmina y Sipí, a unos ${f0(fromRef)}\u00A0km del epicentro.${share ? ` Desde la segunda semana, el ${share.pct}\u00A0% de los eventos del Chocó de M${f1(share.mc)} o más han sido de este grupo.` : ""}`,
@@ -187,10 +192,12 @@ const es = {
 
   swarm: {
     short: "¿Y Chaparral?",
+    swarm: "enjambre",
+    crust: "corteza",
     q: "¿Qué está pasando en Chaparral? ¿Es lo mismo?",
     /** `crustal`: the swarm's median depth passes `crustal` in `claims.ts`, the story's rule too. */
     p1: (start: string, depth: number, crustal: boolean, perDay: number, state: MainshockState): string =>
-      `${state === "none" ? "No. Chaparral es un enjambre (así lo llama también el SGC): muchos eventos, sin uno que domine." : "Chaparral es lo que el SGC llama un enjambre."} Empezó el ${start}, a unos ${f0(depth)}\u00A0km de profundidad${crustal ? ", dentro de la corteza," : ""} y registra en promedio unos ${f0(perDay)} eventos por día.`,
+      `${state === "none" ? "No. Chaparral es un {swarm} (así lo llama también el SGC): muchos eventos, sin uno que domine." : "Chaparral es lo que el SGC llama un {swarm}."} Empezó el ${start}, a unos ${f0(depth)}\u00A0km de profundidad${crustal ? ", dentro de la {crust}," : ""} y registra en promedio unos ${f0(perDay)} eventos por día.`,
     state: (s: MainshockState, largest: number, gap: number | null) =>
       s === "none"
         ? `Ninguno sobresale: ${tied(gap) ? `los dos mayores son de la misma magnitud, ${mag(largest)}` : `el mayor, ${mag(largest)}, está solo ${gap === null ? "un poco" : f1(gap)} por encima del siguiente`}. Por eso no tiene sismo principal.`
@@ -326,7 +333,8 @@ type Copy = typeof es;
 const en: Copy = {
   kicker: "From Pereira",
   title: "What we keep asking about the earthquakes",
-  lede: "Since 10 August, people in the coffee region have felt the ground move again and again. Here, one by one, are the questions we keep asking, answered in plain words with data from the Servicio Geológico Colombiano.",
+  lede: "Since 10 August, people in the coffee region have felt the ground move again and again. Here, one by one, are the questions we keep asking, answered in plain words with data from the {sgc}.",
+  sgcName: "Colombian Geological Survey (SGC)",
   stats: {
     km: (km) => `~${f0(km)}\u00A0km`,
     kmLabel: "from Pereira to the three sources, in a straight line",
@@ -395,14 +403,16 @@ const en: Copy = {
   shaking: {
     short: "How strongly was it felt?",
     q: (ref) => `How strongly was the ${mag(ref.mag)} of ${ref.date} felt in Pereira?`,
-    p1: "Magnitude measures the earthquake where it starts; intensity measures how hard the ground shook in one place. This page does not work out intensities: the figures below are published by the United States Geological Survey (USGS).",
+    p1: "Magnitude measures the earthquake where it starts; intensity measures how hard the ground shook in one place. This page does not work out intensities: the figures below are published by the {usgs}.",
+    usgsName: "United States Geological Survey (USGS)",
+    dyfi: "“Did You Feel It?”",
+    pager: "PAGER",
     reportedTitle: "What people reported",
-    reportedDetail: (n) =>
-      `${n} people answered USGS's “Did You Feel It?” survey in the 10\u00A0km cell that includes Pereira.`,
+    reportedDetail: (n) => `${n} people answered USGS's {dyfi} survey in the 10\u00A0km cell that includes Pereira.`,
     reportedFew: (min) =>
       `Fewer than ${min} people answered in the 10\u00A0km cell that includes Pereira: too few for a figure.`,
     modelledTitle: "What the model estimates",
-    modelledDetail: "USGS's PAGER model works it out for the city: it is an estimate, not a report.",
+    modelledDetail: "USGS's {pager} model works it out for the city: it is an estimate, not a report.",
     figureAria: "Intensity of the earthquake in Pereira according to USGS",
     total: (n) =>
       n === 1
@@ -443,13 +453,14 @@ const en: Copy = {
 
   stop: {
     short: "Why won't it stop?",
+    aftershocks: "aftershocks",
     q: (weeks, still) =>
       still
         ? `Why is it still shaking ${WORDS_EN[weeks] ?? f0(weeks)} weeks later?`
         : `Why did it keep shaking for ${WORDS_EN[weeks] ?? f0(weeks)} weeks?`,
     qSoon: (still) => (still ? "Why is it still shaking?" : "Why did it keep shaking?"),
     p1: (deepKm) =>
-      `This is the most interesting part. Chocó's events fall into two groups, and depth alone separates them. The deep group, about ${f0(deepKm)}\u00A0km down beneath the big earthquake, is its aftershocks.`,
+      `This is the most interesting part. Chocó's events fall into two groups, and depth alone separates them. The deep group, about ${f0(deepKm)}\u00A0km down beneath the big earthquake, is its {aftershocks}.`,
     p2: (shallowKm, fromRef, share) =>
       `The shallow group is about ${f0(shallowKm)}\u00A0km deep beneath Istmina and Sipí, some ${f0(fromRef)}\u00A0km from the epicentre.${share ? ` Since the second week, ${share.pct}% of Chocó's events of M${f1(share.mc)} or more have come from this group.` : ""}`,
     deepLabel: "The deep group:",
@@ -477,9 +488,11 @@ const en: Copy = {
 
   swarm: {
     short: "And Chaparral?",
+    swarm: "swarm",
+    crust: "crust",
     q: "What is happening at Chaparral? Is it the same thing?",
     p1: (start, depth, crustal, perDay, state) =>
-      `${state === "none" ? "No. Chaparral is a swarm, which is also what SGC calls it: many events, none dominant." : "Chaparral is what SGC calls a swarm."} It began on ${start}, about ${f0(depth)}\u00A0km deep${crustal ? " inside the crust" : ""}, and has been running at about ${f0(perDay)} events a day.`,
+      `${state === "none" ? "No. Chaparral is a {swarm}, which is also what SGC calls it: many events, none dominant." : "Chaparral is what SGC calls a {swarm}."} It began on ${start}, about ${f0(depth)}\u00A0km deep${crustal ? " inside the {crust}" : ""}, and has been running at about ${f0(perDay)} events a day.`,
     state: (s, largest, gap) =>
       s === "none"
         ? `None stands out: ${tied(gap) ? `the two largest are the same size, ${mag(largest)}` : `the largest, ${mag(largest)}, is only ${gap === null ? "slightly" : f1(gap)} above the next`}. That is why it has no mainshock.`

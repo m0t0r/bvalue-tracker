@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { insightsCopy } from "@/insights/copy";
 import { dicts } from "@/lib/i18n";
+import { fill } from "@/lib/rich";
 import { ZONE_IDS } from "../core/zones";
 import { insightsStaticShell, staticShell } from "./static-shell";
 
@@ -22,7 +23,7 @@ describe("staticShell", () => {
       const copy = of(lang);
       const t = dicts[lang];
       expect(copy.querySelector("h1")?.textContent).toBe(t.zones[zone].title);
-      expect(copy.querySelector("header p")?.textContent).toBe(t.zones[zone].subtitle);
+      expect(copy.querySelector("header p")?.textContent).toBe(fill(t.zones[zone].subtitle, { sgc: t.sgcName }));
       expect([...copy.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(
         ZONE_IDS.map((z) => t.zones[z].tab),
       );
@@ -64,7 +65,7 @@ describe("insightsStaticShell", () => {
       const copy = doc.querySelector(`[data-static-lang="${lang}"]`)!;
       const c = insightsCopy[lang];
       expect(copy.querySelector("h1")?.textContent).toBe(c.title);
-      expect(copy.querySelector("header p")?.textContent).toBe(c.subtitle);
+      expect(copy.querySelector("header p")?.textContent).toBe(fill(c.subtitle, { sgc: c.sgcName }));
       expect(copy.querySelector('a[href="/"]')?.textContent).toBe(c.back);
       expect([...copy.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
         c.tabs.story,

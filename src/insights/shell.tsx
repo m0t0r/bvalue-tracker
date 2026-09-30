@@ -1,5 +1,6 @@
 import { AlertTriangleIcon, ArrowLeftIcon } from "lucide-react";
 import type { ReactNode, Ref } from "react";
+import { Explain } from "@/components/explainer/explain";
 import { LanguageButton } from "@/components/language-button";
 import { ThemeButton } from "@/components/theme-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
+import { Rich } from "@/lib/rich";
 import { insightsCopy } from "./copy";
 
 export const TABS = ["story", "questions", "3d"] as const;
@@ -64,7 +66,9 @@ export function InsightsShell({
             </div>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{c.title}</h1>
-          <p className="max-w-lg text-muted-foreground text-pretty">{c.subtitle}</p>
+          <p className="max-w-lg text-muted-foreground text-pretty">
+            <Rich text={c.subtitle} parts={{ sgc: <Explain id="sgc">{c.sgcName}</Explain> }} />
+          </p>
           <TabsList ref={tabList} aria-label={c.tabsLabel}>
             {TABS.map((t) => (
               <TabsTrigger key={t} value={t}>

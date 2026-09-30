@@ -37,6 +37,28 @@ practices stayed at 100.
     preview` against a build of `main`, unthrottled, four each way at 390 px and three at 1280:
     LCP within a frame of `main` (medians 120 and 118 ms at 390), CLS 0, and at 1280 the same one
     long task on both, the charts and the map arriving (~80–95 ms at ~450 ms).
+- **The explainers' cards are one chunk, fetched on the reader's first activity** (issue #144,
+  2026-09-30; `src/components/explainer/`). The card, Radix's Popover and Dialog, the drawings and all
+  their words are 18 kB gzipped, with 0.4 kB of CSS (`figures.css`, imported by the drawings so it
+  travels with them). It starts on the first scroll, pointer move, press or key after `load`, or on
+  the first hover, focus or press on an explainer. **Not on idle after `load`**: that fires before
+  `/insights` has its catalogues, and on a throttled phone the chunk took their bandwidth, LCP ~120 ms
+  later in every run. The word itself is in the startup chunk: measured against `main` at `8aef047`
+  from the same fixtures (brotli), the monitor's startup JavaScript went 166.3 → 168.8 kB and
+  `/insights`' 193.2 → 196.2, the HTML 8.5 → 8.8 kB (the word in both languages' static header) and the
+  CSS 17.5 → 17.8 kB.
+  - **Lighthouse A/B** (phone preset, devtools throttling, interleaved, three runs each, both builds
+    from `scripts/fixture-server.ts` with the same state in the browser): the monitor's LCP is the same
+    (medians 1,322 and 1,349 ms, within the runs' spread); `/insights`' is ~100 ms later (4,174 → 4,282 ms).
+    The requests issued first end together on both builds; the last ones in Chrome's queue (six
+    connections a host over the fixture server's HTTP/1.1) end one throttled round trip later, `line.js`
+    +227 ms: the bundler split two small shared chunks out (0.3 kB of Radix, 0.2 kB of an icon), one more
+    file in that queue. Over Cloudflare's HTTP/2 and HTTP/3 there is no such queue; not yet measured
+    there. Two causes were found and removed on the way: the idle preload above, and the b-value drawing's
+    `ToggleGroup`, whose roving focus it shared with the page's tabs, which split two Radix chunks onto the
+    startup path (it is two `Button`s now).
+  - Measure with the same browser state on both origins: a language stored for one origin by an earlier
+    check made the first A/B compare a Spanish page with an English one, whose LCP elements differ.
 - **The latin font subset is preloaded** by a small plugin in `vite.config.ts` that reads the
   hashed file name out of the bundle. Everything on this page is text, so the largest paint
   waits for that file; once the shell painted earlier than the font arrived, the swap from the

@@ -4,6 +4,7 @@ import { hydrateRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeStaticShell } from "@/lib/hydrate";
 import { dicts } from "@/lib/i18n";
+import { fill } from "@/lib/rich";
 import { App } from "@/App";
 import { PageRoot } from "@/page-root";
 import { ZONE_IDS, type ZoneId } from "../core/zones";
@@ -77,7 +78,7 @@ describe("the page's first render", () => {
       for (const node of nodes) expect(node.isConnected).toBe(true);
       expect(document.querySelector("h1")).toBe(h1);
       expect(document.querySelector("header p")).toBe(subtitle);
-      expect(subtitle.textContent).toBe(dicts[lang].zones[zone].subtitle);
+      expect(subtitle.textContent).toBe(fill(dicts[lang].zones[zone].subtitle, { sgc: dicts[lang].sgcName }));
       // The page under the header is React's own, drawn once the header is adopted.
       expect(container.querySelectorAll('[role="tabpanel"]').length).toBeGreaterThan(0);
     },

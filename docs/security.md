@@ -75,6 +75,16 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   them with `createImageBitmap` (or, where that is missing, through a `blob:` URL, which
   `img-src` already allows), never from the host through an `<img>`.
   Re-check the map and the chart axis labels if you touch it.
+  **The explainers' logos are files of this site** (`src/components/explainer/logos/`, issue #144), so
+  `img-src 'self'` covers them and no reader's browser asks another host for an image. Only SGC's logo
+  is shown: it is in the public domain on Wikimedia Commons (PD-textlogo), with the trademark caution
+  that goes with it, which the card respects by saying only that this page's events come from SGC's
+  public catalogue. USGS forbids its identifier to other organisations without written permission
+  (usgs.gov, "Use of the trademarked USGS identifier by non-USGS organizations"), and ISC publishes no
+  policy for ISC-GEM's. Those get their short name in a neutral tile, never in their colours. (Checked
+  too, for sources the page names without a card: ESA forbids its logo without written permission,
+  esa.int's branding FAQ; GEBCO and Open-Meteo publish no policy.) A link's preview is words written here, not the
+  destination's own preview fetched from it: nothing is scraped, and SGC is not asked for anything.
   **There is no inline script, and none is allowed** (no `'unsafe-inline'`, hash or nonce in
   `script-src`). The head script that sets the page's language and theme before the first paint
   (`src/boot.ts`, 2026-09-28) is a same-origin file under `/assets/`, which `'self'` already covers.

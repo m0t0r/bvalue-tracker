@@ -4,8 +4,11 @@
  * decides what may be shown, and the sentences are `../copy.ts`'s. Every USGS figure is rendered as
  * text, and no USGS string (a place name, a label) is shown at all.
  */
+import type { ReactNode } from "react";
+import { Explain } from "@/components/explainer/explain";
 import { fmtDayLong } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { Rich } from "@/lib/rich";
 import { FELT_MIN_RESPONSES, type Felt } from "../claims";
 import { insightsCopy, intensityName } from "../copy";
 import { fmtInt } from "../shared";
@@ -35,7 +38,9 @@ export function Shaking({ felt, mag }: { felt: Felt; mag: number }) {
 
   return (
     <>
-      <P>{c.p1}</P>
+      <P>
+        <Rich text={c.p1} parts={{ usgs: <Explain id="usgs">{c.usgsName}</Explain> }} />
+      </P>
       <Figure
         caption={
           <>
@@ -43,14 +48,13 @@ export function Shaking({ felt, mag }: { felt: Felt; mag: number }) {
             {felt.usgsEventUrl ? (
               <>
                 {" "}
-                <a
+                <Explain
+                  id="usgs-event"
                   href={felt.usgsEventUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2 hover:text-foreground"
+                  linkClassName="underline underline-offset-2 hover:text-foreground"
                 >
                   {c.usgsLink}
-                </a>
+                </Explain>
               </>
             ) : null}
           </>
@@ -61,19 +65,34 @@ export function Shaking({ felt, mag }: { felt: Felt; mag: number }) {
             <Reading
               title={c.reportedTitle}
               level={reported?.level ?? null}
-              detail={reported ? c.reportedDetail(fmtInt(reported.responses)) : c.reportedFew(FELT_MIN_RESPONSES)}
+              detail={
+                reported ? (
+                  <Rich
+                    text={c.reportedDetail(fmtInt(reported.responses))}
+                    parts={{ dyfi: <Explain id="dyfi">{c.dyfi}</Explain> }}
+                  />
+                ) : (
+                  c.reportedFew(FELT_MIN_RESPONSES)
+                )
+              }
             />
           ) : null}
-          {modelled ? <Reading title={c.modelledTitle} level={modelled.level} detail={c.modelledDetail} /> : null}
+          {modelled ? (
+            <Reading
+              title={c.modelledTitle}
+              level={modelled.level}
+              detail={<Rich text={c.modelledDetail} parts={{ pager: <Explain id="pager">{c.pager}</Explain> }} />}
+            />
+          ) : null}
         </dl>
       </Figure>
       {agreement ? <P>{agreement}</P> : null}
       {felt.totalResponses !== null ? <P>{c.total(felt.totalResponses)}</P> : null}
       <P>
         {c.sgc}{" "}
-        <a href={SGC_FELT_URL} target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">
+        <Explain id="sgc-felt-report" href={SGC_FELT_URL} linkClassName="font-medium underline underline-offset-2">
           {c.sgcLink}
-        </a>
+        </Explain>
       </P>
       <Takeaway label={questionsCopy[lang].inOneSentence}>{claims.feltTakeaway(felt, mag)}</Takeaway>
     </>
@@ -81,7 +100,7 @@ export function Shaking({ felt, mag }: { felt: Felt; mag: number }) {
 }
 
 /** One intensity: its numeral, USGS's term for it, and where it comes from. A dash when it is hidden. */
-function Reading({ title, level, detail }: { title: string; level: number | null; detail: string }) {
+function Reading({ title, level, detail }: { title: string; level: number | null; detail: ReactNode }) {
   const { lang } = useI18n();
   const name = level === null ? null : intensityName(level, lang);
   return (
