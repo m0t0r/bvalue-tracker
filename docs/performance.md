@@ -640,6 +640,44 @@ practices stayed at 100.
     and #126, "Magnitud en el tiempo" with its day choosing, ~5–7 h, after which Recharts is
     removed). Keeping Recharts and trimming it (`initialDimension`, explicit ticks, done in #96) cannot
     remove its store's evaluation or its render.
+- **"Magnitud en el tiempo" is drawn without Recharts** (issue #126, 2026-09-30;
+  `charts/magnitude-time.tsx`, what it keeps and what it fixed in [the page](frontend.md)). It was the
+  heaviest of the three: two Recharts charts and two more that existed only to draw a pinned axis, with
+  up to a thousand dots each wrapped in three layers of Recharts' own elements.
+  - **The render** (phone 412 × 823, 4× CPU, `pnpm preview` of `main` at `aed8d13` and of this on the
+    same catalogue, a private headless Chrome; each run a fresh context, stepped down the page until
+    every card above is drawn, then scrolled so this card enters `Deferred`'s 600 px margin; the main
+    thread's work over the next 3 s, from `Performance.getMetrics`, and the long tasks and long
+    animation frames the page itself reports; seven interleaved pairs per zone, ranges and medians):
+
+    | | Tasks | Script | Longest task | Long animation frames |
+    |---|---|---|---|---|
+    | Tolima (1,037 events) | 563–660 → 82–99 ms (633 → 85) | 438–511 → 32–43 ms | 397–456 ms → none in 6 runs, 52 ms in one | one of 402–461 ms → none in 6, 55 ms in one |
+    | Chocó (809 events) | 547–619 → 75–87 ms (590 → 83) | 416–476 → 30–35 ms | 351–413 ms → none over 50 ms | one of 356–419 ms → none |
+
+    Recharts' chunk was already evaluated in these runs (a phone draws "Valor b en el tiempo" first), so
+    the ~400 ms task is this chart's render alone: on `main` a reader scrolling down a phone met a
+    frozen page for that long as the card arrived. The table is the build before the code review; two
+    pairs per zone after it gave 85–102 ms against 559–642.
+  - **Bytes** (`vite build`, gzip 9, this chart's chunks beyond what the page has at startup): 114.7 →
+    15.8 kB, its own chunk 13.7 → 5.7 kB. The monitor's startup is unchanged (on both builds, 119.2 kB
+    for the entry's static imports). **Recharts' bytes have not left yet**: "Valor b en el tiempo" still imports it
+    until issue #125 lands, and with one user Rolldown folds the 298 kB (83 kB gzipped) into that
+    chart's chunk (`b-over-time-*.js`, 333 kB, 91.7 kB gzipped). All three charts together beyond
+    startup: 130.1 → 119.2 kB. Removing `recharts` and `ui/chart.tsx` is the step after #125.
+  - **The load is unchanged**, since no page draws this chart during its load: its card is below
+    `Deferred`'s margin on a phone and on a desktop. One Chrome DevTools MCP trace each way (Tolima,
+    412 × 823, Slow 4G, 4× CPU, a reload): LCP 761 → 727 ms, CLS 0 → 0, and no forced reflow from the
+    chart. Lighthouse, devtools throttling, straight against both previews (uncompressed, so not to be
+    set beside the brotli-proxy tables above), interleaved, five runs each, every run checked for the
+    build it loaded; medians:
+
+    | | TBT | LCP | Score | CLS |
+    |---|---|---|---|---|
+    | phone `/` | 278 → 271 ms | 1351 → 1350 ms | 88 → 89 | 0 → 0 |
+    | phone `/choco` | 281 → 286 ms | 1346 → 1350 ms | 89 → 89 | 0 → 0 |
+    | desktop `/` | 0 → 0 ms | 182 → 193 ms | 100 → 100 | 0 → 0 |
+    | desktop `/choco` (4 runs of `main`, one failed to start) | 2 → 1 ms | 217 → 204 ms | 100 → 100 | 0 → 0 |
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

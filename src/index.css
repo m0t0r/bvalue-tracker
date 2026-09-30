@@ -315,14 +315,10 @@ html:not([lang="en"]) [data-static-lang="en"],
 html[lang="en"] [data-static-lang="es"] {
   display: none;
 }
-/* The daily bars take presses, and a mouse can sweep across them. Recharts writes `cursor: default`
-   inline on its wrapper. It merges a chart's `style` prop over that, but the design-system lint allows
-   no inline style, so these rules use `!important` instead: the bars show the pointer, and while a
-   drag lasts the whole page shows the sideways cursor, whatever the mouse is over, so it does not
-   flicker back to the arrow as the drag leaves the chart. */
-[data-day-bars] .recharts-wrapper {
-  cursor: pointer !important;
-}
+/* A mouse can sweep across the daily bars to choose several days. While a drag lasts the whole page
+   shows the sideways cursor, whatever the mouse is over, so it does not flicker back to the arrow, or
+   to a link's hand, as the drag leaves the chart: hence every element, and `!important` over the
+   cursors those elements set for themselves. At rest the bars show the pointer (`cursor-pointer`). */
 [data-drag-days],
 [data-drag-days] * {
   cursor: col-resize !important;
