@@ -1,15 +1,16 @@
 /**
- * Which of a time axis' candidate ticks get a label. This is Recharts' own rule for its default
- * `interval="preserveEnd"`, run here so that the chart can pass the result as `ticks` with
- * `interval={0}`: Recharts then draws them as given, without writing each label into the DOM to measure
- * it, a layout per label inside "Valor b en el tiempo"'s first render (issue #96).
+ * Which of an axis' candidate ticks get a label. This is Recharts' own rule for its default
+ * `interval="preserveEnd"`, run here with widths the chart gives it: Recharts wrote each label into the
+ * DOM to measure it, a layout per label inside "Valor b en el tiempo"'s first render (issue #96). The
+ * charts drawn without Recharts (issues #118, #125) keep the rule, so their labels are the ones it chose.
  *
  * From the last candidate back, a label is kept when it lies wholly between `start` and `end`, and each
  * kept label moves `end` to its own left edge less `gap`. The last candidate alone is pulled back inside
  * when it crosses `end`, as Recharts pulls it; it is then drawn at its own place, past the edge by as
  * much (half a pixel for the widest label the chart has, an hour label in its 40 px right margin).
- * Candidates are walked in the order given, not sorted: Recharts walks its candidates as it collects
- * them, and the chart passes them the same way so its labels stay the ones Recharts chose.
+ * Candidates are walked in the order given, not sorted, as Recharts walks its own: pass them in axis
+ * order. Recharts collected a time axis' candidates series by series, so a second series that ended
+ * early took the "last" label and left every later date without one; "Valor b en el tiempo" sorts them.
  */
 export function preserveEndTicks(
   candidates: readonly number[],

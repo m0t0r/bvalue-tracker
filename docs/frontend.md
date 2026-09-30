@@ -325,8 +325,9 @@ words for a reader in Pereira (the rules for what it may say are in
 [the science](science.md#the-insights-page-insights-from-2026-09-24)). D3's maths modules
 (`d3-geo`, `d3-scale`, `d3-shape`, `d3-array`) do the maths and React renders the SVG, so there is no
 `d3-selection`; the monitor's Recharts and MapLibre never load there. The monitor's frequency–magnitude
-chart is drawn the same way since issue #118, and "Magnitud en el tiempo" since #126 (see their
-bullets under Interface conventions), so `d3-scale` and `d3-shape` are now shared chunks of both pages.
+chart is drawn the same way since issue #118, "Valor b en el tiempo" since #125 and "Magnitud en el
+tiempo" since #126 (see their bullets under Interface conventions), so `d3-scale` and `d3-shape` are now
+shared chunks of both pages.
 
 - **The route.** The asset layer serves `insights.html` at `/insights` in production. In dev the
   Cloudflare plugin would hand that path to the Worker, which answers 404 (the same trap as the zone
@@ -1324,6 +1325,107 @@ colour, motion). Keep to them:
   - **Declined in the code review (2026-09-29):** *measuring the tooltip only when its content
     changes.* Each move commits new text or a new cursor, which leaves layout to be done for that frame
     anyway; reading the tooltip's box forces it earlier, not twice, as Recharts' own read did.
+  - **The pointer, finger and keyboard rules above are one hook, `useReading` (`charts/svg-chart.tsx`)**,
+    since issue #125: a chart gives it how many points it has, which point a pixel is on and how high the
+    keyboard's tooltip sits, and gets back the reading to draw and the handlers. "Valor b en el tiempo"
+    uses the same one, so a fix to either chart's tooltip is a fix to both.
+- **"Valor b en el tiempo" is drawn the same way** (`charts/b-over-time.tsx`, issue #125, 2026-09-30;
+  what it saved is in [Performance](performance.md)): `d3-scale` and `d3-shape` for the maths, React for
+  the SVG, the shared pieces of `charts/svg-chart.tsx`. At rest it is the Recharts build's picture to the
+  pixel, apart from which dates the axis labels (below), and the Recharts build's bugs were fixed rather
+  than copied. What a change must keep:
+  - **The layout is Recharts'**: 32 px for the b axis, 40 px on the right for "b = 1" and the last date
+    label, 16 px on top, a 30 px date axis; the drawing a whole number of pixels wide from the plot box's
+    left edge. Bottom to top: the grid (a line per b tick and one at each edge of the plot, once where a
+    tick is on an edge), the shaded stretches, the ±1σ band, the mainshock's line, the dashed line, the
+    line, "b = 1", the dots, the cursor and its three dots, and every label over all of them. The band, the
+    lines and the dots are clipped to the plot's height and to nothing sideways, as Recharts clipped them.
+  - **Two numbers are written as Recharts wrote them, because half a pixel decides a row.** A grid line
+    keeps its unrounded height (394.50000000000006, not 394.5: rounded, the line moved a pixel row), and a
+    shaded stretch's edges are rounded to four decimals.
+  - **The time axis runs over both lines' windows**, this reading's and the dashed line's own, which can
+    end later. The labels are chosen by `preserveEndTicks` (issue #96) from every window's end on either
+    line, **in time order** (changed from Recharts, below), by the plot's width and font alone: its
+    height follows the b card as Mc moves and measures nothing. Without a canvas a label is taken as
+    0.6 em a character (`labelWidth`, shared with the frequency–magnitude chart), where the Recharts build
+    fell back to measuring in the DOM: a little wide, so such a browser gets a label fewer, never two that
+    touch.
+  - **The mainshock is drawn only on the time axis** (Recharts' `ifOverflow="discard"`), its label 5 px
+    in from the line and from the plot's top. Chocó's M7.4 is before the first window's end, so today no
+    zone draws it; a catalogue with a clear mainshock halfway through was used to check it.
+  - **Changed from Recharts, each a bug in the old chart:**
+    - *The tooltip read the wrong window wherever the dashed line was drawn.* With `scale="time"` Recharts
+      took every line's points as places the pointer could be on, the dashed line's included, but the
+      tooltip describes this line's windows only. Scanned a pixel at a time on Chocó at 1280 px
+      (2026-09-30): over 58 % of the plot's width the tooltip showed one window, "8 sept → 19 sept",
+      whatever the pointer was on, with the cursor on a dashed-line point and the three dots up to 540 px
+      away from it; and **the four latest windows, 20 to 27 September, could not be read at all**, by
+      pointer, finger or keyboard (the arrows stopped at the window of 19 September, and the latest b the
+      chart draws, 0.51, was nowhere in it). Why Recharts settled on that window was not looked into. The
+      reading is now the window of this line nearest the pointer, anywhere in the plot, with the cursor
+      and the dots on it; halfway between two is the earlier one's. The same scan reads all 44 windows,
+      each with its cursor and dots on it. A test holds it with a dashed line whose windows fall between
+      this line's and end later.
+    - *The latest date gets a label.* Recharts collected its label candidates line by line, this line's
+      windows and then the dashed line's, and chose from the last one back: the dashed line's last window
+      took the end label whatever its date, and no later date got one. On Tolima at 390 px the axis ended
+      at "28 sept", 8 px short of the line's end on the 29th; a dashed line ending days earlier would have
+      left the latest days unlabelled. The candidates are now sorted, so the last label is the last date
+      ("24 sept, 26 sept, 29 sept" there). This is the one change to the chart at rest: see "Checked".
+    - *The keyboard's tooltip sits over the window it reads* (issue #125 asked for a decision): its
+      bottom edge 10 px above the top of the window's ±1σ, to the right of the cursor, or under the band
+      where there is no room above (`clear` in `tipPosition`, tested). Recharts put it halfway down the
+      chart for every window, wherever the line was: on Chocó at 1280 px its top was 85 px under the
+      first window's point. Beside the point, where the pointer's tooltip goes, was tried first and covered the windows
+      the arrows step to next. The pointer's tooltip stays where Recharts put it, 10 px below and right
+      of the pointer, which the reader can move. (The frequency–magnitude chart keeps the one height: its
+      cursor crosses two series, and neither is "the" reading.)
+    - *Focus shows the window the keyboard was last on*, a lifted finger lets go, the first tooltip
+      appears in place, a tap reads the window under the finger, and a move is drawn within its event: the
+      five fixes of the frequency–magnitude chart, which this chart has through `useReading`.
+    - *Found by the code review in both charts, and fixed in the hook* (2026-09-30): a press on the
+      drawing focuses it, and the keyboard's tooltip then appeared on the first window when the pointer
+      left (focus from a press now shows nothing; the arrows still work from there); the arrows also
+      scrolled a sideways-scrolling ancestor (they are the chart's now, `preventDefault`); and the
+      pointer's reading was kept as an index, so new data or a new size under a resting pointer moved the
+      tooltip to whatever had that index (it is kept as the pointer's place and read again on each
+      render, and forgotten with the drawing).
+    - *A reading of another magnitude type that is not drawn no longer stretches the b axis.* With one
+      window (no line to draw) or no name in the key, its b still set the axis' range.
+  - **The reading is its own component, `Reading`**, which owns `useReading`: a move renders the cursor,
+    the three dots and the tooltip, and nothing of the card around them (code review; in the card, every
+    pointer pixel re-rendered the header, the CSV button and the key).
+  - **Declined in the code review (2026-09-30):** *one `ChartFrame`/`AxisTicks` for both charts' frame,
+    svg, clip path, grid and tick labels.* The two differ in each of those (a key inside the frame or
+    outside it, a log or a linear axis, grid rows deduplicated or never coinciding, labels over the cursor
+    or under it), and the third chart ("Magnitud en el tiempo", #126, moved the same day in another
+    branch) has pinned axes and a scroll container: the shared shape is better cut from three than
+    guessed from two, in the change that removes Recharts, as that chart's own note says. What was the
+    same is shared: `useReading`, `inPlot`,
+    `labelWidth`, `ChartTip`, `usePlotSize`. *Moving the frequency–magnitude chart's reading into a child
+    component too:* its hover was measured in #124 (~20 ms to the screen at 4× CPU) and is left alone.
+  - **Kept from Recharts on purpose:** the three dots on the cursor, b and the two ends of its ±1σ, which
+    are what the tooltip's "b = 0.58 ± 0.04" says; the dashed cursor over the plot's whole height; the
+    arrows stepping through every window and stopping at the ends; Enter hiding and showing the tooltip.
+  - **Checked** (agent-browser, `pnpm preview` of `main` at `aed8d13` and of this behind the proxy, the
+    same catalogue): screenshots of the card for both zones, both languages, both themes at 320, 390 and
+    1280 px. **With Recharts' label order, 24 of 24 were identical to the pixel.** With the labels in
+    time order, 2 are identical and 22 differ only in the 12 pixel rows of the date labels (another day
+    labelled, a few pixels along); everything else in those 22 is still the same pixel. The same holds
+    for the edge cases, whose counts below are from before that fix: and five edge cases at 390 and 1280 px on both zones:
+    a clear mainshock mid-catalogue, a catalogue of three and a half days (labels with the hour), one
+    magnitude type (no dashed line), too few events (the message) and no canvas. 15 of those 20 are
+    identical. One, the short catalogue on Tolima at 1280 px, differs in 1,913 pixels by at most 11/255
+    with every coordinate in the two drawings equal: the differing pixels include the card's corners and
+    the CSV button's icon, which this does not touch, so it is the rasteriser's, and the same on every
+    run of each build. The four with no
+    canvas differ in the date labels only (above). After the magnitude-type tab, Mc moved, Mc moved until
+    the windows ran out and back, a resize from 390 to 700 px and one depth group, every label, dot,
+    line and path of the two drawings is at the same place. A real mouse at five points and the keyboard
+    path at 1280 and 390 px: identical where Recharts read the right window, and different exactly where
+    the fixes above say (the arrows and Enter sent as in-page key events: see
+    [development](development.md#tooling-gotchas)). Touch (drag, lift, three taps) through the DevTools
+    protocol, not on a physical phone: the lift clears the tooltip, where Recharts left it over the chart.
 - **A chart grows into the space beside it only where the extra height cannot mislead.**
   Cards in a two-column row are stretched to the taller one, so a fixed-height chart leaves a
   void under its legend. "Distribución frecuencia–magnitud" therefore fills its card (`flex-1`
@@ -1352,7 +1454,7 @@ colour, motion). Keep to them:
   Mc. The key is hidden from screen readers, so the chart's `desc` names those stretches by date
   ("…las ventanas que terminan entre el 14 sept y el 18 sept…"), and the b card's caution names the
   chart by its title, not as "beside" it: on a phone it is below. The key (`BTimeKey`,
-  `b-over-time-key.tsx`, apart from Recharts) is drawn in the card's
+  `b-over-time-key.tsx`, apart from the chart's chunk) is drawn in the card's
   placeholder too, and over a hidden copy holding every entry it can have: its shaded-stretch entry
   comes and goes with Mc, and the card is above the filters on a phone. It keeps that room when the
   windows run out. Checked 2026-09-28 by stepping Mc from 2.0 to 4.0 on both zones at 320, 390, 1024

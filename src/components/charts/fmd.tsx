@@ -1,14 +1,13 @@
 import { scaleLinear, scaleLog } from "d3-scale";
 import { line, symbol, symbolCircle, symbolSquare } from "d3-shape";
-import { memo, useId, useMemo, useRef, useState, type CSSProperties } from "react";
-import { flushSync } from "react-dom";
+import { memo, useId, useMemo, useRef, type CSSProperties } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
 import { magnitudeTicks } from "./magnitude-ticks";
 import { fmdDescription } from "./fmd-description";
-import { ChartKey, ChartTip, textWidth, usePlotSize, type PlotArea } from "./svg-chart";
+import { ChartKey, ChartTip, inPlot, labelWidth, usePlotSize, useReading, type PlotArea } from "./svg-chart";
 import { preserveEndTicks } from "./time-ticks";
 
 // The drawing's margins, as the Recharts version had them: the y axis' 40 px on the left, 12 px on the
@@ -22,9 +21,6 @@ const MIN_TICK_GAP = 5;
 /** Recharts' default symbols, 64 px² (a square of 8 px, a circle of radius ~4.51), drawn as it draws them. */
 const SQUARE = symbol(symbolSquare, 64).digits(3)()!;
 const CIRCLE = symbol(symbolCircle, 64).digits(3)()!;
-
-/** Which magnitude the tooltip is on, and its height: the pointer's, or the keyboard's fixed one. */
-type Active = { i: number; y: number };
 
 /** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
 export const FmdChart = memo(function FmdChart({
@@ -57,12 +53,7 @@ export const FmdChart = memo(function FmdChart({
   const top = Math.max(10, ...bins.map((b) => b.cumulative));
 
   const box = useRef<HTMLDivElement>(null);
-  const svg = useRef<SVGSVGElement>(null);
   const [plotRef, size] = usePlotSize();
-  // The pointer's reading wins over the keyboard's, as in Recharts; the keyboard's is kept while the
-  // pointer is away, and lets go when the chart loses focus.
-  const [pointer, setPointer] = useState<Active | null>(null);
-  const [key, setKey] = useState<{ i: number; on: boolean; y: number } | null>(null);
 
   const drawn = useMemo(() => {
     if (!size || data.length === 0) return null;
@@ -86,15 +77,10 @@ export const FmdChart = memo(function FmdChart({
       .y((d) => y(d.fit!))
       .digits(3)(data);
     // Recharts' default thinning (`interval="preserveEnd"`): from the last label back, one that would come
-    // within `MIN_TICK_GAP` of the next is dropped, as "4.3" is before "4.5" on a phone. Without a canvas
-    // to measure with, a label is taken as 0.6 em a character, a little wider than Geist's digits.
-    const em = parseFloat(size.font) || 12;
+    // within `MIN_TICK_GAP` of the next is dropped, as "4.3" is before "4.5" on a phone.
     const xTicks = preserveEndTicks(magnitudeTicks([lo, hi], 8), {
       x,
-      width: (v) => {
-        const label = v.toFixed(1);
-        return textWidth(label, size.font) ?? label.length * 0.6 * em;
-      },
+      width: (v) => labelWidth(v.toFixed(1), size.font),
       start: 0,
       end: size.width,
       gap: MIN_TICK_GAP,
@@ -181,40 +167,25 @@ export const FmdChart = memo(function FmdChart({
     );
   }, [drawn, size, data, mcAt, clip]);
 
-  // A reading is of a bin by its index, and a new catalogue can have fewer bins: an index past the end
-  // is no reading at all, as Recharts dropped an active index outside its data.
   const n = data.length;
-  const keyI = key && key.i < n ? key.i : null;
-  const active: Active | null =
-    pointer && pointer.i < n ? pointer : key?.on && keyI !== null ? { i: keyI, y: key.y } : null;
+  // The pointer's reading is the bin nearest it, as Recharts' axis tooltip finds it; nothing outside the
+  // plot. The bins are evenly spaced, so it is the nearest step from the first. The keyboard's tooltip
+  // sits at one height for every magnitude, where Recharts put it: halfway between the plot's top and the
+  // chart's bottom, key included. A move's render is the cursor and the tooltip alone (`marks`).
+  const { svg, active, frame, keys } = useReading(
+    n,
+    (px, py) => {
+      if (!drawn) return null;
+      const { area, x, lo, hi } = drawn;
+      if (!inPlot(area, px, py)) return null;
+      const step = n > 1 ? (hi - lo) / (n - 1) : 1;
+      // A point exactly halfway between two bins is the lower one's, as in Recharts.
+      return { i: Math.min(n - 1, Math.max(0, Math.ceil((x.invert(px) - lo) / step - 0.5))), y: py };
+    },
+    () => (TOP + Math.round(box.current!.getBoundingClientRect().height)) / 2,
+  );
   const at = drawn && active ? { x: drawn.x(data[active.i]!.mag), y: active.y } : null;
   const p = active ? data[active.i]! : null;
-
-  // The bin nearest the pointer, as Recharts' axis tooltip finds it; nothing outside the plot. The bins
-  // are evenly spaced, so it is the nearest step from the first.
-  const read = (clientX: number, clientY: number) => {
-    if (!drawn) return;
-    const { area, x, lo, hi } = drawn;
-    const r = svg.current!.getBoundingClientRect();
-    // In whole pixels, as Recharts reads a pointer.
-    const px = Math.round(clientX - r.left),
-      py = Math.round(clientY - r.top);
-    const inside = px >= area.left && px <= area.left + area.width && py >= area.top && py <= area.top + area.height;
-    const step = n > 1 ? (hi - lo) / (n - 1) : 1;
-    // A point exactly halfway between two bins is the lower one's, as in Recharts.
-    const i = Math.min(n - 1, Math.max(0, Math.ceil((x.invert(px) - lo) / step - 0.5)));
-    // Drawn within the event, before the next frame, as Recharts' store drew it: left to React's scheduler,
-    // a move's tooltip reached the screen a frame later (~35 against ~30 ms at 4× CPU). The render is the
-    // cursor and the tooltip alone (`marks`).
-    const next = inside ? { i, y: py } : null;
-    if (next?.i !== pointer?.i || next?.y !== pointer?.y) flushSync(() => setPointer(next));
-  };
-  // The keyboard's tooltip sits at one height for every magnitude, where Recharts put it: halfway between
-  // the plot's top and the chart's bottom, key included. Read when a key is pressed, not in the render.
-  const showKey = (i: number) => {
-    const chartH = Math.round(box.current!.getBoundingClientRect().height);
-    setKey({ i, on: true, y: (TOP + chartH) / 2 });
-  };
 
   return (
     <Frame
@@ -225,17 +196,7 @@ export const FmdChart = memo(function FmdChart({
       plotRef={plotRef}
       box={box}
       width={size?.width}
-      onMouseMove={(e) => read(e.clientX, e.clientY)}
-      onMouseLeave={() => setPointer(null)}
-      onTouchMove={(e) => {
-        const touch = e.touches[0];
-        if (touch) read(touch.clientX, touch.clientY);
-      }}
-      // A finger lifted lets go. Recharts left the tooltip where a sideways drag ended, over the chart while
-      // the reader scrolled on, until a tap elsewhere. A tap still shows it: the browser follows the touch
-      // with the mouse events of a click, and their move comes after this.
-      onTouchEnd={() => setPointer(null)}
-      onTouchCancel={() => setPointer(null)}
+      {...frame}
     >
       {drawn && size ? (
         <>
@@ -247,22 +208,7 @@ export const FmdChart = memo(function FmdChart({
             viewBox={`0 0 ${size.width} ${size.height}`}
             ref={svg}
             className="block outline-hidden"
-            onFocus={() => {
-              // Focus shows the magnitude the keyboard was last on, or the first. Recharts showed it on the
-              // first focus only, and a reader who tabbed back found the chart silent until an arrow.
-              showKey(keyI ?? 0);
-            }}
-            onBlur={() => setKey((k) => (k ? { ...k, on: false } : k))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                if (key && keyI !== null) setKey({ ...key, on: !key.on });
-                return;
-              }
-              if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-              const step = e.key === "ArrowRight" ? 1 : -1;
-              if (keyI === null) showKey(step > 0 ? 0 : n - 1);
-              else if (keyI + step >= 0 && keyI + step < n) showKey(keyI + step);
-            }}
+            {...keys}
           >
             <title>{t.fmdTitle}</title>
             <desc>{t.fmdDesc}</desc>

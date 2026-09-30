@@ -36,7 +36,7 @@ import { mainshockId } from "../core/mainshock";
 import { ZONES, ZONE_IDS, type ZoneId } from "../core/zones";
 import { updateEveryMin } from "../worker/plan.ts";
 
-// The three Recharts cards and the map are the page's heavy chunks; `Deferred` says why they
+// The three chart cards and the map are the page's heavy chunks; `Deferred` says why they
 // are only fetched once the reader is near them. Everything above the b-value — the number
 // itself, the status bar, the groups card and the filters — stays in the first chunk.
 const BOverTimeChart = lazy(() =>

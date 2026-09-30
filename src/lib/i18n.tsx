@@ -284,7 +284,6 @@ const es = {
     ` A las ventanas que terminan ${spans} pueden faltarles eventos pequeños, así que su valor b puede salir más bajo que el real.`,
   bTimeAltSpan: (a: string, b: string) => (a === b ? `el ${a}` : `entre el ${a} y el ${b}`),
   bTimeAltAnd: " y ",
-  band: "±1σ",
   tableTitle: "Catálogo",
   downloadCsv: "Descargar CSV",
   // The catalogue's button names how many events the file holds, which is what the table lists: the
@@ -565,7 +564,6 @@ const en: Dict = {
     ` The windows ending ${spans} may be missing small events, so their b-values may come out lower than the true ones.`,
   bTimeAltSpan: (a, b) => (a === b ? `on ${a}` : `between ${a} and ${b}`),
   bTimeAltAnd: " and ",
-  band: "±1σ",
   tableTitle: "Catalogue",
   downloadCsv: "Download CSV",
   downloadEventsIn: (n, one) => `Download ${n} ${one ? "event" : "events"} as`,
