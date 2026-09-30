@@ -57,8 +57,31 @@ export const startLang = (stored: Lang | null, languages: readonly string[]): La
 export const startTheme = (stored: Theme | null, systemDark: boolean): Theme =>
   stored ?? (systemDark ? "dark" : "light");
 
+/** PROTOTYPE: research flags, set by `?proto=a,b` (empty clears) and kept in localStorage. */
+function applyProto(): void {
+  try {
+    const asked = new URLSearchParams(location.search).get("proto");
+    if (asked !== null) localStorage.setItem("sgc-swarm:proto", asked);
+    const flags = (localStorage.getItem("sgc-swarm:proto") ?? "").split(",");
+    document.documentElement.dataset.proto = flags.join(" ");
+    // The data /insights draws from is in the browser (`local-first.ts` keeps the time it stored it).
+    const kept = Number(localStorage.getItem("sgc-swarm:kept"));
+    if (flags.includes("noskel") && Date.now() - kept < 7 * 24 * 3600_000) {
+      document.documentElement.dataset.local = "";
+    }
+    if (flags.includes("vt")) {
+      const style = document.createElement("style");
+      style.textContent = "@view-transition{navigation:auto}";
+      document.head.append(style);
+    }
+  } catch {
+    // Storage refused: no flags.
+  }
+}
+
 /** Writes the startup language and theme on `<html>`. The head script's whole job. */
 export function applyStartup(): void {
+  applyProto();
   const root = document.documentElement;
   root.lang = startLang(storedLang(), navigatorLanguages(navigator));
   root.classList.toggle("dark", startTheme(storedTheme(), matchMedia(DARK_QUERY).matches) === "dark");

@@ -1,5 +1,6 @@
 import { contextPath, eventsPath, statusPath } from "../../core/page-data";
 import type { ZoneId } from "../../core/zones";
+import { remember } from "./local-first";
 import { whenActivated } from "./prerender";
 import type { ContextResponse, SeaForecast, StatusResponse, StoredEvent } from "../../worker/api-types";
 
@@ -18,8 +19,14 @@ export class HttpError extends Error {
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) throw new HttpError(path, res.status);
-  return (await res.json()) as T;
+  // PROTOTYPE: keep the answer for the next page load (`local-first.ts`).
+  const text = await res.text();
+  if (!init) remember(path, text);
+  return JSON.parse(text) as T;
 }
+
+/** PROTOTYPE: any GET by path, for the monitor's warm-up of what /insights needs. */
+export const getPath = (path: string) => json<unknown>(path);
 
 /**
  * TanStack Query's default of three retries, minus the answers a retry cannot change. A 4xx is

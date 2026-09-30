@@ -14,6 +14,7 @@ import { LoadError } from "@/components/load-error";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { TabsContent } from "@/components/ui/tabs";
 import { useHydrated } from "@/lib/hydrate";
+import { proto } from "@/lib/local-first";
 import { useI18n } from "@/lib/i18n";
 import { toggleTheme } from "@/lib/theme";
 import { BackToTop } from "./back-to-top";
@@ -31,7 +32,10 @@ function once<T>(load: () => Promise<T>): () => ReactPromise<T> {
     if (p === undefined) {
       const promise = load();
       promise.then(
-        (value) => void Object.assign(promise, { status: "fulfilled", value }),
+        (value) => {
+          performance.mark("proto:chunk");
+          Object.assign(promise, { status: "fulfilled", value });
+        },
         (reason: unknown) => void Object.assign(promise, { status: "rejected", reason }),
       );
       p = promise;
@@ -98,10 +102,15 @@ export function InsightsApp() {
   // React's 300 ms hold does not come back through `use`. The three values travel as one, so a tab
   // never pairs the claims of one catalogue with a forecast worked out from the next.
   const loaded = useMemo(
-    () => (isPending || !data ? undefined : { data, context, forecast }),
-    [isPending, data, context, forecast],
+    // PROTOTYPE: not during hydration, which must draw the HTML's skeleton even when the data is
+    // already here from the browser's store.
+    () => (!hydrated || isPending || !data ? undefined : { data, context, forecast }),
+    [hydrated, isPending, data, context, forecast],
   );
-  const shown = useDeferredValue(loaded);
+  const deferred = useDeferredValue(loaded);
+  // PROTOTYPE: `nodefer` draws the tab in the render that has the data, to test whether the deferred
+  // render is what a prerendered page holds back until the network answers.
+  const shown = proto("nodefer") ? loaded : deferred;
   // One notice at a time, and never beside the load error, which replaces the page. Data that stopped
   // updating comes before an unfinished history: it is the one the reader cannot see for themselves,
   // and it holds for the back-fill's own progress too, which is as old.
@@ -112,6 +121,8 @@ export function InsightsApp() {
       : incomplete
         ? { title: c.incompleteTitle, body: c.incompleteBody }
         : null;
+  if (loaded && !performance.getEntriesByName("proto:loaded").length) performance.mark("proto:loaded");
+  if (shown && !performance.getEntriesByName("proto:shown").length) performance.mark("proto:shown");
   const tabList = useRef<HTMLDivElement>(null);
   const footer = useRef<HTMLElement>(null);
 

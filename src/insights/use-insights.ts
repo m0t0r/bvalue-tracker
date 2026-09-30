@@ -31,8 +31,18 @@ export function useInsights(): {
   staleSince: number | null;
 } {
   const qc = useQueryClient();
-  const choco = useQuery({ queryKey: ["events", "choco"], queryFn: () => getEvents("choco") });
-  const tolima = useQuery({ queryKey: ["events", "tolima"], queryFn: () => getEvents("tolima") });
+  // PROTOTYPE: "always", so a catalogue drawn from the browser's store is asked for again whatever
+  // its age, and the HTML's preload is always used.
+  const choco = useQuery({
+    queryKey: ["events", "choco"],
+    queryFn: () => getEvents("choco"),
+    refetchOnMount: "always",
+  });
+  const tolima = useQuery({
+    queryKey: ["events", "tolima"],
+    queryFn: () => getEvents("tolima"),
+    refetchOnMount: "always",
+  });
   // Status also says whether either zone's history is still loading: a half-filled database gives
   // confident, wrong claims (docs/science.md). Only read — starting the back-fill is the monitor's
   // job, and this page never asks SGC for anything.
@@ -64,6 +74,7 @@ export function useInsights(): {
     queryFn: () => getContext("choco"),
     retry: false,
     staleTime: Infinity,
+    refetchOnMount: "always",
     refetchOnWindowFocus: recheck,
     refetchOnReconnect: recheck,
   });

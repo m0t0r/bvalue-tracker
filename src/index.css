@@ -311,6 +311,12 @@
 html[data-page="monitor"] {
   scrollbar-gutter: stable;
 }
+/* PROTOTYPE (instant /insights, the `noskel` flag): while the browser holds the data the page draws
+   from, the skeleton is not shown for the few frames before the story replaces it. The head script
+   sets the attribute; the page removes it once it has drawn, or found nothing to draw from. */
+html[data-local] [data-slot="skeleton"] {
+  visibility: hidden;
+}
 html:not([lang="en"]) [data-static-lang="en"],
 html[lang="en"] [data-static-lang="es"] {
   display: none;

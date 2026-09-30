@@ -19,7 +19,8 @@
  * again for figures that look current, and use one capture for both sides of a comparison.
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createSecureServer, type Http2ServerRequest, type Http2ServerResponse } from "node:http2";
 import { dirname, join, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { brotliCompressSync, constants } from "node:zlib";
@@ -52,6 +53,13 @@ const { positionals, values } = parseArgs({
     api: { type: "string", default: "data/api-fixtures.json" },
     dir: { type: "string", default: "dist/client" },
     port: { type: "string", default: "4180" },
+    // Research options (instant /insights): a round trip's wait on every answer, the API's extra
+    // server time, the speculation rules' eagerness, and a Cache-Control for the pages' HTML.
+    latency: { type: "string", default: "0" },
+    tls: { type: "string", default: "" },
+    "api-delay": { type: "string", default: "0" },
+    rules: { type: "string", default: "" },
+    "html-cache": { type: "string", default: "" },
   },
 });
 
@@ -107,7 +115,27 @@ function serve(): void {
     return out;
   };
 
-  const server = createServer((req, res) => {
+  const latency = Number(values.latency);
+  const apiDelay = Number(values["api-delay"]);
+  const handle = (req: IncomingMessage, res: ServerResponse) => {
+    const wait = latency + ((req.url ?? "").startsWith("/api/") ? apiDelay : 0);
+    if (wait > 0) setTimeout(() => answer(req, res), wait);
+    else answer(req, res);
+  };
+  // With `--tls DIR` (key.pem, cert.pem) it speaks HTTP/2, as the edge does: over HTTP/1.1 a page's
+  // thirty requests queue on six connections, and the delays above then add up request by request.
+  const server = values.tls
+    ? createSecureServer(
+        {
+          key: readFileSync(join(values.tls, "key.pem")),
+          cert: readFileSync(join(values.tls, "cert.pem")),
+          allowHTTP1: true,
+        },
+        handle as unknown as (req: Http2ServerRequest, res: Http2ServerResponse) => void,
+      )
+    : createServer(handle);
+  const answer = (req: IncomingMessage, res: ServerResponse) => {
+    req.headers.host ??= String(req.headers[":authority"] ?? "");
     const method = req.method ?? "GET";
     const url = req.url ?? "/";
     const { pathname } = new URL(url, "http://localhost");
@@ -139,6 +167,12 @@ function serve(): void {
       return void res.writeHead(answer.status, headers).end(raw);
     }
 
+    if (pathname === "/speculation-rules.json" && values.rules) {
+      const rules = { prerender: [{ where: { href_matches: ["/", "/choco", "/insights"] }, eagerness: values.rules }] };
+      return void res
+        .writeHead(200, { "content-type": "application/speculationrules+json", "cache-control": "no-cache" })
+        .end(JSON.stringify(rules));
+    }
     const file = method === "GET" || method === "HEAD" ? staticFile(pathname, isFile) : null;
     if (file === null) return void res.writeHead(404, { "content-type": "text/plain" }).end("not found\n");
     const raw = readFileSync(join(root, file));
@@ -147,10 +181,15 @@ function serve(): void {
       "cache-control": cacheControl(file),
       vary: "accept-encoding",
     };
+    if (file.endsWith(".html")) {
+      if (values.rules) headers["speculation-rules"] = '"/speculation-rules.json"';
+      if (values["html-cache"]) headers["cache-control"] = values["html-cache"];
+    }
+    if (file === "sw.js") headers["cache-control"] = "no-cache";
     const body = br && compressible(file) ? compressed(file, raw, constants.BROTLI_MAX_QUALITY) : raw;
     if (body !== raw) headers["content-encoding"] = "br";
     res.writeHead(200, headers).end(method === "HEAD" ? undefined : body);
-  });
+  };
   // This machine only: it serves a copy of the catalogue with none of the Worker's checks.
   server.listen(port, "127.0.0.1", () => {
     console.log(`${values.dir} and ${Object.keys(fixtures).length} API answers at http://localhost:${port}`);
