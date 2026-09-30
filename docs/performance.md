@@ -429,7 +429,7 @@ practices stayed at 100.
   none now (counted by wrapping `getBoundingClientRect` in the page):
   - **The date axis picks from every point, not from dates.** With `scale="time"` Recharts takes each
     window's end as a candidate tick, then the dashed line's own windows, and keeps a label only where it
-    clears the next one by `minTickGap`, measured. `preserveEndTicks` (`charts/time-ticks.ts`, tested)
+    clears the next one by `minTickGap`, measured. `preserveEndTicks` (then `charts/time-ticks.ts`, now `packages/charts/src/labels.ts`, tested)
     now runs the same rule over the same candidates in the same order, with widths from a canvas
     (`measureText`, no layout), and the chart passes the result as `ticks` with `interval={0}`, which
     Recharts draws as given. Without a 2D canvas it leaves the choice to Recharts, as before. A test
@@ -820,6 +820,42 @@ practices stayed at 100.
   - **What is left** is in issue #127's list: #131 and #132 refactor the 11 functions the compiler
     skips, #133 removes the manual `useMemo`, `useCallback` and `memo` the compiler makes redundant,
     and #134 moves to the native compiler when it is stable (a 0.8 s build in #127's trial).
+- **The charts' shared code is a package; a pointer crossing the daily bars costs a little more** (issue #138,
+  2026-09-30; `packages/charts`, what it is in [the page](frontend.md#the-chart-kit-packagescharts)).
+  Measured compiled, against `main` at `6f0a0d4` (React Compiler on both sides), both served by
+  `scripts/fixture-server.ts` from one capture. No page's load changes: the stylesheet is the same
+  file byte for byte, and the monitor's entry is 218.17 → 218.12 kB.
+  - **Bytes** (`vite build`): the three charts' chunks and what they share, 53.2 → 55.0 kB (23.2 →
+    24.1 kB gzipped, 20.2 → 20.9 kB brotli). The shared chunk is now `tip-*.js` (11.5 kB;
+    `svg-chart-*.js` and `time-ticks-*.js` were 5.3 kB together), and "Magnitud en el tiempo"'s own
+    went 22.6 → 20.0 kB. Before the rebase onto React Compiler this was 33.6 → 32.0 kB: compiled,
+    `useReading` carries the memo slots of the work it took over from the magnitude chart.
+    - **The kit takes `cn` as a peer, as it takes React** (found measuring the rebase, 2026-09-30). As
+      a dependency of its own it stayed on `^0.3.2` when Dependabot moved the app to 0.4.0 (#152),
+      and pnpm gave the kit its own copy: two class mergers in the bundle, the charts 20.2 → 29.8 kB
+      brotli. A peer is the app's copy, whatever version that is.
+  - **Render profile** (`PROFILE=1` builds of both, 1280 px, `/choco`, no throttle; a pointer swept
+    across each plot at 45 % of its height in 120 moves through the DevTools protocol, then twenty
+    arrow keys, one per call; three runs each, the counts the same in every run, the times medians):
+
+    | Sweep of 120 moves | Commits | Component updates | React's render time |
+    |---|---|---|---|
+    | Frequency–magnitude | 120 → 113 | 592 → 677 | 18.1 → 13.6 ms |
+    | b over time | 120 → 112 | 278 → 382 | 17.0 → 14.3 ms |
+    | Daily bars | 90 → 120 | 134 → 359 | 7.2 → 14.9 ms |
+    | Magnitude dots | 26 → 21 | 22 → 47 | 3.0 → 4.4 ms |
+
+    The first two charts commit less (a pointer over the margins renders nothing now) and take less
+    time; each commit has one more component, `Drawing`. **The daily bars cost more**, about 0.06 ms
+    a move with no throttle: the pointer's place is kept for every move on a day and read again in the
+    render, so that new data or a new width under a resting pointer is read where the pointer is
+    (checked on the page: [the chart kit](frontend.md#the-chart-kit-packagescharts)); that chart used
+    to render only when the day changed. On the dots the sweep crosses few dots and the difference is
+    inside the spread. *Tried and taken back in the first code review:* rendering nothing for a move
+    that reads what the tooltip already shows. It kept the place where the pointer entered a point, up
+    to a day's width from where it rested, which is the stale reading this change exists to remove.
+    Reading once per move needs the hook to know when a chart's scales changed; not built. Twenty arrow
+    keys: 20 commits on both builds, 0.7–1.6 ms.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under

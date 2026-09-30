@@ -230,11 +230,13 @@ describe("'Valor b en el tiempo' drawn without Recharts", () => {
     const box = svg.parentElement!;
     fireEvent.mouseMove(box, { clientX: 114, clientY: 100 });
     expect(tipBox().style.getPropertyValue("--tip-y")).toBe("110px");
+    // The pointer took the tooltip and leaves with it: the keyboard's comes back on a key, where it was.
     fireEvent.mouseLeave(box);
-    fireEvent.keyDown(svg, { key: "Enter" });
     expect(tip()).toBeUndefined();
     fireEvent.keyDown(svg, { key: "Enter" });
     expect(tip()).toBe("b = 0.90 ± 0.05");
+    fireEvent.keyDown(svg, { key: "Enter" });
+    expect(tip()).toBeUndefined();
   });
 
   it("stops at either end, lets go on blur, and shows where it was on the next focus", () => {

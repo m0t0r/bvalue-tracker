@@ -1099,7 +1099,7 @@ colour, motion). Keep to them:
     on a phone is 1,260 px wide with ~275 on screen: a dot near the visible edge had its tooltip cut
     off by the scroll container or under the pinned axis (measured on `main` at 390 px: 23 to 161 px
     cut). The area is read when the reading is made and again whenever the chart scrolls or changes
-    width under a tooltip (`useTipArea`). A tooltip is at most the visible
+    width under a tooltip (`area` from `useReading`, given the scroller's `view`). A tooltip is at most the visible
     plot wide, and at most 360 px, and a longer place wraps (`--tip-max`, `wrap-anywhere`): on `main` a
     70-letter word made the tooltip 459 px wide and the scroll container 161 px wider.
   - **Changed: a lifted finger lets go of the tooltip**, as on the frequency–magnitude chart. On `main`
@@ -1109,7 +1109,7 @@ colour, motion). Keep to them:
     keyboard shows the first event on screen, which without scrolling is the first of all, or the one
     the keyboard was last on; the arrows step, Enter hides and shows the tooltip, blur hides it. The
     tooltip sits by its dot, with the same dashed cross as the pointer's.
-  - **Changed: the keyboard's point is scrolled into view** (`View.reveal`), and the arrows no longer
+  - **Changed: the keyboard's point is scrolled into view** (`ScrollView.reveal`), and the arrows no longer
     also scroll the container around the chart. On `main` the keyboard's day could be 40 days off
     screen. A press on a dot focuses the drawing too, and shows no keyboard reading
     (`:focus-visible`).
@@ -1120,7 +1120,8 @@ colour, motion). Keep to them:
     a mouse move from where a resting pointer already is whenever the chart moves under it. After the
     keyboard's own scroll that move is ignored, or it would take the tooltip back; after the reader's
     scroll (a wheel, a trackpad) it counts, so the tooltip goes on naming what a press there would
-    choose (`usePointerMoved`).
+    choose. Since issue #138 this is `useReading`'s rule for every chart ([the chart kit](#the-chart-kit-packagescharts)),
+    and a move from the same place with nothing moved under it is no move at all.
   - **A pinned axis writes a thousand and over in thousands** ("1k", `tickLabel`): its column has room
     for three digits, and "1000" lost its first one to the column's edge. No day has had more than
     ~190 events; the axis is ready for one that does.
@@ -1160,11 +1161,12 @@ colour, motion). Keep to them:
     24 cases, against 13 cut off on `main`). Touch was driven through the DevTools protocol (tap,
     sideways drag, tap on a day and again), not on a physical phone. `magnitude-time.test.ts` holds
     the behaviour; each of 20 mutations of the component failed a test.
-  - **Declined in the code review (2026-09-30):** *moving the keyboard walk, the pointer-moved rule,
-    the tooltip's shell and the focus ring into `svg-chart.tsx`* for the three charts to share. It is
-    the right home, but "Valor b en el tiempo" was being moved in another branch at the same time
-    (issue #125) and edited that file. The tooltip's shell moved when Recharts was removed (`ChartTip`,
-    the dark-tooltip bullet below); the rest is issue #138.
+  - **Declined in the code review (2026-09-30), and done since:** *moving the keyboard walk, the
+    pointer-moved rule, the tooltip's shell and the focus ring out of this chart* for the three to
+    share. "Valor b en el tiempo" was being moved in another branch at the same time (issue #125).
+    The tooltip's shell moved when Recharts was removed (`ChartTip`, the dark-tooltip bullet below);
+    the rest moved with issue #138, into [the chart kit](#the-chart-kit-packagescharts). What is
+    left here is what only this chart does: the scroller's width, the day choosing and its drag.
 - **Choosing a cluster narrows the whole page**, like a filter: "Ver solo este grupo" in the
   "Dos grupos de eventos" card. It is one of the settings the scope notice below names, and it sits
   outside the cards because a cluster can be emptied by the other filters, and the control must not
@@ -1272,7 +1274,7 @@ colour, motion). Keep to them:
   - **The layout is Recharts'**: 40 px for the y axis, 12 px on the right, 16 on top, a 30 px x axis,
     the drawing a whole number of pixels wide from the plot box's left edge (Recharts rounds its
     container), and the key under it as wide as the drawing less its right margin. The key is
-    `ChartKey` (`charts/svg-chart.tsx`), drawn as shadcn's `ChartLegendContent` drew it; this chart no
+    `ChartKey` (`@bvalue/charts`), drawn as shadcn's `ChartLegendContent` drew it; this chart no
     longer goes through `ChartContainer`, which wrapped Recharts' `ResponsiveContainer`, and takes its
     colours as the theme's own classes (`fill-chart-3`, `bg-chart-1`) rather than `--color-*` variables.
   - **The magnitude labels sit on their magnitudes** (`magnitudeTicks`, `charts/magnitude-ticks.ts`):
@@ -1325,13 +1327,15 @@ colour, motion). Keep to them:
   - **Declined in the code review (2026-09-29):** *measuring the tooltip only when its content
     changes.* Each move commits new text or a new cursor, which leaves layout to be done for that frame
     anyway; reading the tooltip's box forces it earlier, not twice, as Recharts' own read did.
-  - **The pointer, finger and keyboard rules above are one hook, `useReading` (`charts/svg-chart.tsx`)**,
+  - **The pointer, finger and keyboard rules above are one hook, `useReading` (`@bvalue/charts`)**,
     since issue #125: a chart gives it how many points it has, which point a pixel is on and how high the
-    keyboard's tooltip sits, and gets back the reading to draw and the handlers. "Valor b en el tiempo"
-    uses the same one, so a fix to either chart's tooltip is a fix to both.
+    keyboard's tooltip sits, and gets back the reading to draw and the handlers. Every chart uses the
+    same one since issue #138, so a fix to one chart's tooltip is a fix to all
+    ([the chart kit](#the-chart-kit-packagescharts), which also lists what that changed here: the
+    keyboard takes the tooltip from a resting pointer, and a bin is its magnitude).
 - **"Valor b en el tiempo" is drawn the same way** (`charts/b-over-time.tsx`, issue #125, 2026-09-30;
   what it saved is in [Performance](performance.md)): `d3-scale` and `d3-shape` for the maths, React for
-  the SVG, the shared pieces of `charts/svg-chart.tsx`. At rest it is the Recharts build's picture to the
+  the SVG, the shared pieces of `@bvalue/charts`. At rest it is the Recharts build's picture to the
   pixel, apart from which dates the axis labels (below), and the Recharts build's bugs were fixed rather
   than copied. What a change must keep:
   - **The layout is Recharts'**: 32 px for the b axis, 40 px on the right for "b = 1" and the last date
@@ -1400,9 +1404,10 @@ colour, motion). Keep to them:
     outside it, a log or a linear axis, grid rows deduplicated or never coinciding, labels over the cursor
     or under it), and the third chart ("Magnitud en el tiempo", #126, moved the same day in another
     branch) has pinned axes and a scroll container: the shared shape is better cut from three than
-    guessed from two (issue #138, now that all three are in). What was the
-    same is shared: `useReading`, `inPlot`,
-    `labelWidth`, `ChartTip`, `usePlotSize`. *Moving the frequency–magnitude chart's reading into a child
+    guessed from two. Issue #138 cut it from three, and it is not a frame: what all three share is the
+    drawing, the clip, the grid's rows and the labels' places, each its own piece of
+    [the chart kit](#the-chart-kit-packagescharts), with `useReading`, `inPlot`,
+    `labelWidth`, `ChartTip` and `usePlotSize`. *Moving the frequency–magnitude chart's reading into a child
     component too:* its hover was measured in #124 (~20 ms to the screen at 4× CPU) and is left alone.
   - **Kept from Recharts on purpose:** the three dots on the cursor, b and the two ends of its ±1σ, which
     are what the tooltip's "b = 0.58 ± 0.04" says; the dashed cursor over the plot's whole height; the
@@ -1428,7 +1433,7 @@ colour, motion). Keep to them:
     protocol, not on a physical phone: the lift clears the tooltip, where Recharts left it over the chart.
 - **A chart's tooltip is dark in both themes** (owner's call, 2026-09-30: the dark theme's tooltip,
   near-black with light text, in the light theme too). The surface is `ChartTip`'s own
-  (`charts/svg-chart.tsx`), so the three charts' four tooltips cannot differ: a box with the `dark`
+  (`@bvalue/charts`), so the three charts' four tooltips cannot differ: a box with the `dark`
   class, which gives it and everything in it the dark theme's tokens (`bg-background`,
   `text-foreground`, `text-muted-foreground`, the caution icon's `text-caution-strong`, the border).
   A tooltip's content is therefore written with the theme's classes and no `dark:` variant, and a
@@ -1759,6 +1764,130 @@ Not yet verified by anyone: real screen-reader output, a physical touch device, 
 Safari. The back-fill and ingest-failure alerts have now been seen rendered, in both
 themes, but against a **stubbed** `/api/status` (see [Tooling gotchas](development.md#tooling-gotchas))
 — not yet in a live state driven by SGC itself.
+
+## The chart kit (`packages/charts`)
+
+**What a chart on this page is, apart from what it draws, is one package, `@bvalue/charts`** (issue
+#138, 2026-09-30). The monitor's three charts (`src/components/charts/fmd.tsx`, `b-over-time.tsx`,
+`magnitude-time.tsx`) bring their scales, their marks and their words; the kit is everything a
+pointer, a finger, the keyboard or a label does the same way on all of them. It knows nothing about
+earthquakes, a zone, the page's strings or shadcn's `Card`, and its `tsconfig.json` has no `@` alias,
+so it cannot import them. Like `@bvalue/seismo` it is consumed as TypeScript source, with no build
+step ([development](development.md#tooling-gotchas)).
+
+| Piece | What it holds |
+|---|---|
+| `useReading` | The tooltip's state: what the pointer, a finger and the keyboard read off a drawing, and which of them holds the tooltip. Its header lists the rules. |
+| `useScrollView` | The sideways scroller around a drawing wider than its card: starts at the end, stays there through a refresh, tells a drawing what is on screen, brings the keyboard's point on screen. |
+| `Drawing`, `focusRing` | The `svg` that is a tab stop with a keyboard layer, named by its `title` and `desc`, and the focus ring for the element around it. |
+| `GridRows`, `TickLabels`, `PlotClip` | The grid's rows (once where a tick is on an edge), the axis labels where Recharts put them (14 px under the plot, 8 px before it), the clip of a plot's height. |
+| `preserveEndTicks`, `ownPlaceLabels`, `labelWidth`, `textWidth` | Which labels fit, by Recharts' rule or each at its own place, and how wide one is, from a canvas. |
+| `ChartTip`, `tipPosition`, `ChartKey` | The tooltip's dark surface and its place, and a key. |
+| `usePlotSize`, `inPlot`, `PlotArea` | A plot's box in whole pixels, read before the first frame. |
+
+- **One set of rules for the tooltip, where there were two.** "Distribución frecuencia–magnitud" and
+  "Valor b en el tiempo" used `useReading`; "Magnitud en el tiempo" had written the same rules again
+  for its dots and its bars (its own keyboard walk, `usePointerMoved`, `useTipArea`, `View`), and the
+  two had drifted. The owner's rule for a rewrite is that a difference without a reason is a bug to
+  fix, not to copy, so each was settled one way, for all four drawings:
+  - **The one used last holds the tooltip, on every chart.** On the first two charts the pointer's
+    reading always won: with the mouse resting anywhere on the plot, focus, the arrows and Enter
+    changed nothing on screen (checked on `main` with a real pointer at 1280 and 390 px: the tooltip
+    stayed on the pointer's bin through a focus, two arrows and two Enters). An arrow or a focus from
+    the keyboard now takes the tooltip, and a pointer that moves onto a point takes it back, as on
+    the magnitude chart. The keyboard's reading then stays hidden until a key brings it back; it
+    used to reappear by itself when the pointer left those two charts.
+  - **An arrow pressed while the keyboard's tooltip is hidden shows it where it was, without a
+    step**, on every chart (the magnitude chart's rule). The first two charts stepped from a point
+    the reader could not see.
+  - **A move from the same place with nothing moved under it is no move.** The magnitude chart took
+    any move from where a resting pointer already was for the pointer coming back, unless its own
+    keyboard scroll had just happened: a browser's own repeat of the pointer's place handed the
+    tooltip back to the pointer under the keyboard. The move now counts only when the chart has
+    moved under the pointer (the reader's scroll).
+  - **The pointer's reading is read again on every render, on every chart**, so new data or a new
+    size under a resting pointer puts the tooltip on what is under it. The magnitude chart kept the
+    event or the day the pointer had been on, and after a new width the tooltip could name a day a
+    press there would not choose. **This one shows on the page** (checked 2026-09-30, both zones at
+    1280 px): with the mouse resting on the daily bars, a window narrowed to 900 px left `main`'s
+    tooltip on 6 Sept while the pointer was over 21 Sept, and a refresh that added a day did the same
+    on the dots and the bars; here the tooltip names what is under the pointer, which is what
+    `main` shows too after the next 1 px move.
+  - **Focus from a press shows nothing, by both tests**: the press itself, and `:focus-visible`. A
+    press is over with its own event: the daily bars' drag prevents the press's focus and may be let
+    go where the page never hears of it, and a flag waiting for that would have silenced the next
+    focus from the keyboard (code review).
+  - **Declined in the code review (2026-09-30):** *finding the keyboard's point by a map, not a
+    scan*, when new data has moved it: the scan runs only after the data changed under a keyboard
+    reading, over a catalogue of about a thousand. *Declaring the tests' own imports in the
+    package* (`vitest`, `@testing-library/react`): `@bvalue/seismo`'s tests resolve theirs from the
+    root too, and the label recording is one fixture for a test on each side. The package declares
+    what its source imports.
+  - **A frequency–magnitude bin is its magnitude** (`id` in `useReading`), as a dot is its event and
+    a bar its day: a filter that moves the smallest magnitude moves every bin's index, and the
+    keyboard's reading stayed on the index, another magnitude (a refresh that brought an M1.0, with
+    the keyboard on M1.8: `main` showed M1.3 and here it stays on M1.8, checked 2026-09-30). A window of "Valor b en el tiempo"
+    stays its index: two windows can end at the same moment, and nothing else names one from one
+    Mc to the next.
+  - **Enter takes the tooltip from a resting pointer, like an arrow** (code review). It toggled the
+    keyboard's reading unseen under the pointer's tooltip, on every chart, and the reading then
+    appeared by itself when the pointer left.
+  - **Kept apart, with its reason:** a finger that moves is read like a pointer on the first two
+    charts and not on the magnitude chart, where the move is the scroll. Enter hides and shows the
+    tooltip everywhere but on the daily bars, where it chooses the day (`enter`), and is handed only
+    the day the keyboard's tooltip is on.
+- **The frame is not a component.** The issue asked for the wrapper, the `svg`, the clip, the grid
+  and the labels as one frame. Cut from the three, what they share is smaller pieces: one chart's
+  key is inside the focus ring and another's outside, one has pinned axes in their own `svg`, one
+  draws its labels over the cursor. A `ChartFrame` would have needed a slot or a flag for each.
+  `GridRows` draws a row once where a tick is on the plot's edge for all of them, which only "Valor b
+  en el tiempo" did; the others' ticks never met an edge, or drew the same line twice with one key.
+- **Its tests are the `charts` vitest project** (`packages/charts/test`, happy-dom), on a stand-in
+  chart of five points: every rule above, without a catalogue. Each of 35 mutations of the kit
+  failed a test. The three charts' own tests still run what the reader gets; one assertion in
+  `b-over-time.test.ts` changed with the first fix above (after the pointer takes the tooltip and
+  leaves, Enter shows the keyboard's reading, where it hid it).
+- **An arrow that cannot step renders nothing**, at either end of a walk: the keyboard's reading is
+  kept as the same state (`reading.test.ts`, "renders nothing for arrows held against either end").
+- **The kit is compiled by React Compiler, as `src/` is** (`SOURCE_DIRS` in `react-compiler.config.ts`;
+  [development](development.md#tooling-gotchas)). Its code was compiled in `src/`, and the move to a
+  package took it out of the build's compiler until it was listed there. It compiles with no skips,
+  and its tests run compiled (`compiled.test.ts`).
+- **Where the tooltip goes did not change** (checked 2026-09-30 after the rebase onto React Compiler,
+  `main` at `6f0a0d4` against this, both served by `scripts/fixture-server.ts` from one capture,
+  DevTools-protocol mouse moves and touches, in-page keys one per call, each box read after its
+  glide). A hover grid over all four drawings (the plot's edges and corners, both sides of every
+  flip, the scrolling chart at its start, middle and end; 6,096 places, both zones, 1280 and 390 px),
+  every keyboard step of every walk to both ends (7,186 records) and taps and drags (416): the same
+  box on both builds in every case. What differs is only what the fixes above say: with the mouse
+  resting on the plot the keyboard's tooltip shows (at the place `main` gives it with the mouse
+  away), Enter hides it, a repeated place is no move, a hidden reading comes back without a step,
+  and new data or a new width under a resting pointer is read where the pointer is. The cards at
+  rest have the same markup (36 of 36: both zones, both themes, 320, 390 and 1280 px) and the
+  stylesheet is the same file.
+- **Checked before the rebase** (agent-browser, `main` at `5662df1` and this served by `scripts/fixture-server.ts` from
+  one capture of the catalogue): the three cards on both zones, both themes at 320, 390 and 1280 px.
+  The stylesheet is the same file, byte for byte; the cards' markup is the same in 36 of 36, apart
+  from React's own ids for a clip path, which follow load order on either build; over four runs 35,
+  36, 34 and 36 of 36 screenshots were identical to the pixel, and the others differed by 1/255 in at
+  most 206 colour values with their markup equal (the rasteriser's). Then a real pointer (DevTools
+  protocol moves), in-page key events and touch events over all four drawings at 1280 and 390 px, 72
+  steps each: the two builds differ only in the fixes above. A real press, a drag released outside
+  the chart and a focus from the keyboard after it, on the bars: the same on both. What it costs
+  and saves is in [Performance](performance.md).
+- **Whether it came out smaller** (the issue's own test). The three charts went from 1,801 lines to
+  1,520 ("Magnitud en el tiempo" from 978 to 721), and what they share from 370 lines in two files
+  to 807 in seven, a third of them the rules written down: about a hundred lines more in all, for
+  one copy of each rule where there were two, and 1.6 kB less JavaScript.
+- **Not in the kit, on purpose:**
+  - *The charts themselves.* They read the page's strings, its zones and `Stats`; a package that
+    took them would take the page with them.
+  - *`src/insights/measure.ts`*, the insights page's `textWidth`. It pads a width by 3 % and guesses
+    one without a canvas, to reserve room; the kit's must match Recharts' measure exactly or say it
+    cannot ([Performance](performance.md), issue #96's declined items).
+  - *The insights page's drawings and the groups card's daily strips.* They have no keyboard layer
+    and no tooltip; the strips' scroller is the nearest thing to `useScrollView`, and is a
+    follow-up of its own.
 
 ## Design-system lint
 

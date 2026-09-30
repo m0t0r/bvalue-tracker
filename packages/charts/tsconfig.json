@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The browser and React, and nothing of the app: no "@" alias, no Vite client types, no Node.
+    // The compiler is what keeps the page's strings, its zones and its statistics out of here.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": []
+  },
+  "include": ["src", "test"]
+}

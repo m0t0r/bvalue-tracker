@@ -1,3 +1,18 @@
+import {
+  ChartTip,
+  Drawing,
+  GridRows,
+  TickLabels,
+  focusRing,
+  inPlot,
+  labelWidth,
+  ownPlaceLabels,
+  usePlotSize,
+  useReading,
+  useScrollView,
+  type PlotArea,
+  type ScrollView,
+} from "@bvalue/charts";
 import { scaleLinear } from "d3-scale";
 import { symbol, symbolCircle, symbolStar } from "d3-shape";
 import {
@@ -11,7 +26,6 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
 import { DAY, dailyCounts, type DayRange } from "@/lib/daily-counts";
@@ -22,9 +36,8 @@ import { cn } from "@/lib/utils";
 import { useZone } from "@/lib/zone";
 import { clusterOf, type Cluster } from "../../../core/clusters";
 import type { ZoneId } from "../../../core/zones";
-import { bandOnAxis, countAxis, dayBar, dayTicks, ownPlaceLabels, tickLabel } from "./day-axis";
+import { bandOnAxis, countAxis, dayBar, dayTicks, tickLabel } from "./day-axis";
 import { ClusterLegend, DailyLine, useFinePointer } from "./magnitude-time-legend";
-import { ChartTip, textWidth, usePlotSize, type PlotArea } from "./svg-chart";
 
 // The whole sequence squeezed into a phone's ~300px is one solid band, so below DENSE_BELOW every
 // Colombian day gets a fixed slice of width instead and the card scrolls sideways. Above it the
@@ -46,7 +59,6 @@ const TOP = 8;
 // The first day starts half a date label inside the plot, so its label, centred on the day's start like
 // every other, has room: at the plot's edge it would be cut by the drawing's own left edge.
 const FIRST_DAY = LEFT + 20;
-const REVEAL = 16; // how far inside the screen's edge the keyboard's point is kept
 const TIP_MAX = 360;
 const SCATTER_H = 256; // h-64
 const BARS_H = 144; // h-36
@@ -78,125 +90,29 @@ interface Frame {
   domain: readonly [number, number];
 }
 
-/**
- * The scroll container, as the drawings inside it need it: which part of a drawing is on screen, so a
- * tooltip stays there, and a way to bring a point on screen for the keyboard.
- */
-interface View {
-  /** The stretch of the drawing that is on screen, in its own px. */
-  visible: () => { from: number; to: number };
-  /** Scrolls until `x`, in the drawing's px, is on screen. */
-  reveal: (x: number) => void;
-  /** Whether the chart last scrolled for the keyboard, with no move of the pointer since. */
-  keyboardScrolled: () => boolean;
-  /** The pointer has moved: a scroll from here on is the reader's own. */
-  pointerMoved: () => void;
-  /** Calls `fn` whenever what is on screen changes: a scroll, or a new width. */
-  subscribe: (fn: () => void) => () => void;
-}
-
 /** A coordinate to four decimals, as Recharts wrote its bars': the full float put some edges a pixel row apart. */
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 
-/** A tooltip keeps to the part of the plot that is on screen: past it, the scroll container cuts it off. */
-function tipArea(view: View, frame: Frame, height: number): PlotArea {
-  const { from, to } = view.visible();
-  const left = Math.max(LEFT, from);
-  const right = Math.min(frame.width - RIGHT, to);
-  return { left, top: TOP, width: Math.max(0, right - left), height: height - TOP - X_AXIS_H };
-}
-
-/**
- * Where the keyboard starts: the first of `n` marks that is on screen, or the last for an arrow to the
- * left. Without scrolling that is the first of all, as in Recharts; on a phone, where the chart opens
- * on its newest days, starting from the first of all would throw the view back to the first day.
- */
-function onScreen(view: View, n: number, x: (i: number) => number): { first: number; last: number } {
-  const { from, to } = view.visible();
-  let first = 0;
-  while (first < n - 1 && x(first) < from + REVEAL) first++;
-  let last = n - 1;
-  while (last > first && x(last) > to - REVEAL) last--;
-  return { first, last };
-}
-
-/** Whether focus came from the keyboard: a press on a dot focuses the drawing too, and asks for no reading. */
-function fromKeyboard(el: Element): boolean {
-  try {
-    return el.matches(":focus-visible");
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Tells a pointer that moved from a chart that moved under it. The keyboard scrolls the chart to the
- * point it is on, and the browser then sends a mouse move from where a resting pointer already was:
- * taken as a move, it would hand the tooltip to whatever had come under the pointer. A scroll the
- * reader makes under a resting pointer sends the same move, and that one counts: the tooltip must go
- * on naming what is under the pointer, which is what a press there would choose.
- */
-function usePointerMoved(view: View) {
-  const last = useRef<{ x: number; y: number } | null>(null);
-  const [moved] = useState(() => ({
-    to: (x: number, y: number) => {
-      const same = last.current?.x === x && last.current.y === y;
-      last.current = { x, y };
-      if (same) return !view.keyboardScrolled();
-      view.pointerMoved();
-      return true;
-    },
-    /** The pointer has left, or a finger has lifted: the next move counts wherever it is. */
-    away: () => {
-      last.current = null;
-    },
-  }));
-  return moved;
-}
-
-/**
- * The part of a drawing's plot a tooltip may use, kept to what is on screen while a tooltip is shown
- * (`live`): read again when a reading is made (`measure`), and whenever the chart scrolls or changes
- * width under one that is already there.
- */
-function useTipArea(view: View, frame: Frame, height: number, live: boolean) {
-  const [area, setArea] = useState<PlotArea>(() => tipArea(view, frame, height));
-  const measure = useCallback(() => {
-    const next = tipArea(view, frame, height);
-    setArea((a) => (a.left === next.left && a.width === next.width && a.height === next.height ? a : next));
-  }, [view, frame, height]);
-  const isLive = useRef(live);
-  useEffect(() => {
-    isLive.current = live;
-  }, [live]);
-  useEffect(() => view.subscribe(() => isLive.current && measure()), [view, measure]);
-  return [area, measure] as const;
-}
+/** A drawing's plot: what its margins and the date labels under it leave. */
+const plotOf = (frame: Frame, height: number): PlotArea => ({
+  left: LEFT,
+  top: TOP,
+  width: frame.width - LEFT - RIGHT,
+  height: height - TOP - X_AXIS_H,
+});
 
 const TIP = "max-w-(--tip-max) wrap-anywhere";
-const DRAWING =
-  "relative shrink-0 overflow-x-clip has-[svg:focus-visible]:rounded-sm has-[svg:focus-visible]:outline-2 has-[svg:focus-visible]:outline-offset-2 has-[svg:focus-visible]:outline-ring";
+const DRAWING = cn("relative shrink-0 overflow-x-clip", focusRing);
 
 /** The grid's horizontal lines and the date labels, the same under the dots and under the bars. */
-function Backdrop({ frame, height, lines }: { frame: Frame; height: number; lines: readonly number[] }) {
+function Backdrop({ frame, plot, ys }: { frame: Frame; plot: PlotArea; ys: readonly number[] }) {
   const { lang } = useI18n();
-  const bottom = height - X_AXIS_H;
   return (
     <>
-      <g className="stroke-border/50">
-        {lines.map((y) => (
-          <line key={y} x1={LEFT} x2={frame.width - RIGHT} y1={y} y2={y} fill="none" />
-        ))}
-      </g>
-      <g className="fill-muted-foreground">
-        {frame.labels.map((d) => (
-          <text key={d} x={frame.x(d)} y={bottom + 14} textAnchor="middle">
-            <tspan x={frame.x(d)} dy="0.71em">
-              {fmtDay(d, lang)}
-            </tspan>
-          </text>
-        ))}
-      </g>
+      <GridRows plot={plot} ys={ys} />
+      <TickLabels
+        below={{ ticks: frame.labels, at: frame.x, label: (d) => fmtDay(d, lang), edge: plot.top + plot.height }}
+      />
     </>
   );
 }
@@ -237,15 +153,7 @@ function PinnedAxis({
   return (
     <div aria-hidden className={cn("sticky left-0 z-10 w-(--axis-col) shrink-0 bg-card", scrolled && "shadow-pin")}>
       <svg width={AXIS_COL} height={height} viewBox={`0 0 ${AXIS_COL} ${height}`} className="block">
-        <g className="fill-muted-foreground">
-          {ticks.map((v) => (
-            <text key={v} x={AXIS_W - 8} y={y(v)} textAnchor="end">
-              <tspan x={AXIS_W - 8} dy="0.355em">
-                {tickLabel(v)}
-              </tspan>
-            </text>
-          ))}
-        </g>
+        <TickLabels beside={{ ticks, at: y, label: tickLabel, edge: AXIS_W }} />
       </svg>
     </div>
   );
@@ -261,9 +169,6 @@ interface Point {
   cluster: Cluster;
   main: boolean;
 }
-
-/** Which event the tooltip is on. */
-type Reading = { id: string };
 
 /**
  * The dots. The tooltip is on the dot under the pointer, or on the event the keyboard is at: the arrows
@@ -285,15 +190,14 @@ const Dots = memo(function Dots({
   /** The magnitudes that get a grid line. */
   ticks: readonly number[];
   days: DayRange | null;
-  view: View;
+  view: ScrollView;
 }) {
   const { t, lang } = useI18n();
   const zone = useZone();
   const fine = useFinePointer();
-  const [pointer, setPointer] = useState<Reading | null>(null);
-  const [key, setKey] = useState<(Reading & { on: boolean }) | null>(null);
 
-  const bottom = SCATTER_H - X_AXIS_H;
+  const plot = useMemo(() => plotOf(frame, SCATTER_H), [frame]);
+  const bottom = plot.top + plot.height;
   const index = useMemo(() => new Map(points.map((p, i) => [p.id, i])), [points]);
 
   // The shallow group is drawn first, then the deep one over it, then the mainshock over both.
@@ -313,107 +217,48 @@ const Dots = memo(function Dots({
     );
     return (
       <>
-        <Backdrop frame={frame} height={SCATTER_H} lines={[...ticks.map((v) => y(v)), TOP, bottom]} />
+        <Backdrop frame={frame} plot={plot} ys={ticks.map((v) => y(v))} />
         <g className="fill-chart-1/55 stroke-chart-1">{drawn.shallow.map(dot)}</g>
         <g className="fill-chart-4/55 stroke-chart-4">{drawn.deep.map(dot)}</g>
         <g className="fill-chart-2">{drawn.main.map(dot)}</g>
       </>
     );
-  }, [drawn, frame, ticks, y, bottom]);
+  }, [drawn, frame, plot, ticks, y]);
 
-  // A reading is of an event by its id: a refresh adds events, and a filter takes them away. The
-  // pointer's and the keyboard's are never both shown: whichever was used last clears the other's.
-  const keyAt = key ? (index.get(key.id) ?? null) : null;
-  const reading = pointer && index.has(pointer.id) ? pointer : key?.on && keyAt !== null ? key : null;
-  const p = reading ? points[index.get(reading.id)!]! : null;
-  const at = p ? { x: frame.x(p.t), y: y(p.mag) } : null;
-  const [area, measure] = useTipArea(view, frame, SCATTER_H, reading !== null);
-
-  const shown = () => onScreen(view, points.length, (i) => frame.x(points[i]!.t));
-  const showKey = (i: number) => {
-    const next = points[i];
-    if (!next) return;
-    // Brought on screen first: on a phone the chart scrolls, and the first event is far to the left.
-    view.reveal(frame.x(next.t));
-    measure();
-    // The keyboard takes the tooltip from a pointer left resting on the chart.
-    setPointer(null);
-    setKey({ id: next.id, on: true });
-  };
   // The mark nearest the pointer, within reach of its edge: a dot is 6 px across, a small thing to land
   // a finger on, so the pointer need only come close. Recharts read only a dot the pointer was exactly on.
-  const svg = useRef<SVGSVGElement>(null);
   const reach = fine ? 5 : 11;
-  const moved = usePointerMoved(view);
-  const leave = () => {
-    moved.away();
-    setPointer(null);
-  };
-  const hover = (clientX: number, clientY: number) => {
-    if (!svg.current || !moved.to(clientX, clientY)) return;
-    const r = svg.current.getBoundingClientRect();
-    const px = clientX - r.left,
-      py = clientY - r.top;
-    let id: string | null = null;
-    let best = reach;
-    // From the last drawn back, so of two marks as near, the one on top wins. The distance is to the
-    // mark's edge, so the star, four times a dot across, is read anywhere on it.
-    for (const group of [drawn.main, drawn.deep, drawn.shallow]) {
-      for (let i = group.length - 1; i >= 0; i--) {
-        const q = group[i]!;
-        const d = Math.hypot(frame.x(q.t) - px, y(q.mag) - py) - (q.main ? STAR_R : DOT_R);
-        if (d < best) {
-          best = d;
-          id = q.id;
+  // A reading is of an event by its id: a refresh adds events, and a filter takes them away. The arrows
+  // walk the events in the order they happened.
+  const reading = useReading({
+    n: points.length,
+    id: (i) => points[i]!.id,
+    read: (px, py) => {
+      let id: string | null = null;
+      let best = reach;
+      // From the last drawn back, so of two marks as near, the one on top wins. The distance is to the
+      // mark's edge, so the star, four times a dot across, is read anywhere on it.
+      for (const group of [drawn.main, drawn.deep, drawn.shallow]) {
+        for (let i = group.length - 1; i >= 0; i--) {
+          const q = group[i]!;
+          const d = Math.hypot(frame.x(q.t) - px, y(q.mag) - py) - (q.main ? STAR_R : DOT_R);
+          if (d < best) {
+            best = d;
+            id = q.id;
+          }
         }
       }
-    }
-    // Drawn within the event, before the next frame: left to React's scheduler the tooltip is a frame late.
-    flushSync(() => {
-      measure();
-      if (id !== (pointer?.id ?? null)) setPointer(id === null ? null : { id });
-      // The pointer takes the tooltip from the keyboard.
-      if (id !== null) setKey((k) => (k?.on ? { ...k, on: false } : k));
-    });
-  };
+      // The tooltip sits by its dot, not at the pointer's height.
+      return id === null ? null : { i: index.get(id)!, y: 0 };
+    },
+    scroll: { view, x: (i) => frame.x(points[i]!.t), plot },
+  });
+  const p = reading.active ? points[reading.active.i]! : null;
+  const at = p ? { x: frame.x(p.t), y: y(p.mag) } : null;
 
   return (
-    <div
-      className={cn(DRAWING, "h-64 w-(--plot-w)")}
-      onMouseMove={(e) => hover(e.clientX, e.clientY)}
-      onMouseLeave={leave}
-      // A finger lifted lets go; a tap still shows the dot, through the mouse events that follow the touch.
-      onTouchEnd={leave}
-      onTouchCancel={leave}
-    >
-      <svg
-        ref={svg}
-        role="application"
-        tabIndex={0}
-        width={frame.width}
-        height={SCATTER_H}
-        viewBox={`0 0 ${frame.width} ${SCATTER_H}`}
-        className="block outline-hidden"
-        onFocus={(e) => {
-          if (fromKeyboard(e.currentTarget)) showKey(keyAt ?? shown().first);
-        }}
-        onBlur={() => setKey((k) => (k ? { ...k, on: false } : k))}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            if (key && keyAt !== null) setKey({ ...key, on: !key.on });
-            return;
-          }
-          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-          // The arrows are the chart's here, not the scroll container's around it.
-          e.preventDefault();
-          const step = e.key === "ArrowRight" ? 1 : -1;
-          if (keyAt === null) showKey(step > 0 ? shown().first : shown().last);
-          else if (!key?.on) showKey(keyAt);
-          else showKey(Math.min(points.length - 1, Math.max(0, keyAt + step)));
-        }}
-      >
-        <title>{t.magTimeTitle}</title>
-        <desc>{t.magTimeDesc}</desc>
+    <div className={cn(DRAWING, "h-64 w-(--plot-w)")} {...reading.frame}>
+      <Drawing width={frame.width} height={SCATTER_H} title={t.magTimeTitle} desc={t.magTimeDesc} reading={reading}>
         {/* The chosen days, carried up from the bars, so the dots can be matched to the catalogue. */}
         <ChosenBand days={days} frame={frame} height={SCATTER_H} />
         {marks}
@@ -427,9 +272,9 @@ const Dots = memo(function Dots({
             pointerEvents="none"
           />
         ) : null}
-      </svg>
-      {at && p && reading ? (
-        <ChartTip at={at} area={area} className={TIP}>
+      </Drawing>
+      {at && p ? (
+        <ChartTip at={at} area={reading.area} className={TIP}>
           <div className="font-medium tabular-nums">
             M{p.mag.toFixed(1)} · {fmtDateTime(p.time, lang)}
           </div>
@@ -449,9 +294,6 @@ interface Day {
   shallow: number;
   deep: number;
 }
-
-/** Which day the tooltip is on, and its height. */
-type DayReading = { start: number; y: number };
 
 /**
  * The daily bars, and choosing days on them. A press on a day with events chooses it, and a second
@@ -477,30 +319,24 @@ const DailyBars = memo(function DailyBars({
   y: (count: number) => number;
   /** The counts that get a grid line. */
   lines: readonly number[];
-  view: View;
+  view: ScrollView;
 }) {
   const { t, lang } = useI18n();
   const fine = useFinePointer();
-  const svg = useRef<SVGSVGElement>(null);
   const anchor = useRef<number | null>(null);
   const dragRef = useRef<{ from: number; to: number; extend: boolean } | null>(null);
   const [drag, setDrag] = useState<DayRange | null>(null);
-  const [pointer, setPointer] = useState<DayReading | null>(null);
-  const [key, setKey] = useState<(DayReading & { on: boolean }) | null>(null);
 
-  const bottom = BARS_H - X_AXIS_H;
+  const plot = useMemo(() => plotOf(frame, BARS_H), [frame]);
+  const bottom = plot.top + plot.height;
   const first = daily[0];
-  const indexOf = (start: number) => {
-    const i = first ? Math.round((start - first.start) / DAY) : -1;
-    return daily[i]?.start === start ? i : null;
-  };
 
-  // The day under the pointer, from the event's own position, so a press is placed by where it landed.
-  const dayAt = (clientX: number, clamp: boolean): Day | undefined => {
-    if (!svg.current || !first) return undefined;
-    const at = frame.invert(clientX - svg.current.getBoundingClientRect().left);
-    const i = Math.floor((at - first.start) / DAY);
-    return daily[clamp ? Math.min(Math.max(i, 0), daily.length - 1) : i];
+  // The day at `px` in the drawing, or none off the axis; with `clamp`, the nearest day.
+  const dayIndex = (px: number, clamp: boolean): number | null => {
+    if (!first) return null;
+    const i = Math.floor((frame.invert(px) - first.start) / DAY);
+    if (clamp) return Math.min(Math.max(i, 0), daily.length - 1);
+    return i >= 0 && i < daily.length ? i : null;
   };
   const press = (start: number) => {
     anchor.current = start;
@@ -509,6 +345,37 @@ const DailyBars = memo(function DailyBars({
   const span = (from: number, to: number) => {
     anchor.current = from;
     onDays(spanDays(from, to));
+  };
+
+  // The tooltip's day: the one under the pointer while it is over the plot, as far up as the pointer
+  // is. The keyboard's tooltip sits at one height for every day, halfway down the drawing: the band
+  // marks the day. Enter chooses the day the keyboard's tooltip is on, and Shift + Enter every day up
+  // to it; a held Enter repeats, and each repeat would let go of the day the first one chose.
+  const reading = useReading({
+    n: daily.length,
+    id: (i) => daily[i]!.start,
+    read: (px, py) => {
+      const y = Math.round(py);
+      if (!inPlot(plot, Math.round(px), y)) return null;
+      const i = dayIndex(px, true);
+      return i === null ? null : { i, y };
+    },
+    keyY: () => (TOP + BARS_H) / 2,
+    enter: (i, e) => {
+      const d = daily[i];
+      if (e.repeat || !d) return;
+      e.preventDefault();
+      if (e.shiftKey && days) span(anchor.current ?? days.from, d.start);
+      else if (d.total > 0) press(d.start);
+    },
+    scroll: { view, x: (i) => frame.x(daily[i]!.start + DAY / 2), plot },
+  });
+  // The day under the pointer, from the event's own position, so a press is placed by where it landed:
+  // the tooltip's day and a press's are read off the same place.
+  const dayAt = (clientX: number, clamp: boolean): Day | undefined => {
+    const at = reading.place(clientX, 0);
+    const i = at ? dayIndex(at.px, clamp) : null;
+    return i === null ? undefined : daily[i];
   };
 
   // A drag is followed on the window, so it goes on outside the chart and ends wherever the button is
@@ -590,73 +457,17 @@ const DailyBars = memo(function DailyBars({
     if (d && d.total > 0) press(d.start);
   };
 
-  // The tooltip's day: the one under the pointer while it is over the plot, as far up as the pointer is.
-  const moved = usePointerMoved(view);
-  const leave = () => {
-    moved.away();
-    setPointer(null);
-  };
-  const read = (clientX: number, clientY: number) => {
-    if (!svg.current || !moved.to(clientX, clientY)) return;
-    const r = svg.current.getBoundingClientRect();
-    const px = Math.round(clientX - r.left),
-      py = Math.round(clientY - r.top);
-    const inside = px >= LEFT && px <= frame.width - RIGHT && py >= TOP && py <= bottom;
-    const d = inside ? dayAt(clientX, true) : undefined;
-    // Drawn within the event, before the next frame (see the dots).
-    flushSync(() => {
-      measure();
-      if (d?.start !== pointer?.start || (d && py !== pointer?.y)) setPointer(d ? { start: d.start, y: py } : null);
-      // The pointer takes the tooltip from the keyboard, so Enter never chooses a day the tooltip is not on.
-      if (d) setKey((k) => (k?.on ? { ...k, on: false } : k));
-    });
-  };
-
-  const keyAt = key ? indexOf(key.start) : null;
-  // The keyboard's tooltip sits at one height for every day, halfway down the drawing: the band marks the day.
-  const shown = () => onScreen(view, daily.length, (i) => frame.x(daily[i]!.start + DAY / 2));
-  const showKey = (i: number) => {
-    const d = daily[i];
-    if (!d) return;
-    view.reveal(frame.x(d.start + DAY / 2));
-    measure();
-    // The keyboard takes the tooltip from a pointer left resting on the chart.
-    setPointer(null);
-    setKey({ start: d.start, on: true, y: (TOP + BARS_H) / 2 });
-  };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-      // The arrows are the chart's here, not the scroll container's around it.
-      e.preventDefault();
-      const step = e.key === "ArrowRight" ? 1 : -1;
-      if (keyAt === null) showKey(step > 0 ? shown().first : shown().last);
-      else if (!key?.on) showKey(keyAt);
-      else showKey(Math.min(daily.length - 1, Math.max(0, keyAt + step)));
-      return;
-    }
-    // A held Enter repeats; each repeat would let go of the day the first one chose.
-    if (e.key !== "Enter" || e.repeat) return;
-    const d = key?.on && keyAt !== null ? daily[keyAt] : undefined;
-    if (!d) return;
-    e.preventDefault();
-    if (e.shiftKey && days) span(anchor.current ?? days.from, d.start);
-    else if (d.total > 0) press(d.start);
-  };
-
   // What the bars show as chosen: the drag while it lasts, then the choice.
   const lit = drag ?? days;
 
-  const pointerAt = pointer ? indexOf(pointer.start) : null;
-  const reading = pointer && pointerAt !== null ? pointer : key?.on && keyAt !== null ? key : null;
-  const [area, measure] = useTipArea(view, frame, BARS_H, reading !== null);
-  const p = reading ? daily[indexOf(reading.start)!]! : null;
+  const p = reading.active ? daily[reading.active.i]! : null;
   const band = frame.x(DAY) - frame.x(0);
 
   // What a pointer or a key does not change: the grid and the date labels, and the bars, which change
   // with the catalogue, the width and the days chosen. A move redraws the day's band and the tooltip.
   const backdrop = useMemo(
-    () => <Backdrop frame={frame} height={BARS_H} lines={lines.map((v) => y(v))} />,
-    [frame, lines, y],
+    () => <Backdrop frame={frame} plot={plot} ys={lines.map((v) => y(v))} />,
+    [frame, plot, lines, y],
   );
   const bars = useMemo(() => {
     const bar = dayBar(band);
@@ -690,28 +501,10 @@ const DailyBars = memo(function DailyBars({
     <div
       data-day-bars
       className={cn(DRAWING, "h-36 w-(--plot-w) cursor-pointer")}
-      onKeyDown={onKeyDown}
-      onMouseMove={(e) => read(e.clientX, e.clientY)}
-      onMouseLeave={leave}
-      onTouchEnd={leave}
-      onTouchCancel={leave}
+      {...reading.frame}
       {...(fine ? { onMouseDown } : { onClick })}
     >
-      <svg
-        ref={svg}
-        role="application"
-        tabIndex={0}
-        width={frame.width}
-        height={BARS_H}
-        viewBox={`0 0 ${frame.width} ${BARS_H}`}
-        className="block outline-hidden"
-        onFocus={(e) => {
-          if (fromKeyboard(e.currentTarget)) showKey(keyAt ?? shown().first);
-        }}
-        onBlur={() => setKey((k) => (k ? { ...k, on: false } : k))}
-      >
-        <title>{t.dailyTitle}</title>
-        <desc>{t.dailyKeys}</desc>
+      <Drawing width={frame.width} height={BARS_H} title={t.dailyTitle} desc={t.dailyKeys} reading={reading}>
         {backdrop}
         {/* The day the tooltip is on. */}
         {p ? (
@@ -721,9 +514,13 @@ const DailyBars = memo(function DailyBars({
             pixels tall, and the dimming alone left it hard to find. */}
         <ChosenBand days={lit} frame={frame} height={BARS_H} />
         {bars}
-      </svg>
-      {p && reading ? (
-        <ChartTip at={{ x: frame.x(p.start + DAY / 2), y: reading.y }} area={area} className={cn(TIP, "tabular-nums")}>
+      </Drawing>
+      {p && reading.active ? (
+        <ChartTip
+          at={{ x: frame.x(p.start + DAY / 2), y: reading.active.y }}
+          area={reading.area}
+          className={cn(TIP, "tabular-nums")}
+        >
           <div>
             <span className="font-medium">{p.total}</span> · {fmtDate(p.start + DAY / 2, lang)}
           </div>
@@ -794,15 +591,7 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
     };
   }, [events, mainshockId, zone.id]);
 
-  const scroller = useRef<HTMLDivElement | null>(null);
   const [sizeRef, size] = usePlotSize();
-  const setScroller = useCallback(
-    (el: HTMLDivElement | null) => {
-      scroller.current = el;
-      sizeRef(el);
-    },
-    [sizeRef],
-  );
   const viewW = size?.width ?? 0;
 
   const roomW = Math.max(0, viewW - AXIS_COL);
@@ -817,14 +606,9 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
     const x = scaleLinear()
       .domain([...domain])
       .range([FIRST_DAY, Math.max(FIRST_DAY, plotW - RIGHT)]);
-    // Without a canvas to measure with, a label is taken as 0.6 em a character, a little wider than Geist's.
-    const em = parseFloat(font) || 12;
     const labels = ownPlaceLabels(dayTicks(domain, tickDays), {
       x,
-      width: (d) => {
-        const label = fmtDay(d, lang);
-        return textWidth(label, font) ?? label.length * 0.6 * em;
-      },
+      width: (d) => labelWidth(fmtDay(d, lang), font),
       start: 0,
       end: plotW,
       gap: LABEL_GAP,
@@ -832,61 +616,20 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
     return { width: plotW, x, invert: (px) => x.invert(px), labels, domain };
   }, [domain, plotW, tickDays, font, lang]);
 
-  // The reader starts at the newest events and scrolls back in time. A refresh or a filter change
-  // keeps them where they were reading unless they were already at the right edge, which is where
-  // the next event will appear.
-  const stick = useRef(true);
-  const [scrolled, setScrolled] = useState(false);
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el || !stick.current) return;
-    el.scrollLeft = el.scrollWidth;
-    setScrolled(el.scrollLeft > 1);
-  }, [plotW]);
-  // The drawings start after the pinned column, so what is on screen of one runs from the scroll
-  // position for as far as the room beside that column.
-  const [view] = useState<View & { changed: () => void }>(() => {
-    let byKeyboard = false;
-    const listeners = new Set<() => void>();
-    return {
-      keyboardScrolled: () => byKeyboard,
-      pointerMoved: () => {
-        byKeyboard = false;
-      },
-      subscribe: (fn) => {
-        listeners.add(fn);
-        return () => void listeners.delete(fn);
-      },
-      changed: () => listeners.forEach((fn) => fn()),
-      visible: () => {
-        const el = scroller.current;
-        const room = (el?.clientWidth ?? 0) - AXIS_COL;
-        // Not laid out: nothing is known to be off screen.
-        if (!el || room <= 0) return { from: 0, to: Infinity };
-        return { from: el.scrollLeft, to: el.scrollLeft + room };
-      },
-      reveal: (x) => {
-        const el = scroller.current;
-        const room = (el?.clientWidth ?? 0) - AXIS_COL;
-        if (!el || room <= 0) return;
-        // With a little air, so the point is not under the pinned column's shadow or on the very edge.
-        if (x >= el.scrollLeft + REVEAL && x <= el.scrollLeft + room - REVEAL) return;
-        const before = el.scrollLeft;
-        el.scrollLeft = x - room / 2;
-        if (el.scrollLeft !== before) byKeyboard = true;
-      },
-    };
-  });
-  // A tooltip on show follows what is on screen: a scroll (`onScroll`) or a new width moves it.
-  useEffect(() => view.changed(), [view, plotW, viewW]);
-
-  const onScroll = useCallback(() => {
-    const el = scroller.current;
-    if (!el) return;
-    stick.current = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
-    setScrolled(el.scrollLeft > 1);
-    view.changed();
-  }, [view]);
+  // The reader starts at the newest events and scrolls back in time, under the pinned axes' column.
+  const {
+    ref: scrollRef,
+    onScroll,
+    scrolled,
+    view,
+  } = useScrollView({ pinned: AXIS_COL, content: plotW, container: viewW });
+  const setScroller = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef(el);
+      sizeRef(el);
+    },
+    [scrollRef, sizeRef],
+  );
 
   // Escape anywhere in the chart lets go of the chosen days; the bars handle the rest (`DailyBars`).
   const onKeyDown = (e: React.KeyboardEvent) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bandOnAxis, countAxis, dayBar, dayTicks, ownPlaceLabels, tickLabel } from "./day-axis";
+import { bandOnAxis, countAxis, dayBar, dayTicks, tickLabel } from "./day-axis";
 
 const DAY = 86_400_000;
 // 10 August 2026, 00:00 in Colombia.
@@ -34,32 +34,8 @@ describe("the date labels", () => {
     expect(dayTicks([AUG_10, AUG_10 + 45 * DAY], 7)).toHaveLength(7);
     // A step of zero would never end.
     expect(dayTicks([AUG_10, AUG_10 + 2 * DAY], 0)).toHaveLength(3);
-  });
-
-  // Chocó's 45 days on a phone: a 1260 px plot, a label every third day, 42 px each.
-  const phone = { width: 1260, step: (1260 - 30 - 12) / 45 };
-  const x = (d: number) => 30 + ((d - AUG_10) / DAY) * phone.step;
-  const candidates = dayTicks([AUG_10, AUG_10 + 45 * DAY], 3);
-  const kept = ownPlaceLabels(candidates, { x, width: () => 42, start: 0, end: phone.width, gap: 24 });
-  const day = (d: number) => (d - AUG_10) / DAY;
-
-  it("keeps every label that fits at its own place", () => {
-    // 10 Aug, 13 Aug … 21 Sept: Recharts dropped 21 Sept to make room for the one below.
-    expect(kept.map(day)).toEqual([0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42]);
-  });
-
-  it("does not draw the end of the last day, whose label would cross the drawing's edge", () => {
-    // Recharts pulled "24 sept" ~10 px inside and drew it there, off its day.
-    expect(x(AUG_10 + 45 * DAY) + 21).toBeGreaterThan(phone.width);
-    expect(kept.map(day)).not.toContain(45);
-  });
-
-  it("drops a label that would cross the left edge, and one that would touch the next", () => {
-    const at = (v: number) => v;
-    expect(ownPlaceLabels([10, 100, 200], { x: at, width: () => 40, start: 0, end: 300, gap: 40 })).toEqual([100, 200]);
-    // 130 ends at 150, under 40 px from where 200 begins: from the end back, 200 is kept.
-    expect(ownPlaceLabels([50, 130, 200], { x: at, width: () => 40, start: 0, end: 300, gap: 40 })).toEqual([50, 200]);
-    expect(ownPlaceLabels([], { x: at, width: () => 40, start: 0, end: 300, gap: 40 })).toEqual([]);
+    // Which of them get a label is `ownPlaceLabels` (`@bvalue/charts`).
+    expect(dayTicks([AUG_10, AUG_10 + 45 * DAY], 3)).toHaveLength(16);
   });
 });
 

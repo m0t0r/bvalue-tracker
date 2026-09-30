@@ -1,7 +1,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import { ChartTip, tipPosition } from "./svg-chart";
+import { ChartTip, tipPosition } from "../src";
 
 afterEach(cleanup);
 

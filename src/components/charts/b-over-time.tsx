@@ -1,3 +1,18 @@
+import {
+  ChartTip,
+  Drawing,
+  GridRows,
+  PlotClip,
+  TickLabels,
+  focusRing,
+  inPlot,
+  labelWidth,
+  preserveEndTicks,
+  usePlotSize,
+  useReading,
+  type PlotArea,
+  type PlotSize,
+} from "@bvalue/charts";
 import { scaleLinear, type ScaleLinear } from "d3-scale";
 import { area as areaShape, line } from "d3-shape";
 import { AlertTriangleIcon } from "lucide-react";
@@ -7,12 +22,11 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { fmtDateTime, fmtDay, fmtDayTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { WINDOW_SIZE, independentWindows, windowIncomplete, type Stats } from "@/lib/stats";
+import { cn } from "@/lib/utils";
 import { BTimeCsvButton } from "./b-over-time-csv";
 import { bAxis } from "./b-axis";
 import { bTimeDescription } from "./b-over-time-description";
 import { BTimeKey } from "./b-over-time-key";
-import { ChartTip, inPlot, labelWidth, usePlotSize, useReading, type PlotArea, type PlotSize } from "./svg-chart";
-import { preserveEndTicks } from "./time-ticks";
 import type { Cluster } from "../../../core/clusters";
 
 /** Below this span the axis labels carry the hour as well as the date. */
@@ -216,11 +230,6 @@ export const BOverTimeChart = memo(function BOverTimeChart({
     const { plot, x, y, yTicks } = drawn;
     const right = plot.left + plot.width,
       bottom = plot.top + plot.height;
-    // A grid line at each b tick and at the plot's two edges, once where a tick is on an edge. Each at its
-    // unrounded height: half a pixel row is where a line changes rows, and 394.5 is not 394.50000000000006.
-    const rows = [...yTicks.map((v) => y(v)), plot.top, bottom].filter(
-      (py, i, all) => all.findIndex((row) => Math.abs(row - py) < 1e-6) === i,
-    );
     // A run of one window reaches halfway to its neighbours, or it would be a line no wider than the
     // plot's stroke.
     const mid = (i: number, j: number) => (data[i]!.t + data[j]!.t) / 2;
@@ -230,18 +239,10 @@ export const BOverTimeChart = memo(function BOverTimeChart({
     });
     return (
       <>
-        <defs>
-          {/* The plot's height, at any width: the axis can be narrower than the data (`bAxis`), and the
-              lines' ends and dots may reach into the margins. */}
-          <clipPath id={clip}>
-            <rect x={0} y={plot.top} width={size.width} height={plot.height} />
-          </clipPath>
-        </defs>
-        <g className="stroke-border/50">
-          {rows.map((py) => (
-            <line key={py} x1={plot.left} x2={right} y1={py} y2={py} fill="none" />
-          ))}
-        </g>
+        {/* The plot's height, at any width: the axis can be narrower than the data (`bAxis`), and the
+            lines' ends and dots may reach into the margins. */}
+        <PlotClip id={clip} plot={plot} width={size.width} />
+        <GridRows plot={plot} ys={yTicks.map((v) => y(v))} />
         <g clipPath={`url(#${clip})`}>
           <g className="fill-caution-edge" fillOpacity={0.45}>
             {stretches.map((s, i) => (
@@ -291,22 +292,10 @@ export const BOverTimeChart = memo(function BOverTimeChart({
       bottom = plot.top + plot.height;
     return (
       <>
-        <g className="fill-muted-foreground">
-          {xTicks.map((v) => (
-            <text key={v} x={x(v)} y={bottom + 14} textAnchor="middle">
-              <tspan x={x(v)} dy="0.71em">
-                {tickLabel(v)}
-              </tspan>
-            </text>
-          ))}
-          {yTicks.map((v) => (
-            <text key={v} x={Y_AXIS_W - 8} y={y(v)} textAnchor="end">
-              <tspan x={Y_AXIS_W - 8} dy="0.355em">
-                {v.toFixed(1)}
-              </tspan>
-            </text>
-          ))}
-        </g>
+        <TickLabels
+          below={{ ticks: xTicks, at: x, label: tickLabel, edge: bottom }}
+          beside={{ ticks: yTicks, at: y, label: (v) => v.toFixed(1), edge: plot.left }}
+        />
         {/* In the right margin, past the end of the plot, where no series can cross it: inside, it sat on
             the ±1σ band at 3.76:1 and the b line ran through it. The halo keeps it legible over a grid line. */}
         <text
@@ -373,7 +362,7 @@ export const BOverTimeChart = memo(function BOverTimeChart({
           // `text-xs` is the size the chart draws its labels in, for measuring them.
           <div
             ref={plotRef}
-            className="relative min-h-80 w-full flex-1 text-xs has-[svg:focus-visible]:rounded-sm has-[svg:focus-visible]:outline-2 has-[svg:focus-visible]:outline-offset-2 has-[svg:focus-visible]:outline-ring"
+            className={cn("relative min-h-80 w-full flex-1 text-xs", focusRing)}
             style={{ "--chart-w": size ? `${size.width}px` : undefined } as CSSProperties}
           >
             {drawn && size ? (
@@ -432,14 +421,22 @@ function Reading({
 }) {
   const { t, lang } = useI18n();
   const { plot, xs } = drawn;
-  // The pointer reads the window nearest it, anywhere in the plot and nothing outside it.
-  const { svg, active, frame, keys } = useReading(data.length, (px, py) => {
-    if (!inPlot(plot, px, py)) return null;
-    // A point exactly halfway between two windows is the earlier one's.
-    let i = 0;
-    for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k]! - px) < Math.abs(xs[i]! - px)) i = k;
-    return { i, y: py };
+  // The pointer reads the window nearest it, anywhere in the plot and nothing outside it. A window is its
+  // place in the line: two can end at the same moment, and nothing else names one from one Mc to the next.
+  const reading = useReading({
+    n: data.length,
+    // The pointer's place in whole pixels, as Recharts read it.
+    read: (rawX, rawY) => {
+      const px = Math.round(rawX),
+        py = Math.round(rawY);
+      if (!inPlot(plot, px, py)) return null;
+      // A point exactly halfway between two windows is the earlier one's.
+      let i = 0;
+      for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k]! - px) < Math.abs(xs[i]! - px)) i = k;
+      return { i, y: py };
+    },
   });
+  const { active } = reading;
   const p = active ? data[active.i]! : null;
   // The keyboard's tooltip sits over the window it reads, clear of its band, or under it where there is no
   // room above. Recharts put it halfway down the chart for every window, wherever the line was, and at the
@@ -449,19 +446,8 @@ function Reading({
 
   return (
     // A whole number of pixels wide, from the plot box's left edge, as Recharts drew it.
-    <div className="absolute inset-y-0 left-0 w-(--chart-w)" {...frame}>
-      <svg
-        role="application"
-        tabIndex={0}
-        width={size.width}
-        height={size.height}
-        viewBox={`0 0 ${size.width} ${size.height}`}
-        ref={svg}
-        className="block outline-hidden"
-        {...keys}
-      >
-        <title>{title}</title>
-        <desc>{desc}</desc>
+    <div className="absolute inset-y-0 left-0 w-(--chart-w)" {...reading.frame}>
+      <Drawing width={size.width} height={size.height} title={title} desc={desc} reading={reading}>
         {marks}
         {at && p ? (
           <g pointerEvents="none">
@@ -482,7 +468,7 @@ function Reading({
           </g>
         ) : null}
         {labels}
-      </svg>
+      </Drawing>
       {at && p ? (
         <ChartTip at={at} area={plot} clear={clear} className="tabular-nums">
           <div className="font-medium">

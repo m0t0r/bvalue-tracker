@@ -14,17 +14,21 @@ import { normalizePath } from "vite";
 /** The compiler's own options. Empty: its defaults, which compile every component and hook. */
 export const COMPILER_OPTIONS: Partial<PluginOptions> = {};
 
-/** The pages' source, as the glob the skipped-list test walks. */
-export const PAGE_SOURCES = "src/**/*.{ts,tsx}";
-
-const SRC = `${normalizePath(path.resolve(import.meta.dirname, "src"))}/`;
-const escaped = SRC.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /**
- * The same files as a module id: only `src/` holds components and hooks. `core/` and
+ * The folders that hold components and hooks: the pages' own, and the chart kit's (`@bvalue/charts`,
+ * whose tooltip, drawing and reading were in `src/` until issue #138 and compiled there). `core/` and
  * `packages/seismo` are plain functions the compiler has nothing to do for, and left in they were a
  * Babel parse and print each, in the build and on every dev-server request.
  */
-export const PAGE_SOURCE_ID = new RegExp(`^${escaped}.*\\.tsx?(?:$|\\?)`);
+const SOURCE_DIRS = ["src", "packages/charts/src"];
+
+/** The pages' source, as the globs the skipped-list test walks. */
+export const PAGE_SOURCES = SOURCE_DIRS.map((dir) => `${dir}/**/*.{ts,tsx}`);
+
+const escape = (dir: string) =>
+  `${normalizePath(path.resolve(import.meta.dirname, dir))}/`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** The same files as a module id. */
+export const PAGE_SOURCE_ID = new RegExp(`^(?:${SOURCE_DIRS.map(escape).join("|")}).*\\.tsx?(?:$|\\?)`);
 
 /**
  * The Babel plugin that compiles the pages. The preset compiles Vite's client environment only,

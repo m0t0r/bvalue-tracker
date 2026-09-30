@@ -1,0 +1,16 @@
+{
+  "name": "@bvalue/charts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "What a chart drawn with React's SVG needs around its marks: its size, its labels, its tooltip, and what a pointer, a finger and the keyboard read off it. Knows nothing about earthquakes, a zone or the page's words.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "cn": "^0.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

@@ -1,14 +1,28 @@
 import { scaleLinear, scaleLog } from "d3-scale";
 import { line, symbol, symbolCircle, symbolSquare } from "d3-shape";
+import {
+  ChartKey,
+  ChartTip,
+  Drawing,
+  GridRows,
+  PlotClip,
+  TickLabels,
+  focusRing,
+  inPlot,
+  labelWidth,
+  preserveEndTicks,
+  usePlotSize,
+  useReading,
+  type PlotArea,
+} from "@bvalue/charts";
 import { memo, useId, useMemo, useRef, type CSSProperties } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/stats";
+import { cn } from "@/lib/utils";
 import type { Cluster } from "../../../core/clusters";
 import { magnitudeTicks } from "./magnitude-ticks";
 import { fmdDescription } from "./fmd-description";
-import { ChartKey, ChartTip, inPlot, labelWidth, usePlotSize, useReading, type PlotArea } from "./svg-chart";
-import { preserveEndTicks } from "./time-ticks";
 
 // The drawing's margins, as the Recharts version had them: the y axis' 40 px on the left, 12 px on the
 // right for the last magnitude label, 16 px on top for "Mc", and the x axis' 30 px at the bottom.
@@ -109,16 +123,8 @@ export const FmdChart = memo(function FmdChart({
     const bottom = area.top + area.height;
     return (
       <>
-        <defs>
-          <clipPath id={clip}>
-            <rect x={0} y={area.top} width={size.width} height={area.height} />
-          </clipPath>
-        </defs>
-        <g className="stroke-border/50">
-          {[...yTicks.map((v) => y(v)), area.top, bottom].map((py) => (
-            <line key={py} x1={area.left} x2={area.left + area.width} y1={py} y2={py} fill="none" />
-          ))}
-        </g>
+        <PlotClip id={clip} plot={area} width={size.width} />
+        <GridRows plot={area} ys={yTicks.map((v) => y(v))} />
         {mcAt !== null ? (
           <line
             x1={mcAt}
@@ -131,22 +137,10 @@ export const FmdChart = memo(function FmdChart({
           />
         ) : null}
         <path d={fitPath ?? ""} clipPath={`url(#${clip})`} strokeWidth={2} fill="none" className="stroke-foreground" />
-        <g className="fill-muted-foreground">
-          {xTicks.map((v) => (
-            <text key={v} x={x(v)} y={bottom + 14} textAnchor="middle">
-              <tspan x={x(v)} dy="0.71em">
-                {v.toFixed(1)}
-              </tspan>
-            </text>
-          ))}
-          {yTicks.map((v) => (
-            <text key={v} x={Y_AXIS_W - 8} y={y(v)} textAnchor="end">
-              <tspan x={Y_AXIS_W - 8} dy="0.355em">
-                {v}
-              </tspan>
-            </text>
-          ))}
-        </g>
+        <TickLabels
+          below={{ ticks: xTicks, at: x, label: (v) => v.toFixed(1), edge: bottom }}
+          beside={{ ticks: yTicks, at: y, label: String, edge: area.left }}
+        />
         <g clipPath={`url(#${clip})`}>
           <g className="fill-chart-3">
             {data.map((d) =>
@@ -172,18 +166,25 @@ export const FmdChart = memo(function FmdChart({
   // plot. The bins are evenly spaced, so it is the nearest step from the first. The keyboard's tooltip
   // sits at one height for every magnitude, where Recharts put it: halfway between the plot's top and the
   // chart's bottom, key included. A move's render is the cursor and the tooltip alone (`marks`).
-  const { svg, active, frame, keys } = useReading(
+  const reading = useReading({
     n,
-    (px, py) => {
+    // The pointer's place in whole pixels, as Recharts read it.
+    read: (rawX, rawY) => {
       if (!drawn) return null;
+      const px = Math.round(rawX),
+        py = Math.round(rawY);
       const { area, x, lo, hi } = drawn;
       if (!inPlot(area, px, py)) return null;
       const step = n > 1 ? (hi - lo) / (n - 1) : 1;
       // A point exactly halfway between two bins is the lower one's, as in Recharts.
       return { i: Math.min(n - 1, Math.max(0, Math.ceil((x.invert(px) - lo) / step - 0.5))), y: py };
     },
-    () => (TOP + Math.round(box.current!.getBoundingClientRect().height)) / 2,
-  );
+    // A bin is its magnitude, in whole tenths: a filter that moves the smallest magnitude moves every
+    // bin's index, and the keyboard stays on the magnitude it was on.
+    id: (i) => Math.round(data[i]!.mag * 10),
+    keyY: () => (TOP + Math.round(box.current!.getBoundingClientRect().height)) / 2,
+  });
+  const { active } = reading;
   const at = drawn && active ? { x: drawn.x(data[active.i]!.mag), y: active.y } : null;
   const p = active ? data[active.i]! : null;
 
@@ -196,22 +197,11 @@ export const FmdChart = memo(function FmdChart({
       plotRef={plotRef}
       box={box}
       width={size?.width}
-      {...frame}
+      {...reading.frame}
     >
       {drawn && size ? (
         <>
-          <svg
-            role="application"
-            tabIndex={0}
-            width={size.width}
-            height={size.height}
-            viewBox={`0 0 ${size.width} ${size.height}`}
-            ref={svg}
-            className="block outline-hidden"
-            {...keys}
-          >
-            <title>{t.fmdTitle}</title>
-            <desc>{t.fmdDesc}</desc>
+          <Drawing width={size.width} height={size.height} title={t.fmdTitle} desc={t.fmdDesc} reading={reading}>
             {marks}
             {at ? (
               <line
@@ -229,7 +219,7 @@ export const FmdChart = memo(function FmdChart({
                 {`Mc ${mc.toFixed(1)}`}
               </text>
             ) : null}
-          </svg>
+          </Drawing>
           {at && p ? (
             <ChartTip at={at} area={drawn.area} className="tabular-nums">
               <div className="font-medium">M{p.mag.toFixed(1)}</div>
@@ -289,7 +279,7 @@ function Frame({
       <CardContent className="flex flex-1 flex-col">
         <div
           ref={box}
-          className="flex min-h-80 w-full flex-1 flex-col text-xs has-[svg:focus-visible]:rounded-sm has-[svg:focus-visible]:outline-2 has-[svg:focus-visible]:outline-offset-2 has-[svg:focus-visible]:outline-ring"
+          className={cn("flex min-h-80 w-full flex-1 flex-col text-xs", focusRing)}
           style={{ "--chart-w": width === undefined ? undefined : `${width}px` } as CSSProperties}
           {...pointer}
         >

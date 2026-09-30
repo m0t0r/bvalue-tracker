@@ -10,6 +10,14 @@ export default defineConfig({
       // The seismology library, on synthetic catalogues only: it knows nothing about SGC or a zone.
       { test: { name: "seismo", include: ["packages/seismo/test/**/*.test.ts"] } },
       {
+        // The chart kit, on a stand-in chart of a few points: it knows nothing about a catalogue or the
+        // page. `happy-dom` because what it holds is what a pointer, a finger and the keyboard do to a
+        // drawing. It ships compiled, like the pages (react-compiler.config.ts), so its tests run it
+        // compiled; `packages/charts/test/compiled.test.ts` fails if they stop.
+        test: { name: "charts", include: ["packages/charts/test/**/*.test.ts"], environment: "happy-dom" },
+        plugins: [reactCompiler()],
+      },
+      {
         // The page's own pure logic. It lives beside the module it tests, because `src` is the only
         // tsconfig project with the DOM lib, JSX and the "@" alias, and a test under `test/` would
         // be typechecked by the Node one, which has none of them. vitest.config.ts replaces
