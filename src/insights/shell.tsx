@@ -66,7 +66,9 @@ export function InsightsShell({
             </div>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{c.title}</h1>
-          <p className="max-w-lg text-muted-foreground text-pretty">
+          {/* Full width, as the monitor's (owner's call, 2026-09-30): capped at 32rem it left most of a
+              desktop header empty. */}
+          <p className="text-muted-foreground text-pretty">
             <Rich text={c.subtitle} parts={{ sgc: <Explain id="sgc">{c.sgcName}</Explain> }} />
           </p>
           <TabsList ref={tabList} aria-label={c.tabsLabel}>

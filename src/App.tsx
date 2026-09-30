@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
 import { lazy, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useMediaQuery } from "usehooks-ts";
+import { Backdrop } from "@/backdrop/backdrop";
 import { BSummary } from "@/components/b-summary";
 import { BTimeKey } from "@/components/charts/b-over-time-key";
 import { BTimeCsvButton } from "@/components/charts/b-over-time-csv";
@@ -150,6 +151,8 @@ function ZonePage({ zone }: { zone: ZoneId }) {
 
   return (
     <>
+      {/* The pixel background, behind the page and never under a card (src/backdrop). */}
+      <Backdrop events={events.data} />
       <main className="contents">
         <StatusBar
           loading={!settled}

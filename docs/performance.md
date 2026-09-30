@@ -949,3 +949,22 @@ practices stayed at 100.
 - The console must stay empty. The basemap style names sprite images OpenFreeMap does not
   ship (`circle-11`), which MapLibre warns about twice per load, so `event-map.tsx` answers
   `styleimagemissing` with an empty pixel. Real map errors still reach `console.error`.
+- **The pixel background costs the load nothing** (`src/backdrop`, 2026-09-30; what it is in
+  [the page](frontend.md#the-pixel-background)). It is its own chunk, 8.7 kB gzipped, imported once the
+  catalogue is on the page, so it is never in the first chunk and never on the path to the header's
+  paint. A/B against `main` (a build of each served from the same captured catalogue by
+  `scripts/fixture-server.ts`), `/` on a 390 × 844 touch phone, Slow 4G, CPU ×4, Chrome DevTools MCP:
+  - **LCP 676 ms against 673**, the same element (the static header's title), CLS 0.00 on both.
+  - **Long tasks: 53 and 156 ms against 56 and 156** (a `PerformanceObserver` on `longtask`, the sum
+    over 50 ms: 109 against 112). A first version added one of 135 ms when the chunk arrived, then one
+    of 102: the first drawing ran twice (on load, and again when `document.fonts.ready` resolved on a
+    font already in), and each time in one task that read the layout, measured the header's words and
+    painted every cell of the document, the cards' column included. Now the font redraws only if it
+    was still loading, every loop walks only the cells that can hold a pixel (the whole row above and
+    below the cards, the margins beside them: on a phone nearly none of the column), and a redraw is
+    three tasks, each after a paint (the layout and the ground, the header's glyphs, the drawing). The
+    same split keeps a theme or language switch from holding back the button's own repaint.
+  - **Moving the pointer costs 0.5–0.9 ms a frame** (unthrottled, 1440 px): a frame repaints only the
+    rows the lens, a ring or the header's scan can reach, and nothing runs while nothing moves. On a
+    phone the epicenter's rings are redrawn at 15 frames a second, and only while they are on screen in
+    a visible tab.
