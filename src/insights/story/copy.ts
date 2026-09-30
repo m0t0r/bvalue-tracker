@@ -49,7 +49,7 @@ const es = {
       similar ? "Tres lugares a distancias similares de Pereira" : "Tres lugares a distancias distintas de Pereira",
     p1: "Esta página sigue los eventos de tres lugares. Dos están en el Chocó, al occidente: un {shallow} cerca de Istmina y Sipí, y un {deep} alrededor del {main} del {date}. El tercero es el {tolima}, en el sur del Tolima.",
     p2: "Cada punto del mapa es un evento del catálogo del {sgc}: {n} desde el {date}.",
-    p3: "Todo sismo se origina en un punto bajo tierra, el foco. Medida en línea recta hasta ese punto, la distancia desde Pereira es de unos {shallowKm} al grupo superficial, {deepKm} al grupo profundo y {tolimaKm} a Chaparral.",
+    p3: "Todo sismo se origina en un punto bajo tierra, el foco. Medida en línea recta hasta ese punto, la distancia desde Pereira es de unos {shallowKm} al grupo superficial, {deepKm} al grupo profundo y {tolimaKm} a Chaparral. El mapa solo muestra la distancia sobre la superficie; el recuadro añade la profundidad.",
     note: "Cada distancia es la mediana de los eventos de ese lugar, medida en línea recta desde Pereira hasta el foco de cada evento.",
   },
 
@@ -315,9 +315,17 @@ const es = {
   /** Labels drawn inside the pinned graphic, and its text alternative for each scene. */
   graphic: {
     mapTitle: "Eventos del catálogo del SGC, {from} – {to}",
-    mapAria:
-      "Mapa con los eventos de los tres lugares y Pereira. Las líneas dan la distancia en línea recta desde Pereira hasta cada lugar.",
-    mapNote: "Distancia en línea recta hasta el foco · círculo: 120 km en el mapa",
+    mapAria: "Mapa con los eventos de los tres lugares y Pereira.",
+    /** Added to `mapAria` with the map's figures. */
+    mapAriaLines: "Las líneas van de Pereira a cada lugar sobre la superficie: {map}.",
+    /** Added while the side view is drawn. */
+    mapAriaSide:
+      "Un recuadro dibuja los tres lugares de perfil y a escala, con la línea recta hasta el foco de cada uno: {straight}.",
+    mapNote: "Líneas: distancia sobre la superficie · círculo: 120 km",
+    /** The side view's title, over Pereira and the three foci at their depth. */
+    sideTitle: "De perfil: en línea recta hasta el foco",
+    /** The same on a phone, where the inset is narrower. */
+    sideTitleShort: "De perfil, en línea recta",
     ocean: "Océano Pacífico",
     unknownAria: "Mapa de los tres lugares con un signo de interrogación en cada uno.",
     sectionTitle: "Corte de oeste a este · sin exagerar la escala",
@@ -428,7 +436,7 @@ const en: StoryCopy = {
         : "Three places, at different distances from Pereira",
     p1: "The events this page follows come from three places. Two are in Chocó, to the west: a {shallow} near Istmina and Sipí, and a {deep} around the {main} of {date}. The third is the {tolima}, in southern Tolima.",
     p2: "Each dot on the map is an event in {sgc}'s catalogue: {n} since {date}.",
-    p3: "An earthquake starts at a point underground. Counting that depth, in a straight line the shallow group is about {shallowKm} from Pereira, the deep group {deepKm} and Chaparral {tolimaKm}.",
+    p3: "An earthquake starts at a point underground. Counting that depth, in a straight line the shallow group is about {shallowKm} from Pereira, the deep group {deepKm} and Chaparral {tolimaKm}. The map shows only the distance across the surface; the inset adds the depth.",
     note: "Distances: each place's median, in a straight line from Pereira to the point underground where each event began.",
   },
 
@@ -665,9 +673,13 @@ const en: StoryCopy = {
 
   graphic: {
     mapTitle: "Events in SGC's catalogue, {from} – {to}",
-    mapAria:
-      "Map of the events at the three places and Pereira. The lines give the straight-line distance from Pereira to each place.",
-    mapNote: "Straight line to the point underground · circle: 120 km on the map",
+    mapAria: "Map of the events at the three places and Pereira.",
+    mapAriaLines: "The lines run from Pereira to each place across the surface: {map}.",
+    mapAriaSide:
+      "An inset draws the places from the side and to scale, with the straight line to the point underground where each begins: {straight}.",
+    mapNote: "Lines: distance across the surface · circle: 120 km",
+    sideTitle: "Side view: straight line, depth included",
+    sideTitleShort: "Side view, straight line",
     ocean: "Pacific Ocean",
     unknownAria: "Map of the three places with a question mark on each.",
     sectionTitle: "West–east cut · true to scale",

@@ -113,6 +113,14 @@ describe("storyModel on the production catalogue of 2026-09-24", () => {
     expect(m.tolimaToPereiraKm).toBeCloseTo(106.54, 1);
   });
 
+  it("writes on each map line its own length over the surface, which for the deep group is far short of the focus", () => {
+    const d = m.centreKm;
+    // The owner's report (2026-09-30): the deep group's line was the shortest but carried 119 km.
+    expect(d.deep!).toBeLessThan(80);
+    expect(d.deep!).toBeLessThan(d.tolima!);
+    expect(d.deep!).toBeLessThan(d.shallow!);
+  });
+
   it("calls the swarm much further from the plate only while it is at least twice any Chocó source's gap", () => {
     // Fixture gaps above the plate's top: shallow 30.3 km, deep −6.6, M7.4 −20.8; Chaparral 141.3.
     const gaps = [m.plate.shallow, m.plate.deep, m.plate.main].map((p) => p!.plate.topKm - p!.depthKm);
