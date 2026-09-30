@@ -3,7 +3,7 @@ import { windowIncomplete, type Stats } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
 /**
- * "Valor b en el tiempo"'s key, apart from Recharts so that `Deferred` draws it in the card's
+ * "Valor b en el tiempo"'s key, apart from the chart so that `Deferred` draws it in the card's
  * placeholder too: on a phone it wraps to two or three lines, and a placeholder without it was that
  * much shorter than the chart it stood for.
  *

@@ -8,7 +8,7 @@ import type { Cluster } from "../../../core/clusters";
 import { windowsToCsv } from "../../../core/csv";
 
 /**
- * "Valor b en el tiempo"'s download, apart from Recharts so that `Deferred` draws it in the card's
+ * "Valor b en el tiempo"'s download, apart from the chart so that `Deferred` draws it in the card's
  * placeholder too: it shares the header's first row with the title, which it wraps to two lines on a
  * narrow phone, and a placeholder without it was a line short. It needs only the windows, so it works
  * before the chart has loaded.
