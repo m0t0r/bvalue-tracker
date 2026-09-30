@@ -453,7 +453,10 @@ export function StatusBar({
               aria-disabled={pending || resting}
               aria-busy={pending}
               onClick={() => {
-                if (!pending && !resting) refresh.mutate({ auto: false });
+                if (pending || resting) return;
+                // The pixel background answers the press with a ring of pixels (src/backdrop/pixels.ts).
+                window.dispatchEvent(new Event("backdrop:ripple"));
+                refresh.mutate({ auto: false });
               }}
             >
               <RefreshCwIcon data-icon="inline-start" className={refresh.isPending ? "animate-spin" : undefined} />

@@ -10,6 +10,7 @@ import {
   type ComponentType,
   type ReactPromise,
 } from "react";
+import { Backdrop } from "@/backdrop/backdrop";
 import { LoadError } from "@/components/load-error";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { TabsContent } from "@/components/ui/tabs";
@@ -90,7 +91,8 @@ export function InsightsApp() {
   // The static copy in the HTML selects no tab, since it cannot see the query string, and hydration
   // must draw what it has. The tab is chosen in the render after, in the same frame (`useHydrated`).
   const hydrated = useHydrated();
-  const { data, context, forecast, isPending, isError, error, retrying, retry, incomplete, staleSince } = useInsights();
+  const { data, context, forecast, isPending, isError, error, retrying, retry, incomplete, staleSince, catalogues } =
+    useInsights();
   // The tabs are drawn from a deferred copy, so the render the data triggers (hundreds of ms of it
   // on a phone) runs as a transition React can interrupt, not one task that blocks input. It used
   // to be interruptible by accident: `lazy`'s retry after its suspension was (see `chunks`). And a
@@ -134,6 +136,10 @@ export function InsightsApp() {
       after={
         shown && (
           <>
+            {/* The pixel background, as on the monitor (src/backdrop). The page is about both zones,
+                so it draws both: Chocó's sequence and Chaparral's swarm, and on a phone the larger
+                epicenter, the M7.4. */}
+            <Backdrop events={catalogues} />
             <BackToTop label={c.backToTop} tabs={tabList} end={footer} />
             <footer ref={footer} className="mt-auto flex flex-col gap-1 border-t pt-6 text-sm text-muted-foreground">
               {shown.data.dataEnd !== null && <p>{c.dataUpTo(shown.data.dataEnd, lang)}</p>}

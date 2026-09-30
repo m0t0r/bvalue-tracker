@@ -45,6 +45,11 @@ OpenStreetMap · © Mapterhorn.</sub>
   and a set of questions, both drawn with D3 from the live catalogue, and a 3D view of the region
   (see [below](#3d-viewer)). Every sentence about the data is chosen by a tested rule, so it cannot
   drift from the figures beside it.
+- **A pixel-art background drawn from the catalogue.** Behind the header and in the margins, never
+  under the figures: a dithered halftone where the zone's events fall. With a mouse, pointing reveals
+  the events and their magnitudes, and the title turns to a bitmap font; on a phone, the largest
+  event's epicenter sends out rings as the page scrolls. Nothing moves on a desktop until the reader
+  does. See [The page](docs/frontend.md#the-pixel-background).
 - **Spanish and English.** The page opens in the browser's language, and in English when the
   browser prefers neither. A button in the header switches language, and the page remembers the
   choice. Dates and times are always Colombia time (UTC−5).

@@ -815,6 +815,69 @@ full-screen viewer with five views to jump to.
   The M ≥ 4 stat counts the events *after* the M7.4 ("después del M7.4"), which the calendar's and the
   story's totals include; "desde" read as including it.
 
+## The pixel background
+
+**Both pages have a background of 1-bit pixel art drawn from the live catalogue** (`src/backdrop`,
+2026-09-30, the owner's request for "a bit of cherry on top" that does not distract). A canvas behind
+the page, 3 px to the pixel, in `--foreground` at 8–11 % (the mainshock's `--chart-2` is its one other
+colour): an ordered dither (Bayer 8×8) of a smooth field, rising to a checkerboard where the zone's
+events fall, with the newest event as one hard pixel. `/insights` feeds it both zones' catalogues
+(`catalogues` from `useInsights`, the queries it already holds), and the swarm is fitted to the events'
+own spread (their middle 96 % in each direction), so both zones show while each holds more than 2 % of
+the events. Chosen from three prototypes on the page itself, built and judged live:
+a helicorder's drum sheet (disliked), topographic contours with wavefronts (rejected for moving by
+itself) and pixel art (the owner's own suggestion).
+
+- **No card ever sits on a pixel** (owner's call). The pattern fills the header, the side margins and
+  the footer, stops 16 px short of the column from the first card to the footer, and thins out over
+  its last 48 px, a dithered edge rather than a cut. The first version ran under the cards, and they
+  read as "much more visible and contrasty with the borders". It is drawn over the whole document and
+  scrolls with it, so the header's pixels leave with the header. Where the cards begin is one row gap
+  below the header, which is a notice on `/insights` as often as a panel.
+- **Nothing moves on its own on a desktop** (owner's call): the contour version's wavefronts played on
+  load, and that is why it lost. Everything answers the reader:
+  - **A mouse** moves a lens with no shape of its own (a denser disc under it read as "not pleasant"
+    and buried the swarm). Under it the events come out as hard pixels, fainter further from the
+    pointer, and the event nearest writes its magnitude beside it in a 3×5 bitmap font, the largest
+    other one in the lens more quietly. The digits dither in through the Bayer matrix (the owner's
+    favourite detail) and out faster. Labels stay while their event is in the lens, so they do not
+    flicker; the lens opens only over the pattern and closes over a card.
+  - **The header's title and subtitle switch to a bitmap font together**, as one block, while the
+    pointer (or a tap) is on either, and back once it leaves (`pixel-text.ts`). The font is after the
+    HD44780 character LCD's 5×7, with a 4-wide lowercase, descenders and Spanish accents; the title's
+    pixel is 3 px (the grid's cell), so its capitals are 21 px like Geist's at 30 px, and the 16 px
+    subtitle's 1.5 px in a tall cut (row 5 twice), within ~6 % of Geist's height. Each word is set
+    across the page word's own width, so nothing moves or shrinks as it switches: set in the font's
+    own spacing the lines came out a tenth shorter, and the owner read it as the text jumping. Rasterising
+    Geist onto the grid was tried first and was unreadable ("awful"). The switch is a scan: a 72 px band
+    travels along each line on `--ease-slide` at one speed for every line (2.2 px/ms in, 3.6 out; at
+    4 px/ms the owner could not follow it), the subtitle 60 ms behind the title; inside the band the words
+    thin out under a mask while the glyphs resolve out of shaking noise at 20 flickers a second, with
+    stray pixels sparking beside them. A crossfade came first and read as "naive". The page's words stay
+    in the DOM throughout (selection, find, screen readers). The pointer on a control inside the header
+    (the subtitle's "SGC" explainer) switches nothing, so its card opens over words that stay words.
+  - **"Actualizar ahora"** sends one ring of pixels out from where it was pressed, lighting the swarm's
+    events as it passes (`backdrop:ripple`, fired by `status-bar.tsx`).
+- **A phone has no hover, so it gets the epicenter** (owner's request): the largest event as a filled
+  orange pixel disc with its magnitude, in the header's most open spot (the point furthest from every
+  line of text and every control, leaning right; placed by geography it fell on the title on
+  `/insights`), with rings of pixels rolling out from it. Here gentle motion on its own is wanted, since
+  a phone would otherwise be static: the rings roll at 12 px/s, stepped at 15 frames a second, only
+  while they are on screen in a visible tab and never under reduced motion. A scroll pushes them 1.5×
+  its distance and brightens them (the header is on screen only for a little of a scroll, and the owner
+  asked for it "sensitive to the scroll"); a tap on the pattern and "Actualizar ahora" send one strong
+  ring. It is orange, not the red the owner first suggested: red is the page's colour for a failure,
+  and Pereira's on `/insights`. Which version a device gets is `(hover: hover) and (pointer: fine)`.
+- **Reduced motion** keeps every picture and drops every movement: the lens and the text switch jump,
+  and no ring rolls or travels.
+- **Checking it headlessly**: agent-browser's viewport keeps a fine pointer, so the phone's version
+  needs Chrome DevTools MCP's `emulate` with `390x844x3,mobile,touch`. The cost is under
+  [Performance](performance.md).
+- **What the reader's language, theme and the web font change**: a new language or theme redraws
+  (the header's glyphs are set from its words, the ink from the tokens), and so does the font once it
+  lands, if it was not in yet.
+- Ideas for richer drawings on `/insights` in the same language are issue #157, not built.
+
 ## Interface conventions
 
 Settled in a six-domain interface review (accessibility, layout, copy, typography,

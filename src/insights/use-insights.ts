@@ -6,6 +6,7 @@ import { loadError, loadFailed, retrying, staleSince } from "@/lib/load-failed";
 import { useNow } from "@/lib/use-now";
 import { forecastStaleAt, insights, usgsForecast, type Forecast, type Insights } from "./claims";
 import { contextRecheckDue, keepFeltFromFirst } from "./context-refresh";
+import type { StoredEvent } from "../../worker/api-types.ts";
 
 /**
  * Both zones' catalogues from `/api/events`, the same endpoint the monitor reads, and every claim
@@ -29,6 +30,8 @@ export function useInsights(): {
    * else null. The page says so rather than go on counting "the last 7 days" in silence.
    */
   staleSince: number | null;
+  /** Both zones' events, one array per pair of answers, for the page's pixel background (`src/backdrop`). */
+  catalogues: StoredEvent[] | undefined;
 } {
   const qc = useQueryClient();
   const choco = useQuery({ queryKey: ["events", "choco"], queryFn: () => getEvents("choco") });
@@ -103,7 +106,13 @@ export function useInsights(): {
     [data, shownContext, exactNow],
   );
   const failed = [choco, tolima].filter(loadFailed);
+  // A new array only when a catalogue is new: the background redraws itself on each one.
+  const catalogues = useMemo(
+    () => (choco.data && tolima.data ? [...choco.data, ...tolima.data] : undefined),
+    [choco.data, tolima.data],
+  );
   return {
+    catalogues,
     data,
     context: shownContext,
     forecast,
