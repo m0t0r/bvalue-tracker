@@ -581,6 +581,65 @@ practices stayed at 100.
     first paint is the static subtitle, and the only render-blocking request left is the head script,
     as on the monitor. The static subtitle stays the same node through hydration (its buffered
     `largest-contentful-paint` entry's element is still connected once the story is up).
+- **"Distribución frecuencia–magnitud" is drawn without Recharts** (issue #118, 2026-09-29;
+  `charts/fmd.tsx`, how it keeps the chart the same in [the page](frontend.md)). Recharts is the heaviest
+  code the monitor runs after MapLibre: its shared chunk (`chart-grid-*.js`) is 309 kB (87 kB gzipped),
+  most of it its own state machine (Redux Toolkit, Immer, react-redux, es-toolkit, a vendored d3).
+  The chart is now `d3-scale` and `d3-shape`, already the `/insights` page's, and React's SVG.
+  - **Bytes** (`vite build`, each chunk's static imports beyond the monitor's entry, gzip 9): the chart
+    fetched first on a page that has loaded no other chart, 115.1 → 14.0 kB. The monitor's startup did not
+    move (182.0 → 181.6 kB), nor `/insights`' (132.6 → 132.5 kB; its questions tab 68.4 → 69.0 kB, as
+    three smaller shared d3 chunks). **Recharts' chunk still loads**, for the other two charts; all three
+    charts together beyond startup went 134.3 → 129.9 kB. The bytes go with the last of them.
+  - **The render** (phone 412 × 823, 4× CPU, `pnpm preview` of `main` at `b22b968` and of this, the same
+    catalogue behind the proxy, a private headless Chrome; the page scrolled so that the card enters
+    `Deferred`'s 600 px margin and the map below it does not; main-thread work in the 3 s after the
+    scroll, from a trace; seven interleaved pairs per zone):
+
+    | | Tasks | Longest task | Long animation frames |
+    |---|---|---|---|
+    | Tolima | 204–266 → 61–98 ms | 146–188 → 8–10 ms | one of 157–199 ms → none |
+    | Chocó | 267–292 → 71–81 ms | 200–217 → 9–11 ms | one of 210–226 ms → none |
+
+    About 60–80 ms of each window is the page's own work, the same on both. Recharts' frame was its store
+    and selectors (`chart-grid-*.js`, 69–110 ms of script) and its layout reads; this chart's script is
+    ~10 ms. The same pairs against `main` at `becf3af`, before the rebase, gave the same (Tolima 218–243 →
+    68–78 ms). One Chrome DevTools MCP trace each way, Tolima, agreed (271 → 122 ms, longest 201 → 26 ms;
+    MCP traces carry their own overhead, so the scripted pairs are the figures).
+  - **The load** (Lighthouse, devtools throttling, both builds behind the brotli proxy, interleaved, every
+    run checked for the build it loaded; medians). A phone never fetches this chart during the load (its
+    card is below `Deferred`'s margin), so the phone rows are a check that nothing else moved; on a
+    desktop `/` draws it at load, `/choco` does not:
+
+    | | TBT | LCP | Score | CLS |
+    |---|---|---|---|---|
+    | phone `/` (5 runs) | 224 → 225 ms | 1346 → 1346 ms | 95 → 95 | 0 → 0 |
+    | phone `/choco` (9 runs) | 246 → 250 ms (235–277 against 238–303) | 1343 → 1348 ms | 94 → 94 | 0 → 0 |
+    | desktop `/` (5 runs) | 27 → 0 ms (19–34 against 0 in every run) | 200 → 184 ms | 100 → 100 | 0 → 0 |
+    | desktop `/choco` (5 runs) | 0 → 0 ms | 190 → 196 ms | 100 → 100 | 0 → 0 |
+
+  - **Why D3, and not another library** (issue #118's question; a standalone benchmark of this one chart,
+    Tolima's bins, 360 × 380, drawn five ways, each a Vite build, cold loads in a private headless Chrome at
+    412 × 823 and 4× CPU, seven round-robin rounds, medians; an empty React page draws in 127 ms):
+
+    | | JS beyond React (gzip) | Load to drawn | Longest frame | An element per point | Keyboard layer |
+    |---|---|---|---|---|---|
+    | Recharts 3.10 | 105.8 kB | 401 ms | 254 ms | yes | yes |
+    | D3 (`d3-scale`, `d3-shape`) + React SVG | 11.3 kB | 134 ms | none over 50 | yes | ours to write |
+    | visx 4 | 23.7 kB | 166 ms | 59 ms | yes | ours to write |
+    | uPlot 1.6 | 22.6 kB | 191 ms | 64 ms | no, a canvas | no |
+    | Chart.js 4.5 (+ annotation plugin, 13 kB) | 68.1 kB | 204 ms | 75 ms | no, a canvas | no |
+
+    The canvas libraries are fast, but a canvas has no DOM for the tooltip, the keyboard layer, the text
+    alternative or the headless checks here, all of which would be ours to rebuild around it, and
+    Chart.js' tooltip is drawn on the canvas and cannot reach an empty bin. visx is D3 with React
+    components on top: twice the bytes and a little slower, for axes and a tooltip hook we would still
+    have to bend to Recharts' layout and keyboard behaviour. D3 was already in the repo, for `/insights`.
+    A warm hover showed its tooltip within ~9 ms in every library.
+  - **Recommendation: migrate the other two charts too** (issues #125, "Valor b en el tiempo", ~3–4 h,
+    and #126, "Magnitud en el tiempo" with its day choosing, ~5–7 h, after which Recharts is
+    removed). Keeping Recharts and trimming it (`initialDimension`, explicit ticks, done in #96) cannot
+    remove its store's evaluation or its render.
 - **Measuring.** `pnpm build && pnpm preview`, then
   `lighthouse http://localhost:<port>/ --quiet --chrome-flags=--headless=new --only-categories=performance`,
   three times, median. Give the local database data and close the refresh guard first, as under
