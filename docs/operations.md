@@ -6,10 +6,12 @@ Everything below exists because two faults ran for hours with nothing to read. S
 before guessing; the reasoning behind each piece is under
 [Observability decisions](#observability-decisions).
 
-Written-up incidents live in `.claude/incidents/`. The one to read first is
+Written-up incidents live in `docs/incidents/`. The one to read first is
 [2026-09-20](incidents/2026-09-20-ingest-outage-and-sgc-refusal.md): a 9-hour ingest
 outage and the SGC refusal that followed it, with the measurements behind both — including
-why this Worker has never fitted the free plan's 10 ms per-invocation CPU limit.
+why this Worker has never fitted the free plan's 10 ms per-invocation CPU limit. Then
+[2026-09-30](incidents/2026-09-30-sgc-refusal-returns.md): both faults a second time, and why
+the rules the first write-up drew from them did not hold.
 
 ### The four places to look
 

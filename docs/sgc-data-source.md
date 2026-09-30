@@ -25,8 +25,11 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
 - Events are revised after the fact: `automatic` → `manual`, magnitude and location
   change, and events can be withdrawn.
 - Coverage starts 2018-03-01 (stated on the form page).
-- **The 410 is written on Cloudflare's network, and SGC's server never sees the request**
-  (refused since 2026-09-20 12:40 UTC; the refusal's own body read at 16:00 UTC). The deployed
+- **The 410 comes from SGC's end and is answered only to requests leaving Cloudflare.** This
+  bullet first said it was written on Cloudflare's network and that SGC never saw the request;
+  the header test of 2026-09-30, further down, withdrew that, and the sub-bullets arguing it
+  from `cf-ray` are kept as the record of what was believed.
+  (First refused 2026-09-20 12:40 UTC; the refusal's own body read at 16:00 UTC.) The deployed
   Worker began getting **410 Gone** on requests that had succeeded five minutes earlier, with
   no deploy in between, while the canary made the *same* request with the *same* user-agent
   from GitHub's runners and got a normal 200 — at 13:33, and again on its 14:43 schedule. The
@@ -63,6 +66,18 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
     `cf-ray`. If Cloudflare adds those headers anyway, SGC's firewall refusing Cloudflare's
     egress addresses fits the evidence equally well. Test it against any non-Cloudflare origin
     before quoting either writer.
+  - **It came back on 2026-09-30 at 10:45 UTC, at a rate that had run for six days** (8 requests
+    an hour), with no deploy and no change of ours before it. So rate alone does not explain it,
+    and no request rate is known to be safe. A 522 that Cloudflare wrote the day before carries
+    Cloudflare's error-page headers and no `cf-cache-status`; the 410 carries the reverse, which
+    points to SGC's side writing it and Cloudflare's egress adding `server` and `cf-ray`.
+  - **Tested on 2026-09-30: the Cloudflare headers prove nothing, so "written on Cloudflare's
+    network" above is withdrawn.** A throwaway Worker fetched hosts that are not behind
+    Cloudflare (`httpbin.org`, `api.github.com`), and every response came back with
+    `server: cloudflare`, `cf-ray` and `cf-cache-status: DYNAMIC`; httpbin's own 410 had exactly
+    the header set of SGC's. The 410 is an answer from SGC's end, to Cloudflare's addresses or
+    to the `CF-Worker` header. See the
+    [2026-09-30 postmortem](incidents/2026-09-30-sgc-refusal-returns.md).
   - Every outbound Worker request carries a `CF-Worker: sgc-swarm.workers.dev` header that
     we cannot remove, so a block need not be by address at all.
   - **The other end of the chain, confirmed from off Cloudflare's network** (a manual
