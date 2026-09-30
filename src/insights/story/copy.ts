@@ -221,7 +221,8 @@ const es = {
         : m === "awaiting-review"
           ? "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido. Ahora uno destaca, aunque su magnitud todavía es automática y puede cambiar."
           : "El {date} empezó otra serie de eventos, a unos {km} del {main}, cerca de Chaparral. El SGC la llama {tolima}: muchos sismos de tamaño parecido, sin uno grande que domine.",
-    stillSwarm: "Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre.",
+    stillSwarm: "Mientras el SGC no la describa de otra forma, esta página la sigue llamando {swarm}.",
+    swarmWord: "enjambre",
     p2: "Compara las dos franjas: en el Chocó, el evento mayor liberó {chocoShare} de la energía; en Chaparral, el mayor ({mag}) liberó {tolimaShare}.",
     /** Keyed on the swarm's median depth being under 30 km, where it is certainly in the crust. */
     p3: (crustal: boolean): string =>
@@ -564,7 +565,8 @@ const en: StoryCopy = {
         : m === "awaiting-review"
           ? "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size. Now one stands out, though its magnitude is still automatic and may change."
           : "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size, with no large one dominating.",
-    stillSwarm: "Until SGC describes it otherwise, this page keeps calling it a swarm.",
+    stillSwarm: "Until SGC describes it otherwise, this page keeps calling it a {swarm}.",
+    swarmWord: "swarm",
     p2: "Compare the two strips: in Chocó, the largest event released {chocoShare} of the energy; at Chaparral, the largest ({mag}) released {tolimaShare}.",
     p3: (crustal) =>
       crustal

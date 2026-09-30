@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { FlowNumber } from "@/components/flow-number";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Badge } from "@/components/ui/badge";
+import { Explain } from "@/components/explainer/explain.prototype";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -423,7 +424,9 @@ export function BSummary({
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle>{t.bTitle}</CardTitle>
+        <CardTitle>
+          <Explain id="b-value">{t.bTitle}</Explain>
+        </CardTitle>
         {cluster !== null ? <CardDescription>{t.clusterNote(t.clusterName[cluster])}</CardDescription> : null}
       </CardHeader>
       {magType === null ? (

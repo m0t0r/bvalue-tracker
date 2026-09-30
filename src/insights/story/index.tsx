@@ -32,6 +32,7 @@ import { storyModel, USGS_ASSESSED, type StoryModel } from "./model";
 import { HISTORY, ISCGEM_URL, quakeYear } from "../history";
 import { SGC_DURATION_URL, USGS_FINITE_FAULT_URL, shakingParts } from "../durations";
 import { CONVERGENCE_SOURCE, CUTS } from "../plate";
+import { Explain } from "@/components/explainer/explain.prototype";
 import { Rich, fill } from "./rich";
 
 interface Step {
@@ -462,7 +463,7 @@ function useSteps(
             <Rich
               text={c.energy.duration1}
               parts={{
-                sgc: "SGC",
+                sgc: <Explain id="sgc">SGC</Explain>,
                 km: <Num>{d.km}</Num>,
                 magLabel: <MainName>{magLabel}</MainName>,
                 arrival: <Num>{d.arrival}</Num>,
@@ -476,7 +477,11 @@ function useSteps(
             <Rich
               text={c.energy.durationNear}
               parts={{
-                sgc: <ExternalLink href={SGC_DURATION_URL}>SGC</ExternalLink>,
+                sgc: (
+                  <Explain id="sgc-duration" href={SGC_DURATION_URL}>
+                    SGC
+                  </Explain>
+                ),
                 from: <Num>{d.from}</Num>,
                 toMin: <Num>{d.toMin}</Num>,
               }}
@@ -760,10 +765,10 @@ function useSteps(
                 date: fmtDayLong(data.start.tolima, lang),
                 km: km(model.chocoToTolimaKm === null ? null : roundSig(model.chocoToTolimaKm, 2)),
                 main: mainWord,
-                tolima: names.tolima,
+                tolima: <Explain id="swarm">{names.tolima}</Explain>,
               }}
             />{" "}
-            {tState !== "none" && c.tolima.stillSwarm}
+            {tState !== "none" && <Rich text={c.tolima.stillSwarm} parts={{ swarm: c.tolima.swarmWord }} />}
           </p>
           {data.largestShare.choco !== null && data.largestShare.tolima !== null && model.tolimaLargest && (
             <p>
