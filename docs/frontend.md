@@ -79,19 +79,16 @@ the owner's pick).
   only.** A sideways drag on a phone scrolls the chart, so the range is desktop's alone
   (`useFinePointer`, `(hover: hover) and (pointer: fine)`), and the tip under the bars names only
   what works on the reader's device ("Haz clic…, o arrastra…" / "Toca…"). Over the bars the cursor
-  is `pointer`, since a day can be pressed; from the mouse-down and for as long as a drag lasts it is
-  `col-resize` on the whole document, which says the bars take a sideways sweep (owner's call). Both
-  are rules in `index.css` with `!important` (`[data-day-bars]`, `[data-drag-days]`): **Recharts writes
-  `cursor: default` inline on `.recharts-wrapper`**, so a cursor class on any ancestor never reaches
-  the bars. It merges a chart's `style` prop over that, but the design-system lint allows no inline
-  style. A first version put the class on an ancestor and read as working when checked there; check
-  the element under the pointer (`elementFromPoint`).
+  is `pointer`, since a day can be pressed (`cursor-pointer` on the drawing); from the mouse-down and
+  for as long as a drag lasts it is `col-resize` on the whole document, which says the bars take a
+  sideways sweep (owner's call). That one is a rule in `index.css` with `!important`
+  (`[data-drag-days]`), over every element's own cursor, so it does not flicker back as the drag
+  leaves the chart. When checking a cursor, check the element under the pointer (`elementFromPoint`),
+  not an ancestor.
 - **The day under the pointer is read from the event's own position** (`dayAt` in `DailyBars`: the
-  x scale inverted through `useXAxisInverseScale`), never from Recharts' hover index, and the press
-  handlers sit on a plain element around the chart rather than on Recharts' chart events. That index
-  is set a frame after the mousemove, so a quick press or release landed on the day before; a tap has
-  no move before it at all, so on touch every tap would have chosen the previously tapped day; and
-  off the plot it is null, which `daily[Number(null)]` read as the first day (code review, 2026-09-26).
+  time scale inverted), for the tooltip and for a press alike, so a press always lands on the day the
+  tooltip names. (In the Recharts build the press could not use the chart's hover index: it was set a
+  frame after the mousemove, a tap has no move before it at all, and off the plot it was null.)
   A press on the date labels chooses the day above it.
 - **A drag is followed on the window and can be dropped.** It ends on the window's mouseup, wherever
   the button is let go, and is dropped, choosing nothing, on window blur, on Escape, and when a move
@@ -110,11 +107,14 @@ the owner's pick).
   todos los días" on the chosen day. Recharts drew the wider tooltip at its old position first and
   then slid it back over ~120 ms, so on the rightmost days (Tolima's last, 23 Sept) it ran 106 px past
   the chart's scroll container, and a horizontal scrollbar flashed on every press (owner's report,
-  2026-09-26; measured frame by frame). The line under the bars already says how to go back.
-- **The keyboard has the same choices.** Recharts' accessibility layer moves between days with the
-  arrows; `ActiveDay` reads the day it is on, Enter chooses it, Shift + Enter chooses every day up to
-  it, Escape lets go. A held Enter's repeats are ignored, or each would undo the last. The chart's
-  `desc` says all of this.
+  2026-09-26; measured frame by frame). The line under the bars already says how to go back. Since
+  issue #126 a tooltip cannot widen the scroll container at all: each drawing clips sideways
+  (`overflow-x-clip`), and a tooltip is placed inside what is on screen of it.
+- **The keyboard has the same choices.** The arrows move between days, Enter chooses the day the
+  tooltip is on, Shift + Enter chooses every day up to it, Escape lets go. A held Enter's repeats are
+  ignored, or each would undo the last. The chart's `desc` says all of this. The tooltip stays through
+  Enter: in the Recharts build Enter also hid it (its accessibility layer's own toggle), and the day
+  the keyboard was on with it.
 - **Chosen days are marked three ways**: the other bars turn grey, a band in `foreground` at 7 %
   sits behind the chosen days in both the bars and the scatter above, and the line under the bars
   names them. The band was added after review: a chosen day of three events is a bar a few pixels
@@ -325,8 +325,8 @@ words for a reader in Pereira (the rules for what it may say are in
 [the science](science.md#the-insights-page-insights-from-2026-09-24)). D3's maths modules
 (`d3-geo`, `d3-scale`, `d3-shape`, `d3-array`) do the maths and React renders the SVG, so there is no
 `d3-selection`; the monitor's Recharts and MapLibre never load there. The monitor's frequency–magnitude
-chart is drawn the same way since issue #118 (see its bullet under Interface conventions), so
-`d3-scale` and `d3-shape` are now shared chunks of both pages.
+chart is drawn the same way since issue #118, and "Magnitud en el tiempo" since #126 (see their
+bullets under Interface conventions), so `d3-scale` and `d3-shape` are now shared chunks of both pages.
 
 - **The route.** The asset layer serves `insights.html` at `/insights` in production. In dev the
   Cloudflare plugin would hand that path to the Worker, which answers 404 (the same trap as the zone
@@ -1069,13 +1069,101 @@ colour, motion). Keep to them:
   whole range being squeezed in, which on a phone drew one solid band. The bars themselves
   come from `dailyCounts` (see [Events per day](#events-per-day)). The scatter and
   the "eventos por día" bars sit in **one** scroll container so a single gesture moves
-  both, and both y axes are pinned: each is a second, data-less chart in a `sticky`
-  column, which only lines up because the pinned and scrolling charts are given the
-  same margins, the same `X_AXIS_H` and — for the counts — the same explicit domain and
-  `ticks` (`countAxis`). `interval={0}`, or Recharts quietly drops one of them.
+  both, and both y axes are pinned: each is a small drawing of the tick numbers alone in a
+  `sticky` column (`PinnedAxis`), placed by the same scale as the plot beside it.
   The view starts at the newest events and stays there through a refresh unless the
   reader has scrolled away from the right edge. Date ticks go from weekly to whatever
   fits in `TICK_GAP` while it scrolls. Above 768 px nothing changes.
+- **"Magnitud en el tiempo" and its daily bars are drawn with D3's maths and React's SVG, not
+  Recharts** (`charts/magnitude-time.tsx`, its pure parts in `charts/day-axis.ts`; issue #126,
+  2026-09-30; the numbers are in [Performance](performance.md)). With the dots at Recharts' size the
+  card matched the Recharts build to the pixel wherever the old chart was right (below). What a change
+  must keep, and what was changed from Recharts on purpose (owner's rule: fix the old chart's bugs,
+  do not copy them):
+  - **The layout is Recharts'**: a 10 px margin on the left, 12 on the right, 8 on top, a 30 px strip
+    for the date labels, the first day starting 20 px inside the plot (`FIRST_DAY`) so its label,
+    centred on the day's start, is not cut by the drawing's edge. A bar is 2 px clear of its day on
+    each side and a whole number of pixels wide (`dayBar`), and its coordinates are written to four
+    decimals, as Recharts wrote them: with the full float some bar edges came out a step apart.
+  - **Changed: a dot is 28 px² and the mainshock's star 160 px².** The Recharts build asked for those
+    sizes (`ZAxis range`) and never got them: without a `dataKey` Recharts ignored the range and drew
+    both at its default 64 px², so the star was no larger than the dots around it and a thousand
+    9 px dots ran together. This is the one change every reader sees; the two sizes are `DOT` and
+    `STAR`.
+  - **Changed: the tooltip is on the mark nearest the pointer, within 5 px of its edge (11 for a
+    finger)**, where Recharts needed the pointer exactly on a dot, a 9 px target then and a 6 px one
+    now. Of two marks as near, the one drawn on top wins, and the star is read anywhere on it (a first
+    version measured to every mark's centre, and the star's points were out of reach: code review).
+  - **Changed: a tooltip stays inside what is on screen.** Recharts kept it inside the whole plot, which
+    on a phone is 1,260 px wide with ~275 on screen: a dot near the visible edge had its tooltip cut
+    off by the scroll container or under the pinned axis (measured on `main` at 390 px: 23 to 161 px
+    cut). The area is read when the reading is made and again whenever the chart scrolls or changes
+    width under a tooltip (`useTipArea`). A tooltip is at most the visible
+    plot wide, and at most 360 px, and a longer place wraps (`--tip-max`, `wrap-anywhere`): on `main` a
+    70-letter word made the tooltip 459 px wide and the scroll container 161 px wider.
+  - **Changed: a lifted finger lets go of the tooltip**, as on the frequency–magnitude chart. On `main`
+    a sideways drag left the last tooltip standing over the chart, cut off, while the reader scrolled.
+  - **Changed: the keyboard walks every event in the order they happened.** Recharts' layer walked one
+    depth group only (660 of Chocó's 809 events) and never reached the mainshock. Focus from the
+    keyboard shows the first event on screen, which without scrolling is the first of all, or the one
+    the keyboard was last on; the arrows step, Enter hides and shows the tooltip, blur hides it. The
+    tooltip sits by its dot, with the same dashed cross as the pointer's.
+  - **Changed: the keyboard's point is scrolled into view** (`View.reveal`), and the arrows no longer
+    also scroll the container around the chart. On `main` the keyboard's day could be 40 days off
+    screen. A press on a dot focuses the drawing too, and shows no keyboard reading
+    (`:focus-visible`).
+  - **The pointer and the keyboard never both hold the tooltip: the one used last does.** An arrow
+    clears the pointer's reading, and a pointer that moves onto a mark or a day clears the keyboard's,
+    so Enter on the bars can only choose the day the tooltip names (a first version let a resting
+    pointer's tooltip hide the keyboard's day, which Enter then chose: code review). The browser sends
+    a mouse move from where a resting pointer already is whenever the chart moves under it. After the
+    keyboard's own scroll that move is ignored, or it would take the tooltip back; after the reader's
+    scroll (a wheel, a trackpad) it counts, so the tooltip goes on naming what a press there would
+    choose (`usePointerMoved`).
+  - **A pinned axis writes a thousand and over in thousands** ("1k", `tickLabel`): its column has room
+    for three digits, and "1000" lost its first one to the column's edge. No day has had more than
+    ~190 events; the axis is ready for one that does.
+  - **Changed: every date label is centred on its own day, or not drawn.** Recharts pulled the last
+    label inside when it crossed the drawing's edge and drew it there: on a scrolling chart "24 sept",
+    the end of the last day, sat ~10 px before its place and took the room of "21 sept", the last
+    regular label. Labels are chosen by `ownPlaceLabels` (tested), and the end of the last day gets a
+    label only where it fits (Tolima's "1 oct" at 1280 px, which Recharts drew 3 px off, is gone).
+  - **Changed: labels need 24 px between them, not 40** (`LABEL_GAP`). At 40, a scrolling chart's
+    labels, 81 px apart and ~41 px wide, cleared one another by under a pixel, and Tolima's on a phone
+    (72.5 px apart) did not: every other one was dropped, "23 sept" and "29 sept" where every third
+    day was meant.
+  - **Changed: the day under the pointer is marked.** The band behind the hovered day was `--muted` at
+    8 % opacity, which cannot be seen in either theme; it is `--muted` whole, shadcn's own bar cursor.
+  - **Changed: the dashed cross follows the theme** (`muted-foreground` at 50 %). It was a fixed
+    `#ccc`, the one mark on the chart that ignored dark mode; in the light theme it is a step darker
+    (about `#b9b9b9`).
+  - **Changed: a catalogue of one day has its bar.** Recharts sized a bar from the gap between two
+    days and drew none for one (the date filter set to a single day). A bar's width is now the day's
+    own, and where a day is narrower than 5 px (a sequence of ~220 days at 1280 px) it keeps half
+    the day, where Recharts' rule gives no width.
+  - **Changed: the chosen days' band survives the date filter.** Recharts discarded a reference area
+    that reached past the axis, so a choice the filter then cut into lost its band while the bars
+    stayed grey; the part still on the axis is drawn (`bandOnAxis`).
+  - **Gone with Recharts**: the pinned axes as data-less charts with a seed point, `interval={0}`,
+    the probe components that read Recharts' scale and active label, and the `!important` pointer
+    rule. `FIRST_TICK_PAD` stays as `FIRST_DAY`: the first label needs the room whoever draws it.
+  - **What a pointer does not change is built once per catalogue and size** (`marks` in `Dots`, the
+    grid and labels in `DailyBars`): a move redraws the cross and the tooltip, not a thousand dots.
+    A drag redraws the bars alone, as before.
+  - **Checked** (agent-browser, `pnpm preview` of `main` and of this on the same catalogue): with the
+    dots at Recharts' 64 px², screenshots of the card for both zones, both languages, both themes at
+    320, 390 and 1280 px were identical or within 1/255, apart from the date labels above; then, as
+    shipped, the mouse over dots and days, a press, a drag, a drag dropped with Escape, the keyboard
+    path on both drawings at 1280 and 390 px, every keyboard stop counted on both builds, and four
+    extreme place names in the tooltip at 320, 390, 640, 768, 1024 and 1280 px (inside the plot in all
+    24 cases, against 13 cut off on `main`). Touch was driven through the DevTools protocol (tap,
+    sideways drag, tap on a day and again), not on a physical phone. `magnitude-time.test.ts` holds
+    the behaviour; each of 20 mutations of the component failed a test.
+  - **Declined in the code review (2026-09-30):** *moving the keyboard walk, the pointer-moved rule,
+    the tooltip's shell and the focus ring into `svg-chart.tsx`* for the three charts to share. It is
+    the right home, but "Valor b en el tiempo" is being moved in another branch at the same time
+    (issue #125) and edits that file; the two ports are to be folded together in the change that
+    removes Recharts, when both are in.
 - **Choosing a cluster narrows the whole page**, like a filter: "Ver solo este grupo" in the
   "Dos grupos de eventos" card. It is one of the settings the scope notice below names, and it sits
   outside the cards because a cluster can be emptied by the other filters, and the control must not

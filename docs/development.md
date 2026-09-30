@@ -7,7 +7,7 @@
 | `packages/seismo/` | `@bvalue/seismo`, the seismology library: Gutenberg–Richter statistics (`gr.ts`, including the one `computeStats` pipeline), mainshock detection (`mainshock.ts`), magnitude arithmetic in whole tenths (`magnitude.ts`), energy and moment ratios (`energy.ts`) and distances on the sphere (`distance.ts`). Knows nothing about SGC, zones or the page; tested on synthetic catalogues only. |
 | `core/` | Shared, runtime-neutral logic about *this* project: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), the zones, the depth groups, the zone's mainshock with SGC's meaning of "reviewed" (`mainshock.ts`), CSV, CLI. Used by the Worker, the browser and Node. |
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
-| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart) for two of the monitor's charts and D3's maths with React's SVG for the third (`components/charts/fmd.tsx`), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
+| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart) for one of the monitor's charts (`components/charts/b-over-time.tsx`, until issue #125) and D3's maths with React's SVG for the other two (`fmd.tsx`, `magnitude-time.tsx`), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
 | `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
@@ -198,19 +198,13 @@ draws from too):
   relaunched browser too. Focus in the page instead (`element.focus()` from a script), then send the
   arrows and Enter, and measure in a Chrome of your own (`--remote-debugging-port` on a free port and a
   scratch `--user-data-dir`), not the shared one.
-- A `ScatterChart` with a time axis derives a single tick on its own. We pass
-  explicit weekly `ticks`, shared with the bar chart below it — see the scrolling
-  mobile chart under [Interface conventions](frontend.md#interface-conventions) for how the tick
-  spacing and the pinned y axes work.
-- **Recharts silently drops a tick whose label would cross the edge of the plot**
-  (`isVisible` in its `TickUtils`), and passing explicit `ticks` does not override it.
-  That hid the first date on "Magnitud en el tiempo" — 10 August, the day of the
-  mainshock, which sits exactly on the domain's left edge. The fix is `padding` on the
-  `XAxis` (`FIRST_TICK_PAD`, half a date label wide): it moves the scale, so the label
-  stays centred on its own day. `interval="preserveStartEnd"` also shows it, but by
-  nudging the label inward, and the room it takes then costs the *second* tick on a
-  phone — checked in a browser, since jsdom measures every label as 0 wide and hides
-  nothing.
+  **`pnpm preview` goes on serving the build it started with** (issue #126): after `pnpm build` the
+  same process still answered with the old chunks, and a comparison came out "unchanged" against a
+  build that had changed. Restart it after every build. **Match Recharts' number formatting before
+  chasing a difference at a bar's edge**: it writes a bar's coordinates to four decimals, and the same
+  bars written as full floats (24.379999999999995 for 24.38) came out a step apart along some edges,
+  ~200 pixels on a phone's card; rounded the same way, the card was identical to the pixel. To compare
+  a chart whose marks changed size on purpose, build once with the old size and compare that.
 - pnpm 12 blocks dependency build scripts. `pnpm-workspace.yaml` allows `esbuild`,
   `workerd` and `sharp`; without that, installs fail with `ERR_PNPM_IGNORED_BUILDS`.
 - TypeScript is split into `tsconfig.app.json` (DOM), `tsconfig.worker.json`
@@ -263,8 +257,8 @@ draws from too):
 - **Checking the page headlessly**: `agent-browser` (CLI, on PATH) drives a real
   browser against `pnpm dev`; `agent-browser skills get core` is its own guide. Full-page
   screenshots often miss the charts and the map, so scroll and take viewport screenshots
-  instead. Recharts marks are real DOM nodes — a scatter dot is `path#<event id>`, so a
-  tooltip can be raised with `hover`. The map is a canvas: its popups cannot be reached
+  instead. A chart's marks are real DOM nodes — a dot on "Magnitud en el tiempo" is
+  `path#<event id>`, and a mouse move within 8 px of it raises its tooltip. The map is a canvas: its popups cannot be reached
   by selector.
   **Give it data without touching SGC.** Copy a populated `.wrangler/` from another
   checkout, then, in the copy only, close the refresh guard and complete the back-fill:

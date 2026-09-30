@@ -1,7 +1,8 @@
 import { clusterOf } from "../../core/clusters";
 import { dayStart } from "./format";
 
-const DAY = 86_400_000;
+/** A Colombian day in ms: there is no daylight saving, so every day is this long. */
+export const DAY = 86_400_000;
 
 export interface DayCount {
   /** The instant the Colombian calendar day begins. */
