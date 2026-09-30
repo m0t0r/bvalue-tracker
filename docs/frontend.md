@@ -330,6 +330,44 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   Cloudflare plugin would hand that path to the Worker, which answers 404 (the same trap as the zone
   pages), so `insightsPage` in `vite.config.ts` serves it first. The monitor's header links to it,
   and it links back.
+- **Its header and skeleton are in the HTML before any JavaScript runs** (issue #120, 2026-09-29;
+  `InsightsShell` in `src/insights/shell.tsx`), as the monitor's header is (the zone bullets above, and
+  the same machinery): the build renders the page's first render once per language
+  (`insightsStaticShell` in `src/static-shell.tsx`) into a slot in `insights.html`, with the CSS it
+  needs inlined and the stylesheet at the end of the body, and `main.tsx` hydrates the reader's copy.
+  Before this the page was an empty `#root`, and a phone showed a blank white screen until its bundle
+  had run, ~3.5 s ([Performance](performance.md) has the numbers). So a change to the header, the
+  notice's live region or the skeleton is made in `shell.tsx`, which both draw, and
+  `src/insights/hydration.test.ts` holds the static copy to React's first render in both languages and on
+  every tab: no mismatch, every static node kept, the selected tab linked to its panel.
+  - **The theme button follows the `dark` class** (`ThemeButton`, now shared with `MonitorShell`). The
+    page's own chose its icon and name from `useIsDark()`, which the static copy cannot know, and whose
+    `useSyncExternalStore` has no server snapshot, which hydration needs. Its strings are the monitor's
+    (`t.themeToLight`, `t.themeToDark`); the page's copies of them were the same words and are gone.
+  - **No tab is chosen until React has hydrated.** The HTML is one file for the three tabs and cannot
+    see `?tab=`. A copy with the story chosen would show "La historia" on a `?tab=3d` link for the ~2 s
+    before hydration on a phone, then jump to "En 3D"; with none chosen, the chosen tab appears once and
+    nothing on screen changes to something else. React's first render chooses none too, or it would not
+    match (`useHydrated`), and the query string's tab in the render after, which commits in the same
+    frame. On the bare URL, the link the monitor and most shares use, "La historia" is therefore
+    unchosen until hydration. Not built: the head script choosing (it decides the language and the
+    theme and nothing else; #119's per-tab preload was declined for the same reason), and a copy per
+    tab (six copies in the HTML, and a script to choose one, which is the head script again).
+  - **The stand-in face keeps the header's lines**: with Geist blocked, the static header breaks into
+    as many lines as in Geist in 22 of 22 cases (11 widths from 320 to 1350 px, both languages), so the
+    title, subtitle and tabs keep their place when Geist arrives. The back link and the tabs are ~3 px
+    narrower in the stand-in, which moves nothing below them.
+  - **Checked in `agent-browser` on `pnpm preview`** with the bundle and the stylesheet blocked, which
+    shows exactly what paints before React, against React's first render with the API held back: in
+    {light, dark} × {es, en} at 320, 390, 768, 1024 and 1350 px, and on `?tab=questions` and `?tab=3d`,
+    the title, subtitle, back link, buttons, icons, tabs and skeleton had the same text, place and size,
+    and the same theme. The only difference is the chosen tab.
+  - **Declined in the code review (2026-09-29):** having the head script write the query string's tab
+    on `<html>` for CSS to style the chosen tab from, so the bare URL paints "La historia" chosen too.
+    It is the reason above: the head script's one job, and the tab's look restated in CSS outside the
+    component. And one Tailwind compiler for both pages' inlined CSS (`headerCss`), to compile
+    `index.css` once per build: its `build` keeps every candidate it was given, so the second page's
+    CSS would carry the first's classes, and the monitor's pages would change.
 - **Three tabs, "La historia", "Preguntas" and "En 3D"**, in the query string (`?tab=questions`,
   `?tab=3d`; the story is the bare URL). Switching replaces the history entry rather than pushing
   one: back leaves the page. Each tab is its own chunk (`src/insights/story`,
@@ -355,7 +393,7 @@ MapLibre never do; React renders the SVG, so there is no `d3-selection`.
   always-mounted sr-only `role="status"`, since a live region inserted with its text already in it is
   often not read out (the back-fill notice goes the same way). Checked with a 503 on `/api/` and
   offline, and back.
-- **Copy.** The shell and every data-dependent sentence live in `src/insights/copy.ts`; each is a
+- **Copy.** The shell's words and every data-dependent sentence live in `src/insights/copy.ts`; each is a
   function of a claim's result, so the words cannot say more than the rule decided. Each tab keeps its
   long-form prose in its own `copy.ts`. Language and theme are the monitor's (`useI18n`, `theme.ts`),
   so a choice made on one page holds on the other.

@@ -1,4 +1,3 @@
-import { AlertTriangleIcon, ArrowLeftIcon, MoonIcon, SunIcon } from "lucide-react";
 import {
   Suspense,
   memo,
@@ -11,17 +10,15 @@ import {
   type ComponentType,
   type ReactPromise,
 } from "react";
-import { LanguageButton } from "@/components/language-button";
 import { LoadError } from "@/components/load-error";
 import { TechnicalDetail } from "@/components/technical-detail";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
+import { useHydrated } from "@/lib/hydrate";
 import { useI18n } from "@/lib/i18n";
-import { toggleTheme, useIsDark } from "@/lib/theme";
+import { toggleTheme } from "@/lib/theme";
 import { BackToTop } from "./back-to-top";
 import { insightsCopy } from "./copy";
+import { InsightsMain, InsightsShell, PageSkeleton, toTab, type Tab } from "./shell";
 import { useInsights } from "./use-insights";
 
 /**
@@ -73,18 +70,12 @@ const StoryTab = tab(chunks.story, (m) => m.Story);
 const QuestionsTab = tab(chunks.questions, (m) => m.Questions);
 const Block3DTab = tab(chunks["3d"], (m) => m.Block3D);
 
-const TABS = ["story", "questions", "3d"] as const;
-type Tab = (typeof TABS)[number];
-
 /**
  * The tab lives in the query string (`/insights?tab=questions`), so a link can open either one.
  * The story is the bare URL. Switching replaces the entry rather than pushing one: the back button
  * should leave the page, not step between two views of it.
  */
-const readTab = (): Tab => {
-  const t = new URLSearchParams(location.search).get("tab");
-  return t === "questions" || t === "3d" ? t : "story";
-};
+const readTab = (): Tab => toTab(new URLSearchParams(location.search).get("tab"));
 
 // The tab the page opens on is fetched now, beside the data, rather than once the data has arrived
 // and the tab first renders: the two downloads overlap instead of following each other. A failure
@@ -94,8 +85,10 @@ chunks[readTab()]();
 export function InsightsApp() {
   const { lang, t } = useI18n();
   const c = insightsCopy[lang];
-  const dark = useIsDark();
   const [tab, setTab] = useState<Tab>(readTab);
+  // The static copy in the HTML selects no tab, since it cannot see the query string, and hydration
+  // must draw what it has. The tab is chosen in the render after, in the same frame (`useHydrated`).
+  const hydrated = useHydrated();
   const { data, context, forecast, isPending, isError, error, retrying, retry, incomplete, staleSince } = useInsights();
   // The tabs are drawn from a deferred copy, so the render the data triggers (hundreds of ms of it
   // on a phone) runs as a transition React can interrupt, not one task that blocks input. It used
@@ -132,109 +125,58 @@ export function InsightsApp() {
   }, [tab]);
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
-      <Tabs value={tab} onValueChange={(v) => setTab(v === "questions" || v === "3d" ? v : "story")} className="gap-8">
-        <header className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* Pulled out by its own inline padding, so the arrow lines up with the title below it. */}
-            <Button variant="ghost" size="sm-touch" className="-ms-2.5 pointer-coarse:-ms-4" asChild>
-              <a href="/">
-                <ArrowLeftIcon data-icon="inline-start" />
-                {c.back}
-              </a>
-            </Button>
-            <div className="ml-auto flex items-center gap-2">
-              <LanguageButton />
-              <Button
-                variant="outline"
-                size="icon-sm-touch"
-                aria-label={dark ? c.themeToLight : c.themeToDark}
-                onClick={toggleTheme}
-              >
-                {dark ? <SunIcon /> : <MoonIcon />}
-              </Button>
-            </div>
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{c.title}</h1>
-          <p className="max-w-lg text-muted-foreground text-pretty">{c.subtitle}</p>
-          <TabsList ref={tabList} aria-label={c.tabsLabel}>
-            {TABS.map((t) => (
-              <TabsTrigger key={t} value={t}>
-                {c.tabs[t]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </header>
-
-        <main className="contents">
-          {notice ? (
-            <Alert variant="caution" role="note">
-              <AlertTriangleIcon />
-              <AlertTitle>{notice.title}</AlertTitle>
-              <AlertDescription>{notice.body}</AlertDescription>
-            </Alert>
-          ) : null}
-          {/* The notice is announced from here: a live region mounted with its text already in it is
-              often not read out, and the notice itself mounts only when its state begins. */}
-          <span role="status" className="sr-only">
-            {notice ? `${notice.title}. ${notice.body}` : null}
-          </span>
-          {isError ? (
-            <LoadError
-              title={t.loadFailed}
-              body={t.loadFailedBody}
-              retry={t.loadRetry}
-              retrying={retrying}
-              retryingLabel={t.loadRetrying}
-              onRetry={retry}
-            >
-              <TechnicalDetail>{String(error)}</TechnicalDetail>
-            </LoadError>
-          ) : !shown ? (
-            <PageSkeleton label={c.loading} />
-          ) : (
-            <>
-              <TabsContent value="story">
-                <Suspense fallback={<PageSkeleton label={c.loading} />}>
-                  <StoryTab data={shown.data} forecastShown={shown.forecast !== null} />
-                </Suspense>
-              </TabsContent>
-              <TabsContent value="questions">
-                <Suspense fallback={<PageSkeleton label={c.loading} />}>
-                  <QuestionsTab data={shown.data} context={shown.context} forecast={shown.forecast} />
-                </Suspense>
-              </TabsContent>
-              <TabsContent value="3d">
-                <Suspense fallback={<PageSkeleton label={c.loading} />}>
-                  <Block3DTab data={shown.data} />
-                </Suspense>
-              </TabsContent>
-            </>
-          )}
-        </main>
-      </Tabs>
-
-      {shown && <BackToTop label={c.backToTop} tabs={tabList} end={footer} />}
-      {shown && (
-        <footer ref={footer} className="mt-auto flex flex-col gap-1 border-t pt-6 text-sm text-muted-foreground">
-          {shown.data.dataEnd !== null && <p>{c.dataUpTo(shown.data.dataEnd, lang)}</p>}
-          <p className="max-w-md text-pretty">{c.footer}</p>
-          <p>{c.timeNote}</p>
-        </footer>
-      )}
-    </div>
-  );
-}
-
-/** A viewport tall, like the monitor's, so nothing below it is on screen when the page replaces it. */
-function PageSkeleton({ label }: { label: string }) {
-  return (
-    <div role="status" className="flex h-svh flex-col gap-4">
-      {/* Text, not a name: a status region announces its content, and a name alone is not read. */}
-      <span className="sr-only">{label}</span>
-      <Skeleton className="h-10 w-2/3" />
-      <Skeleton className="h-6 w-1/2" />
-      <Skeleton className="flex-1" />
-    </div>
+    <InsightsShell
+      tab={hydrated ? tab : null}
+      onTab={setTab}
+      onToggleTheme={toggleTheme}
+      tabList={tabList}
+      after={
+        shown && (
+          <>
+            <BackToTop label={c.backToTop} tabs={tabList} end={footer} />
+            <footer ref={footer} className="mt-auto flex flex-col gap-1 border-t pt-6 text-sm text-muted-foreground">
+              {shown.data.dataEnd !== null && <p>{c.dataUpTo(shown.data.dataEnd, lang)}</p>}
+              <p className="max-w-md text-pretty">{c.footer}</p>
+              <p>{c.timeNote}</p>
+            </footer>
+          </>
+        )
+      }
+    >
+      <InsightsMain notice={notice}>
+        {isError ? (
+          <LoadError
+            title={t.loadFailed}
+            body={t.loadFailedBody}
+            retry={t.loadRetry}
+            retrying={retrying}
+            retryingLabel={t.loadRetrying}
+            onRetry={retry}
+          >
+            <TechnicalDetail>{String(error)}</TechnicalDetail>
+          </LoadError>
+        ) : !shown ? (
+          <PageSkeleton label={c.loading} />
+        ) : (
+          <>
+            <TabsContent value="story">
+              <Suspense fallback={<PageSkeleton label={c.loading} />}>
+                <StoryTab data={shown.data} forecastShown={shown.forecast !== null} />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="questions">
+              <Suspense fallback={<PageSkeleton label={c.loading} />}>
+                <QuestionsTab data={shown.data} context={shown.context} forecast={shown.forecast} />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="3d">
+              <Suspense fallback={<PageSkeleton label={c.loading} />}>
+                <Block3DTab data={shown.data} />
+              </Suspense>
+            </TabsContent>
+          </>
+        )}
+      </InsightsMain>
+    </InsightsShell>
   );
 }
