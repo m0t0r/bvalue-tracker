@@ -16,12 +16,15 @@ import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
 import type { Compared } from "../history";
 import { fmtKm, fmtMag, fmtTimes, roundSig } from "../shared";
+import { overlaps, textBox, type Box } from "../place";
 import { shakingParts } from "../durations";
 import { FILL, STROKE } from "../tones";
 import { flowRow } from "./layout";
+import { pickCorner } from "./side";
+import { SideView, sideLayout, type SideLayout } from "./side-view";
 import { DotLayer, type Mark } from "./dots";
 import { Layer, SceneTitle, radius, star } from "./marks";
-import { useTextWidth } from "../measure";
+import { useTextWidth, type textWidth } from "../measure";
 import type { Ev, StoryModel } from "./model";
 import { Rich, fill } from "@/lib/rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
@@ -112,6 +115,15 @@ export function Graphic({
     return { proj, path: geoPath(proj), top };
   }, [model.all, width, height, small]);
 
+  // The first scene's lines, labels and side view, laid out once for the map and the ocean's name.
+  const measure = useTextWidth();
+  const whereNear = near("where");
+  const where = useMemo(
+    () =>
+      whereNear ? planWhere({ data, model, proj: map.proj, small, lang, top: map.top, width, height, measure }) : null,
+    [whereNear, data, model, map, small, lang, width, height, measure],
+  );
+
   // Two cross-sections, west–east through Chocó and through Chaparral, true to scale and at one
   // scale: one pixel is the same distance across and down, in both. Each starts at the trench, where
   // the plate goes down and where Slab2's model of it begins. Chocó's reaches past Pereira so the
@@ -183,7 +195,7 @@ export function Graphic({
   const depthMedian = (s: Source) => data.distances[s]?.depthKm ?? null;
   // One text alternative for the whole drawing, for whichever scene is showing.
   const aria: Record<SceneId, string> = {
-    where: c.mapAria,
+    where: mapAria(data, model, lang, where?.side != null),
     unknown: c.unknownAria,
     section: fill(c.sectionAria, {
       shallow: fmtKm(depthMedian("shallow") ?? 0),
@@ -221,7 +233,9 @@ export function Graphic({
               <path key={f.properties.name} d={map.path(f) ?? undefined} className="fill-muted stroke-border" />
             ))}
           </g>
-          <OceanLabel proj={map.proj} small={small} label={c.ocean} data={model} />
+          {!(scene === "where" && where?.oceanHidden) && (
+            <OceanLabel proj={map.proj} small={small} label={c.ocean} data={model} />
+          )}
         </Layer>
 
         <Layer on={onSec}>
@@ -246,18 +260,7 @@ export function Graphic({
       <DotLayer marks={marks} width={width} height={height} />
 
       <svg width={width} height={height} viewBox={viewBox} className="absolute inset-0 block overflow-hidden">
-        <Layer on={scene === "where"}>
-          <WhereOverlay
-            data={data}
-            model={model}
-            proj={map.proj}
-            small={small}
-            lang={lang}
-            top={map.top}
-            width={width}
-            height={height}
-          />
-        </Layer>
+        <Layer on={scene === "where"}>{where && <WhereOverlay plan={where} lang={lang} width={width} />}</Layer>
         <Layer on={scene === "unknown"}>
           {near("unknown") && <UnknownOverlay model={model} proj={map.proj} small={small} />}
         </Layer>
@@ -333,6 +336,35 @@ export function Graphic({
   );
 }
 
+/**
+ * The map's text alternative: the map's distances and the side view's, each sentence only with its
+ * figures, and the side view's only while it is drawn.
+ */
+function mapAria(data: Insights, model: StoryModel, lang: Lang, withSide: boolean) {
+  const c = storyCopy[lang];
+  const list = (km: (s: Source) => number | null | undefined) =>
+    SOURCES.flatMap((s) => {
+      const v = km(s);
+      return v == null ? [] : [`${c.legend[s]}, ${fmtKm(v)}`];
+    }).join("; ");
+  const map = list((s) => model.centreKm[s]);
+  const straight = list((s) => data.distances[s]?.hypocentralKm);
+  return [
+    c.graphic.mapAria,
+    map ? fill(c.graphic.mapAriaLines, { map }) : "",
+    withSide && straight ? fill(c.graphic.mapAriaSide, { straight }) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Where the ocean's name goes: west of the westernmost events and south of Pereira, which on this coast is open sea. */
+function oceanAt(proj: GeoProjection, small: boolean, data: StoryModel) {
+  const lon = Math.min(...data.all.map((e) => e.lon)) - 0.08;
+  const at = proj([lon, PEREIRA.lat - 0.75]);
+  return at ? { x: Math.max(small ? 4 : 12, at[0] - (small ? 70 : 110)), y: at[1], fontSize: small ? 10 : 12 } : null;
+}
+
 function OceanLabel({
   proj,
   small,
@@ -344,17 +376,10 @@ function OceanLabel({
   label: string;
   data: StoryModel;
 }) {
-  // West of the westernmost events and south of Pereira, which on this coast is open sea.
-  const lon = Math.min(...data.all.map((e) => e.lon)) - 0.08;
-  const at = proj([lon, PEREIRA.lat - 0.75]);
+  const at = oceanAt(proj, small, data);
   if (!at) return null;
   return (
-    <text
-      x={Math.max(small ? 4 : 12, at[0] - (small ? 70 : 110))}
-      y={at[1]}
-      className="fill-muted-foreground italic"
-      fontSize={small ? 10 : 12}
-    >
+    <text x={at.x} y={at.y} className="fill-muted-foreground italic" fontSize={at.fontSize}>
       {label}
     </text>
   );
@@ -470,7 +495,28 @@ function PereiraMark({ x, y, small, label }: { x: number; y: number; small: bool
   );
 }
 
-function WhereOverlay({
+interface WherePlan {
+  small: boolean;
+  P: readonly [number, number];
+  /** Pereira's 120 km circle. */
+  ring: string | null;
+  fs: number;
+  towns: { t: (typeof TOWNS)[number]; xy: [number, number] }[];
+  lines: { s: Source; xy: [number, number]; km: number; mx: number; my: number }[];
+  side: SideLayout | null;
+  /** The side view's card, in the corner where it hides least. */
+  card: Box | null;
+  /** Whether the ocean's name is left off, being under the card. */
+  oceanHidden: boolean;
+}
+
+/**
+ * The first scene's marks over the map, and the corner its side view takes (`pickCorner`):
+ * bottom-left, over the sea, unless the card would cut a line or cover a figure, a line's name,
+ * Pereira or the mainshock's star, or hide too many events. A town's or the ocean's name under the
+ * card is left off rather than cut.
+ */
+function planWhere({
   data,
   model,
   proj,
@@ -479,6 +525,7 @@ function WhereOverlay({
   top,
   width,
   height,
+  measure,
 }: {
   data: Insights;
   model: StoryModel;
@@ -488,77 +535,150 @@ function WhereOverlay({
   top: number;
   width: number;
   height: number;
-}) {
+  measure: typeof textWidth;
+}): WherePlan | null {
   const c = storyCopy[lang];
   const P = proj([PEREIRA.lon, PEREIRA.lat]);
-  // The ring stops under the legend and its note (baselines 50 and 66), which it used to cut through.
-  const clip = `ring-${useId().replace(/[^\w-]/g, "")}`;
   if (!P) return null;
+  const fs = small ? 10.5 : 12.5;
+  const towns = TOWNS.filter((t) => t.kind === "city").flatMap((t) => {
+    const xy = proj([t.lon, t.lat]);
+    // A town whose name would cross the drawing's edge is left off.
+    if (!xy || xy[0] < 4 || xy[1] < top || xy[0] > width - 60 || xy[1] > height - fs) return [];
+    const box = textBox({ x: xy[0] + 5, y: xy[1] + 4, width: measure(t.name, fs - 1.5), fontSize: fs - 1.5 });
+    return [{ t, xy, box: { ...box, x0: xy[0] - 3 } }];
+  });
+  const lines = SOURCES.flatMap((s, i) => {
+    const at = model.centres[s];
+    const km = model.centreKm[s];
+    const xy = at && proj([at.lon, at.lat]);
+    if (!xy || km === null) return [];
+    // Labels sit off the line's midpoint, alternately above and below, so they do not collide.
+    const mx = (xy[0] + P[0]) / 2;
+    const my = (xy[1] + P[1]) / 2 + (i % 2 === 0 ? 1 : -1) * (small ? 16 : 22);
+    const figure = textBox({
+      x: mx,
+      y: my,
+      width: measure(fmtKm(km), fs, { weight: 600 }),
+      fontSize: fs,
+      anchor: "middle",
+    });
+    const name = textBox({
+      x: mx,
+      y: my + fs + 2,
+      width: measure(c.legend[s], fs - 1.5),
+      fontSize: fs - 1.5,
+      anchor: "middle",
+    });
+    return [{ s, xy, km, mx, my, boxes: [figure, name] }];
+  });
+  const ocean = oceanAt(proj, small, model);
+  const oceanBox = ocean
+    ? textBox({ x: ocean.x, y: ocean.y, width: measure(c.graphic.ocean, ocean.fontSize), fontSize: ocean.fontSize })
+    : null;
+
+  const side = sideLayout(data.distances, { small, width, height, lang, measure });
+  let card: Box | null = null;
+  if (side) {
+    const m = small ? 4 : 12;
+    const bottom = height - side.height - (small ? 8 : 16);
+    const upper = (small ? 55 : 71) + m;
+    const corners = [
+      [m, bottom],
+      [width - side.width - m, bottom],
+      [m, upper],
+      [width - side.width - m, upper],
+    ].map(([x, y]) => ({ x0: x!, y0: y!, x1: x! + side.width, y1: y! + side.height }));
+    const pereiraR = small ? 10 : 13;
+    const star = model.main && proj([model.main.lon, model.main.lat]);
+    const starR = small ? 10 : 13;
+    card = pickCorner(corners, {
+      boxes: [
+        ...lines.flatMap((l) => l.boxes),
+        {
+          x0: P[0] - pereiraR,
+          x1: P[0] + (small ? 8 : 10) + measure(c.legend.pereira, small ? 12 : 14, { weight: 650 }),
+          y0: P[1] - pereiraR - 12,
+          y1: P[1] + pereiraR,
+        },
+        ...(star ? [{ x0: star[0] - starR, x1: star[0] + starR, y0: star[1] - starR, y1: star[1] + starR }] : []),
+      ],
+      lines: lines.map((l) => [P, l.xy] as const),
+      points: model.all.flatMap((e) => {
+        const xy = proj([e.lon, e.lat]);
+        return xy ? [xy] : [];
+      }),
+    });
+  }
   const ring = geoCircle()
     .center([PEREIRA.lon, PEREIRA.lat])
     .radius(120 / KM_PER_DEG)();
-  const path = geoPath(proj);
-  const fs = small ? 10.5 : 12.5;
+  return {
+    small,
+    P,
+    ring: geoPath(proj)(ring),
+    fs,
+    towns: towns.filter(({ box }) => !card || !overlaps(box, card)),
+    lines,
+    side,
+    card,
+    oceanHidden: card !== null && oceanBox !== null && overlaps(oceanBox, card),
+  };
+}
+
+function WhereOverlay({ plan, lang, width }: { plan: WherePlan; lang: Lang; width: number }) {
+  const c = storyCopy[lang];
+  const { P, fs, small } = plan;
+  // The ring stops under the legend and its note (baselines 50 and 66), which it used to cut through.
+  const clip = `ring-${useId().replace(/[^\w-]/g, "")}`;
   return (
     <g>
       <clipPath id={clip}>
         <rect y={small ? 55 : 71} width={width} height={9999} />
       </clipPath>
       <path
-        d={path(ring) ?? undefined}
+        d={plan.ring ?? undefined}
         clipPath={`url(#${clip})`}
         fill="none"
         className="stroke-foreground/50"
         strokeWidth={1.25}
         strokeDasharray="4 5"
       />
-      {TOWNS.filter((t) => t.kind === "city").map((t) => {
-        const xy = proj([t.lon, t.lat]);
-        // A town whose name would cross the drawing's edge is left off.
-        if (!xy || xy[0] < 4 || xy[1] < top || xy[0] > width - 60 || xy[1] > height - fs) return null;
-        return <TownMark key={t.id} x={xy[0]} y={xy[1]} name={t.name} fontSize={fs - 1.5} />;
-      })}
-      {SOURCES.map((s, i) => {
-        const at = model.centres[s];
-        const d = data.distances[s];
-        if (!at || !d) return null;
-        const xy = proj([at.lon, at.lat]);
-        if (!xy) return null;
-        // Labels sit off the line's midpoint, alternately above and below, so they do not collide.
-        const mx = (xy[0] + P[0]) / 2;
-        const my = (xy[1] + P[1]) / 2 + (i % 2 === 0 ? 1 : -1) * (small ? 16 : 22);
-        return (
-          <g key={s}>
-            <line x1={P[0]} y1={P[1]} x2={xy[0]} y2={xy[1]} className={STROKE[s]} strokeWidth={1.75} />
-            <g transform={`translate(${mx},${my})`}>
-              <text
-                textAnchor="middle"
-                fontSize={fs}
-                fontWeight={600}
-                className="fill-foreground stroke-background tabular-nums"
-                paintOrder="stroke"
-                strokeWidth={4}
-              >
-                {fmtKm(d.hypocentralKm)}
-              </text>
-              <text
-                textAnchor="middle"
-                y={fs + 2}
-                fontSize={fs - 1.5}
-                className="fill-muted-foreground stroke-background"
-                paintOrder="stroke"
-                strokeWidth={4}
-              >
-                {c.legend[s]}
-              </text>
-            </g>
+      {plan.towns.map(({ t, xy }) => (
+        <TownMark key={t.id} x={xy[0]} y={xy[1]} name={t.name} fontSize={fs - 1.5} />
+      ))}
+      {plan.lines.map(({ s, xy, km, mx, my }) => (
+        <g key={s}>
+          <line x1={P[0]} y1={P[1]} x2={xy[0]} y2={xy[1]} className={STROKE[s]} strokeWidth={1.75} />
+          <g transform={`translate(${mx},${my})`}>
+            <text
+              textAnchor="middle"
+              fontSize={fs}
+              fontWeight={600}
+              className="fill-foreground stroke-background tabular-nums"
+              paintOrder="stroke"
+              strokeWidth={4}
+            >
+              {fmtKm(km)}
+            </text>
+            <text
+              textAnchor="middle"
+              y={fs + 2}
+              fontSize={fs - 1.5}
+              className="fill-muted-foreground stroke-background"
+              paintOrder="stroke"
+              strokeWidth={4}
+            >
+              {c.legend[s]}
+            </text>
           </g>
-        );
-      })}
+        </g>
+      ))}
       <PereiraMark x={P[0]} y={P[1]} small={small} label={c.legend.pereira} />
       <text x={small ? 4 : 8} y={small ? 50 : 66} fontSize={fs - 2} className="fill-muted-foreground">
         {c.graphic.mapNote}
       </text>
+      {plan.side && plan.card && <SideView at={plan.card} layout={plan.side} lang={lang} />}
     </g>
   );
 }

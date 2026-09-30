@@ -484,6 +484,28 @@ shared chunks of both pages.
     this rule: each has a hand-chosen spot and is only kept inside the map, as before. They clear one
     another and Pereira's label in every scan above; a longer reference name or a narrower column
     than 320 px is where that could stop holding.
+  - **The story map's side view stays bottom-left, over the sea, wherever it can** (`pickCorner` in
+    `story/side.ts`, 2026-09-30). Corners are tried in a fixed order (bottom-left, bottom-right,
+    top-left, top-right) and the first is taken that cuts no line, covers no figure, line name,
+    Pereira or the mainshock's star, and hides at most 5 % of the events (`MAX_HIDDEN_SHARE`, so it
+    never sits on a cluster); failing all four, the one covering fewest of those marks, then fewest
+    events. A town's or the ocean's name does not count: the card is opaque, so one under it is left
+    off rather than cut, and the ocean's name only while the first scene shows, since the last scene
+    reuses the map without the card (code review).
+    - **Why a fixed order, not the corner that hides least.** The first version weighed every
+      corner by what it covered, a town's name heavier than a few dots. On the 2026-09-30 capture
+      that put the card top-left at 390 px (bottom-left would cover "Cali") and bottom-left at 320 px
+      and on a desktop, and the owner read the jump between widths as a bug. With the fixed order it
+      is bottom-left at 320, 360, 390, 430, 768, 1024, 1280 and 667 × 375 px in both languages, with
+      Chaparral's events held back, and with the web font blocked.
+    - **Its size**: the plot, the arc's reach included, takes at most a third of the drawing across
+      and a sixth of a desktop's height down (70 px on a phone), one scale both ways. The long title
+      is used only where it fits over the plot, else the short one, which may widen the card on a
+      phone (at 320 px the card is about half the drawing). Its labels sit left of each focus and move
+      down two pixels at a time until they clear one another and the other foci's dots. The arc's
+      "120 km" is left off where the arc has shrunk enough to meet "Pereira".
+    - The corner rule and the map's other placements are in `planWhere` (`graphic.tsx`), which runs
+      only while the first scene is mounted.
   - **Declined in the code review (2026-09-30):** *offering the hero strip's ticks up to today*, instead
     of stopping three days short, now that `ownPlaceLabels` guards the edge. The issue keeps which
     ticks a drawing offers out of scope, and the change would add a label to wide layouts that are

@@ -107,6 +107,12 @@ export function storyModel(data: Insights) {
 
   const tolima = bySrc.tolima;
   const cen = { shallow: centre(bySrc.shallow), deep: centre(bySrc.deep), tolima: centre(tolima) };
+  // How long the map's line from Pereira to each centre is, km over the surface: the figure the map
+  // writes on it. The straight-line distance to the focus is the side view's.
+  const centreKm = Object.fromEntries(SOURCES.map((s) => [s, cen[s] ? epicentralKm(PEREIRA, cen[s]) : null])) as Record<
+    Source,
+    number | null
+  >;
   const hypo = SOURCES.flatMap((s) => (data.distances[s] ? [data.distances[s].hypocentralKm] : []));
   const snapped = commonDepths(bySrc.shallow);
   const shallowDepth = data.distances.shallow?.depthKm;
@@ -159,11 +165,16 @@ export function storyModel(data: Insights) {
     /** Every event at M ≥ 4 in either zone since Chocó's catalogue begins, the largest excluded. */
     strongSince: all.filter((e) => e.mag >= 4 && e.id !== main?.id),
     centres: cen,
+    /**
+     * How long the map's line from Pereira to each centre is, km over the surface: the figure the map
+     * writes on it. The straight-line distance to the focus is the side view's.
+     */
+    centreKm,
     /** Each source, and the mainshock once found, against the Slab2 plate at its own place. */
     plate,
     chocoToTolimaKm: main && cen.tolima ? epicentralKm(main, cen.tolima) : null,
     /** How far Pereira is from the swarm's centre on the map: it lies to the north, off Chaparral's cut. */
-    tolimaToPereiraKm: cen.tolima ? epicentralKm(PEREIRA, cen.tolima) : null,
+    tolimaToPereiraKm: centreKm.tolima,
     /**
      * Chaparral's cut is shown: the swarm has events and a place against the plate, and Chocó's plate
      * step, which explains the band and the margin its sentence uses, is shown too. The drawing's

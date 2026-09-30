@@ -583,6 +583,25 @@ the reader's own questions). Everything above still applies to it; this section 
 - **Distances are straight-line from Pereira to the focus** (`hypocentralKm`), the one that matters
   for the waves: all three sources sit 105–130 km away, although the M7.4 was 69 km away on the
   map, because it was 103 km deep.
+  - **A line on a map can only measure distance over the surface, so it carries that figure**
+    (owner's report, 2026-09-30). The story's first map wrote each source's straight-line distance
+    on its line, and the deep group's line, the shortest on the map (78 km on the 2026-09-24
+    fixture), carried 119 km against the swarm's longer line at 108. Each map line now carries its
+    own length (`centreKm`, Pereira to the group's median epicentre), and a side view on the map
+    (`story/side.ts`) draws Pereira at the surface and each focus at its median depth, **one scale
+    across and down**, so each line there is as long as the straight-line figure written on it. The
+    focus is placed across by `√(hypo² − depth²)`, not at the median map distance: the three medians
+    are taken apart and need not form a right triangle (0.6 km apart for the deep group), and the map
+    distance is the one figure the side view does not state.
+  - **The side view's dashed arc is 120 km in a straight line, not the map's circle.** The map's
+    circle is 120 km over the surface, which seen from the side would be a vertical line, not an arc.
+    They share the figure so the two drawings can be read together, and they disagree on purpose:
+    the shallow group sits on the map's circle (~119 km over the surface) and outside the arc
+    (126 km in a straight line). The first version called the arc "the map's circle" in a code
+    comment and here (code review, 2026-09-30).
+  - *Declined in that review*: rounding Chaparral's map line like the Chaparral cut's note. The line
+    reads 107 km and the note "~110 km al norte", one distance (`centreKm.tolima`, which the note
+    now reads too) to two significant figures there, with its "~".
 - **USGS's products for the M7.4, as the daily job reads them** (re-fetched 2026-09-24 for
   us6000tjl2; `worker/usgs.ts`, [the daily USGS job](ingest.md#the-daily-usgs-job)). DYFI and PAGER
   are on the questions tab (below), and so is the forecast (the last rule in this section). The facts:
