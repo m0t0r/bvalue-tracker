@@ -12,6 +12,7 @@ import { bAxis } from "./b-axis";
 import { NO_VERTICAL_LINES } from "./chart-grid";
 import { bTimeDescription } from "./b-over-time-description";
 import { BTimeKey } from "./b-over-time-key";
+import { textWidth } from "./svg-chart";
 import { preserveEndTicks } from "./time-ticks";
 import type { Cluster } from "../../../core/clusters";
 
@@ -24,21 +25,6 @@ const Y_AXIS_W = 32;
 const TICK_GAP = 40;
 // Without a width, Recharts does not measure each word of a label to wrap it, which it never needs to.
 const UNWRAPPED = { width: undefined };
-
-let measuring: CanvasRenderingContext2D | null | undefined;
-/**
- * How wide `text` is in `font`, from a canvas: no layout, where Recharts' own measure writes each label
- * into a hidden span and reads its box. Null where there is no canvas to measure with. Before Geist has
- * loaded it measures the stand-in face, as Recharts' span did, and the labels are not chosen again when
- * Geist arrives, as Recharts' were not: the stand-in is cut to Geist's width, and choosing again would
- * draw the whole chart a second time inside a phone's load.
- */
-function textWidth(text: string, font: string): number | null {
-  if (measuring === undefined) measuring = document.createElement("canvas").getContext("2d") ?? null;
-  if (!measuring) return null;
-  measuring.font = font;
-  return measuring.measureText(text).width;
-}
 
 /**
  * `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits

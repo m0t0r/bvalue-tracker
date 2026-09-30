@@ -7,7 +7,7 @@
 | `packages/seismo/` | `@bvalue/seismo`, the seismology library: Gutenberg–Richter statistics (`gr.ts`, including the one `computeStats` pipeline), mainshock detection (`mainshock.ts`), magnitude arithmetic in whole tenths (`magnitude.ts`), energy and moment ratios (`energy.ts`) and distances on the sphere (`distance.ts`). Knows nothing about SGC, zones or the page; tested on synthetic catalogues only. |
 | `core/` | Shared, runtime-neutral logic about *this* project: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), the zones, the depth groups, the zone's mainshock with SGC's meaning of "reviewed" (`mainshock.ts`), CSV, CLI. Used by the Worker, the browser and Node. |
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
-| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart), MapLibre GL for the monitor; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
+| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, Recharts (via shadcn chart) for two of the monitor's charts and D3's maths with React's SVG for the third (`components/charts/fmd.tsx`), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
 | `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
@@ -182,6 +182,22 @@ draws from too):
   own data first and then each series' own `data`, unsorted. `ResponsiveContainer` draws the whole chart
   once at `initialDimension` (shadcn's is 320 × 200) before it has measured. "Valor b en el tiempo" avoids
   all of it; see [Performance](performance.md).
+- **A chart moved off Recharts is checked against the Recharts build pixel by pixel** (issue #118).
+  Serve `main` and the branch with `pnpm preview` on the same catalogue, take each card in both, and
+  count the pixels that differ and by how much: rasterisation alone leaves a few hundred at 1–3/255
+  (a grid line a step lighter), and anything over ~8/255 is a real difference. In agent-browser
+  `screenshot <selector>` came out blank (all white, or all black in dark mode) for these cards, and
+  two blank shots compare identical: take the viewport and crop it to the card's
+  `getBoundingClientRect`, and look at one image before trusting a count. What a Recharts chart does
+  by default and has to be kept is in [the page](frontend.md) ("Distribución frecuencia–magnitud"),
+  including its keyboard layer, which only a keyboard walk shows.
+  **A real Tab key press can hang headless Chrome on macOS** (2026-09-29): sent through the DevTools
+  protocol (`Input.dispatchKeyEvent`) to a page with nothing focusable, the browser process sat at 100 %
+  CPU in the system's key-shortcut handling (`NSMenu`) and stopped answering for good; the shared Chrome
+  on :9222 had to be restarted. `agent-browser press Tab` on this page once came back to a blank
+  relaunched browser too. Focus in the page instead (`element.focus()` from a script), then send the
+  arrows and Enter, and measure in a Chrome of your own (`--remote-debugging-port` on a free port and a
+  scratch `--user-data-dir`), not the shared one.
 - A `ScatterChart` with a time axis derives a single tick on its own. We pass
   explicit weekly `ticks`, shared with the bar chart below it — see the scrolling
   mobile chart under [Interface conventions](frontend.md#interface-conventions) for how the tick

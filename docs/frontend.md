@@ -323,8 +323,10 @@ those, so an untouched tab shows no chips on either side.
 `src/insights/main.tsx`; the `client` entry in `vite.config.ts`). It explains the zones in plain
 words for a reader in Pereira (the rules for what it may say are in
 [the science](science.md#the-insights-page-insights-from-2026-09-24)). D3's maths modules
-(`d3-geo`, `d3-scale`, `d3-shape`, `d3-array`) load only there, and the monitor's Recharts and
-MapLibre never do; React renders the SVG, so there is no `d3-selection`.
+(`d3-geo`, `d3-scale`, `d3-shape`, `d3-array`) do the maths and React renders the SVG, so there is no
+`d3-selection`; the monitor's Recharts and MapLibre never load there. The monitor's frequency–magnitude
+chart is drawn the same way since issue #118 (see its bullet under Interface conventions), so
+`d3-scale` and `d3-shape` are now shared chunks of both pages.
 
 - **The route.** The asset layer serves `insights.html` at `/insights` in production. In dev the
   Cloudflare plugin would hand that path to the Worker, which answers 404 (the same trap as the zone
@@ -1173,6 +1175,67 @@ colour, motion). Keep to them:
   copy of its longest form, with stand-in figures: without an end window it loses a clause, and the
   card shrank a line when Mc ran the windows out. The reading's name in both keys comes from
   `otherReadingKey`, each card passing the values it draws (the chart its deferred copy).
+- **"Distribución frecuencia–magnitud" is drawn with D3's maths and React's SVG, not Recharts**
+  (`charts/fmd.tsx`, issue #118, 2026-09-29; why, and what it saved, in [Performance](performance.md)).
+  It was rebuilt to be the same chart, checked against the Recharts build pixel by pixel (below), with
+  the old chart's bugs found on the way fixed rather than copied (owner's rule: parity is with what the
+  chart is meant to do). What that took, each of which a change must keep:
+  - **The layout is Recharts'**: 40 px for the y axis, 12 px on the right, 16 on top, a 30 px x axis,
+    the drawing a whole number of pixels wide from the plot box's left edge (Recharts rounds its
+    container), and the key under it as wide as the drawing less its right margin. The key is
+    `ChartKey` (`charts/svg-chart.tsx`), drawn as shadcn's `ChartLegendContent` draws it; this chart no
+    longer goes through `ChartContainer`, which wraps Recharts' `ResponsiveContainer`, and takes its
+    colours as the theme's own classes (`fill-chart-3`, `bg-chart-1`) rather than `--color-*` variables.
+  - **The magnitude labels sit on their magnitudes** (`magnitudeTicks`, `charts/magnitude-ticks.ts`):
+    Recharts' rule for a `tickCount` over a fixed domain, from the smallest magnitude to the largest,
+    with its step rounded up to whole tenths. Recharts' own step could be 0.95 or 0.09, so on Chocó's
+    whole catalogue "1.8" was drawn at 1.75 and "3.7" at 3.65, and on a narrow one (2.0–2.6) "2.5"
+    appeared twice. Where Recharts' step was already whole tenths (Tolima's 0.4) the labels are its
+    own, which a test holds to Recharts' function. They are then thinned as its default `interval`
+    thinned them (`preserveEndTicks`; "4.3" goes before "4.5" at 390 px), with widths from a canvas, or
+    0.6 em a character where there is none.
+  - **The marks are Recharts' symbols** (`d3-shape`'s square and circle of 64 px², as paths): a
+    `<circle>` of the same radius differed at every dot's edge.
+  - **Mc is drawn only on the axis, and "Mc 2.7" is one string.** A manual Mc below the smallest
+    magnitude left is off the axis, and Recharts discarded its reference line there; so does this.
+    Changed from Recharts: on a catalogue of one magnitude the axis is a single value, which a scale maps
+    to its middle, and Recharts drew "Mc 2.5" as a line through the M2.3 point there; it is off the axis
+    too, and left out.
+    Written as `Mc {value}`, React makes two text nodes, shaped apart, and the last digit moved a pixel.
+  - **The tooltip is Recharts'**: on the magnitude nearest the pointer, 10 px below and right of it,
+    on the other side where it would leave the plot (`tipPosition`, tested), gliding 400 ms between
+    magnitudes, with the grey cursor line. Changed from Recharts: it appears where it belongs, where
+    Recharts' first one flew in from the chart's top-left corner over 400 ms (it animated from
+    `translate(0, 0)`), and again from wherever it was last shown (owner's call); and a lifted finger
+    hides it, where Recharts left it over the chart after a sideways drag while the reader scrolled on.
+    A tap still shows it, through the mouse events the browser sends after the touch, and now on the
+    bin under the finger every time: Recharts' taps often showed the previous tap's bin (its hover index
+    lags a frame, as on the day bars). A move is drawn within its event (`flushSync`), as Recharts' store
+    drew it; left to React's scheduler the tooltip reached the screen a frame later. Measured at 4× CPU,
+    a real mouse between two bins, 15 moves: on screen ~20 ms after the event against Recharts' ~30.
+  - **The keyboard layer is Recharts' `accessibilityLayer`**: the drawing is a tab stop
+    (`role="application"`, its `title` and `desc` the text alternative); focus shows a magnitude; the
+    arrows step through every 0.1 step, empty ones included, and stop at the ends; Enter hides and shows
+    the tooltip; blur hides it. Its tooltip sits at one height for every magnitude, where Recharts put
+    it. Changed from Recharts: focus shows the magnitude the keyboard was last on, where Recharts showed
+    one on the first focus only and a reader who tabbed back found the chart silent until an arrow.
+  - **A reading is of a bin by its index, and a filter can leave fewer bins**: an index past the new
+    last bin is no reading (the code review found the tooltip reading past the array and taking the card
+    down), as Recharts dropped an active index outside its data. `fmd.test.ts` holds all of this.
+  - **What a pointer does not change is built once per catalogue and size** (`marks`): a move redraws
+    the cursor and the tooltip, not the ~150 marks.
+  - **Checked** (agent-browser, `pnpm preview` of `main` and of this, the same catalogue): screenshots
+    of the card for both zones, both languages, both themes at 320, 390 and 1280 px, identical to the
+    pixel or within 3/255 in at most ~300 pixels (grid lines rasterised a step lighter), apart from
+    Chocó's labels, above; the mouse over five points, the keyboard path, End, Home and Space (which
+    scroll the page on both), at 1280 and 390 px: the same within 9/255 (the tooltip's shadow); a mouse
+    scanned across the plot a pixel at a time changes bin at the same x on both; with no canvas, the
+    same; a catalogue from M2.0 to M2.6 and one of M2.3 alone differ only by the two fixes above (the
+    labels, the off-axis Mc). Touch was driven through the DevTools protocol (drag, lift, tap), not on a
+    physical phone.
+  - **Declined in the code review (2026-09-29):** *measuring the tooltip only when its content
+    changes.* Each move commits new text or a new cursor, which leaves layout to be done for that frame
+    anyway; reading the tooltip's box forces it earlier, not twice, as Recharts' own read did.
 - **A chart grows into the space beside it only where the extra height cannot mislead.**
   Cards in a two-column row are stretched to the taller one, so a fixed-height chart leaves a
   void under its legend. "Distribución frecuencia–magnitud" therefore fills its card (`flex-1`
@@ -1470,7 +1533,7 @@ colour, motion). Keep to them:
   `aria-labelledby` on the thumb, which is the element with `role="slider"`.
 - **Every tab stop shows focus at 3:1 or more** (interface review, 2026-09-26). Light `--ring` is
   `oklch(0.556)`, 4.74:1 on white (shadcn's 0.708 was 2.59:1), and nothing uses `ring-ring/50`. A
-  region that is a tab stop — a Recharts `accessibilityLayer` chart, a Radix tab panel, the map
+  region that is a tab stop — a chart with a keyboard layer (Recharts' or ours), a Radix tab panel, the map
   canvas — draws a 2 px `outline-ring` set off from it rather than a ring against its contents; a
   tab panel inside a sheet insets it. A page-level panel whose first child is focusable takes no stop
   of its own (`tabIndex={-1}`), and the magnitude chart's pinned y axes, which repeat the axis beside
