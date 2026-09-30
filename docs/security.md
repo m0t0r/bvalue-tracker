@@ -63,9 +63,13 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
 - Static assets bypass the Worker (`run_worker_first: ["/api/*"]`), so page headers come
   from `public/_headers`, not from Hono.
   The CSP there is narrow and was checked against the running page: MapLibre needs
-  `blob:` for its worker, the shadcn chart needs `style-src 'unsafe-inline'` (and so, from
-  2026-09-28, does the header's CSS inlined in each zone's HTML, issue #97: compiled at build time
-  from `index.css` for the header's own classes, nothing from a request or the catalogue), the
+  `blob:` for its worker, the header's CSS inlined in each page's HTML needs `style-src
+  'unsafe-inline'` (issues #97 and #120: compiled at build time from `index.css` for the header's own
+  classes, nothing from a request or the catalogue; so do the two `style="outline:none"`
+  attributes Radix puts on the static header's tab panel. What React sets at runtime, a chart's
+  positions included, goes through the CSSOM, which the CSP does not restrict. shadcn's chart, which
+  injected a `<style>` per chart, needed the keyword first and left with Recharts on 2026-09-30; a
+  hash for the one inlined block in its place has not been tried), the
   basemap needs `tiles.openfreemap.org`, and the map's relief shading needs
   `tiles.mapterhorn.com` in `connect-src` only: MapLibre fetches elevation tiles and decodes
   them with `createImageBitmap` (or, where that is missing, through a `blob:` URL, which
@@ -177,7 +181,7 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
 
 Checked and found clean, so do not re-litigate: SQL is fully bound everywhere; event ids are
 regex-constrained so the outbound SGC link cannot become `javascript:`; map popups use
-`textContent` and the chart's `dangerouslySetInnerHTML` takes only source literals; `onError`
+`textContent`; nothing in `src/` uses `dangerouslySetInnerHTML` (shadcn's chart did, and is gone); `onError`
 leaks nothing; no secrets in source or history; CI cannot deploy from a pull request.
 
 Still open, with no confirmed exploit: the read routes have

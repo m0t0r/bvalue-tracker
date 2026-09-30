@@ -24,8 +24,9 @@
   # relief shading, the event dots and the chart axis labels all render with this policy
   # on. It is narrow, so re-check the map and charts if any of these change:
   #   blob:            MapLibre GL 6 runs its worker from a blob URL
-  #   'unsafe-inline'  the shadcn chart injects a <style> element per chart, and each zone page
-  #                    carries its header's CSS in a <style> (issue #97)
+  #   'unsafe-inline'  each page carries its header's CSS in a <style> (issues #97, #120), and
+  #                    the static header has style attributes (Radix's outline:none on a tab
+  #                    panel). Styles React sets at runtime go through the CSSOM and need nothing.
   #   tiles.openfreemap.org  basemap style, sprites, glyphs and vector tiles
   #   tiles.mapterhorn.com   the map's relief (elevation tiles); connect-src only, since
   #                          MapLibre fetches raster-dem tiles and never loads them as <img>

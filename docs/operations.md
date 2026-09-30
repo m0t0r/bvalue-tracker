@@ -186,7 +186,7 @@ why it is shaped the way it is. All of it was measured here, on 2026-09-20.
 ### The page's own failures
 
 Nobody is watching this page's console — it is one researcher's tab — so a MapLibre worker
-that never loads, a Recharts crash or a hashed chunk that 404s after a deploy left the
+that never loads, a chart that throws or a hashed chunk that 404s after a deploy left the
 reader with a broken page and left us with nothing. `src/lib/report-error.ts` posts to
 `POST /api/client-error`, which writes one `page error` line and stores nothing.
 

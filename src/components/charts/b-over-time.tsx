@@ -484,21 +484,19 @@ function Reading({
         {labels}
       </svg>
       {at && p ? (
-        <ChartTip at={at} area={plot} clear={clear}>
-          <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl tabular-nums">
-            <div className="font-medium">
-              b = {p.b.toFixed(2)} ± {p.sigma.toFixed(2)}
-            </div>
-            <div className="text-muted-foreground">
-              {fmtDateTime(p.from, lang)} → {fmtDateTime(p.to, lang)}
-            </div>
-            {p.incomplete ? (
-              <div className="mt-1 flex max-w-56 items-start gap-1 text-pretty">
-                <AlertTriangleIcon className="mt-px size-3 shrink-0 text-caution-strong" />
-                {t.bTimeTipIncomplete(p.mcOwn.toFixed(1), p.mc.toFixed(1))}
-              </div>
-            ) : null}
+        <ChartTip at={at} area={plot} clear={clear} className="tabular-nums">
+          <div className="font-medium">
+            b = {p.b.toFixed(2)} ± {p.sigma.toFixed(2)}
           </div>
+          <div className="text-muted-foreground">
+            {fmtDateTime(p.from, lang)} → {fmtDateTime(p.to, lang)}
+          </div>
+          {p.incomplete ? (
+            <div className="mt-1 flex max-w-56 items-start gap-1 text-pretty">
+              <AlertTriangleIcon className="mt-px size-3 shrink-0 text-caution-strong" />
+              {t.bTimeTipIncomplete(p.mcOwn.toFixed(1), p.mc.toFixed(1))}
+            </div>
+          ) : null}
         </ChartTip>
       ) : null}
     </div>

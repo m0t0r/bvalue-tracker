@@ -4,11 +4,11 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
- * Recharts and MapLibre are most of the JavaScript this page ships (~1.3 MB and ~1.0 MB of
- * sources), and every card that needs them is below the b-value the reader came for — the map
- * is five screens down on a phone. Loaded with the rest of the page they held the first paint
- * behind a megabyte of script and cost 1.8 s of scripting on a mid-range phone, so each card
- * asks for its chunk only once it is within 600 px of the viewport (`margin`). A card already on screen
+ * MapLibre is most of the JavaScript this page ships (~1.0 MB of sources), and the map and the
+ * charts are all below the b-value the reader came for — the map is five screens down on a phone.
+ * Loaded with the rest of the page (the charts were then on Recharts, ~1.3 MB more) they held the
+ * first paint behind a megabyte of script and cost 1.8 s of scripting on a mid-range phone, so each
+ * card asks for its chunk only once it is within 600 px of the viewport (`margin`). A card already on screen
  * loads immediately, one screen after the shell has painted.
  *
  * The placeholder is the same card with the same title, so only the drawing arrives late and

@@ -3,11 +3,12 @@ const clean = (v: number) => Number(v.toPrecision(12));
 
 /**
  * The magnitude axis' labels: from the smallest magnitude in a round step, which may leave a short last
- * gap, and always the largest. This is Recharts' rule for an axis with a `tickCount` over a fixed domain
+ * gap, and always the largest. This was Recharts' rule for an axis with a `tickCount` over a fixed domain
  * (`getTickValuesFixedDomain`), with one change: the step is a whole number of `unit`s (the chart's 0.1
  * bins). Recharts' step could be 0.95 or 0.09, and then a label written to one decimal was not where its
  * magnitude is ("1.8" at 1.75 on Chocó's axis) or said the same as the next ("2.5" at 2.45 and 2.54).
- * `magnitude-ticks.test.ts` holds it to Recharts' own function wherever that step is whole tenths.
+ * `magnitude-ticks.test.ts` holds it to a recording of Recharts' own function wherever that step was whole
+ * tenths.
  */
 export function magnitudeTicks([a, b]: [number, number], tickCount: number, unit = 0.1): number[] {
   const lo = Math.min(a, b),

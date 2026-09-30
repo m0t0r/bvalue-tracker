@@ -3,7 +3,7 @@ import type { Stats } from "@/lib/stats";
 import type { Cluster } from "../../../core/clusters";
 
 /**
- * "Distribución frecuencia–magnitud"'s description, apart from Recharts like `bTimeDescription`, so
+ * "Distribución frecuencia–magnitud"'s description, apart from the chart's chunk like `bTimeDescription`, so
  * that `Deferred` writes it into the placeholder: on a phone it runs to four lines, which a one-line
  * skeleton left out of the placeholder's height.
  */
