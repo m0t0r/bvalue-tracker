@@ -11,6 +11,8 @@ import { fmtInt } from "../shared";
 const f0 = (v: number) => Math.round(v).toString();
 const f1 = (v: number) => v.toFixed(1);
 const mag = (m: number) => `M${f1(m)}`;
+/** The two largest events are the same size: a gap that would be written "0.0" is said as a tie. */
+const tied = (gap: number | null) => gap !== null && f1(gap) === "0.0";
 /** Seconds for a wave's arrival, never "0 s": under a second is said as such. */
 const secs = (s: number, lt1: string) => (s < 1 ? lt1 : `${f0(s)}\u00A0s`);
 
@@ -161,7 +163,7 @@ const es = {
       `El grupo superficial está a unos ${f0(shallowKm)}\u00A0km de profundidad bajo Istmina y Sipí, a unos ${f0(fromRef)}\u00A0km del epicentro.${share ? ` Desde la segunda semana, el ${share.pct}\u00A0% de los eventos del Chocó de M${f1(share.mc)} o más han sido de este grupo.` : ""}`,
     deepLabel: "El grupo profundo:",
     shallowLabel: "El grupo superficial:",
-    why: "¿Por qué el grupo superficial no se apagó como lo hacen las réplicas? Con este catálogo nadie lo puede decir. En casos así, los sismólogos suelen considerar varias posibilidades: que el gran sismo haya cambiado los esfuerzos en la roca y activado una zona que ya estaba cargada; que haya fluidos moviéndose por las fallas; o que un deslizamiento lento, que no se siente, esté empujando la roca a su alrededor. Son hipótesis en estudio, no conclusiones de esta página.",
+    why: "¿Por qué el grupo superficial no se apagó como lo hacen las réplicas? Con este catálogo nadie lo puede decir. En casos así, los sismólogos suelen considerar varias posibilidades: que el sismo grande haya cambiado los esfuerzos en la roca y activado una zona que ya estaba cargada; que haya fluidos moviéndose por las fallas; o que un deslizamiento lento, que no se siente, esté empujando la roca a su alrededor. Son hipótesis en estudio, no conclusiones de esta página.",
     /** Keyed on the `decay` claim for each group; `why` is only shown when the shallow group has not faded. */
     takeaway: (deep: Decay["case"], shallow: Decay["case"]): string =>
       deep === "young"
@@ -191,7 +193,7 @@ const es = {
       `${state === "none" ? "No. Chaparral es un enjambre (así lo llama también el SGC): muchos eventos, sin uno que domine." : "Chaparral es lo que el SGC llama un enjambre."} Empezó el ${start}, a unos ${f0(depth)}\u00A0km de profundidad${crustal ? ", dentro de la corteza," : ""} y registra en promedio unos ${f0(perDay)} eventos por día.`,
     state: (s: MainshockState, largest: number, gap: number | null) =>
       s === "none"
-        ? `Ninguno sobresale: el mayor, ${mag(largest)}, está solo ${gap === null ? "un poco" : f1(gap)} por encima del siguiente. Por eso no tiene sismo principal.`
+        ? `Ninguno sobresale: ${tied(gap) ? `los dos mayores son de la misma magnitud, ${mag(largest)}` : `el mayor, ${mag(largest)}, está solo ${gap === null ? "un poco" : f1(gap)} por encima del siguiente`}. Por eso no tiene sismo principal.`
         : `Ahora su evento mayor, ${mag(largest)}, sí sobresale${gap === null ? "" : `: está ${f1(gap)} por encima del siguiente`}${s === "awaiting-review" ? ", aunque el SGC todavía no lo ha revisado" : ""}. Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre.`,
     shareTitle: "¿Cuánta energía liberó el evento más grande de cada zona?",
     shareChoco: (m: number) => `Chocó: su mayor, ${mag(m)}`,
@@ -205,7 +207,7 @@ const es = {
     driftPanel: (when: string, n: number) => `${when} · ${n} eventos`,
     driftAria: (when: string, n: number) => `${when}: ${n} eventos`,
     driftCaption: (err: string) =>
-      `Cada cuadro muestra 12 horas del enjambre. La cruz es el centro de sus eventos (la mediana) y la línea, el recorrido del centro hasta ese momento. Cada epicentro tiene un error típico de ~${err}\u00A0km, así que un punto aislado no dice nada; cualquier desplazamiento del centro es una pista que habría que confirmar relocalizando los eventos, no un hallazgo.`,
+      `Cada cuadro muestra 12 horas del enjambre. La cruz es el centro de sus eventos (la mediana) y la línea, el recorrido del centro hasta ese momento. Cada epicentro tiene un error típico de unos ${err}\u00A0km, así que un punto aislado no dice nada; cualquier desplazamiento del centro es una pista que habría que confirmar relocalizando los eventos, no un hallazgo.`,
     takeaway: (state: MainshockState): string =>
       state === "none"
         ? "Chaparral no tiene un sismo principal: es un enjambre, y no se puede saber de antemano si se apagará o seguirá."
@@ -233,7 +235,7 @@ const es = {
     short: "¿Cuántas veces lo he sentido?",
     q: "¿Cuántas veces lo he sentido?",
     p1: "Esta página no sabe qué sentiste tú, pero sí qué días hubo eventos lo bastante grandes para que los notes. Pon el umbral donde te parezca y el calendario marcará los días con al menos un evento así en estas dos zonas.",
-    threshold: "Yo los noto desde",
+    threshold: "Los noto desde",
     daysOf: (n: number) => `de ${n} días`,
     events: (n: number) => `${n} ${n === 1 ? "evento" : "eventos"}`,
     weekdays: ["L", "M", "X", "J", "V", "S", "D"],
@@ -291,7 +293,7 @@ const es = {
       }),
       bValue: (b: string, mc: string, ourB: string, ourMc: string) => ({
         title: "Otro valor b.",
-        body: `Su modelo usa b = ${b} para los sismos desde M${mc}; el de esta página, unos ${ourB}, se calcula con sismos desde M${ourMc}. Cada uno vale para lo que describe.`,
+        body: `Su modelo usa b = ${b} para los eventos desde M${mc}; el de esta página, unos ${ourB}, se calcula con eventos desde M${ourMc}. Cada uno vale para lo que describe.`,
       }),
       sgc: "La autoridad en Colombia es el Servicio Geológico Colombiano: para información oficial y para saber qué hacer, consulta sus boletines (sgc.gov.co).",
       source: "Fuente: pronóstico de réplicas del USGS.",
@@ -306,11 +308,11 @@ const es = {
     why: "Qué mueve la actividad del grupo de Istmina–Sipí y cómo va a evolucionar.",
     link: "Si Chaparral tiene que ver con el sismo grande del Chocó. Es una hipótesis del SGC, no un resultado.",
     faults: (choco: string, tolima: string, snapped: { depthKm: number; count: number } | null) =>
-      `La forma exacta de las fallas. Las ubicaciones tienen errores típicos de ~${choco}\u00A0km en el Chocó y ~${tolima}\u00A0km en Chaparral${snapped ? `, y muchas profundidades se repiten en valores fijos (${snapped.count} eventos de Chaparral a ${f1(snapped.depthKm)}\u00A0km justos), señal de que no están bien determinadas` : ""}.`,
+      `La forma exacta de las fallas. Las ubicaciones tienen errores típicos de unos ${choco}\u00A0km en el Chocó y unos ${tolima}\u00A0km en Chaparral${snapped ? `, y muchas profundidades se repiten en valores fijos (${snapped.count} eventos de Chaparral a ${f1(snapped.depthKm)}\u00A0km justos), señal de que no están bien determinadas` : ""}.`,
     floor:
       "Los eventos por debajo de M2.0: el SGC no los publica en este catálogo, y las estaciones cercanas son pocas.",
     types:
-      "Las magnitudes mezclan tipos (MLr, MLv, Mw) que no son del todo comparables, así que las cifras de energía son aproximadas.",
+      "Las magnitudes mezclan tipos (MLr, MLv, Mw…) que no son del todo comparables, así que las cifras de energía son aproximadas.",
     revisions: "El catálogo cambia: el SGC revisa y a veces corrige o retira eventos después de publicarlos.",
     takeaway:
       "Los datos muestran bien qué pasó y cómo se compara con lo típico; el porqué exacto y lo que vendrá siguen sin respuesta.",
@@ -324,7 +326,7 @@ type Copy = typeof es;
 const en: Copy = {
   kicker: "From Pereira",
   title: "What we keep asking about the earthquakes",
-  lede: "Since 10 August, people in the Coffee Region have felt the ground move again and again. Here, one by one, are the questions we keep asking, answered in plain words with data from the Servicio Geológico Colombiano.",
+  lede: "Since 10 August, people in the coffee region have felt the ground move again and again. Here, one by one, are the questions we keep asking, answered in plain words with data from the Servicio Geológico Colombiano.",
   stats: {
     km: (km) => `~${f0(km)}\u00A0km`,
     kmLabel: "from Pereira to the three sources, in a straight line",
@@ -342,7 +344,7 @@ const en: Copy = {
     short: "Why do I feel it so far away?",
     q: "Why do I feel, in Pereira, earthquakes that happen so far away?",
     p1: (lo, hi) =>
-      `Because with earthquakes, "far" is measured differently. The three sources of these weeks — the Istmina–Sipí group, the deep group beside the big earthquake, and Chaparral — are all about ${f0(lo)}–${f0(hi)}\u00A0km from Pereira in a straight line, counting depth. At that distance an M4's waves arrive much weakened, but can still be noticed.`,
+      `Because with earthquakes, “far” is measured differently. The three sources of these weeks — the Istmina–Sipí group, the deep group beside the big earthquake, and Chaparral — are all about ${f0(lo)}–${f0(hi)}\u00A0km from Pereira in a straight line, counting depth. At that distance an M4's waves arrive much weakened, but can still be noticed.`,
     p2: (ref, epi, depth, hypo, similar) =>
       `The ${mag(ref.mag)} of ${ref.date} was ${f0(epi)}\u00A0km away on the map and ${f0(depth)}\u00A0km deep: ${f0(hypo)}\u00A0km in a straight line.${similar ? " Almost the same as the others. What made it so strong was not closeness but size." : ""} Play with the controls: pick an event, change its size or distance, and see how much energy and motion would arrive, and how long the waves would take.`,
     takeaway: (km, ref, similar) =>
@@ -396,7 +398,7 @@ const en: Copy = {
     p1: "Magnitude measures the earthquake where it starts; intensity measures how hard the ground shook in one place. This page does not work out intensities: the figures below are published by the United States Geological Survey (USGS).",
     reportedTitle: "What people reported",
     reportedDetail: (n) =>
-      `${n} people answered USGS's "Did You Feel It?" survey in the 10\u00A0km cell that includes Pereira.`,
+      `${n} people answered USGS's “Did You Feel It?” survey in the 10\u00A0km cell that includes Pereira.`,
     reportedFew: (min) =>
       `Fewer than ${min} people answered in the 10\u00A0km cell that includes Pereira: too few for a figure.`,
     modelledTitle: "What the model estimates",
@@ -434,7 +436,7 @@ const en: Copy = {
     lens: "lens: the top corner",
     aria: (units, k, what) => `The reference earthquake as ${units} dots; ${what} fills ${k} of them.`,
     caption:
-      'Energy radiated as waves, from the Gutenberg–Richter relation (energy grows 31.6 times per magnitude unit). It is approximate and meant for comparing, not an exact measure. "All the others" adds up every event in SGC\'s catalogue for the zone, from M2.0.',
+      "Energy radiated as waves, from the Gutenberg–Richter relation (energy grows 31.6 times per magnitude unit). It is approximate and meant for comparing, not an exact measure. “All the others” adds up every event in SGC's catalogue for the zone, from M2.0.",
     takeaway: (pct, ref, small) =>
       `Everything that has shaken in Chocó since ${ref.date}, added together, is ${small ? "only " : ""}${pct}% of that earthquake's energy.`,
   },
@@ -480,7 +482,7 @@ const en: Copy = {
       `${state === "none" ? "No. Chaparral is a swarm, which is also what SGC calls it: many events, none dominant." : "Chaparral is what SGC calls a swarm."} It began on ${start}, about ${f0(depth)}\u00A0km deep${crustal ? " inside the crust" : ""}, and has been running at about ${f0(perDay)} events a day.`,
     state: (s, largest, gap) =>
       s === "none"
-        ? `None stands out: the largest, ${mag(largest)}, is only ${gap === null ? "slightly" : f1(gap)} above the next. That is why it has no mainshock.`
+        ? `None stands out: ${tied(gap) ? `the two largest are the same size, ${mag(largest)}` : `the largest, ${mag(largest)}, is only ${gap === null ? "slightly" : f1(gap)} above the next`}. That is why it has no mainshock.`
         : `Its largest event, ${mag(largest)}, now does stand ${gap === null ? "" : `${f1(gap)} `}above the next${s === "awaiting-review" ? ", though SGC has not reviewed it yet" : ""}. Until SGC describes it otherwise, this page still calls it a swarm.`,
     shareTitle: "How much of the energy did each zone's largest event release?",
     shareChoco: (m) => `Chocó: its largest, ${mag(m)}`,
@@ -494,7 +496,7 @@ const en: Copy = {
     driftPanel: (when, n) => `${when} · ${n} events`,
     driftAria: (when, n) => `${when}: ${n} events`,
     driftCaption: (err) =>
-      `Each panel is 12 hours of the swarm. The cross is the centre of its events (the median) and the line is the centre's path so far. Each epicentre carries a typical error of ~${err}\u00A0km, so a single dot says nothing; any drift of the centre is a hint that would need the events relocated to confirm, not a finding.`,
+      `Each panel is 12 hours of the swarm. The cross is the centre of its events (the median) and the line is the centre's path so far. Each epicentre carries a typical error of about ${err}\u00A0km, so a single dot says nothing; any drift of the centre is a hint that would need the events relocated to confirm, not a finding.`,
     takeaway: (state) =>
       state === "none"
         ? "Chaparral has no mainshock: it is a swarm, and swarms can die out or carry on, with no way to know beforehand which."
@@ -519,7 +521,7 @@ const en: Copy = {
   },
 
   felt: {
-    short: "How many times have I felt it?",
+    short: "How many times have I felt one?",
     q: "How many times have I felt one?",
     p1: "This page cannot know what you felt, but it does know which days had events of the size you start to notice. Set the threshold where it feels right, and the calendar marks the days with at least one such event in these two zones.",
     threshold: "I notice them from",
@@ -576,7 +578,7 @@ const en: Copy = {
       }),
       bValue: (b, mc, ourB, ourMc) => ({
         title: "Another b-value.",
-        body: `Its model uses b = ${b} for earthquakes from M${mc} up; this page's, about ${ourB}, is computed from earthquakes of M${ourMc} and up. Each is right for what it describes.`,
+        body: `Its model uses b = ${b} for events from M${mc} up; this page's, about ${ourB}, is computed from events of M${ourMc} and up. Each is right for what it describes.`,
       }),
       sgc: "The authority in Colombia is the Servicio Geológico Colombiano: for official information and for what to do, see its bulletins (sgc.gov.co).",
       source: "Source: USGS's aftershock forecast.",
@@ -591,9 +593,9 @@ const en: Copy = {
     why: "What drives the Istmina–Sipí group's activity, and how it will evolve.",
     link: "Whether Chaparral has anything to do with Chocó's big earthquake. It is SGC's hypothesis, not a result.",
     faults: (choco, tolima, snapped) =>
-      `The fine shape of the faults. Locations carry typical errors of ~${choco}\u00A0km in Chocó and ~${tolima}\u00A0km at Chaparral${snapped ? `, and many depths repeat fixed values (${snapped.count} Chaparral events at exactly ${f1(snapped.depthKm)}\u00A0km), a sign they are not well pinned down` : ""}.`,
+      `The fine shape of the faults. Locations carry typical errors of about ${choco}\u00A0km in Chocó and about ${tolima}\u00A0km at Chaparral${snapped ? `, and many depths repeat fixed values (${snapped.count} Chaparral events at exactly ${f1(snapped.depthKm)}\u00A0km), a sign they are not well pinned down` : ""}.`,
     floor: "Events below M2.0: SGC does not publish them in this catalogue, and there are few stations nearby.",
-    types: "Magnitudes mix types (MLr, MLv, Mw) that are not fully comparable, so the energy figures are approximate.",
+    types: "Magnitudes mix types (MLr, MLv, Mw…) that are not fully comparable, so the energy figures are approximate.",
     revisions:
       "The catalogue changes: SGC reviews its events and sometimes corrects or withdraws them after publishing.",
     takeaway:

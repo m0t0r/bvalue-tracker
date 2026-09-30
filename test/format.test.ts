@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   dayBounds,
   dayStart,
+  fmtDateLong,
   fmtDateTime,
   fmtDay,
   fmtDayLong,
@@ -31,6 +32,9 @@ describe("Colombian time", () => {
     expect(fmtDay(Date.parse("2026-09-20T17:00:00Z"), "es")).toBe("20\u00A0sept");
     expect(fmtDayLong(Date.parse(LATE), "es")).toBe("10 de agosto");
     expect(fmtDayLong(Date.parse(LATE), "en")).toBe("10 August");
+    // With its year, for a day in another year: the 1979 earthquake the story names in a sentence.
+    expect(fmtDateLong(Date.parse("1979-11-23T23:40:00Z"), "es")).toBe("23 de noviembre de 1979");
+    expect(fmtDateLong(Date.parse("1979-11-23T23:40:00Z"), "en")).toBe("23 November 1979");
   });
 
   it("gives a past event's year by Colombia's own clock, which ran on UTC−4 in 1992–93", () => {

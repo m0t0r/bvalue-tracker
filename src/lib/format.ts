@@ -24,6 +24,7 @@ const DATE_TIME = formatters({
 const DATE = formatters({ day: "numeric", month: "short", year: "numeric" });
 const DAY_MONTH = formatters({ day: "numeric", month: "short" });
 const DAY_MONTH_LONG = formatters({ day: "numeric", month: "long" });
+const DATE_LONG = formatters({ day: "numeric", month: "long", year: "numeric" });
 const DAY_MONTH_TIME = formatters({
   day: "numeric",
   month: "short",
@@ -72,6 +73,8 @@ export function fmtDayRange(from: number, to: number, lang: Lang): string {
 export const fmtIsoDay = (ms: number) => new Date(ms + TZ_OFFSET_MS).toISOString().slice(0, 10);
 /** A day inside running prose: "10 de agosto", "10 August". Abbreviations stay in labels and ticks. */
 export const fmtDayLong = (ms: number, lang: Lang) => DAY_MONTH_LONG[lang].format(ms);
+/** The same with its year, for a day in another year: "23 de noviembre de 1979", "23 November 1979". */
+export const fmtDateLong = (ms: number, lang: Lang) => DATE_LONG[lang].format(ms);
 /** Axis tick on a range of a few days, where a date alone repeats: "18 sept, 14:00" */
 export const fmtDayTime = (ms: number, lang: Lang) => DAY_MONTH_TIME[lang].format(ms);
 const TIME = formatters({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" });

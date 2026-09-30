@@ -233,8 +233,8 @@ const es = {
     /** The line is drawn only when the drift claim says the centre moved. */
     driftHow: (moved: boolean): string =>
       moved
-        ? "En el dibujo, cada punto es un evento (más intenso cuanto más reciente), y la línea une el centro de los eventos de cada periodo de 12 horas."
-        : "En el dibujo, cada punto es un evento (más intenso cuanto más reciente).",
+        ? "En el dibujo, cada punto es un evento (de color más intenso cuanto más reciente), y la línea une el centro de los eventos de cada periodo de 12 horas."
+        : "En el dibujo, cada punto es un evento (de color más intenso cuanto más reciente).",
     driftElsewhere:
       "En otros enjambres del mundo, desplazamientos así se han asociado con fluidos o con fallas que se deslizan lentamente. Aquí no se sabe.",
     hypothesis:
@@ -521,7 +521,7 @@ const en: StoryCopy = {
           ? "The aftershocks are not dying away as expected"
           : "The first aftershocks",
     deep1:
-      "After a large earthquake come aftershocks: smaller events in the same area, ever further apart. A rule from 1894, Omori's law, says their rate falls roughly as one over the time elapsed.",
+      "After a large earthquake come aftershocks: smaller events in the same area, ever further apart. A rule from 1894, Omori's law, says their rate falls roughly as one over the time elapsed: after twice the time, half as many aftershocks a day.",
     deep2: "Look at the {deep} in the drawing. {claim}",
     deepNote:
       "Only events of {mc} and up are counted, which the catalogue records completely. The dashed line is that typical curve, anchored to the deep group's first day: an illustration, not a fit.",
@@ -557,15 +557,15 @@ const en: StoryCopy = {
         ? "Chaparral: one event now stands out"
         : m === "awaiting-review"
           ? "Chaparral: one event stands out, awaiting review"
-          : "Chaparral: many events, none in charge",
+          : "Chaparral: many events, none dominant",
     p1: (m) =>
       m === "found"
         ? "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size. Now one of them stands out above all the others."
         : m === "awaiting-review"
           ? "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size. Now one stands out, though its magnitude is still automatic and may change."
-          : "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size, with no single large one in charge.",
+          : "On {date} another run of events began, about {km} from the {main}, near Chaparral. SGC calls it a {tolima}: many earthquakes of similar size, with no large one dominating.",
     stillSwarm: "Until SGC describes it otherwise, this page keeps calling it a swarm.",
-    p2: "Compare the two strips: in Chocó, the largest event holds {chocoShare} of the energy; at Chaparral, the largest ({mag}) holds {tolimaShare}.",
+    p2: "Compare the two strips: in Chocó, the largest event released {chocoShare} of the energy; at Chaparral, the largest ({mag}) released {tolimaShare}.",
     p3: (crustal) =>
       crustal
         ? "It has averaged about {perDay} events a day, about {depth} deep, inside the crust."
@@ -574,8 +574,8 @@ const en: StoryCopy = {
       d === "moved" ? "It seems to be moving, slowly" : d === "none" ? "No visible movement" : "Is it moving?",
     driftHow: (moved) =>
       moved
-        ? "In the drawing, each dot is an event, stronger the more recent, and the line joins the centre of each half-day's events."
-        : "In the drawing, each dot is an event, stronger the more recent.",
+        ? "In the drawing, each dot is an event, its colour stronger the more recent, and the line joins the centre of each half-day's events."
+        : "In the drawing, each dot is an event, its colour stronger the more recent.",
     driftElsewhere:
       "In other swarms around the world, shifts like this have been linked to fluids or to faults slipping slowly. Here, nobody knows.",
     hypothesis:
@@ -628,7 +628,7 @@ const en: StoryCopy = {
     bigger:
       "Whether a larger earthquake will come. Nobody can predict earthquakes: not the day, the exact place or the size.",
     forecast:
-      'USGS does publish a forecast of probabilities for Chocó; you will find it under the question "Is a bigger one coming?" on the "Questions" tab.',
+      "USGS does publish a forecast of probabilities for Chocó; you will find it under the question “Is a bigger one coming?” on the “Questions” tab.",
     floor: "What happens below M2.0: SGC's public catalogue starts there.",
     closing:
       "What helps is not guessing but being prepared, and following the official information of the Servicio Geológico Colombiano.",
@@ -692,7 +692,7 @@ const en: StoryCopy = {
     lull: "lull",
     tolimaTitle: "How much energy the largest event released",
     tolimaAria:
-      "Two strips with each event's share of the energy, largest first: in Chocó the largest event holds {choco}; at Chaparral, {tolima}. Below, a close-up map of Chaparral.",
+      "Two strips with each event's share of the energy, largest first: in Chocó the largest event released {choco}; at Chaparral, {tolima}. Below, a close-up map of Chaparral.",
     stripChoco: "Chocó · the largest ({mag}): {share}",
     stripTolima: "Chaparral · the largest ({mag}): {share}",
     stripNote: "each slice is one event, largest first",

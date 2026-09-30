@@ -156,7 +156,8 @@ const es = {
   minMag: "Magnitud mínima",
   manualOnly: "Solo revisados (manual)",
   excludeMainshock: "Excluir sismo principal",
-  dateOrder: "La fecha inicial debe ser anterior a la final.",
+  // The same day in both is allowed (it is how one day is chosen), and the fields go by their labels.
+  dateOrder: "Elige en «Hasta» el mismo día que en «Desde» o uno posterior.",
   mcLabel: "Magnitud de completitud (Mc)",
   mcAuto: "Automática (curvatura máxima)",
   mcManual: "Manual",
@@ -247,9 +248,12 @@ const es = {
     none: "Ninguno claro",
     gapHint: (day: string, gap: string) => `${day} · ${gap} por encima del siguiente`,
     pendingHint: (day: string) => `${day} · automático, en revisión`,
-    noneHint: (gap: string) => `el mayor, solo ${gap} por encima del siguiente`,
+    // A tie is said as one: "solo 0.0 por encima del siguiente" is a figure with nothing in it.
+    noneHint: (gap: string) =>
+      gap === "0.0" ? "los dos mayores tienen la misma magnitud" : `el mayor, solo ${gap} por encima del siguiente`,
     gapHintShort: (day: string, gap: string) => `${day} · +${gap} sobre el\u00A02.º`,
-    noneHintShort: (gap: string) => `el mayor, solo +${gap} sobre el\u00A02.º`,
+    noneHintShort: (gap: string) =>
+      gap === "0.0" ? "los dos mayores, iguales" : `el mayor, solo +${gap} sobre el\u00A02.º`,
   },
   depth: "Profundidad (km)",
   magTimeTitle: "Magnitud en el tiempo",
@@ -271,7 +275,7 @@ const es = {
   grFit: "Ajuste G–R",
   bTimeTitle: "Valor b en el tiempo",
   bTimeDesc: (n: number, mc: string, shared: number) =>
-    `Ventanas móviles de ${n} eventos con Mc fija = ${mc}, cada una situada en su último evento. Cada ventana comparte ${shared} eventos con la anterior, así que la línea parece más fiable de lo que es. Los puntos marcan ventanas sin ningún evento en común. Banda: ±1σ.`,
+    `Ventanas móviles de ${n} eventos con Mc fija = ${mc}, cada una situada en su último evento. Cada ventana comparte ${shared} eventos con la anterior, así que la línea parece más fiable de lo que es. Los puntos marcan ventanas sin ningún evento en común. Banda: margen de error (±1σ).`,
   bTimeKeyIndependent: "ventanas sin eventos en común",
   bTimeKeyIncomplete: "pueden faltar eventos pequeños: b puede salir más bajo",
   bTimeTipIncomplete: (own: string, mc: string) =>
@@ -350,7 +354,7 @@ const enCommon = {
 };
 
 const en: Dict = {
-  zoneLabel: "Area",
+  zoneLabel: "Zone",
   zones: {
     choco: {
       tab: "Chocó",
@@ -412,19 +416,19 @@ const en: Dict = {
   refreshing: "Querying SGC…",
   refreshWait: (min) => `You already have the latest data: SGC was queried less than ${min} minutes ago.`,
   refreshWaitShort: (min) => `Up to date: SGC was queried <${min}\u00A0min ago.`,
-  refreshFailed: "Unable to refresh. Try again.",
-  refreshCooldown: (s) => `Unable to refresh. Try again in ${s} s.`,
-  refreshCooldownSr: (s) => `Unable to refresh. Try again in ${s} seconds.`,
+  refreshFailed: "Could not refresh. Try again.",
+  refreshCooldown: (s) => `Could not refresh. Try again in ${s} s.`,
+  refreshCooldownSr: (s) => `Could not refresh. Try again in ${s} seconds.`,
   refreshStillFailing: "Not sent: a retry is already on the way.",
   ingestFailed: "The last SGC query failed",
   ingestFailedBody:
-    "Showing the most recent stored data. It retries by itself until SGC answers again; there is no need to reload.",
+    "Showing the most recent stored data. The page retries by itself until SGC answers again; there is no need to reload.",
   technicalDetail: "Technical detail",
-  loadFailed: "Could not load data",
+  loadFailed: "Could not load the data",
   loadFailedBody: "It may be the connection or the server. Try again in a moment.",
   loadRetry: "Try again",
   loadRetrying: "Trying again…",
-  loadStruggling: "Couldn't load the data yet",
+  loadStruggling: "Could not load the data yet",
   loadStrugglingBody: "The page is trying again by itself.",
   loadAttempt: (n, of) => `Attempt ${n} of ${of}`,
   backfillAction: "Load now",
@@ -447,7 +451,7 @@ const en: Dict = {
   minMag: "Minimum magnitude",
   manualOnly: "Reviewed only (manual)",
   excludeMainshock: "Exclude mainshock",
-  dateOrder: "Start date must be before end date.",
+  dateOrder: "Choose a “To” date on or after the “From” date.",
   mcLabel: "Magnitude of completeness (Mc)",
   mcAuto: "Automatic (maximum curvature)",
   mcManual: "Manual",
@@ -529,9 +533,11 @@ const en: Dict = {
     none: "None clear",
     gapHint: (day, gap) => `${day} · ${gap} above the next`,
     pendingHint: (day) => `${day} · automatic, under review`,
-    noneHint: (gap) => `the largest, only ${gap} above the next`,
+    noneHint: (gap) =>
+      gap === "0.0" ? "the two largest are the same size" : `the largest, only ${gap} above the next`,
     gapHintShort: (day, gap) => `${day} · +${gap} over the\u00A02nd`,
-    noneHintShort: (gap) => `the largest, only +${gap} over the\u00A02nd`,
+    noneHintShort: (gap) =>
+      gap === "0.0" ? "the two largest are equal" : `the largest, only +${gap} over the\u00A02nd`,
   },
   depth: "Depth (km)",
   magTimeTitle: "Magnitude over time",
@@ -553,7 +559,7 @@ const en: Dict = {
   grFit: "G–R fit",
   bTimeTitle: "b-value over time",
   bTimeDesc: (n, mc, shared) =>
-    `Sliding windows of ${n} events at a fixed Mc = ${mc}, each placed at its last event. Each window shares ${shared} events with the one before, so the line looks more reliable than it is. The dots mark windows with no events in common. Band: ±1σ.`,
+    `Sliding windows of ${n} events at a fixed Mc = ${mc}, each placed at its last event. Each window shares ${shared} events with the one before, so the line looks more reliable than it is. The dots mark windows with no events in common. Band: margin of error (±1σ).`,
   bTimeKeyIndependent: "windows with no events in common",
   bTimeKeyIncomplete: "small events may be missing: b may come out lower",
   bTimeTipIncomplete: (own, mc) => `The window's own Mc: ${own}, above ${mc}. Small events may be missing.`,
@@ -568,7 +574,7 @@ const en: Dict = {
   downloadCsv: "Download CSV",
   downloadEventsIn: (n, one) => `Download ${n} ${one ? "event" : "events"} as`,
   downloadBCsv: "Download CSV of b-value over time",
-  colTime: "Date-time",
+  colTime: "Date and time",
   colMag: "Mag.",
   colType: "Type",
   colDepth: "Depth (km)",

@@ -29,6 +29,11 @@ import {
 
 const f1 = (v: number) => v.toFixed(1);
 const f0 = (v: number) => Math.round(v).toString();
+/**
+ * A rate that would be written "0.0 a day". The rates are counts over five or seven whole days, so
+ * one that small is a count of zero, and the sentence says "none" rather than print the figure.
+ */
+const zero = (perDay: number) => f1(perDay) === "0.0";
 
 /**
  * When the data on screen was fetched, for the stale-data notice: the time, and the day in full only
@@ -58,7 +63,7 @@ export function intensityName(level: number, lang: Lang): { roman: string; shaki
 /** "VIII (severo)" or 'VIII ("severe")' inside a sentence: USGS's English term quoted, ours not. */
 const named = (level: number, lang: Lang) => {
   const n = intensityName(level, lang);
-  return lang === "en" ? `${n.roman} ("${n.shaking}")` : `${n.roman} (${n.shaking})`;
+  return lang === "en" ? `${n.roman} (“${n.shaking}”)` : `${n.roman} (${n.shaking})`;
 };
 
 const COMPASS_ES = {
@@ -175,7 +180,7 @@ const es = {
   dataUpTo: (ms: number, lang: Lang) => `Datos del SGC hasta el ${fmtDayLong(ms, lang)}`,
   footer:
     "Página independiente, sin relación con el SGC. Las cifras que calcula esta página describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
-  timeNote: "Fechas y horas de Colombia (UTC−5).",
+  timeNote: "Las fechas y horas son de Colombia (UTC−5).",
   backToTop: "Volver arriba",
 
   source: {
@@ -209,7 +214,7 @@ const es = {
     /** A source's recent pace against its own usual one. */
     pace: (p: Pace, lang: Lang): string => {
       if (p.case === "young") return "Aún es pronto para saber cuál es su ritmo habitual.";
-      const rate = `${f1(p.recentPerDay)} eventos al día en los últimos 5 días, frente a unos ${f0(p.usualPerDay)} en un día típico (contando eventos de M${f1(p.mc)} o más)`;
+      const rate = `${zero(p.recentPerDay) ? "ningún evento" : `${f1(p.recentPerDay)} eventos al día`} en los últimos 5 días, frente a unos ${f0(p.usualPerDay)} en un día típico (contando eventos de M${f1(p.mc)} o más)`;
       if (p.case === "quieter") {
         const since = p.quietSince === null ? "" : ` desde el ${fmtDayLong(p.quietSince, lang)}`;
         const before = p.pastLulls.find((l) => l.recovered);
@@ -225,8 +230,8 @@ const es = {
     decay: (d: Decay): string => {
       if (d.case === "young") return "Todavía es pronto para ver cómo se apagan sus réplicas.";
       if (d.case === "decayed")
-        return `Se ha apagado como suelen hacerlo las réplicas: de unos ${f0(d.firstWeekPerDay)} eventos al día en la primera semana a ${f1(d.lastWeekPerDay)} en la última.`;
-      return `No se ha apagado como suelen hacerlo las réplicas: ${f1(d.firstWeekPerDay)} eventos al día en la primera semana y ${f1(d.lastWeekPerDay)} en la última.`;
+        return `Se ha apagado como suelen hacerlo las réplicas: de unos ${f0(d.firstWeekPerDay)} eventos al día en la primera semana a ${zero(d.lastWeekPerDay) ? "ninguno" : f1(d.lastWeekPerDay)} en la última.`;
+      return `No se ha apagado como suelen hacerlo las réplicas: ${f1(d.firstWeekPerDay)} eventos al día en la primera semana y ${zero(d.lastWeekPerDay) ? "ninguno" : f1(d.lastWeekPerDay)} en la última.`;
     },
     /** The swarm's drift. Always a hint, never a finding. */
     drift: (d: Drift): string => {
@@ -320,7 +325,7 @@ const en: Copy = {
   staleTitle: "The data is not updating",
   staleBody: (at, now, lang) => {
     const { time, day } = since(at, now, lang);
-    return `They could not be updated: what you see is from ${time}${day === null ? "" : ` on ${day}`}, and it will update by itself.`;
+    return `It could not be updated: what you see is from ${time}${day === null ? "" : ` on ${day}`}, and it will update by itself.`;
   },
   dataUpTo: (ms, lang) => `SGC data up to ${fmtDayLong(ms, lang)}`,
   footer:
@@ -354,7 +359,7 @@ const en: Copy = {
     },
     pace: (p, lang) => {
       if (p.case === "young") return "It is too recent to know what its usual pace is.";
-      const rate = `${f1(p.recentPerDay)} events a day over the last 5 days, against about ${f0(p.usualPerDay)} on a typical day (counting from M${f1(p.mc)})`;
+      const rate = `${zero(p.recentPerDay) ? "no events in" : `${f1(p.recentPerDay)} events a day over`} the last 5 days, against about ${f0(p.usualPerDay)} on a typical day (counting from M${f1(p.mc)})`;
       if (p.case === "quieter") {
         const since = p.quietSince === null ? "" : ` since ${fmtDayLong(p.quietSince, lang)}`;
         const before = p.pastLulls.find((l) => l.recovered);
@@ -369,8 +374,10 @@ const en: Copy = {
     decay: (d) => {
       if (d.case === "young") return "It is still too early to see how its aftershocks fade.";
       if (d.case === "decayed")
-        return `It has faded like ordinary aftershocks: about ${f0(d.firstWeekPerDay)} events a day in the first week, ${f1(d.lastWeekPerDay)} a day in the last.`;
-      return `It has not faded like ordinary aftershocks: ${f1(d.firstWeekPerDay)} events a day in the first week and ${f1(d.lastWeekPerDay)} in the last.`;
+        return zero(d.lastWeekPerDay)
+          ? `It has faded like ordinary aftershocks: from about ${f0(d.firstWeekPerDay)} events a day in the first week to none in the last.`
+          : `It has faded like ordinary aftershocks: about ${f0(d.firstWeekPerDay)} events a day in the first week, ${f1(d.lastWeekPerDay)} a day in the last.`;
+      return `It has not faded like ordinary aftershocks: ${f1(d.firstWeekPerDay)} events a day in the first week and ${zero(d.lastWeekPerDay) ? "none" : f1(d.lastWeekPerDay)} in the last.`;
     },
     drift: (d) => {
       if (d.case === "too-few")
@@ -421,9 +428,9 @@ const en: Copy = {
     forecastHowToRead: (ps) => {
       const n = howToRead(ps);
       if (n?.case === "tenths")
-        return `"${n.tenths} in 10" means that if this same period were repeated 10 times, about ${n.tenths} of them would have at least one.`;
+        return `“${n.tenths} in 10” means that if this same period were repeated 10 times, about ${n.tenths} of them would have at least one.`;
       if (n?.case === "one-in")
-        return `"1 in ${fmtInt(n.n)}" means that if this same period were repeated ${fmtInt(n.n)} times, about one of them would have at least one.`;
+        return `“1 in ${fmtInt(n.n)}” means that if this same period were repeated ${fmtInt(n.n)} times, about one of them would have at least one.`;
       return "";
     },
     forecastAbove: (a, start, end) =>

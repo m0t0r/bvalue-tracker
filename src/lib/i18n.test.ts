@@ -145,6 +145,19 @@ describe("the caveats, for each state of the mainshock", () => {
  * The status bar's "Sismo principal" is on every tab in every state, so it must read as a reading of
  * the catalogue: never a forecast, never an alarm, and the one automatic state said to be one.
  */
+/**
+ * The filters take the same day in both fields, which is how one day is chosen, so the error may not
+ * ask for "before"; and it names the fields by their labels, the words the reader sees (issue #141).
+ */
+describe("the date-order error", () => {
+  it.each(langs)("names both fields by their labels and allows the same day, in %s", (lang) => {
+    const t = dicts[lang];
+    expect(t.dateOrder).toContain(t.from);
+    expect(t.dateOrder).toContain(t.to);
+    expect(t.dateOrder).not.toMatch(/anterior|before/);
+  });
+});
+
 describe("the mainshock stat", () => {
   const m = (lang: Lang) => dicts[lang].mainshock;
   const all = (lang: Lang) => [
@@ -171,6 +184,15 @@ describe("the mainshock stat", () => {
     for (const hint of [m(lang).noneHint, m(lang).noneHintShort]) {
       expect(`${m(lang).none} ${hint("0.3")}`).toMatch(/claro|clear/i);
       expect(`${m(lang).none} ${hint("0.3")}`).not.toMatch(/enjambre|swarm/i);
+    }
+  });
+
+  // Two events of one magnitude at the top read "solo 0.0 por encima del siguiente" (issue #141).
+  it.each(langs)("says a tie as a tie, never as a gap of 0.0, in %s", (lang) => {
+    for (const hint of [m(lang).noneHint, m(lang).noneHintShort]) {
+      expect(hint("0.0")).not.toMatch(/0\.0/);
+      expect(hint("0.0")).toMatch(/misma|iguales|same|equal/);
+      expect(hint("0.1")).toContain("0.1");
     }
   });
 
