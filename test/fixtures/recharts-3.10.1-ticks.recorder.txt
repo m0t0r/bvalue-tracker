@@ -5,8 +5,9 @@
 //   cp test/fixtures/recharts-3.10.1-ticks.recorder.txt src/components/charts/record.test.ts
 //   pnpm exec vitest run --project page src/components/charts/record.test.ts
 //
-// and copy the JSON back. The two generators below are the ones in `time-ticks.test.ts` (seed 96)
-// and `magnitude-ticks.test.ts` (seed 118), call for call: `preserveEnd[run]` and the
+// and copy the JSON back. The two generators below are the ones in
+// `packages/charts/test/labels.test.ts` (seed 96) and
+// `src/components/charts/magnitude-ticks.test.ts` (seed 118), call for call: `preserveEnd[run]` and the
 // "lo,hi,count" keys only mean anything while the tests draw the same numbers in the same order.
 // Change a generator there and this file together, and record again.
 import { writeFileSync } from "node:fs";

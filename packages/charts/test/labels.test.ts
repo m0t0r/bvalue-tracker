@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import recorded from "../../../test/fixtures/recharts-3.10.1-ticks.json";
-import { preserveEndTicks } from "./time-ticks";
+import { ownPlaceLabels, preserveEndTicks } from "../src";
 
 // Candidates are their own coordinates here, and every label is 20 px wide unless said.
 const layout = { x: (v: number) => v, width: () => 20, start: 0, end: 300, gap: 40 };
@@ -87,5 +87,33 @@ describe("the labels 'Valor b en el tiempo' draws on its time axis", () => {
 
   it("returns nothing for no candidates", () => {
     expect(preserveEndTicks([], layout)).toEqual([]);
+  });
+});
+
+describe("the labels 'Magnitud en el tiempo' draws, each at its own place", () => {
+  // Chocó's 45 days on a phone: a 1260 px plot, a label every third day, 42 px each. Candidates are days.
+  const phone = { width: 1260, step: (1260 - 30 - 12) / 45 };
+  const x = (day: number) => 30 + day * phone.step;
+  const candidates = Array.from({ length: 16 }, (_, i) => i * 3);
+  const kept = ownPlaceLabels(candidates, { x, width: () => 42, start: 0, end: phone.width, gap: 24 });
+
+  it("keeps every label that fits at its own place", () => {
+    // 10 Aug, 13 Aug … 21 Sept: Recharts dropped 21 Sept to make room for the one below.
+    expect(kept).toEqual([0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42]);
+  });
+
+  it("does not draw the end of the last day, whose label would cross the drawing's edge", () => {
+    // Recharts pulled "24 sept" ~10 px inside and drew it there, off its day.
+    expect(x(45) + 21).toBeGreaterThan(phone.width);
+    expect(kept).not.toContain(45);
+    expect(preserveEndTicks(candidates, { x, width: () => 42, start: 0, end: phone.width, gap: 24 })).toContain(45);
+  });
+
+  it("drops a label that would cross the left edge, and one that would touch the next", () => {
+    const at = (v: number) => v;
+    expect(ownPlaceLabels([10, 100, 200], { x: at, width: () => 40, start: 0, end: 300, gap: 40 })).toEqual([100, 200]);
+    // 130 ends at 150, under 40 px from where 200 begins: from the end back, 200 is kept.
+    expect(ownPlaceLabels([50, 130, 200], { x: at, width: () => 40, start: 0, end: 300, gap: 40 })).toEqual([50, 200]);
+    expect(ownPlaceLabels([], { x: at, width: () => 40, start: 0, end: 300, gap: 40 })).toEqual([]);
   });
 });

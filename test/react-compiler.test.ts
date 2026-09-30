@@ -11,7 +11,7 @@ import {
 /**
  * React Compiler leaves a function it cannot handle exactly as written, and says nothing: the page
  * still works, only without the optimisation (docs/development.md, "React Compiler"). So this runs
- * the compiler over `src/` as the build does and holds which of our functions it skips to the list
+ * the compiler over the pages' source (`src/` and the chart kit, `packages/charts/src/`) as the build does and holds which of our functions it skips to the list
  * below. It fails on a skip that is not listed, and on a listed one that no longer happens, so the
  * list can only shrink on purpose. With Babel 8 the compiler skipped 65 functions, not these,
  * without a word (issue #130): that is the kind of change this catches.
@@ -29,8 +29,6 @@ const ALLOWED: AllowedSkip[] = [
   // lets it compile, walk sorting and paging in a browser before taking this entry out.
   { file: "src/components/events-table.tsx", fn: "EventsTable" },
   { file: "src/components/deferred.tsx", fn: "Deferred" },
-  // An optional chain inside a logical test, `d?.start !== pointer?.start || …`.
-  { file: "src/components/charts/magnitude-time.tsx", fn: "DailyBars" },
   // Issue #132, the insights page. The 3D block's refs: three written during render, one read.
   { file: "src/insights/block3d/index.tsx", fn: "Block3D" },
   { file: "src/insights/block3d/index.tsx", fn: "Block" },
@@ -111,7 +109,7 @@ describe("functionName", () => {
   });
 });
 
-describe("React Compiler over src/", () => {
+describe("React Compiler over the pages' source", () => {
   it("skips exactly the functions listed, and compiles the rest", { timeout: 120_000 }, async () => {
     const report = await compilerReport(path.resolve(import.meta.dirname, ".."));
     const { unlisted, stale } = compareSkips(report.skips, ALLOWED);
@@ -127,7 +125,8 @@ describe("React Compiler over src/", () => {
       "A function in ALLOWED is compiled now (or gone). Remove its entry.",
     ).toEqual([]);
 
-    // The compiler did run: an empty report would pass both checks above.
+    // The compiler did run, over both folders: an empty report would pass both checks above.
     expect(report.compiled).toContainEqual({ file: "src/App.tsx", fn: "App" });
+    expect(report.compiled).toContainEqual({ file: "packages/charts/src/reading.ts", fn: "useReading" });
   });
 });

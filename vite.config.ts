@@ -449,7 +449,9 @@ function reactCompilerRan(): Plugin {
         if (!COMPILER_RUNTIME.test(id)) continue;
         if (this.getModuleInfo(id)?.importers.some((importer) => PAGE_SOURCE_ID.test(importer))) return;
       }
-      this.error("no file under src/ imports react/compiler-runtime: React Compiler compiled nothing");
+      this.error(
+        "no page source (src/, packages/charts/src/) imports react/compiler-runtime: React Compiler compiled nothing",
+      );
     },
   };
 }

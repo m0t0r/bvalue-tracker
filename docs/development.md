@@ -5,13 +5,15 @@
 | Path | What |
 |---|---|
 | `packages/seismo/` | `@bvalue/seismo`, the seismology library: Gutenberg–Richter statistics (`gr.ts`, including the one `computeStats` pipeline), mainshock detection (`mainshock.ts`), magnitude arithmetic in whole tenths (`magnitude.ts`), energy and moment ratios (`energy.ts`) and distances on the sphere (`distance.ts`). Knows nothing about SGC, zones or the page; tested on synthetic catalogues only. |
+| `packages/charts/` | `@bvalue/charts`, the chart kit: what a chart drawn with React's SVG needs around its marks. Its size (`plot.ts`), which labels fit and how wide one is (`labels.ts`, `text.ts`), the drawing, its grid and its axis labels (`drawing.tsx`), the tooltip (`tip.tsx`), what a pointer, a finger and the keyboard read off a drawing (`reading.ts`) and the sideways scroller around a wide one (`scroll.ts`). Knows nothing about earthquakes, zones, the page's strings or shadcn; tested on a stand-in chart. It takes React and `cn` as peers, so the bundle has the app's one copy of each (a dependency of its own stayed on an older `cn` when Dependabot moved the app's, and shipped twice). What it holds and why: [the page](frontend.md#the-chart-kit-packagescharts). |
 | `core/` | Shared, runtime-neutral logic about *this* project: SGC request + HTML parser (`seiscomp.ts`), the one admission gate every event passes through (`admit.ts`), the zones, the depth groups, the zone's mainshock with SGC's meaning of "reviewed" (`mainshock.ts`), CSV, CLI. Used by the Worker, the browser and Node. |
 | `worker/` | Hono API (`index.ts`), the one module that decides what ingest is due (`plan.ts`), ingest mechanics (`ingest.ts`), D1 access (`db.ts`), response types shared with the page (`api-types.ts`), the daily USGS job (`external.ts`) and its digests of USGS's files (`usgs.ts`). |
-| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, D3's maths with React's SVG for the monitor's three charts (`components/charts/fmd.tsx`, `b-over-time.tsx`, `magnitude-time.tsx`; Recharts left the repo on 2026-09-30, issue #126), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
+| `src/` | React pages: shadcn/ui, TanStack Query/Form/Table v9, D3's maths with React's SVG for the monitor's three charts (`components/charts/fmd.tsx`, `b-over-time.tsx`, `magnitude-time.tsx`, on `@bvalue/charts`; Recharts left the repo on 2026-09-30, issue #126), MapLibre GL; D3's maths modules for `src/insights/`, the explanations page, whose claim rules (`claims.ts`) and copy are its own. `lib/i18n.tsx` holds the monitor's strings in `es` and `en`. |
 | `migrations/` | D1 schema. |
 | `scripts/` | Operator tools that are not part of the Worker: `logs.ts` reads production's logs from the terminal (`pnpm logs`); `fixture-server.ts` serves a build with no Worker behind it, for [render profiles](#profiling-react-renders); `react-compiler.ts` lists what React Compiler skips and prints a file as it compiles it ([Tooling gotchas](#tooling-gotchas)); `insights-region.ts`, `insights-section.ts`, `insights-block.ts`, `insights-relief.ts`, `insights-history.ts` and `insights-sea-colour.ts` write the insights page's committed data (map outlines; the plate and the cuts; the 3D block's ground, its fine ground and its rupture plane; the past earthquakes of story step 2, from ISC-GEM; the colour of the block's sea, from ESA's Ocean Colour CCI), once, by hand. The 3D block's map image is baked in a browser instead: [The 3D block's map](#the-3d-blocks-map). |
 | `test/`, `worker/test/` | Core tests (Node) and Worker tests (real D1 inside the Workers runtime). Parser fixtures are real SGC responses captured 2026-09-18; `api-events-2026-09-24.json` is production's `/api/events` for both zones at 2026-09-24 14:44 UTC, for the insights page's claim rules. `usgs-us6000tjl2-*` are USGS's files for the M7.4 as served on 2026-09-24: the search the daily job sends (`…-match-…`, the exact query `searchUrl` builds for SGC's mainshock), the detail GeoJSON, DYFI's 10 km cells, PAGER's cities and the OAF forecast. |
-| `src/**/*.test.{ts,tsx}` | The page's own logic, in a third vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
+| `packages/*/test/` | Each package's tests, a vitest project apiece (`seismo` in Node, `charts` on `happy-dom`). |
+| `src/**/*.test.{ts,tsx}` | The page's own logic, in its own vitest project (`page`), on `happy-dom`. It lives beside the module it tests because `tsconfig.app.json` is the only project with the DOM lib, JSX and the `@` alias; the same file under `test/` would be typechecked by the Node project, which has none of them. |
 | `docs/CLOUDFLARE_SPEC.md` | The original design spec, kept for history. Its §3 lists every verified fact about the SGC endpoint. |
 
 ## Local setup
@@ -198,9 +200,13 @@ Driving the page for a profile:
   native compiler (`react({ compiler: true })`) is issue #134. **A function the compiler cannot handle
   is left exactly as written, and nothing is printed.** Everything below follows from that silence.
   - **One file holds the setup, `react-compiler.config.ts`**: the compiler's options, which files it
-    compiles (`src/` only; `core/` and `packages/seismo` have no component or hook) and the plugin.
-    The build, the `page` test project and the skipped-list test all read it, so an option added for
-    one cannot leave the tests passing on code the reader does not get (code review).
+    compiles (`src/` and the chart kit's `packages/charts/src/`; `core/` and `packages/seismo` have no
+    component or hook) and the plugin. The build, the `page` and `charts` test projects and the
+    skipped-list test all read it, so an option added for one cannot leave the tests passing on code
+    the reader does not get (code review). **A new package with components or hooks goes in its
+    `SOURCE_DIRS`**: the chart kit's tooltip, drawing and reading were compiled while they were in
+    `src/`, and moving them to a package (issue #138) took them out of the build's compiler without a
+    word, until they were added there.
   - **`@babel/core` stays on 7.** `pnpm add @babel/core` installs 8, and with it
     `babel-plugin-react-compiler` 1.0 skips every component that has a destructured prop with a
     default (`Expected object property value to be an LVal, got: AssignmentPattern`): 65 functions
@@ -208,7 +214,7 @@ Driving the page for a profile:
     majors; lift that when the compiler supports Babel 8, and let the skipped-list test say whether it
     does.
   - **The skipped list is held by a test**: `test/react-compiler.test.ts` runs the same plugin over
-    `src/**/*.{ts,tsx}` with a `logger` and compares what it skips with `ALLOWED` in that file. It
+    the same folders with a `logger` and compares what it skips with `ALLOWED` in that file. It
     fails on a skip that is not listed **and** on a listed one that no longer happens, so a new
     component cannot quietly lose its optimisation, and the list can only shrink on purpose. The list
     started at 11 in 7 files (214 compiled): issues #131 and #132 empty it.
@@ -233,11 +239,13 @@ Driving the page for a profile:
     page; they still hold what they were written for, that the two renders are the same tree. The
     head script (`src/boot.ts`) has no React.
   - **A build that compiled nothing fails**: `reactCompilerRan` in `vite.config.ts` stops the client
-    build unless a file under `src/` imports `react/compiler-runtime`, React's public entry for
+    build unless a page source file (`PAGE_SOURCE_ID`) imports `react/compiler-runtime`, React's public entry for
     compiled code (a dependency published already compiled imports it too, so any module would not
     do). Checked by building with the Babel plugin taken out.
-  - **Vitest does not read `vite.config.ts`**, so the `page` project is given the same plugin in
-    `vitest.config.ts`. Without it every page test would pass against code no reader runs.
+  - **Vitest does not read `vite.config.ts`**, so the `page` and `charts` projects are given the same
+    plugin in `vitest.config.ts`. Without it every page test would pass against code no reader runs.
+    `packages/charts/test/compiled.test.ts` guards the `charts` project the same way, by what the kit's
+    own hook does: rendered again with nothing changed, `useReading` hands back the same handlers.
     `src/lib/react-compiler.test.tsx` fails if that project stops compiling, **by what React does,
     not by what compiled code looks like**: a parent renders again and a child with unchanged props
     does not, with no `memo` written. (A first version matched the compiler's cache variable in a
@@ -262,6 +270,23 @@ Driving the page for a profile:
   it in place. Its own `tsconfig.json` has `lib: ["ES2022"]` and `types: []`, so a DOM or Node
   global in the library fails `pnpm typecheck` — that is what keeps it runtime-neutral. Its tests
   are the `seismo` vitest project. Import it as `@bvalue/seismo`, never by a relative path.
+- **`packages/charts` is consumed the same way, and is the one package with React in it**
+  (`@bvalue/charts`, issue #138). What differs from `seismo`:
+  - Its `tsconfig.json` has the DOM lib and `jsx`, and no `@` alias, no `vite/client` and no Node
+    types: importing the page's strings, a zone or a shadcn component from it fails
+    `pnpm typecheck`, which is what keeps it a kit and not a second `src/`. It declares what its
+    source imports (`cn`, and React as a peer), so the lockfile has an importer for it; its tests
+    resolve `vitest` and the testing library from the root, as `seismo`'s do.
+  - **Its Tailwind classes need no `@source`.** Tailwind scans the repo from the project root, and
+    the package's files are inside it (they are reached through `node_modules` only as a symlink).
+    Checked when it was made: the stylesheet of a build with the package is the file `main` builds,
+    byte for byte. A package outside the repo, or a built one in `node_modules`, would need the
+    line in `index.css`.
+  - The design-system and React lint rules apply to it as to `src/`. A component that takes a ref
+    inside an object prop must take it out before using it (`const { svg, keys } = reading`):
+    written `ref={reading.svg}`, React's `refs` rule reads every later `reading.…` as a ref read
+    during render.
+  - Its tests are the `charts` vitest project, on `happy-dom`, in `packages/charts/test`.
 - **`Intl.DateTimeFormat.formatRange` changes shape with Node's ICU data**, so a test that pins its
   output can pass locally and fail in CI. en-GB wrote a same-month range "12–18 Sept" on Node 24.11
   (ICU 77) and "12 – 18 Sept" on CI's Node 24.21 (2026-09-26, PR #81). `fmtDayRange` builds the range
@@ -315,11 +340,11 @@ Driving the page for a profile:
   `table.FlexRender`. The package ships its own guides under
   `node_modules/@tanstack/react-table/skills/`. shadcn does not depend on it.
 - **There is no chart library and no `ui/chart.tsx`** (2026-09-30, issue #126). The three charts are
-  `d3-scale` and `d3-shape` with React's SVG, sharing `charts/svg-chart.tsx`; shadcn's `chart`
+  `d3-scale` and `d3-shape` with React's SVG, sharing `@bvalue/charts` (`packages/charts`); shadcn's `chart`
   component wraps Recharts, so `shadcn add chart` would bring the package back. Two tests still hold
   our tick rules to what Recharts 3.10.1 chose, from `test/fixtures/recharts-3.10.1-ticks.json`,
-  recorded from its own functions before it was removed (`time-ticks.test.ts`,
-  `magnitude-ticks.test.ts`): 300 label-thinning cases, and every one of 2,000 axis domains where
+  recorded from its own functions before it was removed (`packages/charts/test/labels.test.ts`,
+  `src/components/charts/magnitude-ticks.test.ts`): 300 label-thinning cases, and every one of 2,000 axis domains where
   Recharts gave whole tenths. The recording is tied to the tests' seeded generators, by run and by
   domain, so a generator is changed only together with the recorder
   (`test/fixtures/recharts-3.10.1-ticks.recorder.txt`, which says how to run it with the package

@@ -24,47 +24,6 @@ export function dayTicks([from, to]: readonly [number, number], everyDays: numbe
 }
 
 /**
- * Which date labels are drawn. From the last candidate back, one is kept when its label, centred on
- * its own day, lies wholly between `start` and `end` and clears the label kept after it by `gap`.
- *
- * Recharts' rule (`preserveEndTicks`) differs in one thing: it pulled the last label inside when it
- * crossed the edge and drew it there. On a scrolling chart that was the end of the last day, drawn
- * ~10 px before its place, and it took the room of the last regular label ("21 sept" on Chocó's).
- */
-export function ownPlaceLabels(
-  candidates: readonly number[],
-  {
-    x,
-    width,
-    start,
-    end,
-    gap,
-  }: {
-    /** Where a candidate sits, in px. */
-    x: (v: number) => number;
-    /** How wide its label is, in px. */
-    width: (v: number) => number;
-    start: number;
-    end: number;
-    /** The least room between two labels. */
-    gap: number;
-  },
-): number[] {
-  const kept: number[] = [];
-  let room = end;
-  for (let i = candidates.length - 1; i >= 0; i--) {
-    const v = candidates[i]!;
-    const at = x(v);
-    if (at < start || at > room) continue;
-    const half = width(v) / 2;
-    if (at - half < start || at + half > room) continue;
-    kept.unshift(v);
-    room = at - half - gap;
-  }
-  return kept;
-}
-
-/**
  * A day's bar inside its `band` of px: 2 px clear on each side and a whole number of pixels wide, as
  * Recharts drew it (`barCategoryGap={2}`). Where a day is too narrow for that, the bar keeps half the
  * day rather than the zero or negative width Recharts' rule gives.

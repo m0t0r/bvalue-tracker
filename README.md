@@ -128,6 +128,8 @@ flowchart LR
   MapLibre GL for the monitor; D3 for the explanations page, and OGL (WebGL 2) for its
   [3D viewer](#3d-viewer).
 - **Statistics:** written and tested here, in the `packages/seismo` library.
+- **Charts:** no chart library. The monitor's three charts share `packages/charts`, which gives each
+  the same keyboard layer, tooltip and focus ring.
 
 ## Project structure
 
@@ -135,6 +137,7 @@ flowchart LR
 |---|---|
 | `core/` | Runtime-neutral logic shared by the Worker, the browser and Node: the SGC request and HTML parser, the admission gate every event passes through, the statistics, CSV and the CLI. |
 | `packages/seismo/` | The seismology library: Gutenberg–Richter statistics and mainshock detection, pure and runtime-neutral, knowing nothing about SGC, a zone or the page. |
+| `packages/charts/` | The chart kit: what a chart drawn with D3's maths and React's SVG needs around its marks (its size, its axis labels, its tooltip, and what a pointer, a finger and the keyboard read off it), knowing nothing about earthquakes or the page's words. |
 | `worker/` | The Hono API, the ingest planner and ingest mechanics, D1 access, and the response types shared with the page. |
 | `src/` | The React pages. `src/lib/i18n.tsx` holds the monitor's strings in Spanish and English and picks the language; `src/insights/` is the explanations page, with its claim rules and its own copy, and `src/insights/block3d/` is the 3D viewer. |
 | `migrations/` | The D1 schema. |

@@ -1,5 +1,5 @@
 /**
- * What React Compiler does with `src/`: which functions it compiles and which it leaves as written.
+ * What React Compiler does with the pages' source (`PAGE_SOURCES`): which functions it compiles and which it leaves as written.
  *
  * The compiler fails silently by design: a component it cannot handle is skipped and the build says
  * nothing. Its `logger` option is the only place a skip shows, so this runs the same Babel plugin the
