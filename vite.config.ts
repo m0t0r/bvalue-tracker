@@ -390,11 +390,45 @@ function insightsPage(): Plugin {
   };
 }
 
+/**
+ * `PROFILE=1 pnpm build`: a build React can be profiled in (issue #128; docs/development.md,
+ * "Profiling React renders"). The production bundle of `react-dom` records no render times; its
+ * `profiling` bundle does, and takes the place of `react-dom/client` in the page's code, which is
+ * also left unminified so a profile names components as the source does.
+ *
+ * It must never be deployed, so it cannot be: it is the pages alone, written to `dist-profile/`. The
+ * Cloudflare plugin is left out, so there is no Worker beside them and nothing `wrangler deploy`
+ * reads (`dist/` and `.wrangler/deploy/`) is touched; a production build made earlier stays as it was.
+ *
+ * In the client environment only, and by `resolveId`, not `resolve.alias`: an alias also reaches the
+ * render of the static headers, which then dies with `ReferenceError: module is not defined`.
+ * `enforce: "pre"`, or Vite's own resolver answers first, this hook is never asked, and the build
+ * silently keeps the production bundle (every render time reads 0).
+ */
+const PROFILE = process.env.PROFILE === "1";
+const PROFILE_DIR = "dist-profile";
+function reactProfiling(): Plugin {
+  return {
+    name: "sgc-react-profiling",
+    apply: "build",
+    enforce: "pre",
+    applyToEnvironment: (environment) => environment.name === "client",
+    async resolveId(id, importer) {
+      if (id !== "react-dom/client") return null;
+      return this.resolve("react-dom/profiling", importer, { skipSelf: true });
+    },
+    closeBundle() {
+      this.info(`PROFILE=1: React's profiling bundle, unminified, in ${PROFILE_DIR}/. For measuring only.`);
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
+    PROFILE && reactProfiling(),
     react(),
     tailwindcss(),
-    cloudflare(),
+    !PROFILE && cloudflare(),
     startup(),
     preloadLatinFont(),
     stylesheetPlacement(),
@@ -410,6 +444,7 @@ export default defineConfig({
     // first, written by `zonePages` after the bundle.
     client: {
       build: {
+        ...(PROFILE ? { minify: false, outDir: PROFILE_DIR } : {}),
         rollupOptions: {
           input: {
             index: path.resolve(import.meta.dirname, "index.html"),
