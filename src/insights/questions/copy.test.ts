@@ -17,6 +17,16 @@ describe("the questions tab's copy", () => {
     expect(questionsCopy.en.stats.strongLabel(ref)).toBe("events of M4.0 or more after the M7.4");
   });
 
+  it("says two largest events of one magnitude as a tie, never as '0.0 above the next'", () => {
+    for (const lang of ["es", "en"] as const) {
+      const state = questionsCopy[lang].swarm.state;
+      expect(state("none", 4.5, 0)).not.toContain("0.0");
+      expect(state("none", 4.5, 0)).toMatch(/misma magnitud|same size/);
+      expect(state("none", 4.5, 0)).toContain("M4.5");
+      expect(state("none", 4.5, 0.3)).toContain("0.3");
+    }
+  });
+
   it("never lets a figure part from its unit 's' at a line break", () => {
     for (const lang of ["es", "en"] as const) {
       expect(questionsCopy[lang].far.arrives(19)).toMatch(/19 s$/);

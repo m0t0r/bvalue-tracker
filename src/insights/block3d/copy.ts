@@ -220,7 +220,7 @@ const en: Copy = {
   close: "Close",
   dialog: "The block in 3D",
   canvas:
-    "A 3D block with the events at their depths, the Nazca plate and where the rock broke in the large earthquake. The story's cross-sections show the same in two dimensions.",
+    "A 3D block with the events at their depths, the Nazca plate and where the rock broke in the big earthquake. The story's cross-sections show the same in two dimensions.",
   noWebgl: "This browser cannot show 3D graphics. The story's cross-sections show the same in two dimensions.",
   views: "Views",
   view: {
@@ -235,7 +235,7 @@ const en: Copy = {
     above: ["From above", "As on a map: where the events happened, without their depth."],
     rupture: [
       "Where it broke",
-      "Close up on the orange patch: the part of the rock that broke in the large earthquake. The stronger the orange, the further it slid.",
+      "Close up on the orange patch: the part of the rock that broke in the big earthquake. The stronger the orange, the further it slid.",
     ],
     chaparral: ["Chaparral", "The Chaparral swarm happens near the surface, far above the plate."],
   },
@@ -243,7 +243,7 @@ const en: Copy = {
   panel: "Key and settings",
   tabs: { key: "Key", settings: "Settings" },
   exaggeration: "Vertical exaggeration",
-  exaggerationHelp: 'Stretches the height so the depths separate better. "True to scale" leaves them unstretched.',
+  exaggerationHelp: "Stretches the height so the depths separate better. “True to scale” leaves them unstretched.",
   layersTitle: "Layers",
   exaggerationOption: (n) => (n === 1 ? "True to scale" : `×${n}`),
   exaggerationTag: (n, raised) =>
@@ -297,14 +297,14 @@ const en: Copy = {
       `USGS places that earthquake about ${f.offset} further ${f.direction} and ${f.deeper} ${f.shallower ? "shallower" : "deeper"} than SGC does. That is why the orange patch does not pass through that earthquake's dot.`,
     pins: (list) => [
       "The markers",
-      `Pereira, in red, and other places for reference. In "Explore in 3D", hover over a marker, or tap it, to see how far it is from Pereira in a straight line: ${list}.`,
+      `Pereira, in red, and other places for reference. In “Explore in 3D”, hover over a marker, or tap it, to see how far it is from Pereira in a straight line: ${list}.`,
     ],
     depth: (w, l, d) => [
       "The sizes",
-      `The block is about ${w} from west to east, ${l} from south to north and ${d} tall. The numbers on the side mark how many kilometres below the surface. To make it easier to see, the height can be stretched and the mountains raised ×${RAISED_LAND}, because at true scale they barely show. Both options are in "Settings".`,
+      `The block is about ${w} from west to east, ${l} from south to north and ${d} tall. The numbers on the side mark how many kilometres below the surface. To make it easier to see, the height can be stretched and the mountains raised ×${RAISED_LAND}, because at true scale they barely show. Both options are in “Settings”.`,
     ],
     snapped: (list) =>
-      `The catalogue puts many small events at exactly the same depth: ${list}. That is why you see "layers" there, and they are not real.`,
+      `The catalogue puts many small events at exactly the same depth: ${list}. That is why you see “layers” there, and they are not real.`,
     sea: (f) => {
       if (!f) {
         return [

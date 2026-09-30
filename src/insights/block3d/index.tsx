@@ -28,7 +28,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { useIsDark } from "@/lib/theme";
 import { getSea } from "@/lib/api";
-import { fmtClock, fmtDay } from "@/lib/format";
+import { fmtClock, fmtDay, fmtDayLong } from "@/lib/format";
 import { compassPoint, type Insights } from "../claims";
 import type { SeaHour, WaveTrain } from "../../../worker/api-types";
 import { CONVERGENCE_CM_PER_YEAR } from "../plate";
@@ -741,7 +741,8 @@ function Key({
   const date = main ? fmtDay(Date.parse(main.time), lang) : "";
   const r = model.rupture;
   const facts: RuptureFacts | null = r && {
-    date,
+    // Written out: it is read inside a sentence, where the dot's label beside it is a label.
+    date: main ? fmtDayLong(Date.parse(main.time), lang) : "",
     length: fmtKm(r.lengthKm),
     top: fmt(RUPTURE.corners[0]![2]!),
     bottom: fmtKm(RUPTURE.corners[2]![2]!),

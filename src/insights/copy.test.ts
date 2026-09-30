@@ -243,7 +243,7 @@ describe("the forecast's other sentences", () => {
       "«1 de cada 7» quiere decir que, si este mismo periodo se repitiera 7 veces, en una de ellas habría al menos uno.",
     );
     expect(insightsCopy.en.claims.forecastHowToRead([0.4347])).toBe(
-      '"4 in 10" means that if this same period were repeated 10 times, about 4 of them would have at least one.',
+      "“4 in 10” means that if this same period were repeated 10 times, about 4 of them would have at least one.",
     );
     expect(es([0.99, 0.0001])).toBe("");
   });
@@ -290,6 +290,36 @@ describe("the stale-data notice", () => {
       expect(s).not.toMatch(/conexi|connection/i);
     }
   });
+});
+
+/**
+ * A rate of zero was printed as a figure, "0.0 eventos al día" (issue #141). Both rates are counts over
+ * whole days (five and seven), so one that shows as 0.0 is a count of zero, and the words say "none"
+ * only then.
+ */
+describe("a rate of zero", () => {
+  for (const lang of ["es", "en"] as const) {
+    const { pace, decay } = insightsCopy[lang].claims;
+    const quiet = (recentPerDay: number) =>
+      pace(
+        { case: "quieter", recentPerDay, usualPerDay: 8, mc: 2.3, recentM4: 0, pastLulls: [], quietSince: null },
+        lang,
+      );
+    const faded = (lastWeekPerDay: number) =>
+      decay({ case: "decayed", firstWeekPerDay: 11, lastWeekPerDay, factor: null });
+
+    it(`${lang}: is said in words in the pace sentence, and one event in five days keeps its figure`, () => {
+      expect(quiet(0)).not.toContain("0.0");
+      expect(quiet(0)).toMatch(lang === "es" ? /ningún evento en los últimos 5 días/ : /no events in the last 5 days/);
+      expect(quiet(0.2)).toContain("0.2");
+    });
+
+    it(`${lang}: is said in words in the decay sentence, and one event in the week keeps its figure`, () => {
+      expect(faded(0)).not.toContain("0.0");
+      expect(faded(0)).toMatch(lang === "es" ? /a ninguno en la última/ : /to none in the last/);
+      expect(faded(1 / 7)).toContain("0.1");
+    });
+  }
 });
 
 describe("the drift sentence with nothing to compare", () => {

@@ -8,7 +8,7 @@ import { scaleLinear, scaleTime } from "d3-scale";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Slider } from "@/components/ui/slider";
 import { useI18n, type Lang } from "@/lib/i18n";
-import { fmtDate, fmtDay, fmtDayLong } from "@/lib/format";
+import { fmtDate, fmtDateLong, fmtDay, fmtDayLong } from "@/lib/format";
 import {
   P_WAVE_KMS,
   S_WAVE_KMS,
@@ -391,7 +391,7 @@ function useSteps(
               <Rich
                 text={c.energy.near(h.near.relation)}
                 parts={{
-                  date: fmtDate(Date.parse(h.near.quake.time), lang),
+                  date: fmtDateLong(Date.parse(h.near.quake.time), lang),
                   pastMag: pastMag(h.near.quake.mag),
                   depth: km(h.near.quake.depthKm),
                   km: km(roundSig(h.near.km, 1)),

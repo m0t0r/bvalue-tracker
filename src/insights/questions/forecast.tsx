@@ -83,9 +83,9 @@ export function ForecastBox({ forecast, named, feltShown }: { forecast: Forecast
               {" "}
               {c.pereiraFelt(named.date)}{" "}
               <a href="#q-shaking" className="font-medium underline underline-offset-2">
-                {lang === "es" ? "«" : '"'}
+                {lang === "es" ? "«" : "“"}
                 {questionsCopy[lang].shaking.short}
-                {lang === "es" ? "»" : '"'}
+                {lang === "es" ? "»" : "”"}
               </a>
               .
             </>
