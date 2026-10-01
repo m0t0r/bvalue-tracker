@@ -31,7 +31,7 @@ function stats(mags: number[], mc: number | null): Stats {
 const MAGS = [2, 2, 2, 2, 2.1, 2.1, 2.1, 2.3, 2.3, 2.6];
 
 function draw(s: Stats) {
-  const view = render(createElement(FmdChart, { stats: s, magType: null, cluster: null }));
+  const view = render(createElement(FmdChart, { stats: s }));
   const svg = view.container.querySelector("svg[role=application]") as SVGSVGElement;
   // The tooltip's first line is the magnitude it is on.
   const tip = () =>
@@ -89,7 +89,7 @@ describe("'Distribución frecuencia–magnitud' drawn without Recharts", () => {
     for (let i = 0; i < 10; i++) fireEvent.keyDown(svg, { key: "ArrowRight" });
     expect(tip()).toBe("M2.6");
     // A filter leaves bins from 2.0 to 2.1 only.
-    view.rerender(createElement(FmdChart, { stats: stats([2, 2, 2.1], 2), magType: null, cluster: null }));
+    view.rerender(createElement(FmdChart, { stats: stats([2, 2, 2.1], 2) }));
     expect(tip()).toBeUndefined();
     fireEvent.keyDown(svg, { key: "Enter" });
     expect(tip()).toBeUndefined();

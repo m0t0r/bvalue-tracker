@@ -11,11 +11,13 @@ import { Skeleton } from "@/components/ui/skeleton";
  * card asks for its chunk only once it is within 600 px of the viewport (`margin`). A card already on screen
  * loads immediately, one screen after the shell has painted.
  *
- * The placeholder is the same card with the same title, so only the drawing arrives late and
- * nothing below it moves. `placeholder` stands in for the drawing and must be exactly its height, at
- * every width: a key that wraps is drawn for real in it (`MapPlaceholder`, `MagnitudeTimePlaceholder`),
- * since a skeleton cannot guess how many lines it takes. The default is a chart's h-80.
- * `action`, where the card has one that works without the chunk, is drawn in the placeholder too.
+ * The card and its header are drawn here, and the chunk brings only the card's content (`children`
+ * is a `CardContent`), so only the drawing arrives late, nothing below it moves, and nothing in the
+ * header is drawn twice: a chart's name, which opens its explainer, and the CSV button keep their
+ * elements, an open card and the focus. `placeholder` stands in for the drawing and must be exactly
+ * its height, at every width: a key that wraps is drawn for real in it (`MapPlaceholder`,
+ * `MagnitudeTimePlaceholder`), since a skeleton cannot guess how many lines it takes. The default is
+ * a chart's h-80. `action` is the card's header action, which works without the chunk.
  * `description` is the card's own, written without the chunk (`bTimeDescription`, `fmdDescription`,
  * `mapDescription`), so the text is there with the data rather than with the drawing, and a
  * description that wraps to four lines on a phone does not leave the placeholder four lines short.
@@ -28,7 +30,7 @@ export function Deferred({
   margin = "600px",
   children,
 }: {
-  title: string;
+  title: ReactNode;
   description: string;
   /** The card's header action, where it works without the chunk (`BTimeCsvButton`). */
   action?: ReactNode;
@@ -52,20 +54,20 @@ export function Deferred({
     },
   });
 
-  const card = (
-    <Card className="h-full" aria-busy="true">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-        {action ? <CardAction>{action}</CardAction> : null}
-      </CardHeader>
-      <CardContent>{placeholder}</CardContent>
-    </Card>
-  );
+  const waiting = <CardContent aria-busy="true">{placeholder}</CardContent>;
 
+  // The header is drawn here, once, and the chunk brings only what goes under it: a chart's name opens
+  // its explainer (issue #145), and the drawing landing must not take an open card, or the focus, with it.
   return (
     <div ref={slot} className="h-full">
-      {near ? <Suspense fallback={card}>{children}</Suspense> : card}
+      <Card className="h-full">
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+          {action ? <CardAction>{action}</CardAction> : null}
+        </CardHeader>
+        {near ? <Suspense fallback={waiting}>{children}</Suspense> : waiting}
+      </Card>
     </div>
   );
 }

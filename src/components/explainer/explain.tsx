@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import type { ExplainerCard } from "./card";
 import type { ExplainerId, LinkId } from "./ids";
@@ -68,6 +68,16 @@ let lastClosedAt = Number.NEGATIVE_INFINITY;
 const warm = () => openCards > 0 || isWarm(lastClosedAt, performance.now());
 
 /**
+ * Words inside a card (a chart's card names the b-value and Mc) keep the pause and the entrance: the card
+ * they sit in is open, and counted warm, every word the pointer crossed on its way through the text would
+ * open at once.
+ */
+const Nested = createContext(false);
+export const NestedExplainers = ({ children }: { children: ReactNode }) => (
+  <Nested.Provider value={true}>{children}</Nested.Provider>
+);
+
+/**
  * A link's explainer always has its address (the card previews where it goes); a source or a term may
  * be a link to its own site, or a word that explains itself.
  */
@@ -91,6 +101,8 @@ type Props = Target & {
  */
 export function Explain({ id, href, linkClassName = "underline underline-offset-4", children }: Props) {
   const { lang } = useI18n();
+  const nested = useContext(Nested);
+  const hot = () => !nested && warm();
   const [Card, setCard] = useState<Card | undefined>(() => loaded);
   const [state, setState] = useState<State>(CLOSED);
   const [instant, setInstant] = useState(false);
@@ -116,7 +128,7 @@ export function Explain({ id, href, linkClassName = "underline underline-offset-
       lastClosedAt = performance.now();
     }
     if (!from.open && to.open) {
-      setInstant(to.by === "focus" || to.by === "key" || warm());
+      setInstant(to.by === "focus" || to.by === "key" || hot());
       openCards += 1;
     }
     current.current = to;
@@ -169,7 +181,7 @@ export function Explain({ id, href, linkClassName = "underline underline-offset-
       if (failed || !canHover()) return;
       if (current.current.open) return cancelWait();
       // Checked again when the pause is over: the download can fail during it.
-      wait(warm() ? 0 : HOVER_DELAY_MS, () => {
+      wait(hot() ? 0 : HOVER_DELAY_MS, () => {
         if (!failed) dispatch({ type: "hover" });
       });
     },

@@ -3,9 +3,12 @@ import { type ReactNode, type RefObject, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { fill } from "@/lib/rich";
+import { dicts } from "@/lib/i18n";
+import { fill, Rich } from "@/lib/rich";
 import type { Lang } from "@/lib/startup";
 import {
+  CHART_PARTS,
+  type ChartEntry,
   type Entry,
   ENTRIES,
   type LinkEntry,
@@ -15,8 +18,9 @@ import {
   type TermEntry,
   WORDS,
 } from "./entries";
+import { Explain, NestedExplainers } from "./explain";
 import { Figure } from "./figures";
-import type { ExplainerId } from "./ids";
+import { CHART_TITLE, type ChartId, type ExplainerId } from "./ids";
 import type { State } from "./interaction";
 import { Mark } from "./mark";
 
@@ -47,9 +51,11 @@ export const domainOf = (href: string) => {
   }
 };
 
-function title(e: Entry, lang: Lang) {
+function title(id: ExplainerId, e: Entry, lang: Lang) {
   if (e.kind === "source") return e.name[lang];
   if (e.kind === "link") return e.title[lang];
+  // A chart's name is the page's own title string, the one its word shows (`CHART_TITLE`).
+  if (e.kind === "chart") return dicts[lang][CHART_TITLE[id as ChartId]];
   return e.term[lang];
 }
 
@@ -114,8 +120,31 @@ function TermText({ entry, lang }: { entry: TermEntry; lang: Lang }) {
   );
 }
 
+/**
+ * A chart's paragraphs. The terms they lean on (the b-value, Mc) are explainers of their own inside the
+ * card, opening their own cards over it, so they are defined once, in `TERMS`.
+ */
+function ChartText({ entry, lang }: { entry: ChartEntry; lang: Lang }) {
+  const parts = Object.fromEntries(
+    Object.entries(CHART_PARTS).map(([name, p]) => [
+      name,
+      "term" in p ? <Explain id={p.term}>{p.word[lang]}</Explain> : p.value,
+    ]),
+  );
+  return (
+    <NestedExplainers>
+      {entry.parts.map((p) => (
+        <p key={p.en}>
+          <Rich text={p[lang]} parts={parts} />
+        </p>
+      ))}
+      {entry.note ? <p className="text-xs text-muted-foreground">{entry.note[lang]}</p> : null}
+    </NestedExplainers>
+  );
+}
+
 /** The card beside the word, with a mouse or the keyboard: who or what, then why, then the way out. */
-function CardBody({ entry, href, lang }: { entry: Entry; href: string | undefined; lang: Lang }) {
+function CardBody({ entry, name, href, lang }: { entry: Entry; name: string; href: string | undefined; lang: Lang }) {
   const link = href ?? (entry.kind === "source" ? entry.url : undefined);
   let head: ReactNode;
   let body: ReactNode;
@@ -138,6 +167,14 @@ function CardBody({ entry, href, lang }: { entry: Entry; href: string | undefine
       </>
     );
     body = <p className="text-muted-foreground">{entry.summary[lang]}</p>;
+  } else if (entry.kind === "chart") {
+    head = <p className="font-semibold">{name}</p>;
+    body = (
+      <>
+        <Figure id={entry.figure} lang={lang} />
+        <ChartText entry={entry} lang={lang} />
+      </>
+    );
   } else {
     head = <p className="font-semibold">{entry.term[lang]}</p>;
     body = (
@@ -157,7 +194,7 @@ function CardBody({ entry, href, lang }: { entry: Entry; href: string | undefine
 }
 
 /** The sheet on touch: the picture first (the mark, or the drawing at its larger size), then the words. */
-function SheetBody({ entry, href, lang }: { entry: Entry; href: string | undefined; lang: Lang }) {
+function SheetBody({ entry, name, href, lang }: { entry: Entry; name: string; href: string | undefined; lang: Lang }) {
   const w = WORDS[lang];
   const link = href ?? (entry.kind === "source" ? entry.url : undefined);
   const mark = entry.kind === "source" ? entry.mark : entry.kind === "link" ? publisherOf(entry.publisher).mark : null;
@@ -166,25 +203,29 @@ function SheetBody({ entry, href, lang }: { entry: Entry; href: string | undefin
       ? entry.short
       : entry.kind === "link" && href
         ? `${domainOf(href)} · ${publisherOf(entry.publisher).name[lang]}`
-        : w.whatItMeans;
+        : entry.kind === "chart"
+          ? w.howToRead
+          : w.whatItMeans;
+  const figure = entry.kind === "term" || entry.kind === "chart" ? entry.figure : undefined;
   return (
     <>
       <div className="flex min-h-32 items-center justify-center bg-muted px-4 pt-6 pb-4">
         {mark ? <Mark mark={mark} size="lg" /> : null}
-        {entry.kind === "term" && entry.figure ? (
+        {figure ? (
           <div className="w-full max-w-md">
-            <Figure id={entry.figure} lang={lang} large />
+            <Figure id={figure} lang={lang} large />
           </div>
         ) : null}
       </div>
       <div className="flex flex-col gap-2 px-4 pt-4">
         {kicker ? <p className="text-xs tracking-wide text-muted-foreground uppercase">{kicker}</p> : null}
-        <SheetTitle>{title(entry, lang)}</SheetTitle>
+        <SheetTitle>{name}</SheetTitle>
         {/* Not a SheetDescription: it greys its text, and this is the card's body, not a gloss on it. */}
         <div className="flex flex-col gap-2 text-sm">
           {entry.kind === "source" ? <SourceText entry={entry} lang={lang} /> : null}
           {entry.kind === "link" ? <p className="text-muted-foreground">{entry.summary[lang]}</p> : null}
           {entry.kind === "term" ? <TermText entry={entry} lang={lang} /> : null}
+          {entry.kind === "chart" ? <ChartText entry={entry} lang={lang} /> : null}
         </div>
       </div>
       <div className="p-4">{link ? <OpenLink href={link} entry={entry} lang={lang} block /> : null}</div>
@@ -210,6 +251,7 @@ export function ExplainerCard({
   onPointerLeave,
 }: Props) {
   const entry = ENTRIES[id] as Entry;
+  const name = title(id, entry, lang);
   const w = WORDS[lang];
   const moveFocus = s.open && (s.by === "key" || s.by === "pin");
 
@@ -244,7 +286,7 @@ export function ExplainerCard({
             onDismiss(true);
           }}
         >
-          <SheetBody entry={entry} href={href} lang={lang} />
+          <SheetBody entry={entry} name={name} href={href} lang={lang} />
         </SheetContent>
       </Sheet>
       <Popover open={s.open && s.surface === "card"} onOpenChange={(o) => !o && onDismiss(false)}>
@@ -256,8 +298,9 @@ export function ExplainerCard({
           sideOffset={6}
           collisionPadding={16}
           data-instant={instant ? "" : undefined}
-          aria-label={title(entry, lang)}
-          className="w-80"
+          aria-label={name}
+          // A chart's card says more than a term's, and is wider so that it is not as tall.
+          className={entry.kind === "chart" ? "w-96" : "w-80"}
           // Opened by Enter or a click: focus onto the card itself, where a screen reader starts at its
           // title. A preview leaves focus where it is.
           onOpenAutoFocus={(e) => {
@@ -278,6 +321,9 @@ export function ExplainerCard({
             // Tab out of either end goes back to the word: the card is portalled to the end of the
             // page, where the next stop would be the browser's own chrome.
             if (e.key !== "Tab") return;
+            // A card opened from a word inside this one is portalled elsewhere but bubbles through here:
+            // its keys are its own, or a Tab out of it closed this card too (code review).
+            if (!(e.target instanceof Node && e.currentTarget.contains(e.target))) return;
             const stops = [...e.currentTarget.querySelectorAll<HTMLElement>("a[href], button, [tabindex='0']")];
             const at = document.activeElement;
             const leaving = e.shiftKey
@@ -289,7 +335,7 @@ export function ExplainerCard({
             }
           }}
         >
-          <CardBody entry={entry} href={href} lang={lang} />
+          <CardBody entry={entry} name={name} href={href} lang={lang} />
         </PopoverContent>
       </Popover>
     </>

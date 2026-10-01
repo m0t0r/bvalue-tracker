@@ -12,14 +12,24 @@ import { WORDS } from "./entries";
  * on the finished picture, and a replay button plays it again (owner's rule: nothing moves by itself).
  * `figures.css` has the motion and the still picture reduced motion gets.
  */
-export type FigureId = "b-value" | "mc" | "sequence" | "energy" | "hypocentre" | "subduction" | "depth-groups";
+export type FigureId =
+  | "b-value"
+  | "mc"
+  | "sequence"
+  | "energy"
+  | "hypocentre"
+  | "subduction"
+  | "depth-groups"
+  | "fmd"
+  | "b-windows"
+  | "magnitude-time";
 
 const SVG = "block h-auto w-full overflow-visible";
 const LABEL = "fill-muted-foreground text-xs";
 const STRONG = "fill-foreground text-xs font-semibold";
 
 /** The drawings whose motion is worth playing again; b's own buttons replay it, and Mc's is an entrance. */
-const REPLAYABLE: ReadonlySet<FigureId> = new Set(["sequence", "energy", "hypocentre", "subduction"]);
+const REPLAYABLE: ReadonlySet<FigureId> = new Set(["sequence", "energy", "hypocentre", "subduction", "b-windows"]);
 
 export function Figure({ id, lang, large = false }: { id: FigureId; lang: Lang; large?: boolean }) {
   // A new key remounts the drawing, which starts its CSS animations over.
@@ -32,6 +42,9 @@ export function Figure({ id, lang, large = false }: { id: FigureId; lang: Lang; 
     hypocentre: Hypocentre,
     subduction: Subduction,
     "depth-groups": DepthGroups,
+    fmd: Fmd,
+    "b-windows": BWindows,
+    "magnitude-time": MagnitudeTime,
   }[id];
   const Drawing = f;
   return (
@@ -504,6 +517,263 @@ function DepthGroups({ lang }: { lang: Lang }) {
         </text>
       </svg>
       <figcaption className="text-xs text-muted-foreground">{w.depthDown}</figcaption>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The monitor's charts (issue #145), each a small version of the chart with its marks named. Made-up
+// numbers, chosen to show the reading, never the catalogue's.
+
+// "Distribución frecuencia–magnitud": squares per magnitude, circles for that magnitude or larger, the
+// line above Mc and, dashed, where it would go below Mc, which is where the small events are missing.
+// The counts peak just below Mc, as a maximum-curvature Mc puts it (the most common magnitude + 0.2).
+const FMD_BINS: [number, number][] = [
+  [2.0, 20],
+  [2.2, 40],
+  [2.4, 70],
+  [2.6, 60],
+  [2.8, 38],
+  [3.0, 24],
+  [3.2, 15],
+  [3.4, 10],
+  [3.6, 6],
+  [3.8, 4],
+  [4.0, 2],
+  [4.2, 1],
+  [4.4, 1],
+];
+const FMD_MC = 2.6;
+const FMD_BASE = 112;
+const fmdX = (m: number) => 40 + ((m - 2) / 2.4) * 240;
+const fmdY = (n: number) => FMD_BASE - Math.log10(n) * 32;
+const FMD_CUMULATIVE = FMD_BINS.map(([m], i) => [m, FMD_BINS.slice(i).reduce((s, [, n]) => s + n, 0)] as const);
+const FMD_AT_MC = FMD_CUMULATIVE.find(([m]) => m === FMD_MC)![1];
+/** Gutenberg–Richter with b = 1 through the cumulative count at Mc. */
+const fmdLine = (m: number) => FMD_AT_MC * 10 ** -(m - FMD_MC);
+
+function Fmd({ lang }: { lang: Lang }) {
+  const w = WORDS[lang].fig;
+  const mcX = fmdX(FMD_MC);
+  return (
+    <>
+      <svg viewBox="0 0 300 136" aria-hidden className={SVG}>
+        {[10, 100].map((n) => (
+          <line key={n} x1={34} x2={290} y1={fmdY(n)} y2={fmdY(n)} strokeDasharray="2 3" className="stroke-border" />
+        ))}
+        <line x1={34} x2={290} y1={FMD_BASE} y2={FMD_BASE} className="stroke-border" />
+        {[1, 10, 100].map((n) => (
+          <text key={n} x={30} y={fmdY(n) + 4} textAnchor="end" className={LABEL}>
+            {n}
+          </text>
+        ))}
+        <line x1={mcX} x2={mcX} y1={16} y2={FMD_BASE} strokeDasharray="2 3" className="stroke-foreground" />
+        <text x={mcX + 5} y={12} className={STRONG}>
+          Mc
+        </text>
+        <text x={mcX - 6} y={12} textAnchor="end" className={LABEL}>
+          {w.missedSmall}
+        </text>
+        {/* Where the line would go below Mc, if no small event were missed. */}
+        <line
+          x1={fmdX(2)}
+          x2={mcX}
+          y1={fmdY(fmdLine(2))}
+          y2={fmdY(FMD_AT_MC)}
+          strokeDasharray="3 3"
+          className="stroke-muted-foreground"
+        />
+        <line
+          x1={mcX}
+          x2={fmdX(4.4)}
+          y1={fmdY(FMD_AT_MC)}
+          y2={fmdY(fmdLine(4.4))}
+          strokeWidth={2}
+          className="stroke-foreground"
+        />
+        <text x={fmdX(3.6)} y={fmdY(fmdLine(3.2))} className={STRONG}>
+          {w.slopeIsB}
+        </text>
+        {FMD_BINS.map(([m, n]) => (
+          <rect key={m} x={fmdX(m) - 3} y={fmdY(n) - 3} width={6} height={6} className="fill-chart-3" />
+        ))}
+        {FMD_CUMULATIVE.map(([m, n]) => (
+          <circle key={m} cx={fmdX(m)} cy={fmdY(n)} r={3.2} className="fill-chart-1" />
+        ))}
+        {[2, 3, 4].map((m) => (
+          <text key={m} x={fmdX(m)} y={FMD_BASE + 16} textAnchor="middle" className={LABEL}>
+            M{m}
+          </text>
+        ))}
+      </svg>
+      <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="size-1.5 bg-chart-3" />
+          {w.eachMagnitude}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-chart-1" />
+          {w.orLarger}
+        </span>
+        <span>{w.eventsPerMagnitudeLog}</span>
+      </figcaption>
+    </>
+  );
+}
+
+// "Valor b en el tiempo": a window of 8 events steps along the catalogue 2 at a time (the page's are 150
+// and 10), and each step adds its b at its last event. It plays once and rests on the last window; the
+// dots are on the windows that share no event, counted back from the latest as the chart counts them.
+const BW_EVENTS = (() => {
+  const r = mulberry32(5);
+  const raw: number[] = [];
+  let x = 0;
+  for (let i = 0; i < 26; i++) {
+    raw.push(x);
+    x += 6 + r() * 14;
+  }
+  const end = raw.at(-1)!;
+  return raw.map((v) => 22 + (v / end) * 256);
+})();
+const BW_SIZE = 8;
+const BW_STEP = 2;
+const BW_B = [1.05, 1.0, 0.98, 0.92, 0.88, 0.85, 0.8, 0.77, 0.75, 0.73];
+const BW_SIGMA = 0.08;
+/** One step of the window, in seconds: `--d` in `figures.css`. */
+const BW_TICK = 0.35;
+const bwY = (b: number) => 102 - (b - 0.55) * 120;
+const BW_DOTS = new Set(BW_B.map((_, k) => k).filter((k) => (BW_B.length - 1 - k) % (BW_SIZE / BW_STEP) === 0));
+const BW_WINDOWS = BW_B.map((b, k) => ({
+  b,
+  first: BW_EVENTS[k * BW_STEP]!,
+  last: BW_EVENTS[k * BW_STEP + BW_SIZE - 1]!,
+  y: bwY(b),
+}));
+
+function BWindows({ lang }: { lang: Lang }) {
+  const w = WORDS[lang].fig;
+  const lastK = BW_WINDOWS.length - 1;
+  return (
+    <>
+      <svg viewBox="0 0 300 150" aria-hidden className={SVG}>
+        <text x={4} y={14} className={LABEL}>
+          b
+        </text>
+        {BW_WINDOWS.map((v, k) => {
+          const prev = BW_WINDOWS[k - 1];
+          return (
+            <g key={k} data-bw="point" style={{ "--d": `${(k * BW_TICK).toFixed(2)}s` } as CSSProperties}>
+              {prev ? (
+                <>
+                  <path
+                    d={`M${prev.last} ${bwY(prev.b + BW_SIGMA)} L${v.last} ${bwY(v.b + BW_SIGMA)} L${v.last} ${bwY(v.b - BW_SIGMA)} L${prev.last} ${bwY(prev.b - BW_SIGMA)} Z`}
+                    className="fill-chart-1/15"
+                  />
+                  <line x1={prev.last} x2={v.last} y1={prev.y} y2={v.y} strokeWidth={2} className="stroke-chart-1" />
+                </>
+              ) : null}
+              {BW_DOTS.has(k) ? <circle cx={v.last} cy={v.y} r={3.5} className="fill-chart-1" /> : null}
+            </g>
+          );
+        })}
+        {/* One window at a time: each shows for its own step, and the last one stays. */}
+        {BW_WINDOWS.map((v, k) => (
+          <g
+            key={k}
+            data-bw={k === lastK ? "last" : "window"}
+            style={{ "--d": `${(k * BW_TICK).toFixed(2)}s` } as CSSProperties}
+          >
+            <rect
+              x={v.first - 4}
+              y={110}
+              width={v.last - v.first + 8}
+              height={20}
+              rx={4}
+              className="fill-chart-1/15 stroke-chart-1"
+            />
+            <line x1={v.last} x2={v.last} y1={v.y + 4} y2={110} strokeDasharray="2 3" className="stroke-chart-1" />
+            <text x={v.first - 4} y={144} className={STRONG}>
+              {w.window}
+            </text>
+          </g>
+        ))}
+        {BW_EVENTS.map((x) => (
+          <line key={x} x1={x} x2={x} y1={114} y2={126} className="stroke-foreground" />
+        ))}
+      </svg>
+      <figcaption className="text-xs text-muted-foreground">
+        {w.time} → · {w.onePointPerWindow}
+      </figcaption>
+    </>
+  );
+}
+
+// "Magnitud en el tiempo": a large earthquake and its aftershocks, each a dot at its time and magnitude,
+// and under them the events of each day. A slower decay than the sequence drawing's, so the dots reach
+// across the whole span as the chart's do.
+const MT_DAYS = 14;
+const mtX = (t: number) => 20 + t * 270;
+const mtY = (m: number) => 88 - (m - 1.8) * 16;
+const MT_MAIN: Ev = { t: 0.03, m: 6.2 };
+const MT_EVENTS: Ev[] = (() => {
+  const r = mulberry32(13);
+  const c = 0.06;
+  const span = 0.95;
+  return Array.from({ length: 56 }, () => {
+    // Omori's decay, sampled through its inverse, and Gutenberg–Richter with b = 1, as in `AFTERSHOCKS`.
+    const t = 0.04 + c * ((span / c + 1) ** r() - 1);
+    const m = Math.min(4.6, 2 - Math.log10(Math.max(r(), 1e-3)));
+    return { t, m };
+  });
+})();
+const MT_COUNTS = (() => {
+  const c = Array.from({ length: MT_DAYS }, () => 0);
+  for (const e of [MT_MAIN, ...MT_EVENTS]) c[Math.min(MT_DAYS - 1, Math.floor(e.t * MT_DAYS))]! += 1;
+  return c;
+})();
+const MT_MAX = Math.max(...MT_COUNTS);
+const MT_DAY_W = 270 / MT_DAYS;
+
+function MagnitudeTime({ lang }: { lang: Lang }) {
+  const w = WORDS[lang].fig;
+  const sx = mtX(MT_MAIN.t);
+  const sy = mtY(MT_MAIN.m);
+  return (
+    <>
+      <svg viewBox="0 0 300 134" aria-hidden className={SVG}>
+        <line x1={14} x2={294} y1={90} y2={90} className="stroke-border" />
+        {MT_EVENTS.map((e, i) => (
+          <circle key={i} cx={mtX(e.t)} cy={mtY(e.m)} r={2.4} className="fill-chart-1" />
+        ))}
+        <path
+          d={`M${sx} ${sy - 9} l2.6 5.4 6 .8 -4.3 4.2 1 5.9 -5.3 -2.8 -5.3 2.8 1 -5.9 -4.3 -4.2 6 -.8z`}
+          className="fill-chart-2"
+        />
+        <text x={sx + 12} y={sy + 4} className={STRONG}>
+          {w.mainshock}
+        </text>
+        {MT_COUNTS.map((n, i) => {
+          const h = (n / MT_MAX) * 30;
+          return (
+            <rect
+              key={i}
+              x={20 + i * MT_DAY_W + 2}
+              y={128 - h}
+              width={MT_DAY_W - 4}
+              height={h}
+              rx={1}
+              className="fill-chart-1/60"
+            />
+          );
+        })}
+        <line x1={14} x2={294} y1={128} y2={128} className="stroke-border" />
+        <text x={294} y={112} textAnchor="end" className={LABEL}>
+          {w.perDay}
+        </text>
+      </svg>
+      <figcaption className="text-xs text-muted-foreground">
+        {w.time} → · {w.heightIsMagnitude}
+      </figcaption>
     </>
   );
 }

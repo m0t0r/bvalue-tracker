@@ -75,8 +75,37 @@
   }
 }
 
+/* "Valor b en el tiempo": a window steps along the events every 0.35 s (`BW_TICK`), and each step adds its
+   stretch of the line. A window shows for its own step only; the last one stays, which is the picture at
+   rest and under reduced motion. */
+[data-bw="point"] {
+  animation: bw-in 200ms var(--ease-out) backwards;
+  animation-delay: var(--d);
+}
+@keyframes bw-in {
+  from {
+    opacity: 0;
+  }
+}
+[data-bw="window"] {
+  opacity: 0;
+  animation: bw-step 350ms step-end;
+  animation-delay: var(--d);
+}
+@keyframes bw-step {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+[data-bw="last"] {
+  animation: bw-in 1ms backwards;
+  animation-delay: var(--d);
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-seq="event"],
+  [data-bw],
   [data-energy],
   [data-wave],
   [data-drift] {

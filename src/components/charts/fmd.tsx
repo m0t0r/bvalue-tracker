@@ -16,13 +16,11 @@ import {
   type PlotArea,
 } from "@bvalue/charts";
 import { memo, useId, useMemo, useRef, type CSSProperties } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { useI18n } from "@/lib/i18n";
 import type { Stats } from "@/lib/stats";
 import { cn } from "@/lib/utils";
-import type { Cluster } from "../../../core/clusters";
 import { magnitudeTicks } from "./magnitude-ticks";
-import { fmdDescription } from "./fmd-description";
 
 // The drawing's margins, as the Recharts version had them: the y axis' 40 px on the left, 12 px on the
 // right for the last magnitude label, 16 px on top for "Mc", and the x axis' 30 px at the bottom.
@@ -36,16 +34,8 @@ const MIN_TICK_GAP = 5;
 const SQUARE = symbol(symbolSquare, 64).digits(3)()!;
 const CIRCLE = symbol(symbolCircle, 64).digits(3)()!;
 
-/** `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits the statistics to one magnitude type. */
-export const FmdChart = memo(function FmdChart({
-  stats,
-  magType,
-  cluster,
-}: {
-  stats: Stats;
-  magType: string | null;
-  cluster: Cluster | null;
-}) {
+/** "Distribución frecuencia–magnitud", under the header `Deferred` draws. */
+export const FmdChart = memo(function FmdChart({ stats }: { stats: Stats }) {
   const { t } = useI18n();
   const { bins, fit, mc } = stats;
   const clip = useId();
@@ -189,19 +179,10 @@ export const FmdChart = memo(function FmdChart({
   const p = active ? data[active.i]! : null;
 
   return (
-    <Frame
-      t={t}
-      stats={stats}
-      magType={magType}
-      cluster={cluster}
-      plotRef={plotRef}
-      box={box}
-      width={size?.width}
-      {...reading.frame}
-    >
+    <Frame t={t} stats={stats} plotRef={plotRef} box={box} width={size?.width} {...reading.frame}>
       {drawn && size ? (
         <>
-          <Drawing width={size.width} height={size.height} title={t.fmdTitle} desc={t.fmdDesc} reading={reading}>
+          <Drawing width={size.width} height={size.height} title={t.fmdTitle} desc={t.fmdAlt} reading={reading}>
             {marks}
             {at ? (
               <line
@@ -238,14 +219,12 @@ export const FmdChart = memo(function FmdChart({
 });
 
 /**
- * The card around the drawing. The plot takes the height the card is given beside the map, less the
+ * The content under the card's header (`Deferred` draws the header). The plot takes the height the card is given beside the map, less the
  * key's, and the drawing fills it from outside the flow, so the card's height never depends on it.
  */
 function Frame({
   t,
   stats,
-  magType,
-  cluster,
   plotRef,
   box,
   width,
@@ -254,8 +233,6 @@ function Frame({
 }: {
   t: ReturnType<typeof useI18n>["t"];
   stats: Stats;
-  magType: string | null;
-  cluster: Cluster | null;
   plotRef: (el: HTMLElement | null) => void;
   box: React.RefObject<HTMLDivElement | null>;
   /** The drawing's width in whole pixels, once measured. */
@@ -269,41 +246,35 @@ function Frame({
 }) {
   const { fit } = stats;
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle>{t.fmdTitle}</CardTitle>
-        <CardDescription>{fmdDescription(t, stats, magType, cluster)}</CardDescription>
-      </CardHeader>
-      {/* The card is stretched to the map beside it, so the chart takes the leftover height
-          rather than leaving it blank under the key. */}
-      <CardContent className="flex flex-1 flex-col">
-        <div
-          ref={box}
-          className={cn("flex min-h-80 w-full flex-1 flex-col text-xs", focusRing)}
-          style={{ "--chart-w": width === undefined ? undefined : `${width}px` } as CSSProperties}
-          {...pointer}
-        >
-          {/* The drawing is a whole number of pixels wide, from the plot box's left edge, as Recharts drew
+    // The card is stretched to the map beside it, so the chart takes the leftover height rather than
+    // leaving it blank under the key.
+    <CardContent className="flex flex-1 flex-col">
+      <div
+        ref={box}
+        className={cn("flex min-h-80 w-full flex-1 flex-col text-xs", focusRing)}
+        style={{ "--chart-w": width === undefined ? undefined : `${width}px` } as CSSProperties}
+        {...pointer}
+      >
+        {/* The drawing is a whole number of pixels wide, from the plot box's left edge, as Recharts drew
               it; the key is centred under the drawing less its right margin, so as wide as the drawing. */}
-          <div ref={plotRef} className="relative min-h-0 flex-1">
-            <div className="absolute inset-y-0 left-0 w-(--chart-w)">{children}</div>
-          </div>
-          <div className="w-(--chart-w)">
-            <ChartKey
-              items={[
-                { label: t.perBin, colour: "chart-3" },
-                { label: t.cumulative, colour: "chart-1" },
-                // The text colour, not a chart colour: orange is the mainshock's alone (docs/frontend.md), and the
-                // line must stay apart from the blue curve it is fitted to and the grey squares under it.
-                {
-                  label: fit ? `${t.grFit}: b = ${fit.b.toFixed(2)} ± ${fit.sigmaB.toFixed(2)}` : t.grFit,
-                  colour: "foreground",
-                },
-              ]}
-            />
-          </div>
+        <div ref={plotRef} className="relative min-h-0 flex-1">
+          <div className="absolute inset-y-0 left-0 w-(--chart-w)">{children}</div>
         </div>
-      </CardContent>
-    </Card>
+        <div className="w-(--chart-w)">
+          <ChartKey
+            items={[
+              { label: t.perBin, colour: "chart-3" },
+              { label: t.cumulative, colour: "chart-1" },
+              // The text colour, not a chart colour: orange is the mainshock's alone (docs/frontend.md), and the
+              // line must stay apart from the blue curve it is fitted to and the grey squares under it.
+              {
+                label: fit ? `${t.grFit}: b = ${fit.b.toFixed(2)} ± ${fit.sigmaB.toFixed(2)}` : t.grFit,
+                colour: "foreground",
+              },
+            ]}
+          />
+        </div>
+      </div>
+    </CardContent>
   );
 }
