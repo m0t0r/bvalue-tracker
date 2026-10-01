@@ -7,6 +7,7 @@ import type { MainshockState } from "@bvalue/seismo";
 import type { Decay } from "../claims";
 import type { Lang } from "@/lib/i18n";
 import { fmtInt } from "../shared";
+import { sourceShort } from "../source-names";
 
 const f0 = (v: number) => Math.round(v).toString();
 const f1 = (v: number) => v.toFixed(1);
@@ -50,7 +51,7 @@ const es = {
     short: "¿Por qué lo siento si está tan lejos?",
     q: "¿Por qué siento en Pereira sismos que ocurren tan lejos?",
     p1: (lo: number, hi: number) =>
-      `Porque, en sismos, «lejos» se mide distinto. Las tres fuentes de estas semanas —el grupo de Istmina–Sipí, el grupo profundo junto al sismo grande y Chaparral— quedan todas a unos ${f0(lo)}–${f0(hi)}\u00A0km de Pereira en línea recta, contando la profundidad. A esa distancia, las ondas de un evento de M4 llegan muy debilitadas, pero todavía pueden notarse.`,
+      `Porque, en sismos, «lejos» se mide distinto. Las tres fuentes de estas semanas quedan todas a unos ${f0(lo)}–${f0(hi)}\u00A0km de Pereira en línea recta, contando la profundidad: el grupo superficial del Chocó, bajo Istmina y Sipí; el grupo profundo, junto al sismo grande; y Chaparral. A esa distancia, las ondas de un evento de M4 llegan muy debilitadas, pero todavía pueden notarse.`,
     /** `similar`: its straight-line distance is within the sources' own range, which the tab checks. */
     p2: (ref: Named, epi: number, depth: number, hypo: number, similar: boolean) =>
       `El ${mag(ref.mag)} del ${ref.date} estaba a ${f0(epi)}\u00A0km en el mapa y a ${f0(depth)}\u00A0km de profundidad: en línea recta, ${f0(hypo)}\u00A0km.${similar ? " Casi lo mismo que los otros: se sintió tan fuerte por su tamaño, no por estar más cerca." : ""} Prueba los controles: elige un evento, cambia su tamaño o su distancia, y mira cuánta energía liberaría, cuánto movimiento llegaría a Pereira y cuánto tardarían las ondas.`,
@@ -60,7 +61,7 @@ const es = {
         : "Lo que llega a Pereira depende del tamaño del evento y de su distancia en línea recta, contando la profundidad.",
     pick: "Elige un evento",
     presetReference: (ref: Named) => `El ${mag(ref.mag)} del ${ref.short}`,
-    presetShallow: (m: number) => `${mag(m)} en Istmina–Sipí`,
+    presetShallow: (m: number) => `${mag(m)} en el grupo superficial`,
     presetTolima: (m: number) => `${mag(m)} en Chaparral`,
     custom: "Personalizado",
     magnitude: "Magnitud",
@@ -82,9 +83,9 @@ const es = {
     mapAria: "Mapa de Pereira, las tres fuentes y la distancia elegida",
     ring: (km: number) => `${f0(km)}\u00A0km alrededor de Pereira`,
     chosen: "la distancia que elegiste",
-    labelShallow: "Istmina–Sipí",
-    labelDeep: (ref: Named) => `${mag(ref.mag)} y réplicas profundas`,
-    labelTolima: "Chaparral",
+    labelShallow: sourceShort.es.shallow,
+    labelDeep: sourceShort.es.deep,
+    labelTolima: sourceShort.es.tolima,
     raceTitle: "La carrera de las ondas hasta Pereira",
     raceSpeed: (x: number) => `acelerada ×${x}`,
     race: "Iniciar la carrera",
@@ -182,8 +183,8 @@ const es = {
               : "Las réplicas del sismo grande se han ido apagando.",
     sameScale: "Misma escala para los dos grupos",
     curve: "Mostrar cómo suelen apagarse las réplicas",
-    deepRow: (km: number) => `Grupo profundo · junto al sismo grande (~${f0(km)}\u00A0km)`,
-    shallowRow: (km: number) => `Grupo superficial · Istmina–Sipí (~${f0(km)}\u00A0km)`,
+    deepRow: (km: number) => `${sourceShort.es.deep} · ~${f0(km)}\u00A0km`,
+    shallowRow: (km: number) => `${sourceShort.es.shallow} · ~${f0(km)}\u00A0km`,
     lull: "más tranquilo",
     rowAria: (label: string, total: number, days: number) => `${label}: ${total} eventos en ${days} días.`,
     caption: (mc: number) =>
@@ -223,13 +224,13 @@ const es = {
 
   linked: {
     short: "¿Están conectados?",
-    q: "¿Están conectados Chocó y Tolima?",
+    q: "¿Están conectados el Chocó y el Tolima?",
     p1: (km: number, weeks: number) =>
       `El SGC ha planteado, como hipótesis preliminar, que el sismo grande del Chocó pudo cambiar los esfuerzos en la corteza y ayudar a reactivar fallas cerca de Chaparral, a unos ${f0(Math.round(km / 10) * 10)}\u00A0km de su epicentro y ${WORDS_ES[weeks] ?? f0(weeks)} semanas después. Es una idea razonable y en estudio, pero no está demostrada, y nada en esta página la pone a prueba.`,
     p2: "Que dos cosas ocurran casi al mismo tiempo no prueba que estén conectadas. La gráfica muestra qué pasó antes y qué después, nada más.",
-    legendShallow: "Chocó, superficial",
-    legendDeep: "Chocó, profundo",
-    legendTolima: "Chaparral",
+    legendShallow: sourceShort.es.shallow,
+    legendDeep: sourceShort.es.deep,
+    legendTolima: sourceShort.es.tolima,
     begins: (d: string) => `${d}: empieza Chaparral →`,
     beginsInside: (d: string) => `${d}: empieza Chaparral`,
     beginsShort: "Chaparral →",
@@ -252,9 +253,9 @@ const es = {
     tapHint: "elige un día para ver sus eventos",
     dayAria: (date: string, n: number) => `${date}: ${n === 0 ? "ninguno" : n === 1 ? "1 evento" : `${n} eventos`}`,
     none: (m: number) => `Ningún evento de ${mag(m)} o más ese día en estas zonas.`,
-    shallowName: "Istmina–Sipí",
-    deepName: "Chocó profundo",
-    tolimaName: "Chaparral",
+    shallowName: sourceShort.es.shallow,
+    deepName: sourceShort.es.deep,
+    tolimaName: sourceShort.es.tolima,
     caption:
       "Solo cuenta los eventos de las dos zonas que sigue esta página. En Colombia tiembla también en otros lugares, y algunos de esos también se sienten en Pereira. Que alguien lo note depende además de dónde estaba y del suelo; el umbral lo eliges tú.",
     takeaway: (days: number, total: number, m: number) =>
@@ -266,18 +267,17 @@ const es = {
     q: "¿Viene uno más grande?",
     p1: "La respuesta honesta es que nadie lo sabe. Hoy nadie puede predecir cuándo, dónde y de qué tamaño será un sismo: ni esta página, ni el SGC, ni ningún otro servicio del mundo. Las secuencias como la del Chocó y los enjambres como el de Chaparral a veces se apagan poco a poco y a veces producen un sismo mayor, y no hay forma de saber de antemano qué hará cada uno.",
     p2: "La posición pública del SGC es que muchos sismos no significan, por sí solos, que venga uno grande. Por eso esta página no calcula probabilidades ni muestra alertas.",
-    helpTitle: "Lo que sí sirve, siempre",
+    helpTitle: "Lo que sí sirve",
     help: [
       "Prepararse sirve siempre, no solo por esta secuencia: Colombia es un país sísmico.",
       "Tener un plan familiar: dónde protegerse, dónde reunirse y un morral de emergencia.",
       "Informarse en fuentes oficiales: los boletines del Servicio Geológico Colombiano (sgc.gov.co).",
     ],
-    takeaway:
-      "Nadie puede anunciar el próximo sismo; lo útil es estar preparado siempre y seguir la información del SGC.",
+    takeaway: "Nadie puede anunciar el próximo sismo; lo útil es estar preparado y seguir la información del SGC.",
     /** USGS's aftershock forecast, relayed. Its sentences with figures are `../copy.ts`'s claims. */
     forecast: {
       lede: (date: string) =>
-        `Lo que sí existe es un pronóstico de probabilidades. El Servicio Geológico de Estados Unidos (USGS) lo calcula para las réplicas del sismo del ${date} y lo hace público. Esta página no lo calcula: lo mostramos tal como lo publica el USGS.`,
+        `Lo que sí existe es un pronóstico de probabilidades. El Servicio Geológico de Estados Unidos (USGS) lo calcula para las réplicas del sismo del ${date} y lo hace público. Esta página no lo calcula: lo muestra tal como lo publica el USGS.`,
       heading: "El USGS publica este pronóstico",
       byline: (issued: string, next: string | null) =>
         `Publicado por el USGS el ${issued} y revisado por uno de sus sismólogos.${next ? ` La próxima actualización está prevista para el ${next}.` : ""}`,
@@ -295,7 +295,7 @@ const es = {
           : `${WORDS_ES[n]![0]!.toUpperCase()}${WORDS_ES[n]!.slice(1)} cosas que conviene saber`,
       area: (radiusKm: number) => ({
         title: "Una zona, dos grupos.",
-        body: `El USGS cuenta los eventos en un círculo de ${f0(radiusKm)}\u00A0km de radio que incluye los dos grupos del Chocó, el profundo y el de Istmina–Sipí. El pronóstico dice qué tan probable es un sismo en esa zona, no en cuál de los dos grupos ocurriría.`,
+        body: `El USGS cuenta los eventos en un círculo de ${f0(radiusKm)}\u00A0km de radio que incluye los dos grupos del Chocó, el profundo y el superficial. El pronóstico dice qué tan probable es un sismo en esa zona, no en cuál de los dos grupos ocurriría.`,
       }),
       catalogue: (mc: string) => ({
         title: "Otro catálogo.",
@@ -315,7 +315,7 @@ const es = {
     short: "¿Qué no sabemos?",
     q: "¿Qué no sabemos todavía?",
     p1: "Bastante, y es mejor decirlo con claridad. Esto es lo que ni estos datos ni esta página pueden responder hoy:",
-    why: "Qué mueve la actividad del grupo de Istmina–Sipí y cómo va a evolucionar.",
+    why: "Qué mueve la actividad del grupo superficial y cómo va a evolucionar.",
     link: "Si Chaparral tiene que ver con el sismo grande del Chocó. Es una hipótesis del SGC, no un resultado.",
     faults: (choco: string, tolima: string, snapped: { depthKm: number; count: number } | null) =>
       `La forma exacta de las fallas. Las ubicaciones tienen errores típicos de unos ${choco}\u00A0km en el Chocó y unos ${tolima}\u00A0km en Chaparral${snapped ? `, y muchas profundidades se repiten en valores fijos (${snapped.count} eventos de Chaparral a ${f1(snapped.depthKm)}\u00A0km justos), señal de que no están bien determinadas` : ""}.`,
@@ -355,7 +355,7 @@ const en: Copy = {
     short: "Why do I feel it so far away?",
     q: "Why do I feel, in Pereira, earthquakes that happen so far away?",
     p1: (lo, hi) =>
-      `Because with earthquakes, “far” is measured differently. The three sources of these weeks — the Istmina–Sipí group, the deep group beside the big earthquake, and Chaparral — are all about ${f0(lo)}–${f0(hi)}\u00A0km from Pereira in a straight line, counting depth. At that distance an M4's waves arrive much weakened, but can still be noticed.`,
+      `Because with earthquakes, “far” is measured differently. The three sources of these weeks are all about ${f0(lo)}–${f0(hi)}\u00A0km from Pereira in a straight line, counting depth: Chocó's shallow group, beneath Istmina and Sipí; its deep group, beside the big earthquake; and Chaparral. At that distance an M4's waves arrive much weakened, but can still be noticed.`,
     p2: (ref, epi, depth, hypo, similar) =>
       `The ${mag(ref.mag)} of ${ref.date} was ${f0(epi)}\u00A0km away on the map and ${f0(depth)}\u00A0km deep: ${f0(hypo)}\u00A0km in a straight line.${similar ? " Almost the same as the others. What made it so strong was not closeness but size." : ""} Play with the controls: pick an event, change its size or distance, and see how much energy and motion would arrive, and how long the waves would take.`,
     takeaway: (km, ref, similar) =>
@@ -364,7 +364,7 @@ const en: Copy = {
         : "What reaches Pereira depends on the event's size and its straight-line distance, counting depth.",
     pick: "Pick an event",
     presetReference: (ref) => `The ${mag(ref.mag)} of ${ref.short}`,
-    presetShallow: (m) => `${mag(m)} at Istmina–Sipí`,
+    presetShallow: (m) => `${mag(m)} in the shallow group`,
     presetTolima: (m) => `${mag(m)} at Chaparral`,
     custom: "Your own",
     magnitude: "Magnitude",
@@ -385,9 +385,9 @@ const en: Copy = {
     mapAria: "Map of Pereira, the three sources and the chosen distance",
     ring: (km) => `${f0(km)}\u00A0km around Pereira`,
     chosen: "the distance you chose",
-    labelShallow: "Istmina–Sipí",
-    labelDeep: (ref) => `${mag(ref.mag)} and deep aftershocks`,
-    labelTolima: "Chaparral",
+    labelShallow: sourceShort.en.shallow,
+    labelDeep: sourceShort.en.deep,
+    labelTolima: sourceShort.en.tolima,
     raceTitle: "The waves' race to Pereira",
     raceSpeed: (x) => `sped up ×${x}`,
     race: "Release the waves",
@@ -481,8 +481,8 @@ const en: Copy = {
               : "The big earthquake's aftershocks have been fading.",
     sameScale: "Same scale for both groups",
     curve: "Show how ordinary aftershocks fade",
-    deepRow: (km) => `Deep group · beside the big earthquake (~${f0(km)}\u00A0km)`,
-    shallowRow: (km) => `Shallow group · Istmina–Sipí (~${f0(km)}\u00A0km)`,
+    deepRow: (km) => `${sourceShort.en.deep} · ~${f0(km)}\u00A0km`,
+    shallowRow: (km) => `${sourceShort.en.shallow} · ~${f0(km)}\u00A0km`,
     lull: "quieter",
     rowAria: (label, total, days) => `${label}: ${total} events over ${days} days.`,
     caption: (mc) =>
@@ -495,7 +495,7 @@ const en: Copy = {
     crust: "crust",
     q: "What is happening at Chaparral? Is it the same thing?",
     p1: (start, depth, crustal, perDay, state) =>
-      `${state === "none" ? "No. Chaparral is a {swarm}, which is also what SGC calls it: many events, none dominant." : "Chaparral is what SGC calls a {swarm}."} It began on ${start}, about ${f0(depth)}\u00A0km deep${crustal ? " inside the {crust}" : ""}, and has been running at about ${f0(perDay)} events a day.`,
+      `${state === "none" ? "No. Chaparral is a {swarm}, which is also what SGC calls it: many events, none dominant." : "Chaparral is what SGC calls a {swarm}."} It began on ${start}, about ${f0(depth)}\u00A0km deep${crustal ? " inside the {crust}" : ""}, and has been running at about ${f0(perDay)} events per day.`,
     state: (s, largest, gap) =>
       s === "none"
         ? `None stands out: ${tied(gap) ? `the two largest are the same size, ${mag(largest)}` : `the largest, ${mag(largest)}, is only ${gap === null ? "slightly" : f1(gap)} above the next`}. That is why it has no mainshock.`
@@ -525,9 +525,9 @@ const en: Copy = {
     p1: (km, weeks) =>
       `SGC has put forward, as a preliminary hypothesis, that Chocó's big earthquake may have changed the stresses in the crust and helped reactivate faults near Chaparral, about ${f0(Math.round(km / 10) * 10)}\u00A0km from its epicentre and ${WORDS_EN[weeks] ?? f0(weeks)} weeks later. It is a reasonable idea under study, but it is not proven, and nothing on this page tests it.`,
     p2: "Two things happening close together in time is not evidence that they are connected. The chart shows what came before and what came after, nothing more.",
-    legendShallow: "Chocó, shallow",
-    legendDeep: "Chocó, deep",
-    legendTolima: "Chaparral",
+    legendShallow: sourceShort.en.shallow,
+    legendDeep: sourceShort.en.deep,
+    legendTolima: sourceShort.en.tolima,
     begins: (d) => `${d}: Chaparral begins →`,
     beginsInside: (d) => `${d}: Chaparral begins`,
     beginsShort: "Chaparral →",
@@ -550,9 +550,9 @@ const en: Copy = {
     tapHint: "pick a day to see its events",
     dayAria: (date, n) => `${date}: ${n === 0 ? "none" : n === 1 ? "1 event" : `${n} events`}`,
     none: (m) => `No event of ${mag(m)} or more that day in these zones.`,
-    shallowName: "Istmina–Sipí",
-    deepName: "Chocó deep",
-    tolimaName: "Chaparral",
+    shallowName: sourceShort.en.shallow,
+    deepName: sourceShort.en.deep,
+    tolimaName: sourceShort.en.tolima,
     caption:
       "Only counts events in the two zones this page follows. Colombia also shakes elsewhere, and some of those are felt in Pereira too. Whether someone notices one also depends on where they were and the ground; the threshold is yours.",
     takeaway: (days, total, m) =>
@@ -564,16 +564,16 @@ const en: Copy = {
     q: "Is a bigger one coming?",
     p1: "The honest answer is that nobody knows. Today no one can predict when, where and how big an earthquake will be: not this page, not SGC, not any service in the world. Sequences like Chocó's and swarms like Chaparral's sometimes die down slowly and sometimes produce a larger earthquake, and there is no way to know beforehand which each will do.",
     p2: "SGC's public position is that many earthquakes do not, by themselves, mean a big one is coming. That is why this page calculates no probabilities and shows no alerts.",
-    helpTitle: "What does help, always",
+    helpTitle: "What does help",
     help: [
-      "Being prepared is worth it at any time, not because of this sequence in particular: Colombia is a seismic country.",
+      "Be prepared at any time, not only because of this sequence: Colombia is a seismic country.",
       "Have a family plan: where to take cover, where to meet, and an emergency bag.",
       "Get information from official sources: the Servicio Geológico Colombiano's bulletins (sgc.gov.co).",
     ],
-    takeaway: "No one can announce the next earthquake; what helps is being prepared at all times and following SGC.",
+    takeaway: "No one can announce the next earthquake; what helps is being prepared and following SGC's information.",
     forecast: {
       lede: (date) =>
-        `What does exist is a forecast of probabilities. The United States Geological Survey (USGS) computes one for the aftershocks of the ${date} earthquake and makes it public. This page does not compute it: we show it as USGS publishes it.`,
+        `What does exist is a forecast of probabilities. The United States Geological Survey (USGS) computes one for the aftershocks of the ${date} earthquake and makes it public. This page does not compute it: it shows it as USGS publishes it.`,
       heading: "USGS publishes this forecast",
       byline: (issued, next) =>
         `Issued by USGS on ${issued} and reviewed by one of its seismologists.${next ? ` The next update is due on ${next}.` : ""}`,
@@ -589,7 +589,7 @@ const en: Copy = {
           : `${WORDS_EN[n]![0]!.toUpperCase()}${WORDS_EN[n]!.slice(1)} things worth knowing`,
       area: (radiusKm) => ({
         title: "One area, two groups.",
-        body: `USGS counts the events in a circle of ${f0(radiusKm)}\u00A0km radius that takes in both of Chocó's groups, the deep one and Istmina–Sipí. The forecast says how likely an earthquake is in that area, not in which of the two groups it would happen.`,
+        body: `USGS counts the events in a circle of ${f0(radiusKm)}\u00A0km radius that takes in both of Chocó's groups, the deep one and the shallow one. The forecast says how likely an earthquake is in that area, not in which of the two groups it would happen.`,
       }),
       catalogue: (mc) => ({
         title: "Another catalogue.",
@@ -609,7 +609,7 @@ const en: Copy = {
     short: "What don't we know?",
     q: "What don't we know yet?",
     p1: "Quite a lot, and it is better to say so plainly. This is what neither this data nor this page can answer today:",
-    why: "What drives the Istmina–Sipí group's activity, and how it will evolve.",
+    why: "What drives the shallow group's activity, and how it will evolve.",
     link: "Whether Chaparral has anything to do with Chocó's big earthquake. It is SGC's hypothesis, not a result.",
     faults: (choco, tolima, snapped) =>
       `The fine shape of the faults. Locations carry typical errors of about ${choco}\u00A0km in Chocó and about ${tolima}\u00A0km at Chaparral${snapped ? `, and many depths repeat fixed values (${snapped.count} Chaparral events at exactly ${f1(snapped.depthKm)}\u00A0km), a sign they are not well pinned down` : ""}.`,

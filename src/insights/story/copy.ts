@@ -11,24 +11,21 @@ import type { Decay, Drift, Pace } from "../claims";
 import type { PlateSide } from "../plate";
 import type { MainshockState } from "@bvalue/seismo";
 import type { Relation } from "../history";
+import { sourceShort } from "../source-names";
 
 const es = {
   hero: {
-    kicker: "Lo que se siente en Pereira",
+    kicker: "Lo que podría sentirse en Pereira",
     headline: (n: number): string =>
-      n === 1
-        ? "evento de magnitud 4 o más en los últimos 7 días."
-        : "eventos de magnitud 4 o más en los últimos 7 días.",
+      n === 1 ? "evento de M4.0 o más en los últimos 7 días." : "eventos de M4.0 o más en los últimos 7 días.",
     intro:
       "Con los datos del {sgc}, esta historia explica de dónde vienen los temblores que se sienten desde el {date}, cómo ha cambiado su ritmo y lo que nadie sabe todavía.",
-    strip: "Cada raya es un evento de M4 o más desde el {date} ({n} en total). La más alta es el {main}.",
-    stripAria: "Línea de tiempo con una raya por cada evento de magnitud 4 o más desde el {date}, coloreada por lugar.",
+    strip: "Cada raya es un evento de M4.0 o más desde el {date} ({n} en total). La más alta es el {main}.",
+    stripAria: "Línea de tiempo con una raya por cada evento de M4.0 o más desde el {date}, coloreada por lugar.",
     scroll: "Sigue bajando",
   },
   legend: {
-    shallow: "Chocó superficial",
-    deep: "Chocó profundo",
-    tolima: "Chaparral",
+    ...sourceShort.es,
     pereira: "Pereira",
   },
   /** The coloured names the prose uses for the three sources. */
@@ -203,8 +200,8 @@ const es = {
       "Esto responde a «¿por qué siguió temblando tanto tiempo?»: lo que continuó en el Chocó no fueron las réplicas del {main}, que se iban apagando despacio. Desde la segunda semana, el {pct} de los eventos del Chocó vinieron del grupo superficial.",
     shallowWeeks: (partial: boolean): string =>
       partial
-        ? "Sus eventos de M4 o más, semana a semana desde el {date}: {weeks} (la última semana aún no ha terminado)."
-        : "Sus eventos de M4 o más, semana a semana desde el {date}: {weeks}.",
+        ? "Sus eventos de M4.0 o más, semana a semana desde el {date}: {weeks} (la última semana aún no ha terminado)."
+        : "Sus eventos de M4.0 o más, semana a semana desde el {date}: {weeks}.",
     /** Only while the shallow group has not faded: it is the "why" of a group that kept going. */
     why: "¿Por qué? No se sabe. Los sismólogos consideran varias posibilidades: que el {main} haya cambiado los esfuerzos en la roca vecina, que haya fluidos moviéndose por las fracturas o que una falla se esté deslizando lentamente. Este catálogo no permite decidir entre ellas.",
     paceTitle: (p: Pace["case"]): string =>
@@ -240,8 +237,8 @@ const es = {
     /** Keyed on the swarm's median depth being under 30 km, where it is certainly in the crust. */
     p3: (crustal: boolean): string =>
       crustal
-        ? "El enjambre registra en promedio unos {perDay} eventos al día, a unos {depth} de profundidad, dentro de la {crust}."
-        : "El enjambre registra en promedio unos {perDay} eventos al día, a unos {depth} de profundidad.",
+        ? "El enjambre registra en promedio unos {perDay} eventos por día, a unos {depth} de profundidad, dentro de la {crust}."
+        : "El enjambre registra en promedio unos {perDay} eventos por día, a unos {depth} de profundidad.",
     driftTitle: (d: Drift["case"]): string =>
       d === "moved" ? "Parece desplazarse despacio" : d === "none" ? "No parece desplazarse" : "¿Se desplaza?",
     /** The line is drawn only when the drift claim says the centre moved. */
@@ -378,7 +375,7 @@ const es = {
     clocksAxis: "días desde el {date} (la escala amplía los primeros días)",
     omori: ["curva típica", "de réplicas"],
     lines: { shallow: "superficial", deep: "profundo" },
-    strongRow: "◆ cada evento de M4 o más",
+    strongRow: "◆ cada evento de M4.0 o más",
     lull: "calma",
     tolimaTitle: "Cuánta energía liberó el evento mayor",
     tolimaAria:
@@ -408,18 +405,16 @@ export type StoryCopy = typeof es;
 
 const en: StoryCopy = {
   hero: {
-    kicker: "What is felt in Pereira",
+    kicker: "What could be felt in Pereira",
     headline: (n) =>
-      n === 1
-        ? "event of magnitude 4 or more in the last 7 days."
-        : "events of magnitude 4 or more in the last 7 days.",
+      n === 1 ? "event of M4.0 or more in the last 7 days." : "events of M4.0 or more in the last 7 days.",
     intro:
       "Using data from the {sgc}, this story explains where the tremors felt since {date} come from, how their pace has changed, and what nobody knows yet.",
-    strip: "Each line is one event of M4 or more since {date} ({n} in all). The tallest is the {main}.",
-    stripAria: "Timeline with one line for each event of magnitude 4 or more since {date}, coloured by place.",
+    strip: "Each line is one event of M4.0 or more since {date} ({n} in all). The tallest is the {main}.",
+    stripAria: "Timeline with one line for each event of M4.0 or more since {date}, coloured by place.",
     scroll: "Keep scrolling",
   },
-  legend: { shallow: "Chocó shallow", deep: "Chocó deep", tolima: "Chaparral", pereira: "Pereira" },
+  legend: { ...sourceShort.en, pereira: "Pereira" },
   names: {
     shallow: "shallow group",
     deep: "deep group",
@@ -555,7 +550,7 @@ const en: StoryCopy = {
           ? "The aftershocks are not dying away as expected"
           : "The first aftershocks",
     deep1:
-      "After a large earthquake come {aftershocks}: smaller events in the same area, ever further apart. A rule from 1894, Omori's law, says their rate falls roughly as one over the time elapsed: after twice the time, half as many aftershocks a day.",
+      "After a large earthquake come {aftershocks}: smaller events in the same area, ever further apart. A rule from 1894, Omori's law, says their rate falls roughly as one over the time elapsed: after twice the time, half as many aftershocks per day.",
     aftershocks: "aftershocks",
     deep2: "Look at the {deep} in the drawing. {claim}",
     deepNote:
@@ -571,8 +566,8 @@ const en: StoryCopy = {
       "This is the answer to “why did it keep shaking for so long?”: in Chocó, what continued was not the {main}'s aftershocks slowly dying away. From the second week on, {pct} of Chocó's events came from the shallow group.",
     shallowWeeks: (partial) =>
       partial
-        ? "Its events of M4 or more, week by week since {date}: {weeks} (the last week is not over yet)."
-        : "Its events of M4 or more, week by week since {date}: {weeks}.",
+        ? "Its events of M4.0 or more, week by week since {date}: {weeks} (the last week is not over yet)."
+        : "Its events of M4.0 or more, week by week since {date}: {weeks}.",
     why: "Why? Nobody knows. Seismologists consider several possibilities: that the {main} changed the stresses in the nearby rock, that fluids are moving through fractures, or that a fault is slipping slowly. This catalogue cannot decide between them.",
     paceTitle: (p) =>
       p === "quieter"
@@ -605,8 +600,8 @@ const en: StoryCopy = {
     p2: "Compare the two strips: in Chocó, the largest event released {chocoShare} of the energy; at Chaparral, the largest ({mag}) released {tolimaShare}.",
     p3: (crustal) =>
       crustal
-        ? "It has averaged about {perDay} events a day, about {depth} deep, inside the {crust}."
-        : "It has averaged about {perDay} events a day, about {depth} deep.",
+        ? "It has averaged about {perDay} events per day, about {depth} deep, inside the {crust}."
+        : "It has averaged about {perDay} events per day, about {depth} deep.",
     driftTitle: (d) =>
       d === "moved" ? "It seems to be moving, slowly" : d === "none" ? "No visible movement" : "Is it moving?",
     driftHow: (moved) =>
@@ -729,7 +724,7 @@ const en: StoryCopy = {
     clocksAxis: "days since {date} (the axis is stretched at the start)",
     omori: ["typical curve", "of aftershocks"],
     lines: { shallow: "shallow", deep: "deep" },
-    strongRow: "◆ each event of M4 and up",
+    strongRow: "◆ each event of M4.0 or more",
     lull: "lull",
     tolimaTitle: "How much energy the largest event released",
     tolimaAria:

@@ -61,6 +61,7 @@ export const fmtDay = (ms: number, lang: Lang) => DAY_MONTH[lang].format(ms).rep
 // The Colombian month of an instant, to compare, and the day of the month alone ("12").
 const MONTH = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit" });
 const DAY_OF_MONTH = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, day: "numeric" });
+const sameMonth = (a: number, b: number) => MONTH.format(a) === MONTH.format(b);
 /**
  * A range of Colombian days, each given by the instant it begins: "12–18 sept" within a month,
  * "30 ago – 2 sept" across one, the day alone for one day. No line breaks inside either end or after the dash.
@@ -70,13 +71,24 @@ const DAY_OF_MONTH = new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE, day: "
  */
 export function fmtDayRange(from: number, to: number, lang: Lang): string {
   if (from === to) return fmtDay(from, lang);
-  if (MONTH.format(from) === MONTH.format(to)) return `${DAY_OF_MONTH.format(from)}–${fmtDay(to, lang)}`;
+  if (sameMonth(from, to)) return `${DAY_OF_MONTH.format(from)}–${fmtDay(to, lang)}`;
   return `${fmtDay(from, lang)} –\u2060 ${fmtDay(to, lang)}`;
 }
 /** The Colombian date of an instant as "2026-09-12", for a file name. */
 export const fmtIsoDay = (ms: number) => new Date(ms + TZ_OFFSET_MS).toISOString().slice(0, 10);
 /** A day inside running prose: "10 de agosto", "10 August". Abbreviations stay in labels and ticks. */
 export const fmtDayLong = (ms: number, lang: Lang) => DAY_MONTH_LONG[lang].format(ms);
+/**
+ * A span of Colombian days, each given by the instant it begins, for running prose: "entre el 4 y el 8 de
+ * septiembre" and "from 4 to 8 September" within a month, both months across one, "el 4 de septiembre"
+ * for a single day. The month is said once where both ends share it; said twice it read as a repeat.
+ */
+export function fmtDaysSpan(from: number, to: number, lang: Lang): string {
+  if (fmtIsoDay(from) === fmtIsoDay(to))
+    return lang === "es" ? `el ${fmtDayLong(from, lang)}` : `on ${fmtDayLong(from, lang)}`;
+  const start = sameMonth(from, to) ? DAY_OF_MONTH.format(from) : fmtDayLong(from, lang);
+  return lang === "es" ? `entre el ${start} y el ${fmtDayLong(to, lang)}` : `from ${start} to ${fmtDayLong(to, lang)}`;
+}
 /** The same with its year, for a day in another year: "23 de noviembre de 1979", "23 November 1979". */
 export const fmtDateLong = (ms: number, lang: Lang) => DATE_LONG[lang].format(ms);
 /** Axis tick on a range of a few days, where a date alone repeats: "18 sept, 14:00" */

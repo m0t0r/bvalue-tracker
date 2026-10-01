@@ -313,3 +313,61 @@ describe("the last-query note without a status", () => {
     expect(dicts[lang].lastUpdateUnknown).not.toBe(dicts[lang].never);
   });
 });
+
+/**
+ * The hint under "Eventos" used to be a bare "/ 1037": a total with no word saying what it is the total
+ * of (issue #142). It says so, as the scope bar's "Mostrando 639 de 786 eventos" does, and only while a
+ * filter narrows the count (unfiltered, the figure above is the whole catalogue). The phone's form is its
+ * own key and may not be longer than the wide one: it shares a row with "Sismo principal".
+ */
+describe("the events hint under the count", () => {
+  it.each(langs)("says what the total is the total of, in %s", (lang) => {
+    const n = (1037).toLocaleString(lang);
+    for (const hint of [dicts[lang].eventsOfCatalogue(n), dicts[lang].eventsOfCatalogueShort(n)]) {
+      expect(hint).toMatch(/1037|1,037/);
+      expect(hint).not.toMatch(/^\s*\//);
+    }
+    expect(dicts[lang].eventsOfCatalogue(n)).toMatch(/catálogo|catalogue/);
+  });
+
+  it.each(langs)("is no longer on the phone than in the wide form, in %s", (lang) => {
+    const { eventsOfCatalogue, eventsOfCatalogueShort } = dicts[lang];
+    const n = (1037).toLocaleString(lang);
+    expect(eventsOfCatalogueShort(n).length).toBeLessThanOrEqual(eventsOfCatalogue(n).length);
+  });
+});
+
+/**
+ * The back-fill notice says its history is loading, and its button used to say "Cargar ahora": not
+ * whether the page was already doing it, or what a press added (issue #142). Both are true to the code:
+ * the page starts the back-fill itself and the Worker's cron carries it on, and the button asks for the
+ * rest straight away, as `/insights` words the first half ("Se completa solo").
+ */
+describe("the back-fill notice", () => {
+  it.each(langs)("says it completes by itself, in the words /insights uses, in %s", (lang) => {
+    expect(dicts[lang].completesItself).toMatch(/completa solo|completes by itself/);
+    for (const zone of ZONE_IDS) {
+      expect(dicts[lang].zones[zone].backfillBody).toContain(dicts[lang].completesItself);
+    }
+  });
+
+  it.each(langs)("names what the button asks for, not only when, in %s", (lang) => {
+    expect(dicts[lang].backfillAction).toMatch(/lo que falta|what is missing/);
+  });
+});
+
+/**
+ * The stand-down line under the refresh button has to say who is retrying, since the reader pressed
+ * "Actualizar" and nothing was "sent" in any sense they know. It keeps its two rules above: no "try
+ * again" asked of the reader, no interval.
+ */
+describe("the line under the button while a retry is on the way", () => {
+  it.each(langs)("says the page is retrying, and that pressing is not needed, in %s", (lang) => {
+    expect(dicts[lang].refreshStillFailing).toMatch(/página.*reintent|page.*retrying/i);
+    expect(dicts[lang].refreshStillFailing).toMatch(/no hace falta pulsar|no need to press/);
+  });
+
+  it.each(langs)("names no interval, in %s", (lang) => {
+    expect(dicts[lang].refreshStillFailing).not.toMatch(/\d/);
+  });
+});

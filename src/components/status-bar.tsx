@@ -144,6 +144,7 @@ function MainshockStat({
 export function StatusBar({
   status,
   shown,
+  total,
   mainshock,
   loading,
   catalogueFailed = false,
@@ -154,6 +155,8 @@ export function StatusBar({
   loading: boolean;
   status: StatusResponse | undefined;
   shown: number | null;
+  /** How many events the catalogue holds, whatever narrows the page; null until it has loaded. */
+  total: number | null;
   /** The zone's mainshock as detected over its whole catalogue; null until the catalogue has loaded. */
   mainshock: ZoneMainshock<StoredEvent> | null;
   /**
@@ -437,7 +440,18 @@ export function StatusBar({
             <Stat
               label={t.events}
               value={shown === null ? catalogueFailed ? "—" : null : <FlowNumber value={shown} lang={lang} />}
-              hint={status ? `/ ${status.totalEvents.toLocaleString(lang)}` : undefined}
+              hint={
+                // Said only while the count is narrowed, and as the scope bar says it ("Mostrando 639 de
+                // 786"): the catalogue's own length, not the status poll's total, which can be a refetch
+                // ahead of it. Unfiltered, the figure above is the whole catalogue and there is nothing to
+                // explain; a worded hint there made the row one line taller at 640 px (Chocó).
+                total === null || shown === total ? undefined : (
+                  <ByWidth
+                    phone={t.eventsOfCatalogueShort(total.toLocaleString(lang))}
+                    wide={t.eventsOfCatalogue(total.toLocaleString(lang))}
+                  />
+                )
+              }
             />
             <MainshockStat mainshock={mainshock} catalogueFailed={catalogueFailed} />
           </div>

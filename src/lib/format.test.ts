@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtClock, relativeTime, relativeTimeShort } from "@/lib/format";
+import { fmtClock, fmtDaysSpan, relativeTime, relativeTimeShort } from "@/lib/format";
 
 const NOW = Date.parse("2026-09-19T12:00:00Z");
 const ago = (seconds: number, lang: "es" | "en" = "es") =>
@@ -68,5 +68,35 @@ describe("the time of something earlier, for a sentence", () => {
   it("adds the day, by Colombia's calendar, when it was another day", () => {
     expect(fmtClock(Date.parse("2026-09-19T04:59:00Z"), "es", NOW)).toEqual({ time: "23:59", day: "18\u00A0sept" });
     expect(fmtClock(Date.parse("2026-09-17T17:35:00Z"), "en", NOW)).toEqual({ time: "12:35", day: "17\u00A0Sept" });
+  });
+});
+
+/**
+ * A span of days inside a sentence names the month once when both ends are in it: "entre el 4 de
+ * septiembre y el 8 de septiembre" said it twice (issue #143).
+ */
+describe("a span of days in running prose", () => {
+  // The start of a Colombian day (UTC-5).
+  const day = (iso: string) => Date.parse(`${iso}T05:00:00Z`);
+
+  it("names the month once within a month", () => {
+    expect(fmtDaysSpan(day("2026-09-04"), day("2026-09-08"), "es")).toBe("entre el 4 y el 8 de septiembre");
+    expect(fmtDaysSpan(day("2026-09-04"), day("2026-09-08"), "en")).toBe("from 4 to 8 September");
+  });
+
+  it("names both months across a month, and both years across a year", () => {
+    expect(fmtDaysSpan(day("2026-08-30"), day("2026-09-09"), "es")).toBe("entre el 30 de agosto y el 9 de septiembre");
+    expect(fmtDaysSpan(day("2026-08-30"), day("2026-09-09"), "en")).toBe("from 30 August to 9 September");
+    // The same month of two years is two months.
+    expect(fmtDaysSpan(day("2026-12-30"), day("2027-01-02"), "es")).toBe("entre el 30 de diciembre y el 2 de enero");
+  });
+
+  it("says one day as one day, and reads the Colombian calendar, not UTC's", () => {
+    expect(fmtDaysSpan(day("2026-09-04"), day("2026-09-04"), "es")).toBe("el 4 de septiembre");
+    expect(fmtDaysSpan(day("2026-09-04"), day("2026-09-04"), "en")).toBe("on 4 September");
+    // 23:30 on the 30th in Colombia is already the 1st in UTC: still August there, still one month.
+    expect(fmtDaysSpan(day("2026-08-12"), Date.parse("2026-09-01T04:30:00Z"), "es")).toBe(
+      "entre el 12 y el 31 de agosto",
+    );
   });
 });

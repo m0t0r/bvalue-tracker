@@ -20,6 +20,7 @@ import { FiltersCard } from "@/components/filters";
 import { LoadError } from "@/components/load-error";
 import { MonitorShell } from "@/components/monitor-shell";
 import { MapPlaceholder, mapDescription } from "@/components/map-legend";
+import { SiteFooter } from "@/components/site-footer";
 import { StatusBar } from "@/components/status-bar";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -160,6 +161,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
           // the back-fill it starts, would otherwise land above the loading skeleton and push it down.
           status={settled ? status.data : undefined}
           shown={events.data ? view.shown.length : null}
+          total={events.data ? events.data.length : null}
           mainshock={events.data ? view.mainshock : null}
           catalogueFailed={catalogueFailed}
           statusFailed={loadFailed(status)}
@@ -346,14 +348,15 @@ function ZonePage({ zone }: { zone: ZoneId }) {
       </main>
 
       {settled ? (
-        <footer className="pb-8 text-sm text-muted-foreground">
-          {t.source}{" "}
-          <Explain id="sgc-catalogue" href={SGC_QUERY_URL}>
-            bdrsnc.sgc.gov.co
-          </Explain>
-          <p className="mt-1 max-w-[75ch] text-pretty">{t.autoUpdateLong(updateEveryMin(zone))}</p>
-          <p className="mt-1 max-w-[75ch] text-pretty">{t.timeNote}</p>
-        </footer>
+        <SiteFooter csv>
+          <p>
+            {t.source}{" "}
+            <Explain id="sgc-catalogue" href={SGC_QUERY_URL}>
+              bdrsnc.sgc.gov.co
+            </Explain>
+          </p>
+          <p>{t.autoUpdateLong(updateEveryMin(zone))}</p>
+        </SiteFooter>
       ) : null}
     </>
   );

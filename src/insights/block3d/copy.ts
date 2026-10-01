@@ -4,6 +4,7 @@
  * number of its own.
  */
 import type { Lang } from "@/lib/i18n";
+import { sourceShort } from "../source-names";
 import { RAISED_LAND, type Preset } from "./shared";
 
 export interface RuptureFacts {
@@ -57,7 +58,10 @@ const es = {
   /** The preview's turning, which the reader can stop (WCAG 2.2.2). */
   spin: { pause: "Detener el movimiento", resume: "Reanudar el movimiento" },
   /** One per input: a phone has no wheel, a mouse cannot pinch. */
-  hint: { touch: "Arrastra para girar · pellizca para acercar", pointer: "Arrastra para girar · rueda para acercar" },
+  hint: {
+    touch: "Arrastra para girar · pellizca para acercar",
+    pointer: "Arrastra para girar · desplaza para acercar",
+  },
   close: "Cerrar",
   dialog: "El bloque en 3D",
   canvas:
@@ -133,7 +137,7 @@ const es = {
     ],
     rupture: (f: RuptureFacts): [string, string] => [
       "La zona naranja",
-      `Es la parte de la roca que se rompió en el sismo del ${f.date}: una grieta de unos ${f.length} de largo, entre ${f.top} y ${f.bottom} de profundidad. Cuanto más intenso el naranja, más se deslizó la roca, hasta unos ${f.slip}. La calculó el USGS con un modelo.`,
+      `Es la parte de la roca que se rompió en el sismo del ${f.date}: una franja de unos ${f.length} de largo, entre ${f.top} y ${f.bottom} de profundidad. Cuanto más intenso el naranja, más se deslizó la roca, hasta unos ${f.slip}. La calculó el USGS con un modelo.`,
     ],
     offset: (f: RuptureFacts) =>
       `El USGS ubica ese sismo unos ${f.offset} más al ${f.direction} y ${f.deeper} ${f.shallower ? "menos" : "más"} profundo de lo que lo ubica el SGC. Por eso la zona naranja no pasa por el punto de ese sismo.`,
@@ -171,10 +175,10 @@ const es = {
     seaColourSource: "Color: ESA Ocean Colour CCI",
   },
   groups: {
-    shallow: "grupo superficial (Istmina–Sipí)",
-    deep: "grupo profundo",
+    shallow: sourceShort.es.shallow,
+    deep: sourceShort.es.deep,
     mainshock: (date: string, mag: string) => `sismo del ${date}, ${mag}`,
-    tolima: "enjambre de Chaparral",
+    tolima: sourceShort.es.tolima,
   },
   snappedItem: (count: number, depth: string) => `${count} a ${depth}`,
   and: " y ",
@@ -291,7 +295,7 @@ const en: Copy = {
     ],
     rupture: (f) => [
       "The orange patch",
-      `The part of the rock that broke in the earthquake of ${f.date}: a crack about ${f.length} long, between ${f.top} and ${f.bottom} deep. The stronger the orange, the further the rock slid, up to about ${f.slip}. USGS worked it out with a model.`,
+      `The part of the rock that broke in the earthquake of ${f.date}: a band about ${f.length} long, between ${f.top} and ${f.bottom} deep. The stronger the orange, the further the rock slid, up to about ${f.slip}. USGS worked it out with a model.`,
     ],
     offset: (f) =>
       `USGS places that earthquake about ${f.offset} further ${f.direction} and ${f.deeper} ${f.shallower ? "shallower" : "deeper"} than SGC does. That is why the orange patch does not pass through that earthquake's dot.`,
@@ -329,10 +333,10 @@ const en: Copy = {
     seaColourSource: "Colour: ESA Ocean Colour CCI",
   },
   groups: {
-    shallow: "shallow group (Istmina–Sipí)",
-    deep: "deep group",
+    shallow: sourceShort.en.shallow,
+    deep: sourceShort.en.deep,
     mainshock: (date, mag) => `earthquake of ${date}, ${mag}`,
-    tolima: "Chaparral swarm",
+    tolima: sourceShort.en.tolima,
   },
   snappedItem: (count, depth) => `${count} at ${depth}`,
   and: " and ",

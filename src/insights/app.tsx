@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Backdrop } from "@/backdrop/backdrop";
 import { LoadError } from "@/components/load-error";
+import { SiteFooter } from "@/components/site-footer";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { TabsContent } from "@/components/ui/tabs";
 import { useHydrated } from "@/lib/hydrate";
@@ -134,20 +135,25 @@ export function InsightsApp() {
       onToggleTheme={toggleTheme}
       tabList={tabList}
       after={
-        shown && (
-          <>
-            {/* The pixel background, as on the monitor (src/backdrop). The page is about both zones,
-                so it draws both: Chocó's sequence and Chaparral's swarm, and on a phone the larger
-                epicenter, the M7.4. */}
-            <Backdrop events={catalogues} />
-            <BackToTop label={c.backToTop} tabs={tabList} end={footer} />
-            <footer ref={footer} className="mt-auto flex flex-col gap-1 border-t pt-6 text-sm text-muted-foreground">
-              {shown.data.dataEnd !== null && <p>{c.dataUpTo(shown.data.dataEnd, lang)}</p>}
-              <p className="max-w-md text-pretty">{c.footer}</p>
-              <p>{c.timeNote}</p>
-            </footer>
-          </>
-        )
+        <>
+          {shown && (
+            <>
+              {/* The pixel background, as on the monitor (src/backdrop). The page is about both zones,
+                  so it draws both: Chocó's sequence and Chaparral's swarm, and on a phone the larger
+                  epicenter, the M7.4. */}
+              <Backdrop events={catalogues} />
+              <BackToTop label={c.backToTop} tabs={tabList} end={footer} />
+            </>
+          )}
+          {/* On a failed load too: what the page says about itself does not wait for its data. Not
+              while it loads, where the footer would be the first thing drawn under the skeleton and
+              the static copy in the HTML (the same first render) has none. */}
+          {shown || isError ? (
+            <SiteFooter ref={footer}>
+              {shown && shown.data.dataEnd !== null ? <p>{c.dataUpTo(shown.data.dataEnd, lang)}</p> : null}
+            </SiteFooter>
+          ) : null}
+        </>
       }
     >
       <InsightsMain notice={notice}>

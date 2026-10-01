@@ -56,7 +56,12 @@
     all over by 13 August. The shallow cluster is all of the current activity and its large
     events are becoming more frequent (20 of its 25 M ≥ 4 events since 8 September). For a reader
     who is not a seismologist this is the useful part, so the "Dos grupos de eventos" card leads
-    with it and the daily-count bars are stacked by cluster.
+    with it and the daily-count bars are stacked by cluster. The caveat under "Cómo leer estas
+    cifras" that says it is written of what happened, in the past tense and with no date ("concentró
+    casi toda su actividad en la primera semana; después casi todo vino del grupo superficial, y es
+    ahí donde bajó el valor b"): it used to begin "Al 19 de septiembre de 2026", a sentence about a
+    state of the catalogue that nothing updated (issue #143). `/insights` computes the same facts from
+    the live catalogue (`decay`), so a figure that must stay current is said there.
   - **Both clusters use the Mc of the whole filtered catalogue**, like the magnitude-type tabs,
     so only the population differs. `computeClusterStats` is the one place that rule lives; the
     page, `/api/stats?cluster=` and the CLI all go through it. Never call `computeStats` on a

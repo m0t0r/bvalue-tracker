@@ -1,8 +1,7 @@
 import { AlertTriangleIcon, ArrowLeftIcon } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { Explain } from "@/components/explainer/explain";
-import { LanguageButton } from "@/components/language-button";
-import { ThemeButton } from "@/components/theme-button";
+import { HeaderControls, PageFrame } from "@/components/page-frame";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,7 +48,7 @@ export function InsightsShell({
   const { lang } = useI18n();
   const c = insightsCopy[lang];
   return (
-    <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
+    <PageFrame>
       <Tabs value={tab ?? ""} onValueChange={(v) => onTab(toTab(v))} className="gap-8">
         <header className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -60,10 +59,7 @@ export function InsightsShell({
                 {c.back}
               </a>
             </Button>
-            <div className="ml-auto flex items-center gap-2">
-              <LanguageButton />
-              <ThemeButton onClick={onToggleTheme} />
-            </div>
+            <HeaderControls onToggleTheme={onToggleTheme} />
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{c.title}</h1>
           {/* Full width, as the monitor's (owner's call, 2026-09-30): capped at 32rem it left most of a
@@ -82,7 +78,7 @@ export function InsightsShell({
         {children}
       </Tabs>
       {after}
-    </div>
+    </PageFrame>
   );
 }
 
