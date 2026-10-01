@@ -5,8 +5,9 @@
  * - **With a mouse** the card is a preview: it opens after a pause on the word and closes after the
  *   pointer leaves both the word and the card. A click on a term keeps it open ("pinned") until a
  *   click elsewhere or Escape. A click on a link follows the link, as it always did.
- * - **On touch** there is no hover, so a tap opens the card and the next tap closes it; on a link the
- *   tap opens the card instead of leaving the page, and the card holds the way out.
+ * - **On touch** there is no hover, so a tap opens the sheet and the next tap closes it; on a link the
+ *   tap opens the sheet instead of leaving the page, and the sheet holds the way out. A device with no
+ *   hovering pointer at all (`canHover` false) is touch for every event, whatever the event says.
  * - **From the keyboard** focus shows the card, as hover does; Enter on a term opens it with focus
  *   inside, so its links are reachable. Enter on a link follows the link.
  */
@@ -37,21 +38,26 @@ const transient = (s: State) => s.open && (s.by === "hover" || s.by === "focus")
 /**
  * The next state, and whether a click must be cancelled (`preventDefault`): a tap on a link opens its
  * card rather than following it.
+ *
+ * `canHover` is whether the device has a pointer that can hover at all (`Explain` reads it from
+ * `(any-hover: hover)`). Without one, a phone, the card does not exist: nothing previews, and a press
+ * of any kind (a tap, a screen reader's activation, an event that claims to be a mouse's) opens the
+ * sheet. The kind of the event is not to be trusted on such a device, the device is.
  */
-export function next(s: State, a: Action): { state: State; cancel: boolean } {
+export function next(s: State, a: Action, canHover = true): { state: State; cancel: boolean } {
   const keep = { state: s, cancel: false };
   switch (a.type) {
     case "hover":
-      return s.open ? keep : { state: { open: true, by: "hover", surface: "card" }, cancel: false };
+      return s.open || !canHover ? keep : { state: { open: true, by: "hover", surface: "card" }, cancel: false };
     case "focus":
-      return s.open ? keep : { state: { open: true, by: "focus", surface: "card" }, cancel: false };
+      return s.open || !canHover ? keep : { state: { open: true, by: "focus", surface: "card" }, cancel: false };
     case "leave":
     case "blur":
       return transient(s) ? { state: CLOSED, cancel: false } : keep;
     case "dismiss":
       return { state: CLOSED, cancel: false };
     case "click": {
-      if (a.press === "touch") {
+      if (a.press === "touch" || !canHover) {
         // A tap toggles, on a link as on a term. A phone that focuses what it taps has opened a
         // preview on focus by the time the click arrives: that is not an opening the reader saw.
         const shown = s.open && s.surface === "sheet";

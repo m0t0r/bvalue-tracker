@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLOSED, isWarm, next, type State, WARM_MS } from "./interaction";
+import { type Action, CLOSED, isWarm, next, type State, WARM_MS } from "./interaction";
 
 const hover: State = { open: true, by: "hover", surface: "card" };
 const focus: State = { open: true, by: "focus", surface: "card" };
@@ -54,6 +54,29 @@ describe("an explainer from the keyboard", () => {
 
   it("follows a link on Enter", () => {
     expect(next(focus, { type: "click", press: "key", link: true })).toEqual({ state: focus, cancel: false });
+  });
+});
+
+describe("an explainer on a device that cannot hover", () => {
+  const noHover = (s: State, a: Action) => next(s, a, false);
+
+  it("never previews on a pointer's hover or on focus, whatever pointer type the event claims", () => {
+    expect(noHover(CLOSED, { type: "hover" })).toEqual({ state: CLOSED, cancel: false });
+    expect(noHover(CLOSED, { type: "focus" })).toEqual({ state: CLOSED, cancel: false });
+  });
+
+  it("opens the sheet for every kind of press, on a term and on a link, never the card", () => {
+    for (const press of ["mouse", "touch", "key"] as const) {
+      for (const link of [false, true]) {
+        expect(noHover(CLOSED, { type: "click", press, link })).toEqual({ state: sheet, cancel: true });
+      }
+    }
+  });
+
+  it("closes the sheet on the next press, of any kind", () => {
+    for (const press of ["mouse", "touch", "key"] as const) {
+      expect(noHover(sheet, { type: "click", press, link: false })).toEqual({ state: CLOSED, cancel: true });
+    }
   });
 });
 

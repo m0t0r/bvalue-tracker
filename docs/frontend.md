@@ -1236,6 +1236,18 @@ colour, motion). Keep to them:
     title; Escape closes and gives focus back to the word, without previewing it again, and Tab out of either end of the card returns to the word, since the card is
     portalled to the end of the page. A card opened while another is open, or within 500 ms of one
     closing, skips the pause and the entrance; so does one opened from the keyboard.
+  - **A device that cannot hover never shows the card** (`(any-hover: hover)` false: a phone). The
+    surface used to follow each event's pointer type, and on a phone the card opened when a click came
+    with no `pointerdown` before it (the press then defaults to a mouse's), from a screen reader's
+    activation (`detail` 0 reads as Enter), and beside a mouse-type pointer resting on the word (a
+    trackpad, DevTools' device mode); a real touch tap always gave the sheet, so it showed up now and
+    then. `next` takes `canHover`: without it nothing previews and every press of any kind opens the
+    sheet. That includes the keyboard: Enter on a link there opens the sheet (whose button follows it)
+    instead of following it, and keyboard focus previews nothing. A laptop or an iPad with a trackpad
+    keeps the per-pointer rule, and with it the same three slips (they need a mouse, an assistive
+    technology or a missing `pointerdown` on a device that can hover). Checked with real touch input
+    over CDP (`Input.dispatchTouchEvent`), not synthetic events alone: `explain.test.ts` holds the
+    cases, and the DevTools MCP's `click` is a mouse press, so it cannot stand in for a tap.
   - **Radix's Popover, not its HoverCard**, which ignores touch and keeps its content from the keyboard.
     The sheet is shadcn's `Sheet` with a `card` layout (a local addition in `ui/sheet.tsx`: flush, rounded
     on top, scrolling past 85 % of the screen) and a close label in the page's language (`closeLabel`;
