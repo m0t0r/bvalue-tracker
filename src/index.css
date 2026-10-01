@@ -394,21 +394,24 @@ html[lang="en"] [data-static-lang="es"] {
   }
 }
 
-/* The map popup is MapLibre's own DOM; make it follow the theme like every other popover. */
+/* The map popup is MapLibre's own DOM. It is a chart tooltip in all but its place, so it has the chart
+   tooltip's surface (`ChartTip`, `@bvalue/charts`): the dark theme's, in both themes. `Popup` is given the
+   `dark` class, which gives the box and its text the dark theme's tokens, and the same ones are used
+   here: `--background`, not the popover's (a step lighter in the dark theme). */
 .maplibregl-popup-content {
-  @apply rounded-lg border bg-popover px-3 py-2 text-popover-foreground shadow-xl;
+  @apply rounded-lg border bg-background px-3 py-2 text-foreground shadow-xl;
 }
 .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
-  border-top-color: var(--popover);
+  border-top-color: var(--background);
 }
 .maplibregl-popup-anchor-top .maplibregl-popup-tip {
-  border-bottom-color: var(--popover);
+  border-bottom-color: var(--background);
 }
 .maplibregl-popup-anchor-left .maplibregl-popup-tip {
-  border-right-color: var(--popover);
+  border-right-color: var(--background);
 }
 .maplibregl-popup-anchor-right .maplibregl-popup-tip {
-  border-left-color: var(--popover);
+  border-left-color: var(--background);
 }
 /* Its zoom buttons too: on the theme's popover surface in dark mode, where MapLibre's white group
    was the one bright thing on the page, with the dark glyphs inverted. */
