@@ -55,6 +55,12 @@ function preloadOnActivity() {
   else window.addEventListener("load", listen, { once: true });
 }
 
+// Whether any pointer of the device can hover: a phone's cannot, a laptop's or an iPad with a trackpad
+// can. Read at each event, so a mouse plugged in later counts. Where nothing can hover the card does
+// not exist and every opening is the sheet, whatever pointer type an event claims (`interaction.ts`,
+// docs/frontend.md). Without `matchMedia`, as in a test, the device is taken for a desktop.
+const canHover = () => typeof window === "undefined" || (window.matchMedia?.("(any-hover: hover)").matches ?? true);
+
 // How many cards are open, and when the last one closed: a card opened while another is open, or
 // right after, skips the pause and the entrance, so reading along a paragraph is not slowed down.
 let openCards = 0;
@@ -116,8 +122,8 @@ export function Explain({ id, href, linkClassName = "underline underline-offset-
     current.current = to;
     setState(to);
   };
-  const dispatch = (a: Action) => {
-    const r = next(current.current, a);
+  const dispatch = (a: Action, hover = canHover()) => {
+    const r = next(current.current, a, hover);
     if (r.state !== current.current) apply(r.state);
     return r.cancel;
   };
@@ -159,8 +165,8 @@ export function Explain({ id, href, linkClassName = "underline underline-offset-
     onPointerEnter: (e: React.PointerEvent) => {
       if (e.pointerType !== "mouse") return;
       load();
-      // After a failed download there is no card to preview.
-      if (failed) return;
+      // After a failed download there is no card to preview; on a device that cannot hover, never.
+      if (failed || !canHover()) return;
       if (current.current.open) return cancelWait();
       // Checked again when the pause is over: the download can fail during it.
       wait(warm() ? 0 : HOVER_DELAY_MS, () => {
@@ -217,15 +223,18 @@ export function Explain({ id, href, linkClassName = "underline underline-offset-
       if (e.key === " ") activate("key");
     },
   };
-  function activate(how: Press) {
+  function activate(pressed: Press) {
     // No card: a link is followed and a term is a word.
     if (failed) return false;
+    // With nothing that can hover, every press is a tap. Read once, for this check and for `next`.
+    const hover = canHover();
+    const how = hover ? pressed : "touch";
     // A second tap while the card is still on its way would close what the reader has not seen yet.
     // Not a link's click or Enter, which always go where the link says.
     if (!Card && current.current.open && (how === "touch" || href === undefined)) return true;
     load();
     cancelWait();
-    return dispatch({ type: "click", press: how, link: href !== undefined });
+    return dispatch({ type: "click", press: how, link: href !== undefined }, hover);
   }
 
   const open = state.open;
