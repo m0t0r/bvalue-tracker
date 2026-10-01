@@ -98,7 +98,7 @@ export default function EventMap({
       },
     });
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
-    const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 10 });
+    const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 10, className: "dark" });
     let shownId: string | null = null;
 
     // The picture leaves on the map's first full frame (`idle`, below), or sooner if that will not

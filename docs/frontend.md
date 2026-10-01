@@ -1664,8 +1664,15 @@ colour, motion). Keep to them:
   A tooltip's content is therefore written with the theme's classes and no `dark:` variant, and a
   chart passes `className` only for what its own tooltip adds (`tabular-nums`, the magnitude chart's
   width cap). The text colour is set on the box: inherited, it would be the page's near-black. In the
-  dark theme nothing changed. The map's popup and the filters' info tip are not chart tooltips and
-  keep their own surfaces (the popover's, and shadcn's inverted `Tooltip`).
+  dark theme nothing changed. The filters' info tip is not a chart tooltip and keeps its own surface
+  (shadcn's inverted `Tooltip`).
+  - **The map's popup has the same surface** (owner's call, 2026-10-01, so the page's hover cards read
+    as one). It is MapLibre's DOM, so `Popup` is given `className: "dark"` and `.maplibregl-popup-content`
+    in `index.css` uses `bg-background`, `text-foreground`, `border` and `shadow-xl`, as `ChartTip` does,
+    and its arrow is `--background`. Not the popover's tokens: in the dark theme `--popover` is a step
+    lighter (`oklch(0.205)` against `0.145`), so the popup was lighter than the chart tooltips there too.
+    Checked at 1280 px on the Tolima tab in both themes beside a chart tooltip. The zoom buttons and
+    the attribution are controls, not tooltips, and keep the theme's popover surface.
   - Measured in the light theme at 320, 390 and 1280 px on both zones (2026-09-30): the box is
     `rgb(10 10 10)`, its text `rgb(250 250 250)` (19:1) and its secondary line `rgb(161 161 161)`
     (7.7:1), the dark theme's own values; every tooltip is inside the viewport and the page gains no
