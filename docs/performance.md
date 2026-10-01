@@ -59,6 +59,10 @@ practices stayed at 100.
     startup path (it is two `Button`s now).
   - Measure with the same browser state on both origins: a language stored for one origin by an earlier
     check made the first A/B compare a Spanish page with an English one, whose LCP elements differ.
+  - **The charts' cards (issue #145, 2026-10-01)** added the three chart entries, their drawings and the
+    nested terms to the same chunk: 15.0 → 18.4 kB brotli, CSS 0.3 → 0.4 kB, still never at startup.
+    The startup JavaScript grew by `ChartName` and the nesting context: 169.7 → 170.2 kB on the monitor,
+    200.8 → 201.1 kB on `/insights` (brotli, against `main` at `ac4fcbb`, same fixtures).
 - **The latin font subset is preloaded** by a small plugin in `vite.config.ts` that reads the
   hashed file name out of the bundle. Everything on this page is text, so the largest paint
   waits for that file; once the shell painted earlier than the font arrived, the swap from the
@@ -144,6 +148,14 @@ practices stayed at 100.
   load and its two lines outweigh the one-line subtitle), which is why it is written into the card's
   placeholder (below). Between 2026-09-26 and `2e2909d` the header's title and subtitle were larger at
   1350 px and took its place.
+
+  **Since issue #145 it is the b card's "Solo con MLr_1…" paragraph instead**: that description went from
+  four lines to two, and the paragraph now outweighs it. Lighthouse's desktop LCP on `/choco` (devtools
+  throttling, interleaved, three runs each, `main` at `ac4fcbb`) went from a median of 252 ms (221, 252,
+  452) to 401 ms (402, 378, 401), and the phone's stayed at the subtitle (1,314 → 1,318 ms). **Nothing
+  paints later**: with the description hidden on both builds, so that the paragraph is the LCP on each, it
+  painted at 388 ms on `main` and 400 ms here (unthrottled, one run each). The metric moved to an element
+  that already painted ~150 ms after the description; why that paragraph waits that long was not looked into.
 - **The 2026-09-26 review** (Chrome DevTools MCP traces, then a Lighthouse A/B against a build of
   `main`, same data, `--throttling-method=devtools`, three interleaved runs each; the numbers are
   medians):

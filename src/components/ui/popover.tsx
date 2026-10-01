@@ -6,7 +6,7 @@ import { Popover as PopoverPrimitive } from "radix-ui"
 
 // shadcn's Popover, with local changes: it enters on `--ease-out` from 96 % and leaves in 100 ms
 // as a fade alone (leaving is quicker than arriving), grows from where its anchor is, never runs
-// wider than the room Radix says is free, and skips both animations with `data-instant` (an
+// wider or taller than the room Radix says is free (a chart's explainer scrolls inside it), and skips both animations with `data-instant` (an
 // opening from the keyboard, or one that follows another at once).
 
 function Popover({
@@ -40,7 +40,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 w-72 max-w-(--radix-popover-content-available-width) origin-(--radix-popover-content-transform-origin) overflow-hidden rounded-xl border bg-popover p-4 text-sm text-popover-foreground shadow-lg outline-hidden data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-[160ms] data-[state=open]:ease-(--ease-out) data-[state=open]:motion-safe:zoom-in-96 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-100 data-instant:animate-none",
+          "z-50 w-72 max-h-(--radix-popover-content-available-height) max-w-(--radix-popover-content-available-width) origin-(--radix-popover-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border bg-popover p-4 text-sm text-popover-foreground shadow-lg outline-hidden data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-[160ms] data-[state=open]:ease-(--ease-out) data-[state=open]:motion-safe:zoom-in-96 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-100 data-instant:animate-none",
           className
         )}
         {...props}

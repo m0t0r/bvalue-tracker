@@ -9,9 +9,9 @@ import {
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
-import { DEPTH_STOPS, MapLegend, mapDescription } from "@/components/map-legend";
+import { DEPTH_STOPS, MapLegend } from "@/components/map-legend";
 import { MapPreview } from "@/components/map-preview";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
 import { fmtDateTime, fmtRegion } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
@@ -174,21 +174,15 @@ export default function EventMap({
   }, [events, mainshockId]);
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle>{t.mapTitle}</CardTitle>
-        <CardDescription>{mapDescription(t, mainshockId)}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {/* The canvas is a keyboard stop (arrows pan, +/- zoom); its own outline is clipped, so the frame shows focus. */}
-        <div className="relative h-96 w-full overflow-hidden rounded-lg border has-[canvas:focus-visible]:outline-2 has-[canvas:focus-visible]:outline-offset-2 has-[canvas:focus-visible]:outline-ring">
-          {/* Inert under the picture: a map the reader cannot see must not take focus or a drag. */}
-          <div ref={el} inert={!ready} className="size-full" />
-          <MapPreview key={build} ready={ready} />
-        </div>
-        {/* Shared with the placeholder (`MapPlaceholder`), so the card keeps its height when the map lands. */}
-        <MapLegend />
-      </CardContent>
-    </Card>
+    <CardContent className="flex flex-col gap-3">
+      {/* The canvas is a keyboard stop (arrows pan, +/- zoom); its own outline is clipped, so the frame shows focus. */}
+      <div className="relative h-96 w-full overflow-hidden rounded-lg border has-[canvas:focus-visible]:outline-2 has-[canvas:focus-visible]:outline-offset-2 has-[canvas:focus-visible]:outline-ring">
+        {/* Inert under the picture: a map the reader cannot see must not take focus or a drag. */}
+        <div ref={el} inert={!ready} className="size-full" />
+        <MapPreview key={build} ready={ready} />
+      </div>
+      {/* Shared with the placeholder (`MapPlaceholder`), so the card keeps its height when the map lands. */}
+      <MapLegend />
+    </CardContent>
   );
 }

@@ -1372,6 +1372,50 @@ colour, motion). Keep to them:
     short name in a neutral tile, never in its own colours. Why, per source, is in
     [Security](security.md). The drawings sit on the sheet's `muted` band, so their ground and land are
     tints of `muted-foreground`: in `muted` they vanished.
+  - **A chart's name is its explainer** (issue #145, 2026-10-01; `ChartName` in `charts/chart-name.tsx`):
+    "Distribución frecuencia–magnitud", "Valor b en el tiempo" and "Magnitud en el tiempo" in their cards'
+    titles open a card on how to read the chart, one pattern for the three (owner's call, after an
+    `InfoTip` beside each title was planned and dropped). **No icon**: the name itself is the trigger,
+    with the dotted underline every term has, so a title takes no more room than its words (measured at
+    320 px in both languages: 22 or 44 px, as on `main`). `InfoTip` stays for one-sentence answers beside
+    a control (the filters' maximum curvature).
+    - **What the card holds** (`CHARTS` in `entries.ts`, a `chart` kind): a small drawing of the chart
+      with its marks named, two or three short paragraphs (what each mark is, why the axis is
+      logarithmic, what the slope says, where Mc shows), and for "Valor b en el tiempo" the note that it
+      is not a forecast. The drawings use made-up numbers, as every explainer's do. The window drawing
+      moves, once, because the moving is the explanation (a window of 8 events stepping 2 at a time,
+      adding its stretch of line), then rests on its last window with a replay button; the other two
+      are still. A sheet's kicker says "Cómo leer el gráfico".
+    - **The b-value, Mc, magnitude and the mainshock are named, not defined again**: a `{placeholder}` in
+      a paragraph becomes that term's own explainer inside the card (`CHART_PARTS`), opening its card
+      over the chart's: card on card with a mouse or the keyboard, sheet on sheet on touch. Escape closes
+      one at a time and focus goes back to the word it came from. A word inside a card keeps the
+      350 ms pause and the entrance (`NestedExplainers`): the open card counts as warm, and without
+      the pause every term the pointer crossed in the text opened at once. The window figures in the
+      text (150, 10, 140) come from `@bvalue/seismo`'s constants.
+    - **The description keeps the orientation in the open**: "Cuántos eventos hay de cada magnitud."
+      for the frequency–magnitude chart, "Cada punto es un evento." as before, and for "Valor b en el
+      tiempo" its windows and Mc in one sentence and the caution that overlapping windows make the line
+      look surer than it is in a second (the science's rule; the card says why). The frequency–magnitude
+      drawing's own text alternative keeps the old sentence (`fmdAlt`), which says what it draws.
+    - **A card can be taller than a chart's**, so a popover is capped at the height Radix says is free
+      and scrolls inside it, up and down only (`ui/popover.tsx`; `overflow-x-hidden`, or every card
+      would have scrolled sideways too); a chart's card is `w-96`, a term's `w-80`.
+    - **The chart's name lives once, in the page's titles** (`CHART_TITLE` in `ids.ts`): the card's
+      heading reads the same string as the word that opened it, so a renamed chart cannot open a card
+      under its old name.
+    - **What the code review changed (2026-10-01):** a Tab out of a term's card inside a chart's card
+      bubbled through the React tree to the chart's card, which took the inner word, its own last stop,
+      for the way out and closed too (each card now answers only the keys pressed inside it;
+      `explain.test.ts`); the window count in the text says "of their 150 events"; the sideways
+      overflow above; the chart's name in one place.
+    - **Declined in the code review:** *making a card opened while any card is open wait like any other*,
+      in place of `NestedExplainers`. Skipping the pause while a card is open is #144's rule for reading
+      along a paragraph; inside a card it is wrong, so it is turned off there and nowhere else.
+      *Hiding a term's card when its word scrolls out of the chart's card* (Radix's `hideWhenDetached`):
+      happy-dom lays nothing out, so every anchor counts as detached and every card in the tests hid,
+      and the case needs a pinned card in a chart's card that is scrolled, on a window too short for it;
+      Escape or a press anywhere else closes it.
   - **Set by hand, the line under the slider keeps its type and names the state first**:
     "Manual · Usar la Mc automática" / "Manual · Use automatic Mc", against "Automática (curvatura
     máxima)". The link is `Button` `link-inline` / `inline`: the line's own 14 px, regular weight
@@ -1797,8 +1841,9 @@ colour, motion). Keep to them:
     much range to fill ~550 px, and the lower third is empty. That is the price of keeping the slope.
 - **"Valor b en el tiempo" says how few readings its line holds** (2026-09-28). A dot marks each window
   that shares no event with another (`independentWindows`); the line between them is drawn through
-  windows that share 140 of 150 events, and the description says so, and that each point sits at its
-  window's last event. The other magnitude reading is a dashed line in the same blue, out of the
+  windows that share 140 of 150 events. The description says the windows overlap, so the line looks
+  surer than it is; the card its name opens says by how much, and that each point sits at its window's
+  last event (issue #145). The other magnitude reading is a dashed line in the same blue, out of the
   tooltip, drawn only while the key names it. Windows that may have lost small events are shaded
   in `--caution-edge` (a run of one reaches halfway to its neighbours), and their tooltip adds both
   Mc. The key is hidden from screen readers, so the chart's `desc` names those stretches by date
@@ -1902,7 +1947,18 @@ colour, motion). Keep to them:
 - **A chart or the map arrives in its own card, already titled.** They are loaded on approach
   (`Deferred`, see [Performance](performance.md)), so on a slow connection the reader first sees
   the card with its heading and a skeleton the size of the drawing. Never a bare grey box, and
-  never a card that changes height when the drawing lands. Every placeholder brings the card's own
+  never a card that changes height when the drawing lands.
+  - **`Deferred` draws the card and its header, once; the chunk brings only the `CardContent`**
+    (issue #145, 2026-10-01). The fallback card and the loaded one used to be two trees, so the header
+    was drawn twice and replaced when the chunk landed. With a chart's name now a control, a tap on it
+    in the placeholder opened nothing: on a 390 px phone at Slow 4G the title was a new element 250 ms
+    after the tap, and its card gone with the old one (a keyboard reader's focus too; the CSV button in
+    "Valor b en el tiempo"'s header had the same replacement on `main`). Now the title is the same
+    element before and after, and the sheet opened in the placeholder stays open while the chart lands
+    under it (`deferred.test.ts`). The charts and the map no longer draw a header of their own, and
+    lost the props only it used (`magType` and `cluster` on the frequency–magnitude chart, `magType` on
+    "Valor b en el tiempo").
+  - Every placeholder brings the card's own
   description (`bTimeDescription`, `fmdDescription`, `mapDescription`), written without the chart's
   code. The map's and the magnitude chart's placeholders draw their real legend beside skeletons of
   the drawing's exact height (`MapPlaceholder`, `MagnitudeTimePlaceholder`), since a legend wraps

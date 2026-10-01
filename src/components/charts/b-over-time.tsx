@@ -17,15 +17,13 @@ import { scaleLinear, type ScaleLinear } from "d3-scale";
 import { area as areaShape, line } from "d3-shape";
 import { AlertTriangleIcon } from "lucide-react";
 import { memo, useCallback, useId, useMemo, type CSSProperties, type ReactNode } from "react";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { fmtDateTime, fmtDay, fmtDayTime } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { WINDOW_SIZE, independentWindows, windowIncomplete, type Stats } from "@/lib/stats";
 import { cn } from "@/lib/utils";
-import { BTimeCsvButton } from "./b-over-time-csv";
 import { bAxis } from "./b-axis";
-import { bTimeDescription } from "./b-over-time-description";
 import { BTimeKey } from "./b-over-time-key";
 import type { Cluster } from "../../../core/clusters";
 
@@ -77,15 +75,14 @@ interface Drawn {
 }
 
 /**
- * `cluster` is set while the page is narrowed to one depth cluster; `magType` while the b card limits
- * the statistics to one magnitude type. `mainshockTime` marks the detected mainshock, where the windows
+ * "Valor b en el tiempo", under the header `Deferred` draws. `cluster` is set while the page is narrowed to
+ * one depth cluster. `mainshockTime` marks the detected mainshock, where the windows
  * after it are the least complete; a mainshock before the first window's end is off the axis and not drawn.
  */
 export const BOverTimeChart = memo(function BOverTimeChart({
   stats,
   other,
   otherKey,
-  magType,
   cluster,
   mainshockTime,
 }: {
@@ -94,7 +91,6 @@ export const BOverTimeChart = memo(function BOverTimeChart({
   other: Stats | null;
   /** What the dashed line is, for the key ("solo MLr_1", "todos los tipos"). */
   otherKey: string | null;
-  magType: string | null;
   cluster: Cluster | null;
   mainshockTime: string | null;
 }) {
@@ -329,68 +325,59 @@ export const BOverTimeChart = memo(function BOverTimeChart({
   }, [drawn, xTicks, mainshockAt, tickLabel, t]);
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle>{t.bTimeTitle}</CardTitle>
-        <CardDescription>{bTimeDescription(t, stats, magType, cluster)}</CardDescription>
-        <CardAction>
-          <BTimeCsvButton stats={stats} magType={magType} cluster={cluster} />
-        </CardAction>
-      </CardHeader>
-      {/* The plot fills the height the b card beside it gives the row, at a fixed scale: extra height
-          shows more of the b axis (`bAxis`), never a steeper version of the same fall. */}
-      <CardContent className="flex flex-1 flex-col justify-center">
-        {data.length < 2 ? (
-          // The plot's own height, so the card does not shrink when the windows run out: it and the b
-          // card beside it lost 329 px at once, and the filters below moved under the reader's pointer.
-          <div className="flex h-80 items-center justify-center">
-            <Empty>
-              <EmptyHeader>
-                <EmptyDescription>
-                  {/* A whole cluster with too few events is not something a wider date range can fix, so it gets its own words. */}
-                  {cluster !== null && stats.fit && stats.fit.n < WINDOW_SIZE
-                    ? t.bTimeEmptyCluster(stats.fit.n.toLocaleString(lang), WINDOW_SIZE)
-                    : t.bTimeEmpty(WINDOW_SIZE)}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          </div>
-        ) : (
-          // The wrapper takes the room and the drawing fills it from outside the flow, so the card's height
-          // never depends on what the chart drew: in the flow, each render measured a couple of pixels
-          // taller than the last, and the row crept down under the Mc slider.
-          // `text-xs` is the size the chart draws its labels in, for measuring them.
-          <div
-            ref={plotRef}
-            className={cn("relative min-h-80 w-full flex-1 text-xs", focusRing)}
-            style={{ "--chart-w": size ? `${size.width}px` : undefined } as CSSProperties}
-          >
-            {drawn && size ? (
-              <Reading
-                size={size}
-                drawn={drawn}
-                data={data}
-                clip={clip}
-                title={t.bTimeTitle}
-                desc={
-                  t.bTimeAlt(data[0]!.b.toFixed(2), data.at(-1)!.b.toFixed(2)) +
-                  (incompleteRuns.length > 0
-                    ? t.bTimeAltIncomplete(
-                        incompleteRuns
-                          .map(([i, j]) => t.bTimeAltSpan(fmtDay(data[i]!.t, lang), fmtDay(data[j]!.t, lang)))
-                          .join(t.bTimeAltAnd),
-                      )
-                    : "")
-                }
-                marks={marks}
-                labels={labels}
-              />
-            ) : null}
-          </div>
-        )}
-        <BTimeKey stats={stats} other={other} otherKey={otherKey} />
-      </CardContent>
-    </Card>
+    // The plot fills the height the b card beside it gives the row, at a fixed scale: extra height shows
+    // more of the b axis (`bAxis`), never a steeper version of the same fall.
+    <CardContent className="flex flex-1 flex-col justify-center">
+      {data.length < 2 ? (
+        // The plot's own height, so the card does not shrink when the windows run out: it and the b
+        // card beside it lost 329 px at once, and the filters below moved under the reader's pointer.
+        <div className="flex h-80 items-center justify-center">
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>
+                {/* A whole cluster with too few events is not something a wider date range can fix, so it gets its own words. */}
+                {cluster !== null && stats.fit && stats.fit.n < WINDOW_SIZE
+                  ? t.bTimeEmptyCluster(stats.fit.n.toLocaleString(lang), WINDOW_SIZE)
+                  : t.bTimeEmpty(WINDOW_SIZE)}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        </div>
+      ) : (
+        // The wrapper takes the room and the drawing fills it from outside the flow, so the card's height
+        // never depends on what the chart drew: in the flow, each render measured a couple of pixels
+        // taller than the last, and the row crept down under the Mc slider.
+        // `text-xs` is the size the chart draws its labels in, for measuring them.
+        <div
+          ref={plotRef}
+          className={cn("relative min-h-80 w-full flex-1 text-xs", focusRing)}
+          style={{ "--chart-w": size ? `${size.width}px` : undefined } as CSSProperties}
+        >
+          {drawn && size ? (
+            <Reading
+              size={size}
+              drawn={drawn}
+              data={data}
+              clip={clip}
+              title={t.bTimeTitle}
+              desc={
+                t.bTimeAlt(data[0]!.b.toFixed(2), data.at(-1)!.b.toFixed(2)) +
+                (incompleteRuns.length > 0
+                  ? t.bTimeAltIncomplete(
+                      incompleteRuns
+                        .map(([i, j]) => t.bTimeAltSpan(fmtDay(data[i]!.t, lang), fmtDay(data[j]!.t, lang)))
+                        .join(t.bTimeAltAnd),
+                    )
+                  : "")
+              }
+              marks={marks}
+              labels={labels}
+            />
+          ) : null}
+        </div>
+      )}
+      <BTimeKey stats={stats} other={other} otherKey={otherKey} />
+    </CardContent>
   );
 });
 

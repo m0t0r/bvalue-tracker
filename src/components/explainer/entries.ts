@@ -8,8 +8,9 @@
  * draws the link passes it, so the card cannot disagree with where the link goes.
  */
 import type { Lang } from "@/lib/startup";
+import { WINDOW_SIZE, WINDOW_STEP } from "@/lib/stats";
 import type { FigureId } from "./figures";
-import type { ExplainerId, LinkId, SourceId, TermId } from "./ids";
+import type { ChartId, ExplainerId, LinkId, SourceId, TermId } from "./ids";
 import sgcLogo from "./logos/sgc.svg";
 import type { MarkSpec } from "./mark";
 
@@ -48,7 +49,20 @@ export interface TermEntry {
   figure?: FigureId;
 }
 
-export type Entry = SourceEntry | LinkEntry | TermEntry;
+/**
+ * How to read one of the monitor's charts: a drawing, then a few short paragraphs. A `{placeholder}` in
+ * a paragraph is filled from `CHART_PARTS`: a term the page already explains opens its own card there,
+ * so the b-value and Mc are defined once, in their cards.
+ */
+export interface ChartEntry {
+  kind: "chart";
+  parts: L[];
+  /** A caution under the paragraphs, in smaller type. */
+  note?: L;
+  figure: FigureId;
+}
+
+export type Entry = SourceEntry | LinkEntry | TermEntry | ChartEntry;
 
 const tile = (text: string): MarkSpec => ({ kind: "tile", text });
 
@@ -371,7 +385,78 @@ const TERMS: Record<TermId, TermEntry> = {
   },
 };
 
-export const ENTRIES: Record<ExplainerId, Entry> = { ...SOURCES, ...LINKS, ...TERMS };
+export const CHARTS: Record<ChartId, ChartEntry> = {
+  fmd: {
+    kind: "chart",
+    parts: [
+      {
+        es: "Cuenta los eventos según su magnitud. Los cuadrados («Por intervalo de 0.1») dicen cuántos hay de cada magnitud, y los círculos («Acumulado»), cuántos hay de esa magnitud o mayor.",
+        en: "It counts the events by magnitude. The squares (“Per 0.1 bin”) show how many there are of each magnitude, and the circles (“Cumulative”) how many there are of that magnitude or larger.",
+      },
+      {
+        es: "El eje vertical es logarítmico: cada línea de la cuadrícula vale 10 veces la de abajo. Así caben en el mismo gráfico los cientos de eventos pequeños y los pocos grandes.",
+        en: "The vertical axis is logarithmic: each gridline is worth 10 times the one below. That way the hundreds of small events and the few large ones fit on one chart.",
+      },
+      {
+        es: "Por encima de la {mc}, los círculos siguen una recta, la ley de Gutenberg–Richter, y su pendiente es el {b}. A la izquierda de la Mc, los círculos quedan por debajo de donde seguiría la recta: ahí el catálogo deja de estar completo y faltan eventos pequeños.",
+        en: "Above {mc}, the circles follow a straight line, the Gutenberg–Richter law, and its slope is the {b}. Left of Mc, the circles fall below where the line would go on: there the catalogue stops being complete, and small events are missing.",
+      },
+    ],
+    figure: "fmd",
+  },
+  "b-over-time": {
+    kind: "chart",
+    parts: [
+      {
+        es: "La línea une el {b} de muchas «ventanas»: grupos de {n} eventos seguidos. Cada ventana se dibuja en la fecha de su último evento.",
+        en: "The line joins the {b} of many “windows”: runs of {n} events in a row. Each window is drawn at the date of its last event.",
+      },
+      {
+        es: "Cada ventana avanza {step} eventos sobre la anterior, así que dos vecinas comparten {shared} de sus {n} eventos: la línea parece más fiable de lo que es. Los puntos marcan ventanas sin eventos en común: solo esas son independientes.",
+        en: "Each window moves on {step} events from the one before, so two neighbours share {shared} of their {n} events: the line looks more reliable than it is. The dots mark windows with no events in common: only those are independent.",
+      },
+      {
+        es: "La banda es el margen de error (±1σ): un cambio más pequeño que la banda puede ser solo azar. Todas las ventanas usan la misma {mc}: así, de una a otra cambian los eventos, no la magnitud desde la que se cuentan.",
+        en: "The band is the margin of error (±1σ): a change smaller than the band may be only chance. Every window uses the same {mc}, so what changes from one to the next is the events, not the magnitude they are counted from.",
+      },
+    ],
+    note: {
+      es: "Describe cómo ha cambiado la secuencia. No es un pronóstico.",
+      en: "It describes how the sequence has changed. It is not a forecast.",
+    },
+    figure: "b-windows",
+  },
+  "magnitude-time": {
+    kind: "chart",
+    parts: [
+      {
+        es: "Cada punto es un evento: de izquierda a derecha, cuándo ocurrió, y en altura, su {magnitude}. La estrella es el {mainshock}, cuando la página encuentra uno claro.",
+        en: "Each dot is one event: left to right, when it happened, and in height, its {magnitude}. The star is the {mainshock}, when the page finds a clear one.",
+      },
+      {
+        es: "Las barras de abajo cuentan los eventos de cada día. Justo después de un sismo grande, las estaciones no alcanzan a detectar todos los eventos pequeños, así que los primeros días pueden mostrar menos de los que hubo.",
+        en: "The bars below count each day's events. Right after a large earthquake the stations miss some of the small events, so the first days may show fewer than there were.",
+      },
+    ],
+    figure: "magnitude-time",
+  },
+};
+
+/**
+ * What fills a chart paragraph's placeholders: a term that opens its own card on the word given here, or
+ * a figure the page computes with (the b-value windows' size and step, from `@bvalue/seismo`).
+ */
+export const CHART_PARTS = {
+  b: { term: "b-value", word: { es: "valor b", en: "b-value" } },
+  mc: { term: "mc", word: { es: "Mc", en: "Mc" } },
+  magnitude: { term: "magnitude", word: { es: "magnitud", en: "magnitude" } },
+  mainshock: { term: "mainshock", word: { es: "sismo principal", en: "mainshock" } },
+  n: { value: String(WINDOW_SIZE) },
+  step: { value: String(WINDOW_STEP) },
+  shared: { value: String(WINDOW_SIZE - WINDOW_STEP) },
+} satisfies Record<string, { term: TermId; word: L } | { value: string }>;
+
+export const ENTRIES: Record<ExplainerId, Entry> = { ...SOURCES, ...LINKS, ...TERMS, ...CHARTS };
 
 /** A link's publisher, whichever form it is named in. */
 export const publisherOf = (p: Publisher): { name: L; mark: MarkSpec } => (typeof p === "string" ? SOURCES[p] : p);
@@ -384,6 +469,7 @@ export const WORDS = {
     inLang: { es: "en español", en: "en inglés" },
     onThisPage: "En esta página:",
     whatItMeans: "Qué significa",
+    howToRead: "Cómo leer el gráfico",
     close: "Cerrar",
     fig: {
       eventsPerMagnitude: "eventos por magnitud",
@@ -410,6 +496,14 @@ export const WORDS = {
       shallow: "superficial",
       deep: "profundo",
       depthDown: "más abajo = más profundo",
+      eachMagnitude: "de cada magnitud",
+      orLarger: "de esa o mayor",
+      slopeIsB: "pendiente = b",
+      missedSmall: "faltan pequeños",
+      window: "ventana",
+      onePointPerWindow: "cada ventana se dibuja en su último evento",
+      mainshock: "sismo principal",
+      perDay: "eventos por día",
     },
   },
   en: {
@@ -418,6 +512,7 @@ export const WORDS = {
     inLang: { es: "in Spanish", en: "in English" },
     onThisPage: "On this page:",
     whatItMeans: "What it means",
+    howToRead: "How to read the chart",
     close: "Close",
     fig: {
       eventsPerMagnitude: "events per magnitude",
@@ -444,6 +539,14 @@ export const WORDS = {
       shallow: "shallow",
       deep: "deep",
       depthDown: "lower = deeper",
+      eachMagnitude: "of each magnitude",
+      orLarger: "of that or larger",
+      slopeIsB: "slope = b",
+      missedSmall: "small ones missed",
+      window: "window",
+      onePointPerWindow: "each window is drawn at its last event",
+      mainshock: "mainshock",
+      perDay: "events per day",
     },
   },
 } satisfies Record<Lang, unknown>;

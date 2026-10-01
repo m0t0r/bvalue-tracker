@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Explain } from "./explain";
@@ -172,6 +172,67 @@ describe("Explain on a term", () => {
       fireEvent.keyUp(word, { key: " " });
     });
     await view.findByRole("dialog", undefined, { timeout: 5000 });
+  });
+
+  // Issue #145: a chart's card links to the b-value's card rather than define it again.
+  it("opens a term named inside a chart's card as a card of its own", async () => {
+    const view = render(createElement(Explain, { id: "b-over-time", children: "b-value over time" }));
+    tap(view.getByRole("button", { name: "b-value over time" }));
+    const sheet = await view.findByRole("dialog", undefined, { timeout: 5000 });
+    expect(sheet.textContent).toContain("150 events in a row");
+    const inner = within(sheet).getByRole("button", { name: "b-value" });
+    expect(inner.getAttribute("aria-haspopup")).toBe("dialog");
+    tap(inner);
+    await waitFor(() =>
+      expect(view.getAllByRole("dialog").some((d) => d.textContent?.includes("How many small events"))).toBe(true),
+    );
+    // The chart's sheet is still there under it, to come back to.
+    expect(inner.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  // The chart's card is open, which counts as warm: without the pause, a pointer crossing its text would
+  // open every term it passed over at once.
+  it("keeps the hover's pause for a term inside an open card", async () => {
+    const view = render(createElement(Explain, { id: "fmd", children: "Frequency–magnitude distribution" }));
+    const name = view.getByRole("button", { name: "Frequency–magnitude distribution" });
+    act(() => {
+      fireEvent.pointerDown(name, { pointerType: "mouse" });
+      fireEvent.click(name, { detail: 1 });
+    });
+    const card = await view.findByRole("dialog", undefined, { timeout: 5000 });
+    const inner = within(card).getByRole("button", { name: "b-value" });
+    act(() => {
+      fireEvent.pointerEnter(inner, { pointerType: "mouse" });
+    });
+    await act(() => new Promise((r) => setTimeout(r, 150)));
+    expect(inner.getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() => expect(inner.getAttribute("aria-expanded")).toBe("true"));
+  });
+
+  // Code review: a key pressed in the inner card bubbles through the React tree to the chart's card too,
+  // which took the inner word, its own last stop, for the way out and closed as well.
+  it("Tab out of a term's card inside a chart's card closes the term's card only", async () => {
+    const view = render(createElement(Explain, { id: "fmd", children: "Frequency–magnitude distribution" }));
+    const click = (el: HTMLElement) =>
+      act(() => {
+        fireEvent.pointerDown(el, { pointerType: "mouse" });
+        fireEvent.click(el, { detail: 1 });
+      });
+    click(view.getByRole("button", { name: "Frequency–magnitude distribution" }));
+    const chart = await view.findByRole("dialog", undefined, { timeout: 5000 });
+    // The chart card's last stop: Mc comes before the b-value in its text.
+    const inner = within(chart).getByRole("button", { name: "b-value" });
+    click(inner);
+    await waitFor(() => expect(view.getAllByRole("dialog")).toHaveLength(2));
+    const card = view.getAllByRole("dialog").find((d) => d !== chart)!;
+    const last = within(card).getAllByRole("button").at(-1)!;
+    act(() => last.focus());
+    act(() => {
+      fireEvent.keyDown(last, { key: "Tab" });
+    });
+    await waitFor(() => expect(inner.getAttribute("aria-expanded")).toBe("false"));
+    expect(document.activeElement).toBe(inner);
+    expect(view.getAllByRole("dialog")).toEqual([chart]);
   });
 
   it("closes the sheet on a second tap", async () => {

@@ -10,6 +10,7 @@ import { BSummary } from "@/components/b-summary";
 import { BTimeKey } from "@/components/charts/b-over-time-key";
 import { BTimeCsvButton } from "@/components/charts/b-over-time-csv";
 import { bTimeDescription } from "@/components/charts/b-over-time-description";
+import { ChartName } from "@/components/charts/chart-name";
 import { fmdDescription } from "@/components/charts/fmd-description";
 import { MagnitudeTimePlaceholder } from "@/components/charts/magnitude-time-legend";
 import { ClustersCard } from "@/components/clusters-card";
@@ -207,7 +208,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                 />
                 <div className="lg:col-span-2">
                   <Deferred
-                    title={t.bTimeTitle}
+                    title={<ChartName chart="b-over-time" />}
                     placeholder={
                       <>
                         <Skeleton className="h-80 w-full" />
@@ -223,7 +224,6 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                       stats={deferred.stats}
                       other={deferred.other}
                       otherKey={bOtherKey}
-                      magType={deferred.magType}
                       cluster={deferred.cluster}
                       mainshockTime={view.mainshock.state === "found" ? view.mainshock.largest.time : null}
                     />
@@ -258,10 +258,10 @@ function ZonePage({ zone }: { zone: ZoneId }) {
               <>
                 <div className="enter grid gap-6 lg:grid-cols-2" style={{ "--i": 1 } as CSSProperties}>
                   <Deferred
-                    title={t.fmdTitle}
+                    title={<ChartName chart="fmd" />}
                     description={fmdDescription(t, deferred.stats, deferred.magType, deferred.cluster)}
                   >
-                    <FmdChart stats={deferred.stats} magType={deferred.magType} cluster={deferred.cluster} />
+                    <FmdChart stats={deferred.stats} />
                   </Deferred>
                   <Deferred
                     title={t.mapTitle}
@@ -274,7 +274,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
                 </div>
                 <div className="enter" style={{ "--i": 2 } as CSSProperties}>
                   <Deferred
-                    title={t.magTimeTitle}
+                    title={<ChartName chart="magnitude-time" />}
                     description={t.magTimeDesc}
                     placeholder={<MagnitudeTimePlaceholder />}
                   >

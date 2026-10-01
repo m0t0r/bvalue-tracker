@@ -26,7 +26,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import type { StoredEvent } from "@/lib/api";
 import { DAY, dailyCounts, type DayRange } from "@/lib/daily-counts";
 import { pickDay, spanDays } from "@/lib/day-selection";
@@ -695,27 +695,21 @@ export const MagnitudeTimeChart = memo(function MagnitudeTimeChart({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t.magTimeTitle}</CardTitle>
-        <CardDescription>{t.magTimeDesc}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {/* Shared with the placeholder (`MagnitudeTimePlaceholder`), so the card keeps its height when the chart lands. */}
-        <ClusterLegend />
-        <div
-          ref={setScroller}
-          onScroll={onScroll}
-          onKeyDown={onKeyDown}
-          role="group"
-          aria-label={t.magTimeRegion}
-          tabIndex={0}
-          className="overflow-x-auto overscroll-x-contain rounded-sm text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring"
-        >
-          {drawing}
-        </div>
-        <DailyLine days={days} count={picked} onShow={onShowPicked} />
-      </CardContent>
-    </Card>
+    <CardContent className="flex flex-col gap-3">
+      {/* Shared with the placeholder (`MagnitudeTimePlaceholder`), so the card keeps its height when the chart lands. */}
+      <ClusterLegend />
+      <div
+        ref={setScroller}
+        onScroll={onScroll}
+        onKeyDown={onKeyDown}
+        role="group"
+        aria-label={t.magTimeRegion}
+        tabIndex={0}
+        className="overflow-x-auto overscroll-x-contain rounded-sm text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      >
+        {drawing}
+      </div>
+      <DailyLine days={days} count={picked} onShow={onShowPicked} />
+    </CardContent>
   );
 });

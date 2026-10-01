@@ -58,7 +58,6 @@ function draw(s: Stats, props: { other?: Stats | null; otherKey?: string | null;
       stats: next,
       other: props.other ?? null,
       otherKey: props.otherKey ?? null,
-      magType: null,
       cluster: null,
       mainshockTime: props.mainshockTime ?? null,
     });

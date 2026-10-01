@@ -283,14 +283,19 @@ const es = {
   tableDays: (days: string, n: string, of: string) => `Solo ${days}: ${n} de ${of} eventos`,
   magTimeRegion: "Magnitud en el tiempo y eventos por día; gráficos desplazables en horizontal",
   fmdTitle: "Distribución frecuencia–magnitud",
-  fmdDesc: "Escala logarítmica. La recta es la ley de Gutenberg–Richter ajustada por encima de Mc.",
+  // The card says what the chart shows, in the open; the chart's name opens how to read it (issue #145).
+  fmdDesc: "Cuántos eventos hay de cada magnitud.",
+  /** The drawing's own text alternative, which says what it draws. */
+  fmdAlt: "Escala logarítmica. La recta es la ley de Gutenberg–Richter ajustada por encima de Mc.",
   fmdIsolated: (mag: string) => `El punto aislado a la derecha es el evento de mayor magnitud (M${mag}).`,
   cumulative: "Acumulado N(≥M)",
   perBin: "Por intervalo de 0.1",
   grFit: "Ajuste G–R",
   bTimeTitle: "Valor b en el tiempo",
-  bTimeDesc: (n: number, mc: string, shared: number) =>
-    `Ventanas móviles de ${n} eventos con Mc fija = ${mc}, cada una situada en su último evento. Cada ventana comparte ${shared} eventos con la anterior, así que la línea parece más fiable de lo que es. Los puntos marcan ventanas sin ningún evento en común. Banda: margen de error (±1σ).`,
+  // The caution stays in the open (docs/science.md); what a window, the dots and the band are is in the
+  // chart's card, which its name opens (issue #145).
+  bTimeDesc: (n: number, mc: string) =>
+    `El valor b en ventanas de ${n} eventos seguidos, con Mc fija = ${mc}. Las ventanas se solapan, así que la línea parece más fiable de lo que es.`,
   bTimeKeyIndependent: "ventanas sin eventos en común",
   bTimeKeyIncomplete: "pueden faltar eventos pequeños: b puede salir más bajo",
   bTimeTipIncomplete: (own: string, mc: string) =>
@@ -577,14 +582,15 @@ const en: Dict = {
   tableDays: (days, n, of) => `Only ${days}: ${n} of ${of} events`,
   magTimeRegion: "Magnitude over time and events per day; horizontally scrollable charts",
   fmdTitle: "Frequency–magnitude distribution",
-  fmdDesc: "Log scale. The line is the Gutenberg–Richter law fitted above Mc.",
+  fmdDesc: "How many events there are of each magnitude.",
+  fmdAlt: "Log scale. The line is the Gutenberg–Richter law fitted above Mc.",
   fmdIsolated: (mag: string) => `The isolated point on the right is the largest event (M${mag}).`,
   cumulative: "Cumulative N(≥M)",
   perBin: "Per 0.1 bin",
   grFit: "G–R fit",
   bTimeTitle: "b-value over time",
-  bTimeDesc: (n, mc, shared) =>
-    `Sliding windows of ${n} events at a fixed Mc = ${mc}, each placed at its last event. Each window shares ${shared} events with the one before, so the line looks more reliable than it is. The dots mark windows with no events in common. Band: margin of error (±1σ).`,
+  bTimeDesc: (n, mc) =>
+    `The b-value in windows of ${n} events in a row, at a fixed Mc = ${mc}. The windows overlap, so the line looks more reliable than it is.`,
   bTimeKeyIndependent: "windows with no events in common",
   bTimeKeyIncomplete: "small events may be missing: b may come out lower",
   bTimeTipIncomplete: (own, mc) => `The window's own Mc: ${own}, above ${mc}. Small events may be missing.`,

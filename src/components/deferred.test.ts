@@ -1,5 +1,5 @@
 import { act, cleanup, render } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, lazy } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Deferred } from "./deferred";
 
@@ -66,5 +66,34 @@ describe("Deferred", () => {
     expect(view.queryByText("drawing")).not.toBeNull();
     act(() => observers.at(-1)!.fire(false));
     expect(view.queryByText("drawing")).not.toBeNull();
+  });
+
+  // Issue #145: a chart's name opens its explainer, and a reader can press it in the placeholder. The
+  // header is drawn once, so the chunk landing does not take an open card, or the focus, with it.
+  it("keeps the header's own elements when the drawing lands, chunk or no chunk", async () => {
+    let arrive!: () => void;
+    const chunk = new Promise<void>((r) => (arrive = r));
+    // The chart's chunk, held back until the test lets it arrive.
+    const Drawing = lazy(() => chunk.then(() => ({ default: () => createElement("p", null, "drawing") })));
+    const view = render(
+      createElement(Deferred, {
+        title: createElement("button", null, "Title"),
+        description: "d",
+        action: createElement("button", null, "Action"),
+        children: createElement(Drawing),
+      }),
+    );
+    const title = view.getByRole("button", { name: "Title" });
+    const action = view.getByRole("button", { name: "Action" });
+    act(() => title.focus());
+    act(() => observers.at(-1)!.fire(true));
+    await act(async () => {
+      arrive();
+      await chunk;
+    });
+    expect(view.queryByText("drawing")).not.toBeNull();
+    expect(view.getByRole("button", { name: "Title" })).toBe(title);
+    expect(view.getByRole("button", { name: "Action" })).toBe(action);
+    expect(document.activeElement).toBe(title);
   });
 });
