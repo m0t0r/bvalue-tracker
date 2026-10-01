@@ -310,9 +310,10 @@ export async function sgcHealth(db: D1Database): Promise<SgcHealth> {
     streak.push(r);
   }
   const limited = await db
-    // The IN list matches the partial index ingest_runs_rate_limited exactly; keep them
-    // together. finished_at is never null for these rows, but saying so keeps Date.parse
-    // below off a NaN path rather than relying on finish() being the only writer.
+    // The whole WHERE and the ORDER BY match the partial index ingest_runs_rate_limited
+    // exactly (0009); keep them together, or the planner walks every run instead.
+    // finished_at is never null for these rows, but saying so keeps Date.parse below off a
+    // NaN path rather than relying on finish() being the only writer.
     .prepare(`SELECT finished_at, retry_after_s FROM ingest_runs
               WHERE http_status IN (429, 503) AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1`)
     .first<{ finished_at: string; retry_after_s: number | null }>();

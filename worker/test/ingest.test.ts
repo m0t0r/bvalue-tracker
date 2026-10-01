@@ -976,7 +976,7 @@ describe("the last run is answered from an index", () => {
 
   // This half once used ingest_runs_ok and then materialised every matching row into a
   // temporary b-tree to sort it — ~28,000 rows at three months, to answer "what happened
-  // last?". Checked against the whole index set, which still holds ingest_runs_ok.
+  // last?". Checked against the whole index set.
   it("sorts nothing to find a zone's last successful run", async () => {
     const detail = await plan(
       "SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND zone = ?1 AND ok = 1 ORDER BY id DESC LIMIT 1",
@@ -984,6 +984,28 @@ describe("the last run is answered from an index", () => {
     );
     expect(detail).toContain("ingest_runs_zone_finished_ok");
     expect(detail).not.toContain("TEMP B-TREE");
+  });
+
+  // sgcHealth's newest 429 or 503, on every tick and every POST /api/refresh. Until 0009 the
+  // planner walked ingest_runs_finished instead, because it matched the ORDER BY and the
+  // `finished_at IS NOT NULL`, and read the whole table whenever SGC had never rate-limited us:
+  // production's top query by rows read, ~1,400 a call (D1 insights, 2026-10-01).
+  it("finds the newest rate limit in the partial index, not by walking every run", async () => {
+    const detail = await plan(
+      "SELECT finished_at, retry_after_s FROM ingest_runs WHERE http_status IN (429, 503) AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1",
+    );
+    expect(detail).toContain("ingest_runs_rate_limited");
+    expect(detail).not.toContain("TEMP B-TREE");
+  });
+
+  // backfillProgress and ingestSweep's order, on every wide tick: covering, so neither reads the table.
+  it("reads a zone's sweep rows from the covering index alone", async () => {
+    for (const sql of [
+      "SELECT DISTINCT window_start AS s FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' AND ok = 1",
+      "SELECT window_start AS s, MAX(started_at) AS last FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' GROUP BY window_start",
+    ]) {
+      expect(await plan(sql, "tolima")).toContain("COVERING INDEX ingest_runs_sweep");
+    }
   });
 
   it("still answers both correctly", async () => {

@@ -201,6 +201,25 @@ picture, because the planner prefers that one's equality seek and keeps the sort
 `EXPLAIN QUERY PLAN` against the **whole index set**, never against the index you just
 wrote in isolation.
 
+**0005 then broke 0003, and nothing noticed for two weeks** (found 2026-10-01). `sgcHealth`'s
+rate-limit lookup also says `finished_at IS NOT NULL ORDER BY id DESC`, which
+`ingest_runs_finished` matches, so the planner walked that index instead of the partial one and
+read every run SGC had not refused, which is all of them. It was production's top query by rows
+read, ~1,400 a call. `migrations/0009` makes the partial index cover the same predicate and order,
+and drops `ingest_runs_ok`, which no plan used any more. Two habits came out of it:
+
+- **Read production's figures, not only the plans.** `pnpm exec wrangler d1 insights sgc-swarm
+  --timePeriod 7d --sort-by reads --json` lists each query shape with its average rows read. A
+  hot query reading about as many rows as `ingest_runs` holds has lost its index.
+- **Every hot query over `ingest_runs` has a plan assertion** in `worker/test/ingest.test.ts`, so
+  an index added later that pulls the planner away fails a test instead of a bill.
+
+What is left reading many rows, and why it stays (same check): the `COUNT(*)` over a zone's
+events for `/api/status` and `/api/health`, and the catalogue itself, read the zone's events
+because that is the answer (a count has no shortcut short of a counter table, at ~1,000 rows a
+call); the mainshock lookup sorts the zone by `mag`, which runs about twice a day (see
+`zoneMainshockRow`); `backfillProgress` reads the zone's sweep rows, ~124, through a covering index.
+
 <a id="the-cpu-budget"></a>
 ### The CPU budget
 
