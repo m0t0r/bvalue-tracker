@@ -16,6 +16,11 @@ const esCommon = {
   /** Short-term aftershock incompleteness, for any zone with a mainshock. */
   afterMainshock:
     "Justo después del sismo principal se pierden eventos pequeños; las primeras ventanas son las menos fiables.",
+  /**
+   * What a notice about an unfinished history promises on both pages: the page starts it and the cron
+   * carries it on. It does not say "nothing to do": the monitor's notice has a button that asks for it now.
+   */
+  completesItself: "Se completa solo.",
 };
 
 /**
@@ -46,15 +51,15 @@ const es = {
       title: "Secuencia sísmica del Chocó",
       subtitle: "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del {sgc}.",
       backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} semanas`,
-      backfillBody:
-        "Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine.",
+      backfillBody: `Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine. ${esCommon.completesItself}`,
       caveats: (m: CaveatState) => [
         esCommon.notForecast,
         esCommon.floor,
         esCommon.magTypes,
         ...(m === "found" ? [esCommon.afterMainshock] : []),
         esCommon.revisions,
-        "La secuencia está formada por dos grupos de eventos a distinta profundidad. Al 19 de septiembre de 2026, el grupo profundo, el del sismo principal, tuvo casi toda su actividad en la primera semana; casi todo lo posterior es del grupo superficial, y es ahí donde baja el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
+        // Said of what happened, in the past tense and with no date, so it does not age as the catalogue grows.
+        "La secuencia está formada por dos grupos de eventos a distinta profundidad. El grupo profundo, el del sismo principal, concentró casi toda su actividad en la primera semana; después casi todo vino del grupo superficial, y es ahí donde bajó el valor b. El valor b del grupo profundo sale de pocos eventos, así que su margen de error es amplio.",
         esCommon.mainshockRule,
       ],
     },
@@ -64,8 +69,7 @@ const es = {
       title: "Enjambre sísmico de Chaparral (Tolima)",
       subtitle: "Enjambre de eventos en Chaparral, Tolima, desde el 20 de septiembre de 2026. Datos del {sgc}.",
       backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} días`,
-      backfillBody:
-        "Todavía faltan días desde el 20 de septiembre. El valor b y los gráficos no son representativos hasta que termine.",
+      backfillBody: `Todavía faltan días desde el 20 de septiembre. El valor b y los gráficos no son representativos hasta que termine. ${esCommon.completesItself}`,
       caveats: (m: CaveatState) => [
         "El valor b describe el enjambre: cuánto pesan los eventos grandes frente a los pequeños. No es un pronóstico ni una alerta.",
         esCommon.floor,
@@ -92,6 +96,13 @@ const es = {
     },
   },
   events: "Eventos",
+  /**
+   * The hint under the count while a filter narrows it: the catalogue's total, said as the total of the
+   * catalogue (a bare "/ 1037" said of what). On a phone it shares a row with the mainshock, so it has a
+   * shorter form. Unfiltered there is no hint: the count is the whole catalogue.
+   */
+  eventsOfCatalogue: (n: string) => `de ${n} en el catálogo`,
+  eventsOfCatalogueShort: (n: string) => `de ${n} en total`,
   newestEvent: "Evento más reciente",
   lastUpdate: "Última consulta al SGC",
   /** The last-query note beside the refresh button on a phone (`*Short` below `sm`). */
@@ -122,7 +133,7 @@ const es = {
   refreshCooldown: (s: number) => `No se pudo actualizar. Inténtalo de nuevo en ${s} s.`,
   /** What a screen reader hears instead, once: the countdown would be read out every second. */
   refreshCooldownSr: (s: number) => `No se pudo actualizar. Inténtalo de nuevo en ${s} segundos.`,
-  refreshStillFailing: "No se envió: ya hay un reintento en camino.",
+  refreshStillFailing: "La página ya reintenta; no hace falta pulsar.",
   ingestFailed: "La última consulta al SGC falló",
   ingestFailedBody:
     "Se muestran los últimos datos guardados. La consulta se repetirá automáticamente hasta que el SGC vuelva a responder; no hace falta recargar.",
@@ -139,7 +150,8 @@ const es = {
   loadStrugglingBody: "La página lo vuelve a intentar sola.",
   /** Drawn only: read out, the count would be news at every retry. */
   loadAttempt: (n: number, of: number) => `Intento ${n} de ${of}`,
-  backfillAction: "Cargar ahora",
+  completesItself: esCommon.completesItself,
+  backfillAction: "Cargar lo que falta ahora",
   backfillShort: "Historial incompleto",
   scopeTitle: (shown: string, total: string) => `Mostrando ${shown} de ${total} eventos`,
   scopeShort: (shown: string, total: string) => `${shown} de ${total}`,
@@ -338,7 +350,14 @@ const es = {
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
   autoUpdateLong: (min: number) =>
     `El catálogo se consulta al SGC cada ${min} minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.`,
-  timeNote: "Las fechas y horas son de Colombia (UTC−5). Los CSV descargados usan UTC.",
+  /**
+   * The footer both pages share (`SiteFooter`): what the page is, and the one place the zone of every
+   * time on it is stated. The monitor adds the CSV line, since it is the page that downloads them.
+   */
+  disclaimer:
+    "Página independiente, sin relación con el SGC. Las cifras que calcula esta página describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
+  timeNote: "Las fechas y horas son de Colombia (UTC−5).",
+  timeNoteCsv: "Los CSV descargados usan UTC.",
 };
 
 export type Dict = typeof es;
@@ -354,6 +373,7 @@ const enCommon = {
   mainshockRule:
     "The page calls the largest event the mainshock only if an SGC analyst has reviewed it and it exceeds every other event by at least 1 magnitude unit, comparing magnitudes as SGC publishes them. The label is retrospective: if a larger event came later, the earlier one would become a foreshock.",
   afterMainshock: "Right after the mainshock small events are missed; the earliest windows are the least reliable.",
+  completesItself: "It completes by itself.",
 };
 
 const en: Dict = {
@@ -368,15 +388,14 @@ const en: Dict = {
       title: "Chocó earthquake sequence",
       subtitle: "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the {sgc}.",
       backfillTitle: (a, b) => `Loading history: ${a} of ${b} weeks`,
-      backfillBody:
-        "Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes.",
+      backfillBody: `Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes. ${enCommon.completesItself}`,
       caveats: (m) => [
         enCommon.notForecast,
         enCommon.floor,
         enCommon.magTypes,
         ...(m === "found" ? [enCommon.afterMainshock] : []),
         enCommon.revisions,
-        "The sequence is two groups of events at different depths. As of 19 September 2026 the deep group, the mainshock's own, had nearly all of its activity in the first week; almost everything since belongs to the shallow group, and that is where the b-value falls. The deep group's b-value comes from few events, so its margin of error is wide.",
+        "The sequence is two groups of events at different depths. The deep group, the mainshock's own, had nearly all of its activity in the first week; after that almost everything came from the shallow group, and that is where the b-value fell. The deep group's b-value comes from few events, so its margin of error is wide.",
         enCommon.mainshockRule,
       ],
     },
@@ -386,8 +405,7 @@ const en: Dict = {
       title: "Chaparral earthquake swarm (Tolima)",
       subtitle: "Swarm of events at Chaparral, Tolima, since 20 September 2026. Data from the {sgc}.",
       backfillTitle: (a, b) => `Loading history: ${a} of ${b} days`,
-      backfillBody:
-        "Days since 20 September are still missing. The b-value and charts are not representative until this finishes.",
+      backfillBody: `Days since 20 September are still missing. The b-value and charts are not representative until this finishes. ${enCommon.completesItself}`,
       caveats: (m) => [
         "The b-value describes the swarm: how much the large events weigh against the small ones. It is not a forecast or an alert.",
         enCommon.floor,
@@ -406,6 +424,8 @@ const en: Dict = {
     },
   },
   events: "Events",
+  eventsOfCatalogue: (n) => `of ${n} in the catalogue`,
+  eventsOfCatalogueShort: (n) => `of ${n} in total`,
   newestEvent: "Newest event",
   lastUpdate: "Last SGC query",
   lastUpdateShort: "Last SGC query",
@@ -423,7 +443,7 @@ const en: Dict = {
   refreshFailed: "Could not refresh. Try again.",
   refreshCooldown: (s) => `Could not refresh. Try again in ${s} s.`,
   refreshCooldownSr: (s) => `Could not refresh. Try again in ${s} seconds.`,
-  refreshStillFailing: "Not sent: a retry is already on the way.",
+  refreshStillFailing: "The page is retrying; no need to press.",
   ingestFailed: "The last SGC query failed",
   ingestFailedBody:
     "Showing the most recent stored data. The page retries by itself until SGC answers again; there is no need to reload.",
@@ -435,7 +455,8 @@ const en: Dict = {
   loadStruggling: "Could not load the data yet",
   loadStrugglingBody: "The page is trying again by itself.",
   loadAttempt: (n, of) => `Attempt ${n} of ${of}`,
-  backfillAction: "Load now",
+  completesItself: enCommon.completesItself,
+  backfillAction: "Load what is missing now",
   backfillShort: "History incomplete",
   scopeTitle: (shown, total) => `Showing ${shown} of ${total} events`,
   scopeShort: (shown, total) => `${shown} of ${total}`,
@@ -615,7 +636,10 @@ const en: Dict = {
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
   autoUpdateLong: (min) =>
     `The catalogue is read from SGC every ${min} minutes. While this page is open, the figures, charts and map update by themselves, with no reload.`,
-  timeNote: "Dates and times are Colombia time (UTC−5). Downloaded CSVs use UTC.",
+  disclaimer:
+    "An independent page, not affiliated with SGC. The figures this page computes describe what has already happened and are not a forecast. For official information, consult the Servicio Geológico Colombiano.",
+  timeNote: "Dates and times are Colombia time (UTC−5).",
+  timeNoteCsv: "Downloaded CSVs use UTC.",
 };
 
 /** Exported for the tests, which assert on strings without mounting the page. */

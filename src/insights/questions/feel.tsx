@@ -76,7 +76,7 @@ export function FeelExplorer({
   return (
     <Figure caption={c.caption(P_WAVE_KMS, S_WAVE_KMS)}>
       <div className="grid gap-6 md:grid-cols-2">
-        <MiniMap data={data} epi={epi} source={active?.event} ringKm={ringKm} refNamed={ref} />
+        <MiniMap data={data} epi={epi} source={active?.event} ringKm={ringKm} />
         <div className="flex flex-col gap-5">
           <Choice
             label={c.pick}
@@ -155,13 +155,11 @@ function MiniMap({
   epi,
   source,
   ringKm,
-  refNamed,
 }: {
   data: Insights;
   epi: number;
   source?: { lat: number; lon: number };
   ringKm: number;
-  refNamed: Named;
 }) {
   const { lang } = useI18n();
   const measure = useTextWidth();
@@ -213,12 +211,12 @@ function MiniMap({
   const labels = (
     [
       { s: "shallow", lat: 4.3, lon: -76.95, text: c.labelShallow },
-      { s: "deep", lat: 5.14, lon: -76.3, text: c.labelDeep(refNamed) },
+      { s: "deep", lat: 5.14, lon: -76.3, text: c.labelDeep },
       { s: "tolima", lat: 3.6, lon: -75.55, text: c.labelTolima },
     ] as const
   ).map((l) => {
     const [x, y] = project(l.lon, l.lat);
-    // Kept inside the map: centred on its point, "● Istmina–Sipí" began 8 px past the left edge
+    // Kept inside the map: centred on its point, a label began 8 px past the left edge
     // at 320 px. Measured in screen pixels, then scaled to the map's viewBox units.
     const width = measure(`● ${l.text}`, 12, { weight: 600 }) * k;
     const at = Math.min(MAP - 4 - width / 2, Math.max(4 + width / 2, x));

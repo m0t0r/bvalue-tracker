@@ -5,11 +5,12 @@
  * own module (`story/copy.ts`, `questions/copy.ts`) and uses these for anything that depends on
  * the data.
  *
- * Decimal point in every number, as on the main page and at SGC ("M4.5", "4.8 al día").
+ * Decimal point in every number, as on the main page and at SGC ("M4.5", "4.8 por día").
  */
-import type { Lang } from "@/lib/i18n";
-import { fmtClock, fmtDayLong } from "@/lib/format";
+import { dicts, type Lang } from "@/lib/i18n";
+import { fmtClock, fmtDayLong, fmtDaysSpan } from "@/lib/format";
 import { fmtInt, fmtPct } from "./shared";
+import { sourceShort } from "./source-names";
 import {
   SOURCES,
   compassPoint,
@@ -159,18 +160,17 @@ const percentEn = (p: Percent) =>
 const deSource = (s: Source) => `de ${es.source[s]}`.replace(/^de el /, "del ");
 
 const es = {
-  docTitle: "¿Qué está pasando? · sismos del Chocó y Tolima",
+  docTitle: "¿Qué está pasando? · sismos del Chocó y del Tolima",
   title: "¿Qué está pasando?",
   subtitle:
     "Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto, explicados en palabras sencillas con los datos del {sgc}.",
   sgcName: "Servicio Geológico Colombiano",
-  back: "Volver al inicio",
+  back: "Ver los datos en vivo",
   tabsLabel: "Forma de verlo",
   tabs: { story: "La historia", questions: "Preguntas", "3d": "En 3D" },
   loading: "Cargando los catálogos…",
   incompleteTitle: "Todavía se está cargando el historial",
-  incompleteBody:
-    "Aún faltan eventos por cargar. Hasta que estén todos, las cifras de esta página y lo que se dice de ellas no son representativas. Se completa solo; no hace falta hacer nada.",
+  incompleteBody: `Aún faltan eventos por cargar. Hasta que estén todos, las cifras de esta página y lo que se dice de ellas no son representativas. ${dicts.es.completesItself}`,
   /** The monitor's line in its own words (`staleSince` in `src/lib/i18n.tsx`), with what it means here. */
   staleTitle: "Los datos no se están actualizando",
   /** `at`: when the oldest data on screen was fetched; the time alone when that was today. */
@@ -179,20 +179,14 @@ const es = {
     return `No se pudieron actualizar: lo que ves es ${day === null ? "de las" : `del ${day} a las`} ${time}, y se actualizará solo.`;
   },
   dataUpTo: (ms: number, lang: Lang) => `Datos del SGC hasta el ${fmtDayLong(ms, lang)}`,
-  footer:
-    "Página independiente, sin relación con el SGC. Las cifras que calcula esta página describen lo que ya ocurrió y no son un pronóstico. Para información oficial, consulta al Servicio Geológico Colombiano.",
-  timeNote: "Las fechas y horas son de Colombia (UTC−5).",
   backToTop: "Volver arriba",
 
   source: {
-    shallow: "el grupo superficial del Chocó (Istmina–Sipí)",
-    deep: "el grupo profundo del Chocó, junto al M7.4",
+    shallow: "el grupo superficial del Chocó",
+    deep: "el grupo profundo del Chocó",
     tolima: "el enjambre de Chaparral (Tolima)",
   } satisfies Record<Source, string>,
-  sourceShort: { shallow: "Chocó superficial", deep: "Chocó profundo", tolima: "Chaparral" } satisfies Record<
-    Source,
-    string
-  >,
+  sourceShort: sourceShort.es,
 
   claims: {
     /** Where the last week's strong events came from. */
@@ -215,12 +209,12 @@ const es = {
     /** A source's recent pace against its own usual one. */
     pace: (p: Pace, lang: Lang): string => {
       if (p.case === "young") return "Aún es pronto para saber cuál es su ritmo habitual.";
-      const rate = `${zero(p.recentPerDay) ? "ningún evento" : `${f1(p.recentPerDay)} eventos al día`} en los últimos 5 días, frente a unos ${f0(p.usualPerDay)} en un día típico (contando eventos de M${f1(p.mc)} o más)`;
+      const rate = `${zero(p.recentPerDay) ? "ningún evento" : `${f1(p.recentPerDay)} eventos por día`} en los últimos 5 días, frente a unos ${f0(p.usualPerDay)} en un día típico (contando eventos de M${f1(p.mc)} o más)`;
       if (p.case === "quieter") {
         const since = p.quietSince === null ? "" : ` desde el ${fmtDayLong(p.quietSince, lang)}`;
         const before = p.pastLulls.find((l) => l.recovered);
         const again = before
-          ? ` Algo así ya ocurrió entre el ${fmtDayLong(before.from, lang)} y el ${fmtDayLong(before.to, lang)}, y luego volvió a su ritmo; por eso todavía no se sabe si es una pausa o el final.`
+          ? ` Algo así ya ocurrió ${fmtDaysSpan(before.from, before.to, lang)}, y luego volvió a su ritmo; por eso todavía no se sabe si es una pausa o el final.`
           : " Todavía no se sabe si es una pausa o el final.";
         return `Está más tranquilo${since}: ${rate}.${again}`;
       }
@@ -231,8 +225,8 @@ const es = {
     decay: (d: Decay): string => {
       if (d.case === "young") return "Todavía es pronto para ver cómo se apagan sus réplicas.";
       if (d.case === "decayed")
-        return `Se ha apagado como suelen hacerlo las réplicas: de unos ${f0(d.firstWeekPerDay)} eventos al día en la primera semana a ${zero(d.lastWeekPerDay) ? "ninguno" : f1(d.lastWeekPerDay)} en la última.`;
-      return `No se ha apagado como suelen hacerlo las réplicas: ${f1(d.firstWeekPerDay)} eventos al día en la primera semana y ${zero(d.lastWeekPerDay) ? "ninguno" : f1(d.lastWeekPerDay)} en la última.`;
+        return `Se ha apagado como suelen hacerlo las réplicas: de unos ${f0(d.firstWeekPerDay)} eventos por día en la primera semana a ${zero(d.lastWeekPerDay) ? "ninguno" : f1(d.lastWeekPerDay)} en la última.`;
+      return `No se ha apagado como suelen hacerlo las réplicas: ${f1(d.firstWeekPerDay)} eventos por día en la primera semana y ${zero(d.lastWeekPerDay) ? "ninguno" : f1(d.lastWeekPerDay)} en la última.`;
     },
     /** The swarm's drift. Always a hint, never a finding. */
     drift: (d: Drift): string => {
@@ -317,30 +311,26 @@ const en: Copy = {
   subtitle:
     "The earthquakes felt in Colombia's coffee region since 10 August, explained in plain words with data from the {sgc}.",
   sgcName: "Colombian Geological Survey (SGC)",
-  back: "Back to home",
+  back: "See the live data",
   tabsLabel: "How to look at it",
   tabs: { story: "The story", questions: "Questions", "3d": "In 3D" },
   loading: "Loading the catalogues…",
   incompleteTitle: "The history is still loading",
-  incompleteBody:
-    "Some events have not loaded yet. Until they all have, the figures on this page and what is said about them are not representative. It completes by itself; there is nothing you need to do.",
+  incompleteBody: `Some events have not loaded yet. Until they all have, the figures on this page and what is said about them are not representative. ${dicts.en.completesItself}`,
   staleTitle: "The data is not updating",
   staleBody: (at, now, lang) => {
     const { time, day } = since(at, now, lang);
     return `It could not be updated: what you see is from ${time}${day === null ? "" : ` on ${day}`}, and it will update by itself.`;
   },
   dataUpTo: (ms, lang) => `SGC data up to ${fmtDayLong(ms, lang)}`,
-  footer:
-    "An independent page, not affiliated with SGC. The figures this page computes describe what has already happened and are not a forecast. For official information, consult the Servicio Geológico Colombiano.",
-  timeNote: "Dates and times are Colombia time (UTC−5).",
   backToTop: "Back to top",
 
   source: {
-    shallow: "Chocó's shallow group (Istmina–Sipí)",
-    deep: "Chocó's deep group, around the M7.4",
+    shallow: "Chocó's shallow group",
+    deep: "Chocó's deep group",
     tolima: "the Chaparral swarm (Tolima)",
   },
-  sourceShort: { shallow: "Chocó shallow", deep: "Chocó deep", tolima: "Chaparral" },
+  sourceShort: sourceShort.en,
 
   claims: {
     strongMix: (m, minMag, days) => {
@@ -361,12 +351,12 @@ const en: Copy = {
     },
     pace: (p, lang) => {
       if (p.case === "young") return "It is too recent to know what its usual pace is.";
-      const rate = `${zero(p.recentPerDay) ? "no events in" : `${f1(p.recentPerDay)} events a day over`} the last 5 days, against about ${f0(p.usualPerDay)} on a typical day (counting from M${f1(p.mc)})`;
+      const rate = `${zero(p.recentPerDay) ? "no events in" : `${f1(p.recentPerDay)} events per day over`} the last 5 days, against about ${f0(p.usualPerDay)} on a typical day (counting from M${f1(p.mc)})`;
       if (p.case === "quieter") {
         const since = p.quietSince === null ? "" : ` since ${fmtDayLong(p.quietSince, lang)}`;
         const before = p.pastLulls.find((l) => l.recovered);
         const again = before
-          ? ` It did this once before, from ${fmtDayLong(before.from, lang)} to ${fmtDayLong(before.to, lang)}, and then picked up again, so it is too early to tell a pause from an end.`
+          ? ` It did this once before, ${fmtDaysSpan(before.from, before.to, lang)}, and then picked up again, so it is too early to tell a pause from an end.`
           : " It is too early to tell a pause from an end.";
         return `It has been quieter${since}: ${rate}.${again}`;
       }
@@ -377,9 +367,9 @@ const en: Copy = {
       if (d.case === "young") return "It is still too early to see how its aftershocks fade.";
       if (d.case === "decayed")
         return zero(d.lastWeekPerDay)
-          ? `It has faded like ordinary aftershocks: from about ${f0(d.firstWeekPerDay)} events a day in the first week to none in the last.`
-          : `It has faded like ordinary aftershocks: about ${f0(d.firstWeekPerDay)} events a day in the first week, ${f1(d.lastWeekPerDay)} a day in the last.`;
-      return `It has not faded like ordinary aftershocks: ${f1(d.firstWeekPerDay)} events a day in the first week and ${zero(d.lastWeekPerDay) ? "none" : f1(d.lastWeekPerDay)} in the last.`;
+          ? `It has faded like ordinary aftershocks: from about ${f0(d.firstWeekPerDay)} events per day in the first week to none in the last.`
+          : `It has faded like ordinary aftershocks: about ${f0(d.firstWeekPerDay)} events per day in the first week, ${f1(d.lastWeekPerDay)} per day in the last.`;
+      return `It has not faded like ordinary aftershocks: ${f1(d.firstWeekPerDay)} events per day in the first week and ${zero(d.lastWeekPerDay) ? "none" : f1(d.lastWeekPerDay)} in the last.`;
     },
     drift: (d) => {
       if (d.case === "too-few")

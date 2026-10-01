@@ -322,6 +322,34 @@ describe("a rate of zero", () => {
   }
 });
 
+/**
+ * "entre el 4 de septiembre y el 8 de septiembre" said the month twice (issue #143). The earlier lull is
+ * dated as a span, the month once when both ends share it.
+ */
+describe("the earlier lull in the pace sentence", () => {
+  const day = (iso: string) => Date.parse(`${iso}T05:00:00Z`);
+  const quiet = (lang: "es" | "en", from: string, to: string) =>
+    insightsCopy[lang].claims.pace(
+      {
+        case: "quieter",
+        recentPerDay: 4.8,
+        usualPerDay: 10,
+        mc: 2.3,
+        recentM4: 0,
+        pastLulls: [{ from: day(from), to: day(to), recovered: true }],
+        quietSince: null,
+      },
+      lang,
+    );
+
+  it("names the month once within a month, and both across two", () => {
+    expect(quiet("es", "2026-09-04", "2026-09-08")).toContain("ya ocurrió entre el 4 y el 8 de septiembre, y luego");
+    expect(quiet("en", "2026-09-04", "2026-09-08")).toContain("once before, from 4 to 8 September, and then");
+    expect(quiet("es", "2026-08-30", "2026-09-09")).toContain("entre el 30 de agosto y el 9 de septiembre");
+    expect(quiet("en", "2026-08-30", "2026-09-09")).toContain("from 30 August to 9 September");
+  });
+});
+
 describe("the drift sentence with nothing to compare", () => {
   for (const lang of ["es", "en"] as const) {
     const drift = insightsCopy[lang].claims.drift;

@@ -317,6 +317,51 @@ those, so an untouched tab shows no chips on either side.
   Its magnitude axis tops out per zone, M8 for Chocó and M6 for Chaparral, and grows past that
   only for an event that needs it.
 
+## What both pages share
+
+**What the two pages have in common is drawn once, so one cannot say less than the other** (issue #142,
+2026-10-01). The monitor never said it was independent of SGC, while `/insights` did ("Página
+independiente, sin relación con el SGC"), because each page had written its own footer and only one
+had the sentence. Three components, in `src/components/`, and `page-chrome.test.ts` fails if a page
+draws its own copy of any of them:
+
+- **`SiteFooter`** (`site-footer.tsx`) is the one `<footer>`. The page gives it its own lines as
+  children (the monitor: where its data comes from and how often it is read; `/insights`: how far the
+  data goes), and it adds the shared ones: the time zone (`timeNote`, and `timeNoteCsv` for the page
+  that has downloads, `csv`) and what the page is (`disclaimer`: independent of SGC, its figures
+  describe what already happened and are not a forecast, and where the official word is). `ref` goes
+  to `BackToTop`, which watches the footer. Lines of one group are 4 px apart and the two groups 16 px,
+  under a rule, with the text in a column of at most `max-w-2xl`. The monitor's footer took the look
+  `/insights`' already had, so it gained the rule. Both pages end 80 px above the window's bottom edge
+  (`pb-12` on top of the frame's padding): the round back-to-top button, 44 px and 16–24 px up, sat on the
+  end of the disclaimer, the longest line, on a phone (found in the before/after captures).
+  - **Where it sits.** Inside the zone's panel on the monitor, whose lines depend on the zone, and
+    after the tabs on `/insights`; `mt-auto` takes it to the window's foot on a short page in both (the
+    monitor's tabs fill the frame, `flex-1`, or the panel would end with its content and the footer
+    with it). The monitor draws it once its data has settled, a failed load included; `/insights` once
+    it has data or has failed, and not while it loads: its first render must equal the HTML's, which
+    has none.
+- **`PageFrame`** (`page-frame.tsx`) is the column both pages are drawn in: its width, its gutters and
+  the tabular numerals. The pixel background reads where the cards' column lies, so a frame of a page's
+  own could move it.
+- **`HeaderControls`** (same file) is the language and theme buttons at the end of a header, with the
+  page's own controls (the monitor's link to `/insights`) before them. The `-touch` sizes live there.
+  The 3D viewer's own language button is not this: it sits in a different header.
+
+The words are shared as well as the markup: `disclaimer`, `timeNote`, `timeNoteCsv` and
+`completesItself` ("Se completa solo.", the back-fill notice's promise on both pages; it does not
+add "no hace falta hacer nada", which the monitor's "Cargar lo que falta ahora" beside it would
+contradict) are in `i18n.tsx`, which `/insights` already reads for the theme button's names, and its
+own dictionary has no copy of them. All three components are markup with no state, so the build draws
+the headers into the HTML as it did, and the hydration tests (`page-root.test.ts`,
+`insights/hydration.test.ts`) pass unchanged.
+
+- **Not shared, with the reason.** The two headers: the monitor's has zone tabs and a title two sizes
+  smaller, `/insights`' a way back and three tabs, and a header both pages draw would need a slot or a
+  flag for each difference (the chart kit's frame was declined for the same reason). The load error
+  already is shared (`LoadError`). The stale-data and unfinished-history notices are not: each page
+  words them for what it shows, and what they promise is shared in the sentence above.
+
 ## The insights page
 
 **`/insights` is a second page with its own HTML file and its own bundle** (`insights.html`,
@@ -359,7 +404,13 @@ shared chunks of both pages.
   - **The stand-in face keeps the header's lines**: with Geist blocked, the static header breaks into
     as many lines as in Geist in 22 of 22 cases (11 widths from 320 to 1350 px, both languages), so the
     title, subtitle and tabs keep their place when Geist arrives. The back link and the tabs are ~3 px
-    narrower in the stand-in, which moves nothing below them.
+    narrower in the stand-in, which moves nothing below them. Measured again on 2026-10-01 when the link
+    went from "Volver al inicio" to **"Ver los datos en vivo"** / "See the live data" (issue #143, owner's
+    choice: the old words could be read as "back to the top", beside the round "Volver arriba" button):
+    22 of 22 at 320, 360, 375, 390, 414, 480, 640, 768, 1024, 1280 and 1350 px, in both faces, the top
+    row one line (28 px) at every width with the controls beside the link, and the header's height equal
+    to `main`'s at every width (the link grew from 119 to 154 px in Spanish and from 116 to 132 in English,
+    and at 320 px the row has room to spare).
   - **Checked in `agent-browser` on `pnpm preview`** with the bundle and the stylesheet blocked, which
     shows exactly what paints before React, against React's first render with the API held back: in
     {light, dark} × {es, en} at 320, 390, 768, 1024 and 1350 px, and on `?tab=questions` and `?tab=3d`,
@@ -399,7 +450,21 @@ shared chunks of both pages.
 - **Copy.** The shell's words and every data-dependent sentence live in `src/insights/copy.ts`; each is a
   function of a claim's result, so the words cannot say more than the rule decided. Each tab keeps its
   long-form prose in its own `copy.ts`. Language and theme are the monitor's (`useI18n`, `theme.ts`),
-  so a choice made on one page holds on the other.
+  so a choice made on one page holds on the other. What the footer says is the monitor's too
+  ([What both pages share](#what-both-pages-share)).
+  - **One name per source** (issue #143, 2026-10-01). Chocó's shallow group was named five ways on the
+    questions tab alone, and two keys on two tabs disagreed. In prose a group is "el grupo superficial"
+    or "el grupo profundo", with its place said once where it is introduced (the story's first
+    step, question 1's opening clause, question 3's two paragraphs). Every key, label and legend,
+    on all three tabs, takes its name from `sourceShort` (`src/insights/source-names.ts`): "Chocó
+    superficial", "Chocó profundo", "Chaparral", "Chocó shallow", "Chocó deep" in English, never a
+    comma form and never the place as a name ("Istmina–Sipí"). `source-names.test.ts` holds each tab to
+    the table and fails if a copy file spells a name out again.
+  - **A threshold is written with its decimal, "M4.0 o más"** (owner's decision, 2026-09-30), on the
+    story as on the questions tab; a size class keeps "M4", "M5", "M6" (the ×32 ladder, "un M4 llega
+    muy atenuado"). A rate is "por día" / "per day" on every tab, the monitor's "Eventos por día", and
+    the page is "esta página", never "nosotros" ("we" is the region's people). A span of days names
+    the month once ("entre el 4 y el 8 de septiembre", `fmtDaysSpan`). `wording.test.ts` holds these.
 - **Colours.** Chocó's groups keep the monitor's blue and teal and the mainshock its orange (the
   monitor's Gutenberg–Richter fit line is `foreground` for that reason, not `--chart-2`). The
   Chaparral swarm is `--chart-5`, a violet chosen by search against all four under simulated colour
@@ -995,8 +1060,8 @@ colour, motion). Keep to them:
   Colombian sequence. `fmtRegion` in `src/lib/format.ts` strips it, and the table, the
   magnitude-chart tooltip and the map popup all go through it. The CSV and the API keep
   the region exactly as SGC gives it.
-- **The zone is stated once, in the footer** (`timeNote`), and never repeated on an
-  individual timestamp. It used to hang off every one of them — the two status-bar
+- **The zone is stated once, in the footer** (`timeNote`, drawn by `SiteFooter`: see "What both pages
+  share" below), and never repeated on an individual timestamp. It used to hang off every one of them — the two status-bar
   hints, the map popup, the magnitude and b-over-time tooltips, the table's column
   header, and "los días son días de Colombia" under the magnitude chart — which read as
   a disclaimer being restated rather than a fact. A new timestamp gets no zone label.
@@ -1035,7 +1100,11 @@ colour, motion). Keep to them:
 - **Three stand-down messages, three different truths.** `refreshWait` claims SGC answered
   within the last five minutes, so it may only appear when nothing has failed;
   `refreshStillFailing` replaces it beside the alert and must not tell the reader to press
-  again, because while SGC is refusing us the Worker's own wait is an hour; `refreshFailed`
+  again, because while SGC is refusing us the Worker's own wait is an hour (it says who is
+  retrying, "La página ya reintenta; no hace falta pulsar": it used to read "No se envió: ya hay un
+  reintento en camino", with no subject, to a reader who had pressed "Actualizar" and sent nothing
+  (issue #142). It is as short as it was on purpose: beside the button on a phone it is two lines, and
+  the first version, "La página ya reintenta la consulta; no hace falta pulsar de nuevo", was three); `refreshFailed`
   is for the request from the *page* failing, which is a different thing again, and so names no SGC
   ("No se pudo actualizar", not "No se pudo consultar al SGC": that request never reached it). While the data is
   stale (`staleSince`), the stale line takes priority over all three: `refreshWait` would claim
@@ -1096,6 +1165,18 @@ colour, motion). Keep to them:
   Then "Eventos" and "Sismo principal". "Última consulta al SGC" is no longer a stat: it is the
   line under the refresh button, which it concerns, in the place of "Se actualiza sola cada N
   minutos" (the footer still says that): how long ago, and from `sm` up the clock time too.
+  - **The hint under "Eventos" says what the total is the total of, and only while a filter narrows
+    the count** (issue #142, 2026-10-01): "de 1037 en el catálogo" / "of 1,037 in the catalogue", as the
+    scope bar's "Mostrando 639 de 786 eventos" says it (it was a bare "/ 1037": of what?). On a phone it
+    is `eventsOfCatalogueShort`, "de 1037 en total", through `ByWidth`. The total is the catalogue's own
+    length, as the scope bar's, not the status poll's, which can be a refetch ahead of it. Unfiltered it
+    says nothing: the count is the whole catalogue. **A worded hint when unfiltered was built first
+    ("todo el catálogo") and measured against `main`, and dropped**: on Chocó at 640 px the stat row has
+    2 px to spare (Eventos is 51 px wide, and a stat that no longer fits takes the next line), so the
+    wider hint put the card a row taller (176 → 264 px) from 638 to 675 px, in both languages. Measured
+    on 28 renders (both zones and languages, 320, 375, 390, 640, 768, 1024 and 1280 px) the unfiltered
+    card is exactly `main`'s height with the next card at the same top; filtered, the phone widths are
+    too, and 640 px on Chocó is the one place it is a row taller, while the reader has narrowed the count.
   - `/api/status` carries `newestEvent` (id, time, mag, region), read in the same indexed
     one-row query as the id alone was. The status bar takes it from there rather than from the
     catalogue, which can be a refetch behind the status poll.
@@ -1793,7 +1874,7 @@ colour, motion). Keep to them:
   "Probar ahora" button during them (it restarts the chain and adds requests, the problem the refresh
   backoff exists for).
 - **An alert's button is its `AlertAction`** (shadcn's slot; owner's report, 2026-09-29). The
-  back-fill notice's "Cargar ahora" sat at the end of its sentence, and the load error's "Reintentar"
+  back-fill notice's button (then "Cargar ahora") sat at the end of its sentence, and the load error's "Reintentar"
   under its text. Upstream pins the action top-right over 72 px of padding, which fits an `xs` button
   and not these (`sm-touch`), so `ui/alert.tsx` makes it a grid column beside the title and
   description from `sm`, top-aligned so the technical detail opening does not move it, and a row under

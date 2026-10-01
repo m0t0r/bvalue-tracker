@@ -1,8 +1,7 @@
 import { LightbulbIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Explain } from "@/components/explainer/explain";
-import { LanguageButton } from "@/components/language-button";
-import { ThemeButton } from "@/components/theme-button";
+import { HeaderControls, PageFrame } from "@/components/page-frame";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
@@ -32,10 +31,10 @@ export function MonitorShell({
   const { t } = useI18n();
   const copy = t.zones[zone];
   return (
-    <div className="mx-auto flex min-h-svh max-w-7xl flex-col gap-6 px-4 py-8 tabular-nums sm:px-6">
+    <PageFrame>
       {/* One tab per zone. Only the chosen zone's panel is mounted, so switching throws away the
           other zone's filters and scroll-linked state and starts this one from its own defaults. */}
-      <Tabs value={zone} onValueChange={(v) => isZoneId(v) && onZone(v)} className="gap-6">
+      <Tabs value={zone} onValueChange={(v) => isZoneId(v) && onZone(v)} className="flex-1 gap-6">
         <header className="flex flex-col gap-2">
           {/* The zones and the page's three controls share the top row; the title and the subtitle
               belong to the chosen zone and run the full width underneath. On a narrow phone the
@@ -48,7 +47,7 @@ export function MonitorShell({
                 </TabsTrigger>
               ))}
             </TabsList>
-            <div className="ml-auto flex items-center gap-2">
+            <HeaderControls onToggleTheme={onToggleTheme}>
               {/* The explanations page, for a reader who wants the why rather than the figures. */}
               <Button variant="outline" size="sm-touch" asChild>
                 <a href="/insights">
@@ -58,10 +57,7 @@ export function MonitorShell({
                   <span className="max-sm:sr-only">{t.insightsLink}</span>
                 </a>
               </Button>
-              {/* The `-touch` sizes: on touch the controls grow to 40px, and the hit area to 44px, instead of relying on an invisible hit area alone. */}
-              <LanguageButton />
-              <ThemeButton onClick={onToggleTheme} />
-            </div>
+            </HeaderControls>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-balance">{copy.title}</h1>
           <p className="text-muted-foreground text-pretty">
@@ -70,6 +66,6 @@ export function MonitorShell({
         </header>
         {children}
       </Tabs>
-    </div>
+    </PageFrame>
   );
 }
