@@ -120,6 +120,31 @@ curl "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/analy
     GROUP BY day, lane ORDER BY day DESC"
 ```
 
+<a id="the-domains-analytics"></a>
+### The domain's analytics
+
+Since the site moved to bvalue.site (2026-10-02), Cloudflare sees every request to it, which it never
+did on workers.dev. None of this is in the repo except one CSP entry; all of it is free and is read in
+the dashboard, under the zone or the account:
+
+| Where | Holds | Kept | Answers |
+|---|---|---|---|
+| **Zone analytics** (*bvalue.site → Analytics & Logs → HTTP Traffic*) | every request at the edge: count, bytes, country, status, cached or not | 30 days | "Is anyone reading it, and from where?" "Did the 5xx rate change after a deploy?" |
+| **Web Analytics** (*Analytics & Logs → Web Analytics*, site bvalue.site) | page views and visits by path, country, browser and referrer, and the real readers' **LCP, INP and CLS** (Core Web Vitals), with the element and URL behind each poor score | 6 months | "Is the page as fast on readers' phones as in the lab?" — the measured numbers in [Performance](performance.md) are lab runs |
+| **Security events** (*Security → Analytics / Events*) | what the WAF custom rule and the managed rules blocked or challenged, with path and agent | free plan: a sample | "Is that 403 the Worker's same-origin check, or the edge?" — an edge block never reaches Workers Logs |
+
+- **Web Analytics is a script on the page**: the edge adds Cloudflare's beacon to each page's HTML
+  on bvalue.site ("automatic setup"), so readers on the old name, a preview URL or localhost send
+  nothing. It uses no cookie. It cannot be added to a response sent with `Cache-Control:
+  no-transform`, and it counts only readers whose browser ran the script, so it reads lower than
+  zone analytics, which counts crawlers and the readers who block it. See
+  [Security](security.md) for the CSP entry.
+- **Speculation rules prerender pages** that may never be opened. Whether the beacon counts a
+  prerender nobody opened as a visit has not been checked; compare its page views with zone
+  analytics' HTML requests before reading much into a small count.
+- An edge block (WAF, the "scanner paths" rule) leaves no line in Workers Logs and no invocation:
+  if a reader reports a Cloudflare error page and the logs are clean, look at Security events.
+
 ## Observability decisions
 
 How to *use* any of this is under [Debugging production](#debugging-production). This is
@@ -164,7 +189,8 @@ why it is shaped the way it is. All of it was measured here, on 2026-09-20.
 - **The free tier covers all of this.** Workers Logs: 200,000 events/day, 3 days, included
   on the free plan. Analytics Engine: 100,000 data points and 10,000 read queries a day,
   kept **3 months**, and currently not billed at all. Source maps: free. Tail Workers and
-  Logpush are **paid-only** and are not used. Cloudflare has no Workers alert on the free
+  Logpush are **paid-only** and are not used. The zone's own analytics, Web Analytics and
+  Security events came with the domain and are free too ([above](#the-domains-analytics)). Cloudflare has no Workers alert on the free
   plan either, which is why the alarm is a scheduled GitHub Actions job against
   `/api/health`.
 - **Three days is shorter than this project's slowest fault**, which is the entire argument

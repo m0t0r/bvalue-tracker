@@ -19,5 +19,10 @@
   // Present so the tests run the same code path production does, rather than the
   // "binding is undefined" branch. The pool accepts the writes and discards them.
   "analytics_engine_datasets": [{ "binding": "INGEST_ANALYTICS", "dataset": "sgc_ingest" }],
-  "vars": { "LOG_LEVEL": "info" },
+  // The same as production, so the old-name redirect is tested against the real names.
+  "vars": {
+    "LOG_LEVEL": "info",
+    "CANONICAL_ORIGIN": "https://bvalue.site",
+    "WORKERS_DEV_HOST": "bvalue-tracker.sgc-swarm.workers.dev",
+  },
 }

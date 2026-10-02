@@ -10,10 +10,23 @@
   // core/zone-pages.ts), so the single-page-application fallback only
   // meant that every wrong path — /robots.txt, /favicon.ico, a crawler's guess — answered 200
   // with the whole app. "none" sends an asset miss to the Worker, which answers a plain 404.
+  //
+  // The pages themselves (/, /choco, /insights) also run worker-first, but only so the Worker can
+  // send the old workers.dev host to the domain (worker/index.ts, `movedPage`); on bvalue.site it
+  // hands them straight to `ASSETS`, so `public/_headers` still sets their headers. Keep this list
+  // equal to the pages: ZONE_PATHS in core/zone-pages.ts, plus /insights.
   "assets": {
+    "binding": "ASSETS",
     "not_found_handling": "none",
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": ["/api/*", "/", "/choco", "/insights"],
   },
+  // The site's address. A Workers Custom Domain: Cloudflare keeps its DNS record and certificate,
+  // and `wrangler deploy` attaches it. It needs the zone's parking records gone first, and the
+  // deploy token needs Workers Routes: Edit on the zone. See docs/deployment.md ("The domain").
+  "routes": [{ "pattern": "bvalue.site", "custom_domain": true }],
+  // Stated, not defaulted: with `routes` set, the workers.dev name is still wanted, because it is
+  // what answers the old links with a 301 to the domain.
+  "workers_dev": true,
   // Per-IP ceiling on /api/*. The same-origin check keeps other sites' pages out;
   // this keeps any single caller from turning the API into a D1 bill.
   "ratelimits": [
@@ -42,6 +55,11 @@
     // The floor for worker/log.ts. "debug" for an investigation, then back to "info":
     // debug lines are cheap but the free plan allows 200,000 log events a day in total.
     "LOG_LEVEL": "info",
+    // Where the pages live, and the workers.dev name they used to live at. A page requested on the
+    // old name is answered with a 301 to the same path on the domain; the API is not, so a tab
+    // still open on the old name keeps working. Preview URLs and localhost never match.
+    "CANONICAL_ORIGIN": "https://bvalue.site",
+    "WORKERS_DEV_HOST": "bvalue-tracker.sgc-swarm.workers.dev",
   },
   "triggers": {
     // Every 15 min, for the Tolima zone (the Chaparral swarm): the trailing 1 day, insert/update
