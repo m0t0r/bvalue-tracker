@@ -1,7 +1,7 @@
 import captured from "../../../test/fixtures/api-events-2026-09-24.json";
 import { describe, expect, it } from "vitest";
 import { insights, type Catalogues } from "../claims";
-import { overlaps, textBox } from "../place";
+import { overlaps, textBox } from "../drawing";
 import { ARC_KM } from "./side";
 import { sideLayout } from "./side-view";
 import { storyCopy } from "./copy";

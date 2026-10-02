@@ -5,7 +5,7 @@
  * longest figure but one. Pure layout; `SideView` in `side-view.tsx` draws it.
  */
 import type { SourceDistance } from "../claims";
-import { crosses, overlaps, type Box } from "../place";
+import { crosses, overlaps, type Box } from "../drawing";
 
 /** The arc's radius, km: the same 120 km as the map's circle, so the two drawings share one mark. */
 export const ARC_KM = 120;

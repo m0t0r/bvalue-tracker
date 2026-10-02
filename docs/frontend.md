@@ -495,7 +495,7 @@ shared chunks of both pages.
   (issue #154, 2026-09-30). The catalogue grows, so where a label falls moves by itself: the rule is
   what holds, never a nudged number. Every decision measures through `useTextWidth()`, so a drawing
   laid out in the stand-in face lays itself out again when Geist arrives. The helpers are
-  `src/insights/place.ts` (tested); the axis rule is the chart kit's.
+  `src/insights/drawing/place.ts` (tested); the axis rule is the chart kit's.
   - **An axis' labels go through `ownPlaceLabels`** (`@bvalue/charts`, used as it is): each drawing
     still offers the ticks it chose by width, and a label is drawn only where, centred on its own
     place, it clears the next one by `INSIGHTS_LABEL_GAP` (6 px) and both edges of the drawing. A tick's mark
@@ -544,8 +544,8 @@ shared chunks of both pages.
     a 2 px gap wrongly left off. Medellín and Bogotá lie off the map at every width and were drawn
     outside it, clipped; at 320 px "Manizales" sat under "● M7.4 y réplicas profundas" and "Armenia"
     touched "Ibagué", and both Manizales and Ibagué are left off there. The story's map still leaves
-    off a town near its right edge by a fixed 60 px (`graphic.tsx`), which nothing crosses today; #155
-    moves the two maps' town marks into one module. The map's three source labels are not placed by
+    off a town near its right edge by a fixed 60 px (`graphic.tsx`), which nothing crosses today; both
+    maps draw a town with the one `TownMark` (below). The map's three source labels are not placed by
     this rule: each has a hand-chosen spot and is only kept inside the map, as before. They clear one
     another and Pereira's label in every scan above; a longer reference name or a narrower column
     than 320 px is where that could stop holding.
@@ -587,6 +587,65 @@ shared chunks of both pages.
     rest): identical, or within the rasteriser's 1–17/255, apart from the drift label and the Spanish
     "calma" above; the questions tab's markup is byte for byte `main`'s but for the map's two
     off-map towns.
+- **What the two tabs' drawings share is one module, `src/insights/drawing/`** (issue #155,
+  2026-10-02), which both import from `../drawing`. Before it, the story and the questions tab shared
+  only `useTextWidth` and the tone maps, and wrote the rest out each time, the same rule in each copy.
+  - **What is in it**: `useTextWidth` and `textWidth` (`measure.ts`); the label placement of issue #154
+    (`place.ts`); `largestFit`, the step a pixel at a time down to a font size that fits, with the 9 px
+    floor (`FONT_FLOOR`), which the energy squares' labels, the duration bars and the story's group
+    legend call (`largest-fit.ts`); `fitRegion`, the outline map fitted to a box (its projection, path
+    and outlines) for the questions map, the story's map and the cuts' locator (`fit.ts`); `KM_PER_DEG`
+    (`km.ts`); the marks both tabs draw (`marks.tsx`): `HaloText`, `TownMark`, `PereiraMark`; and
+    `radius`, `star` and `diamond` (`shapes.ts`), moved from the story's `marks.tsx` so both tabs can
+    import them. The story's `marks.tsx` keeps what only it draws: the prose markers, `SceneTitle` and
+    `Layer`.
+  - **One file per set of users, behind one import.** The bundle splits by file, not by export: a
+    file either tab imports goes whole into the chunk both tabs load. With the story's shapes and
+    `largestFit` beside the shared marks and `fitRegion`, the questions tab downloaded them for
+    nothing, so each is a file of its own and lands in the story's chunk. Add a piece only one tab
+    draws in a file of its own too. What the move costs a reader, measured in Chrome DevTools (each
+    script's brotli size as served, `main` against this, one capture): the story tab 214,194 →
+    214,651 bytes of JavaScript (+457), the questions tab, which also loads the story's chunk (#108),
+    256,163 → 256,560 (+397). About half is React Compiler's memo cache around the three shared
+    components (475 bytes gzipped, measured by building them with `"use no memo"`); the rest is the
+    shared code itself. Making them prop helpers or plain render functions to save it was not done:
+    it trades a third of a kilobyte for marks that read less like the rest of the page.
+  - **Every text with the page's halo is a `HaloText`**, which takes the halo's width (3 or 4 px, 5–7
+    on the story's big "?"): `paintOrder="stroke"` is written once, there.
+  - **`TownMark` and `PereiraMark` are drawn the same on both maps, to the pixel, and differ where
+    they did.** A drawing that scales with its column passes `k`, its viewBox units per pixel, to
+    `TownMark` and `PereiraMark`, and a look's sizes are in px. The questions map's Pereira is not the story's with `k` applied: a smaller disc that
+    does not pulse, a thinner outline, a bolder label and a thinner halo, and its town dots are 2 px
+    to the story's 2.2. Kept as they were, as a look of its own (`MAP_PEREIRA` in
+    `questions/feel.tsx`), so this move changed no pixel; settling them is issue #168.
+  - **One kilometre-per-degree figure**, derived from `@bvalue/seismo`'s Earth radius (6371 km,
+    `EARTH_RADIUS_KM`): 111.195, with `kmPerDegLon` for a degree of longitude. The story's cuts and the
+    drift step's 1 km scale bar used 111.2, 0.005 % longer, and the questions map, `kmFrom` and the 3D
+    tab 111.195. It is a file of its own (`drawing/km.ts`), which the 3D tab and `questions/derive.ts`
+    import directly: taken from `fit.ts`, the 3D tab's chunk brought d3-geo in with it, 8.7 kB
+    gzipped it does not use (found in the code review by comparing the builds' chunk graphs).
+  - **Checked against `main`, pixel by pixel** (2026-10-02): every story step and the questions tab
+    screen by screen, at 320 × 700, 390 × 844 and 1280 × 800, in both themes and languages, both
+    builds served by `scripts/fixture-server.ts` from one capture, in a headless Chrome of its own
+    with the clock frozen and reduced motion (`main` against itself: identical, 68 of 68). Built
+    with 111.2 in place of the new figure, the story is identical to `main` in 201 of 204 shots, and
+    the other three differ by 1 pixel at 2–3/255 or were identical on a second run: the move changed
+    nothing. With the new figure, the seven steps that convert degrees to kilometres differ (the
+    120 km ring, both cuts, the drift step's scale bar and error circle): 70 to 2,068 pixels at up to
+    39/255, the anti-aliasing along long lines moved by a twentieth of a pixel at most. The questions
+    tab, built with 111.195 written out, is identical in 204 of 204; with the derived figure
+    (111.194927) question 1's map and question 4's small maps differ in 23 of 204 shots, by 1 to 28
+    pixels at up to 7/255.
+  - **Declined in the code review (2026-10-02):** *`largestFit` handing back the layout it found*,
+    so a caller does not lay out once more at the size chosen. The issue named its interface (a size
+    or null), and the extra layout is a few measurements from a warm cache, well under a millisecond.
+  - **A module, not a package.** Every piece names the page: its colour tokens, `Source`, `TOWNS`,
+    `REGION`, the copy. A package that knew nothing of the page would need all of it passed in.
+  - **Left apart on purpose**: the three element-size hooks (the questions tab's `useWidth`, the
+    story's `useSize`, the kit's `usePlotSize`). The story's resizes in a transition, and the
+    questions tab's renders once at a fallback width before its first measurement. Also each drawing's
+    dot-radius formula, the two diamond shapes, and where an axis label sits (6 px before the plot
+    here, 8 px in the kit).
 - **"¿Qué tan fuerte se sintió?" is question 2** (`questions/shaking.tsx`, 2026-09-25), right after
   the distance question it answers for one real event. It appears only when `feltInPereira` has a
   figure (see [the science](science.md#the-insights-page-insights-from-2026-09-24)), so it is in the
@@ -634,7 +693,7 @@ shared chunks of both pages.
   past earthquakes in `muted-foreground`. Squares are right-aligned so each label sits beside its own
   square; left-aligned, the small ones' labels floated ~250 px from them. A row is never shorter than
   its two lines of text. The labels are measured (`fitRanks` in `story/layout.ts`, `textWidth` in
-  `insights/measure.ts`, shared with the questions tab's labels: one canvas measurement, cached once the web font has loaded), the widest line
+  `insights/drawing/measure.ts`, shared with the questions tab's labels: one canvas measurement, cached once the web font has loaded), the widest line
   decides how much width the squares get, and the text steps down a pixel at a time (to 9 px) until
   every row fits the height and the largest square is at least two rows tall; if even 9 px is too
   wide, the first lines drop the time. At 320 × 640 the second part's nine rows did not fit at 11 px
@@ -2162,7 +2221,7 @@ step ([development](development.md#tooling-gotchas)).
 | `useScrollView` | The sideways scroller around a drawing wider than its card: starts at the end, stays there through a refresh, tells a drawing what is on screen, brings the keyboard's point on screen. |
 | `Drawing`, `focusRing` | The `svg` that is a tab stop with a keyboard layer, named by its `title` and `desc`, and the focus ring for the element around it. |
 | `GridRows`, `TickLabels`, `PlotClip` | The grid's rows (once where a tick is on an edge), the axis labels where Recharts put them (14 px under the plot, 8 px before it), the clip of a plot's height. |
-| `preserveEndTicks`, `ownPlaceLabels`, `labelWidth`, `textWidth` | Which labels fit, by Recharts' rule or each at its own place, and how wide one is, from a canvas. |
+| `preserveEndTicks`, `ownPlaceLabels`, `labelWidth` | Which labels fit, by Recharts' rule or each at its own place, and how wide one is, from a canvas. |
 | `ChartTip`, `tipPosition`, `ChartKey` | The tooltip's dark surface and its place, and a key. |
 | `usePlotSize`, `inPlot`, `PlotArea` | A plot's box in whole pixels, read before the first frame. |
 
@@ -2263,9 +2322,13 @@ step ([development](development.md#tooling-gotchas)).
 - **Not in the kit, on purpose:**
   - *The charts themselves.* They read the page's strings, its zones and `Stats`; a package that
     took them would take the page with them.
-  - *`src/insights/measure.ts`*, the insights page's `textWidth`. It pads a width by 3 % and guesses
-    one without a canvas, to reserve room; the kit's must match Recharts' measure exactly or say it
-    cannot ([Performance](performance.md), issue #96's declined items).
+  - *The insights page's `textWidth`* (`src/insights/drawing/measure.ts`). The two callers need
+    opposite things: the insights drawings reserve room, so that one pads a width by 3 % and guesses
+    one without a canvas; the kit chooses which axis labels to draw, and its tests hold that choice to
+    a recording of Recharts' (`test/fixtures/recharts-3.10.1-ticks.json`), so it measures exactly and
+    pads nothing. Recharts itself left in PR #139; the recording is what keeps them apart now. The kit
+    exports `labelWidth` alone, and keeps its canvas measure to itself (issue #155: nothing outside it
+    imported that measure). Each file's header says why the other exists.
   - *The insights page's drawings and the groups card's daily strips.* They have no keyboard layer
     and no tooltip; the strips' scroller is the nearest thing to `useScrollView`, and is a
     follow-up of its own.
@@ -2408,7 +2471,7 @@ is left as written, silently, which is why these are conventions and not only li
   everything drawn from it follows. Walked compiled on 2026-09-30: `Ago`'s relative times, the
   refresh backoff's countdown, the stale-data line and the 3D viewer's panel all went on updating.
   - **The one place that did freeze was found by the code review, not by the walk**: `textWidth`
-    (`insights/measure.ts`) measures a label in whatever face is loaded, and a width taken before
+    (`insights/drawing/measure.ts`) measures a label in whatever face is loaded, and a width taken before
     Geist arrives was to be taken again "on the next render". Compiled, a scene keeps its layout
     until its inputs change, and a module's function is never one, so a drawing laid out before the
     font stayed in the stand-in face's widths. (On `main` it healed only if something else rendered

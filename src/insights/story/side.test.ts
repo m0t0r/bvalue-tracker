@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceDistance } from "../claims";
-import type { Box } from "../place";
+import type { Box } from "../drawing";
 import { ARC_KM, pickCorner, sideFocus, sideScale } from "./side";
 
 const d = (hypocentralKm: number, depthKm: number): SourceDistance => ({

@@ -1,27 +1,11 @@
 /**
- * Small shared pieces of the story's drawings and prose: dot sizes, the star, and the inline markers
- * the text uses. The colours per source are the page's, in `../tones.ts`.
+ * Small shared pieces of the story's drawings and prose: the inline markers the text uses, a scene's
+ * title and layer. Marks both tabs draw are in `../drawing`; the colours per source in `../tones.ts`.
  */
 import type { ReactNode } from "react";
 import type { Source } from "../claims";
+import { star } from "../drawing";
 import { BG } from "../tones";
-
-/** Dot radius for a magnitude, in px at scale `k`. Area grows with magnitude, never below a visible minimum. */
-export const radius = (mag: number, k = 1) => Math.max(1.3, (mag - 1.6) * 1.15) * k;
-
-/** A five-pointed star centred on the origin, for the mainshock. */
-export function star(r: number) {
-  const pts: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const a = (Math.PI / 5) * i - Math.PI / 2;
-    const rr = i % 2 === 0 ? r : r * 0.45;
-    pts.push(`${(Math.cos(a) * rr).toFixed(2)},${(Math.sin(a) * rr).toFixed(2)}`);
-  }
-  return `M${pts.join("L")}Z`;
-}
-
-/** A diamond centred on the origin with half-diagonal `r`. */
-export const diamond = (r: number) => `M0,${-r}L${r},0L0,${r}L${-r},0Z`;
 
 /**
  * A source named in the prose: a dot of its colour beside the word, which stays in the text colour.

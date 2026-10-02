@@ -1,3 +1,10 @@
+/**
+ * How wide a chart's labels are, to choose which of them to draw. The insights page measures its labels
+ * with a function of its own (`textWidth` in `src/insights/drawing/measure.ts`), and the two stay apart
+ * because their callers need opposite things: that one reserves room, padding every width by 3 % and
+ * guessing one without a canvas, where this one reproduces a recorded choice of labels
+ * (`test/fixtures/recharts-3.10.1-ticks.json`), and so measures exactly and pads nothing.
+ */
 let measuring: CanvasRenderingContext2D | null | undefined;
 /**
  * How wide `text` is in `font`, from a canvas: no layout, where Recharts' own measure writes each label
@@ -6,7 +13,7 @@ let measuring: CanvasRenderingContext2D | null | undefined;
  * Geist arrives, as Recharts' were not: the stand-in is cut to Geist's width, and choosing again would
  * draw the whole chart a second time inside a phone's load.
  */
-export function textWidth(text: string, font: string): number | null {
+function textWidth(text: string, font: string): number | null {
   if (measuring === undefined) measuring = document.createElement("canvas").getContext("2d") ?? null;
   if (!measuring) return null;
   measuring.font = font;

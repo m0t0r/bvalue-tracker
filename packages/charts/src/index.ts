@@ -11,5 +11,5 @@ export { ownPlaceLabels, preserveEndTicks, type LabelRoom } from "./labels";
 export { inPlot, usePlotSize, type PlotArea, type PlotSize } from "./plot";
 export { useReading, type Reading, type ReadingHandlers, type ReadingOptions, type ReadingScroll } from "./reading";
 export { useScrollView, type ScrollView } from "./scroll";
-export { labelWidth, textWidth } from "./text";
+export { labelWidth } from "./text";
 export { ChartTip, tipPosition } from "./tip";

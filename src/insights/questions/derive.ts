@@ -7,6 +7,7 @@ import { energyRatio, epicentralKm, hypocentralKm } from "@bvalue/seismo";
 import { dayStart } from "@/lib/format";
 import { sourceOf, type Insights, type QuakeLike, type Source } from "../claims";
 import { PEREIRA } from "../../../core/places";
+import { KM_PER_DEG, kmPerDegLon } from "../drawing/km";
 import { fmtInt, roundSig } from "../shared";
 
 const DAY = 86_400_000;
@@ -95,6 +96,6 @@ export const toPereira = (e: QuakeLike) => ({ epi: epicentralKm(e, PEREIRA), hyp
 
 /** Km east (x) and north (y) of `origin`, flat-Earth: for the swarm's few-km drift panels. */
 export const kmFrom = (origin: { lat: number; lon: number }, p: { lat: number; lon: number }) => ({
-  x: (p.lon - origin.lon) * 111.195 * Math.cos((origin.lat * Math.PI) / 180),
-  y: (p.lat - origin.lat) * 111.195,
+  x: (p.lon - origin.lon) * kmPerDegLon(origin.lat),
+  y: (p.lat - origin.lat) * KM_PER_DEG,
 });
