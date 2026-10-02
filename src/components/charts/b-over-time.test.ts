@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dicts } from "@/lib/i18n";
 import type { Stats } from "@/lib/stats";
 import { BOverTimeChart } from "./b-over-time";
 
@@ -75,7 +76,7 @@ describe("'Valor b en el tiempo' drawn without Recharts", () => {
   it("draws the band, the line, a dot on the independent windows only, and names itself", () => {
     const { svg, texts } = draw(stats(FIVE));
     expect(svg.getAttribute("tabindex")).toBe("0");
-    expect(svg.querySelector("title")?.textContent).toBe("b-value over time");
+    expect(svg.querySelector("title")?.textContent).toBe(dicts.en.bTimeTitle);
     expect(svg.querySelector("desc")?.textContent).toBe("b goes from 1.00 in the first window to 0.60 in the latest.");
     // Five windows of 150 events stepping by 10 share events: only the latest stands alone.
     const dots = svg.querySelectorAll("g.stroke-card circle");
@@ -273,13 +274,13 @@ describe("'Valor b en el tiempo' drawn without Recharts", () => {
 
   it("marks the mainshock only when it is on the time axis", () => {
     const on = draw(stats(FIVE), { mainshockTime: iso(2) });
-    expect(on.texts()).toContain("Mainshock");
+    expect(on.texts()).toContain(dicts.en.mainshock.label);
     const mark = on.svg.querySelector("line.stroke-chart-2");
     expect(mark?.getAttribute("x1")).toBe("196");
     cleanup();
     // Before the first window's end, as Chocó's M7.4 is: Recharts discarded the line, and so does this.
     const off = draw(stats(FIVE), { mainshockTime: iso(-3) });
-    expect(off.texts()).not.toContain("Mainshock");
+    expect(off.texts()).not.toContain(dicts.en.mainshock.label);
     expect(off.svg.querySelector("line.stroke-chart-2")).toBeNull();
   });
 

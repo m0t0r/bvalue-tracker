@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { energyRatio } from "@bvalue/seismo";
 import { HISTORY, HISTORY_FOR, compareHistory, rankLayout } from "./history";
 
 /** SGC's location for the M7.4, as the catalogue gives it. */
@@ -53,12 +52,12 @@ describe("compareHistory", () => {
   it("gives each energy ratio the way round a reader says it", () => {
     const armenia = h.smaller.find((r) => r.quake.id === "iscgem1443400")!;
     expect(armenia.relation).toBe("more");
-    expect(armenia.times).toBeCloseTo(energyRatio(7.4, 6.1), 9);
-    expect(Math.round(armenia.times)).toBe(89);
+    // Energy goes as 10^(1.5 M): 10^(1.5 × 1.3) = 89.13 for M7.4 against Armenia's M6.1.
+    expect(armenia.times).toBeCloseTo(89.125, 3);
     const tumaco = h.larger.find((r) => r.quake.id === "iscgem654039")!;
     expect(tumaco.relation).toBe("less");
-    expect(tumaco.times).toBeCloseTo(energyRatio(8.1, 7.4), 9);
-    expect(Math.round(tumaco.times)).toBe(11);
+    // 10^(1.5 × 0.7) = 11.22 for Tumaco's M8.1 against the M7.4.
+    expect(tumaco.times).toBeCloseTo(11.22, 2);
   });
 
   it("calls the M7.4 the region's largest in 122 years of records", () => {
@@ -78,7 +77,7 @@ describe("compareHistory", () => {
     // 7.25 shows as M7.3: against Eje Cafetero's 7.2 that is 10^0.15, not 10^0.075.
     const r = compareHistory({ ...M74, mag: 7.25 }, true).near!;
     expect(r.relation).toBe("more");
-    expect(r.times).toBeCloseTo(energyRatio(7.3, 7.2), 9);
+    expect(r.times).toBeCloseTo(1.4125, 4);
   });
 
   it("claims the region only for the event the record was read for, and only when it stands a tenth clear", () => {
@@ -127,7 +126,7 @@ describe("rankLayout", () => {
   it("keeps every square's area true to energy", () => {
     const { rows } = rankLayout(mags, { height: 700, maxSide: 400, minRow: 30, gap: 8 });
     for (let i = 1; i < mags.length; i++) {
-      expect((rows[0]!.side / rows[i]!.side) ** 2).toBeCloseTo(energyRatio(mags[0]!, mags[i]!), 6);
+      expect((rows[0]!.side / rows[i]!.side) ** 2).toBeCloseTo(10 ** (1.5 * (mags[0]! - mags[i]!)), 6);
     }
   });
 

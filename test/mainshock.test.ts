@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MAINSHOCK_MIN_GAP, mainshockId, zoneMainshock } from "../core/mainshock.ts";
+import { mainshockId, zoneMainshock } from "../core/mainshock.ts";
 import { MAINSHOCK_ID, parseCatalogHtml } from "../core/seiscomp.ts";
 
 const fixture = parseCatalogHtml(
@@ -24,10 +24,6 @@ describe("zoneMainshock on the captured Chocó catalogue", () => {
     expect(r.gap).toBe(2.5);
     expect(r.runnerUp).toMatchObject({ mag: 4.9, magType: "MLv" });
   });
-
-  it("uses a gap of 1.0", () => {
-    expect(MAINSHOCK_MIN_GAP).toBe(1.0);
-  });
 });
 
 describe("zoneMainshock on SGC's own fields", () => {
@@ -44,6 +40,12 @@ describe("zoneMainshock on SGC's own fields", () => {
     const r = zoneMainshock(chaparral);
     expect(r).toMatchObject({ state: "none", gap: 0.3 });
     expect(mainshockId(r)).toBeNull();
+  });
+
+  it("calls the largest a mainshock from a full magnitude unit above the next, and not at 0.9", () => {
+    const over = (mag: number) => zoneMainshock([...chaparral, sgc("X", mag, "Mw", "manual")]);
+    expect(over(5.5)).toMatchObject({ state: "found", gap: 1.0 });
+    expect(over(5.4)).toMatchObject({ state: "none", gap: 0.9 });
   });
 
   it("reads SGC's `manual` as reviewed and anything else as not", () => {

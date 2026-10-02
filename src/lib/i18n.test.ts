@@ -142,10 +142,6 @@ describe("the caveats, for each state of the mainshock", () => {
 });
 
 /**
- * The status bar's "Sismo principal" is on every tab in every state, so it must read as a reading of
- * the catalogue: never a forecast, never an alarm, and the one automatic state said to be one.
- */
-/**
  * The filters take the same day in both fields, which is how one day is chosen, so the error may not
  * ask for "before"; and it names the fields by their labels, the words the reader sees (issue #141).
  */
@@ -158,6 +154,10 @@ describe("the date-order error", () => {
   });
 });
 
+/**
+ * The status bar's "Sismo principal" is on every tab in every state, so it must read as a reading of
+ * the catalogue: never a forecast, never an alarm, and the one automatic state said to be one.
+ */
 describe("the mainshock stat", () => {
   const m = (lang: Lang) => dicts[lang].mainshock;
   const all = (lang: Lang) => [

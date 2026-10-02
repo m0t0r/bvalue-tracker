@@ -171,6 +171,42 @@ Driving the page for a profile:
 - With the React DevTools extension in the browser (or `--enable react-devtools`), the script leaves
   the extension's hook alone and `__prof.summary()` says so in `err`. Use a browser without it.
 
+## Writing tests
+
+An assertion earns its place by failing when the code is wrong. **One that can fail only when the
+code and the test are edited together has no oracle**, and is left out (reviewed across every test
+file on 2026-10-02):
+
+- **No constant held to itself.** `expect(TRAILING_DAYS).toBe(3)` fails only when someone changes
+  the 3 on purpose. Assert the value where a caller meets it: the plan's `days: 3`, the waits a
+  reader sees after failed presses (`refresh-backoff.test.ts`), the request Open-Meteo is sent
+  (`sea.test.ts`), not the export.
+- **No expected value built by the helper the code uses.** `energyRatio(7.4, 6.1)` on both sides,
+  `fmtInt(12_000)`, the median through `horizontalErrorKm`: write the number by hand (89.125, "12 000",
+  4.156) and say in a comment where it comes from. The same goes for SQL: the index tests plan the
+  statements `worker/` really sends (`plans()` in `worker/test/ingest.test.ts`), never a copy.
+- **No static copy pinned to its own table**, and no lone `not.toContain` of a phrase that was
+  deleted. Check that the right string reaches the right element (`dicts.en.fmdTitle` in the chart's
+  `<title>`), rules a new string could break (`wording.test.ts`), what a doc or an issue says the copy
+  must say (the footer's "not a forecast", from [the science](science.md)), or copy computed from data.
+- **Independent oracles stay**: hand-worked values, the captured fixtures in `test/fixtures/`, two
+  files that must agree (code and `wrangler.jsonc`, `es` and `en`, the CSS easing and its JS twin).
+  A check that a test's own data still sets off the trap it is about may stay beside real assertions.
+- Nothing the type system already guarantees, and nothing of a dependency's internals (the owner's
+  rule: [React Compiler](#tooling-gotchas)).
+- **Prove a new assertion can fail**: break the production line it guards, watch it fail, restore.
+  The ingest test "does not remove events outside the requested window" served the whole catalogue
+  for a late window and could not fail at all, until it was given a response without the early rows.
+- **State comes from factories, not module-level `let`s**: `setup()` in `report-error.test.ts`,
+  `stubObservers()` in `deferred.test.ts`, `slowExplain()` in `explain-slow.test.ts` (whose two tests
+  passed only in file order before). `using`/`Symbol.dispose` only where there is real cleanup.
+- **Offline**: SGC, USGS and Open-Meteo are MSW handlers that error on anything unhandled. happy-dom
+  is told not to navigate any frame or open a page for a followed link (`offlineDom` in
+  `vitest.config.ts`): it fetched `https://example.org/...` from the explainer's link tests on every run. `test/live.test.ts`
+  is the one test that goes online, on purpose and only with `LIVE=1`.
+- **The name says the behaviour, the case and the outcome**: "still tells the last run from the last
+  successful one", not "still answers both correctly".
+
 ## Tooling gotchas
 
 - **React's own lint rules run in oxlint as a JS plugin under another name** (issue #129). oxlint

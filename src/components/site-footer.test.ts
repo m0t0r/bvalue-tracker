@@ -28,6 +28,7 @@ describe("the footer both pages share", () => {
     );
   });
 
+  // docs/science.md: "It is not a forecast, and the page must keep saying so."
   it.each(langs)("says the figures are not a forecast and where the official word is, in %s", (lang) => {
     expect(dicts[lang].disclaimer).toMatch(/no son un pronóstico|are not a forecast/);
     expect(dicts[lang].disclaimer).toMatch(/información oficial|official information/);

@@ -6,9 +6,9 @@ import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import { CHAPARRAL_BBOX, ZONE_IDS, type ZoneId } from "../../core/zones.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
 import EMPTY from "../../test/fixtures/seiscomp-empty.html?raw";
-import { ABANDONED_ERROR, insertStmt, sgcHealth } from "../db.ts";
+import { ABANDONED_ERROR, insertStmt, lastRun, runInFlight, sgcHealth } from "../db.ts";
 import worker from "../index.ts";
-import { ingest, ingestSweep, sweepChunks } from "../ingest.ts";
+import { backfillProgress, ingest, ingestSweep, sweepChunks } from "../ingest.ts";
 import { IN_FLIGHT_MS } from "../plan.ts";
 
 // The fixture covers 2026-08-10 .. 2026-09-18 22:08 UTC.
@@ -71,6 +71,52 @@ const count = async (where = "1=1") =>
 
 const runCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM ingest_runs").first<{ n: number }>())!.n;
 
+/**
+ * How SQLite plans each statement `run` sends, in order: the queries production really asks, bound as
+ * it binds them, so a query edited in worker/ cannot drift from a copy of it kept here.
+ */
+async function plans(run: (db: D1Database) => Promise<unknown>): Promise<string[]> {
+  const sent: { sql: string; args: unknown[] }[] = [];
+  const bound = (target: object, key: PropertyKey) => {
+    const value = Reflect.get(target, key, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  };
+  const db = new Proxy(env.DB, {
+    get: (target, key) =>
+      key !== "prepare"
+        ? bound(target, key)
+        : (sql: string) => {
+            // Planned unbound unless it is bound, and once for each binding when it is reused.
+            const unbound = { sql, args: [] as unknown[] };
+            sent.push(unbound);
+            const statement = target.prepare(sql);
+            return new Proxy(statement, {
+              get: (s, k) =>
+                k !== "bind"
+                  ? bound(s, k)
+                  : (...args: unknown[]) => {
+                      const at = sent.indexOf(unbound);
+                      if (at >= 0) sent.splice(at, 1);
+                      sent.push({ sql, args });
+                      return s.bind(...args);
+                    },
+            });
+          },
+  });
+  await run(db);
+  return Promise.all(
+    sent.map(async ({ sql, args }) =>
+      (
+        await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
+          .bind(...args)
+          .all<{ detail: string }>()
+      ).results
+        .map((r) => r.detail)
+        .join("\n"),
+    ),
+  );
+}
+
 /** Rewrites one table cell of the row belonging to `id`. */
 function editRow(html: string, id: string, edit: (row: string) => string): string {
   const at = html.indexOf(`id_sismo=${id}&`);
@@ -79,10 +125,23 @@ function editRow(html: string, id: string, edit: (row: string) => string): strin
   return html.slice(0, start) + edit(html.slice(start, end)) + html.slice(end);
 }
 
+/** The page's own count of its rows, which SGC writes above the table, after `n` were taken out. */
+const recount = (html: string, n: number) =>
+  html.replace(/(colspan=2>)(\d+)</, (_, cell: string, total: string) => `${cell}${Number(total) - n}<`);
+
+/** Drops the `n` newest rows: the table runs oldest first, so these are the last `n` of its body. */
 function dropRows(html: string, n: number): string {
   let out = html;
   for (let i = 0; i < n; i++) out = out.slice(0, out.lastIndexOf("<tr>")) + "</tbody></table></body></html>";
-  return out.replace(/(colspan=2>)786</, `$1${786 - n}<`);
+  return recount(out, n);
+}
+
+/** Drops the `n` oldest rows, the first `n` of the table's body. */
+function dropOldest(html: string, n: number): string {
+  const start = html.indexOf("<tbody>") + "<tbody>".length;
+  let end = start;
+  for (let i = 0; i < n; i++) end = html.indexOf("</tr>", end) + "</tr>".length;
+  return recount(html.slice(0, start) + html.slice(end), n);
 }
 
 /** Calls the Worker as the page does: same-origin, which /api/* now requires. */
@@ -191,9 +250,12 @@ describe("ingest", () => {
 
   it("does not remove events outside the requested window", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
-    // A response for a late window legitimately lacks the early events.
-    const run = (await ingest(deps(dropRows(FULL, 0)), new Date("2026-09-15T00:00:00Z"), TO, "manual"))!;
-    expect(run.removed).toBe(0);
+    // A response for a late window legitimately lacks the early events: SGC is asked from a day
+    // before the window, so it answers from 2026-09-14, and the fixture holds 673 events before that.
+    const late = (await ingest(deps(dropOldest(FULL, 673)), new Date("2026-09-15T00:00:00Z"), TO, "manual"))!;
+    // No note either: a removal refused by the 20% guard would also leave `removed` at 0.
+    expect(late).toMatchObject({ ok: true, fetched: 786 - 673, removed: 0, error: null });
+    expect(await count("removed_at IS NOT NULL")).toBe(0);
   });
 
   it("refuses a response that would retire more than 20% of a window", async () => {
@@ -878,12 +940,7 @@ describe("a run the Worker was killed in the middle of", () => {
   // refresh. Unindexed it read the whole table — the fourth hot query over it, and the one
   // 0003 missed. Partial, so the ordinary case reads a near-empty index.
   it("is looked up through the partial index, not a scan of every run ever recorded", async () => {
-    const { results } = await env.DB.prepare(
-      "EXPLAIN QUERY PLAN SELECT 1 AS x FROM ingest_runs WHERE finished_at IS NULL AND started_at > ? LIMIT 1",
-    )
-      .bind(NOW.toISOString())
-      .all<{ detail: string }>();
-    expect(results.map((r) => r.detail).join("\n")).toContain("ingest_runs_unfinished");
+    expect(await plans((db) => runInFlight(db, NOW))).toEqual([expect.stringContaining("ingest_runs_unfinished")]);
   });
 });
 
@@ -946,18 +1003,9 @@ describe("the refusal back-off, through the cron", () => {
  * before adding a fifth; adding one to /api/health is what prompted the check.
  */
 describe("the last run is answered from an index", () => {
-  const plan = async (sql: string, ...args: string[]) =>
-    (
-      await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
-        .bind(...args)
-        .all<{ detail: string }>()
-    ).results
-      .map((r) => r.detail)
-      .join("\n");
-
   // The newest run of any zone: the refusal probe's "when did a request last leave".
   it("walks the index instead of scanning the table", async () => {
-    const detail = await plan("SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
+    const [detail] = await plans((db) => lastRun(db, false, null));
     expect(detail).toContain("ingest_runs_finished");
     expect(detail).not.toContain("TEMP B-TREE");
   });
@@ -966,10 +1014,7 @@ describe("the last run is answered from an index", () => {
   // and skipping the other zone's rows would still be cheap while both run all the time, and
   // a full scan the day one of them stops — so each has an index that leads with the zone.
   it("finds one zone's last run with a seek, not by walking the other zone's", async () => {
-    const detail = await plan(
-      "SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND zone = ?1 ORDER BY id DESC LIMIT 1",
-      "tolima",
-    );
+    const [detail] = await plans((db) => lastRun(db, false, "tolima"));
     expect(detail).toContain("ingest_runs_zone_finished");
     expect(detail).not.toContain("TEMP B-TREE");
   });
@@ -978,10 +1023,7 @@ describe("the last run is answered from an index", () => {
   // temporary b-tree to sort it — ~28,000 rows at three months, to answer "what happened
   // last?". Checked against the whole index set.
   it("sorts nothing to find a zone's last successful run", async () => {
-    const detail = await plan(
-      "SELECT * FROM ingest_runs WHERE finished_at IS NOT NULL AND zone = ?1 AND ok = 1 ORDER BY id DESC LIMIT 1",
-      "tolima",
-    );
+    const [detail] = await plans((db) => lastRun(db, true, "tolima"));
     expect(detail).toContain("ingest_runs_zone_finished_ok");
     expect(detail).not.toContain("TEMP B-TREE");
   });
@@ -991,24 +1033,20 @@ describe("the last run is answered from an index", () => {
   // `finished_at IS NOT NULL`, and read the whole table whenever SGC had never rate-limited us:
   // production's top query by rows read, ~1,400 a call (D1 insights, 2026-10-01).
   it("finds the newest rate limit in the partial index, not by walking every run", async () => {
-    const detail = await plan(
-      "SELECT finished_at, retry_after_s FROM ingest_runs WHERE http_status IN (429, 503) AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1",
-    );
-    expect(detail).toContain("ingest_runs_rate_limited");
-    expect(detail).not.toContain("TEMP B-TREE");
+    const health = await plans(sgcHealth);
+    expect(health).toContainEqual(expect.stringContaining("ingest_runs_rate_limited"));
+    for (const detail of health) expect(detail).not.toContain("TEMP B-TREE");
   });
 
   // backfillProgress and ingestSweep's order, on every wide tick: covering, so neither reads the table.
   it("reads a zone's sweep rows from the covering index alone", async () => {
-    for (const sql of [
-      "SELECT DISTINCT window_start AS s FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' AND ok = 1",
-      "SELECT window_start AS s, MAX(started_at) AS last FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' GROUP BY window_start",
-    ]) {
-      expect(await plan(sql, "tolima")).toContain("COVERING INDEX ingest_runs_sweep");
-    }
+    const covered = expect.stringContaining("COVERING INDEX ingest_runs_sweep");
+    expect(await plans((db) => backfillProgress(db, NOW, "tolima"))).toEqual([covered]);
+    // Chaparral's sequence starts after NOW, so the sweep reads its order and has nothing to fetch.
+    expect(await plans((db) => ingestSweep({ ...deps(EMPTY), db }, "tolima"))).toEqual([covered]);
   });
 
-  it("still answers both correctly", async () => {
+  it("still tells the last run from the last successful one", async () => {
     await recordRun(1, {}, new Date(NOW.getTime() - 60_000));
     await recordRun(0, {}, NOW);
     const body = (await (await call("/api/status")).json()) as any;

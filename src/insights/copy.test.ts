@@ -20,19 +20,18 @@ describe("intensityName", () => {
     ]);
   });
 
-  it("and in Spanish, with the same numerals", () => {
-    expect([1, 3, 4, 5, 6, 7, 8, 9, 10].map((l) => intensityName(l, "es").shaking)).toEqual([
-      "no sentido",
-      "débil",
-      "leve",
-      "moderado",
-      "fuerte",
-      "muy fuerte",
-      "severo",
-      "violento",
-      "extremo",
-    ]);
-    expect(intensityName(8, "es").roman).toBe("VIII");
+  // The Spanish terms are the page's own translation, so they are held to the English level for level.
+  it("and in Spanish, with the same numerals, a term for every level, and one term where USGS has one", () => {
+    const levels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const es = levels.map((l) => intensityName(l, "es"));
+    const en = levels.map((l) => intensityName(l, "en"));
+    expect(es.map((n) => n.roman)).toEqual(en.map((n) => n.roman));
+    es.forEach((n, i) => {
+      expect(n.shaking).toMatch(/\S/);
+      expect(n.shaking).not.toBe(en[i]!.shaking);
+    });
+    const shared = (names: typeof es) => names.slice(1).map((n, i) => n.shaking === names[i]!.shaking);
+    expect(shared(es)).toEqual(shared(en));
   });
 
   it("keeps a level past the scale's ends on the scale: DYFI never goes under I, PAGER can pass X", () => {

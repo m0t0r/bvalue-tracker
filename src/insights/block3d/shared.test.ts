@@ -148,7 +148,6 @@ describe("framing", () => {
   });
 
   it("frames the whole block in every fitted view at the exaggeration the viewer opens at, phone to desktop", () => {
-    expect(VIEWER_EXAGGERATION).toBe(1);
     const fitted = (Object.keys(PRESETS) as Preset[]).filter((p) => PRESETS[p].dist === "fit");
     for (const preset of fitted)
       for (const aspect of [0.46, 0.8, 1.7]) {
@@ -172,7 +171,8 @@ describe("framing", () => {
     const a = framing("rupture", 1, 32, 1);
     const b = framing("rupture", 2, 32, 1);
     expect(b.target[1]).toBeCloseTo(2 * a.target[1], 6);
-    expect(PRESETS.rupture.dist).toBe(330);
+    // Fixed, not fitted: a phone and a wide screen put the camera in the same place.
+    expect(framing("rupture", 1, 32, 0.46)).toEqual(framing("rupture", 1, 32, 1.7));
   });
 });
 

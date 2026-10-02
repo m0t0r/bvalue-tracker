@@ -12,7 +12,6 @@ import {
   compassPoint,
   CRUSTAL_KM,
   crustal,
-  FAR_FROM_KM,
   decay,
   drift,
   FELT_MIN_RESPONSES,
@@ -356,7 +355,6 @@ describe("feltInPereira", () => {
   });
 
   it(`hides Pereira's reports below ${FELT_MIN_RESPONSES} responses, and keeps the model and the total`, () => {
-    expect(FELT_MIN_RESPONSES).toBe(5);
     const few = feltInPereira(withPereira({ cdi: 6.1, responses: 4 }, 8.43), found)!;
     expect(few.reported).toBeNull();
     expect(few.agreement).toBeNull();
@@ -521,9 +519,9 @@ describe("usgsForecast", () => {
   });
 
   it("says Chocó is far only from 100 km: nearer, an M5's waves are not bound to arrive much weakened", () => {
-    expect(FAR_FROM_KM).toBe(100);
     const reach = (beyondKm: number) => ({ ...data, chocoReach: { ...data.chocoReach, beyondKm } });
     expect(usgsForecast(CONTEXT, reach(100))!.page.farKm).toBe(100);
+    expect(usgsForecast(CONTEXT, reach(99))!.page.farKm).toBeNull();
     expect(usgsForecast(CONTEXT, reach(90))!.page.farKm).toBeNull();
     expect(usgsForecast(CONTEXT, reach(0))!.page.farKm).toBeNull();
   });

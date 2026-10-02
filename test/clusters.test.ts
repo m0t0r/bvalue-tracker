@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CLUSTER_DEPTH_KM, clusterOf, computeClusterStats } from "../core/clusters.ts";
+import { clusterOf, computeClusterStats } from "../core/clusters.ts";
 import { bValue, computeStats, dominantMagType } from "@bvalue/seismo";
 import { MAINSHOCK_ID, parseCatalogHtml } from "../core/seiscomp.ts";
 
@@ -12,7 +12,6 @@ const NOW = Date.parse("2026-09-18T23:59:59Z");
 
 describe("clusterOf", () => {
   it("cuts at 70 km, and the cut itself is deep", () => {
-    expect(CLUSTER_DEPTH_KM).toBe(70);
     expect(clusterOf({ depthKm: 0 })).toBe("shallow");
     expect(clusterOf({ depthKm: 69.99 })).toBe("shallow");
     expect(clusterOf({ depthKm: 70 })).toBe("deep");

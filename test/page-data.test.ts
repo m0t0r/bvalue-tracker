@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   INSIGHTS_LOAD,
-  PRELOAD_MEDIA,
   chunkPreloads,
   classAttributes,
   modulePreloadTags,
@@ -22,7 +21,7 @@ const preloaded = (html: string) =>
 describe("the pages' data preloads", () => {
   it("are what fetch() sends by default, so the page's own request is handed the response", () => {
     expect(preloadTags(["/api/status?zone=choco"])).toBe(
-      `<link rel="preload" href="/api/status?zone=choco" as="fetch" crossorigin media="${PRELOAD_MEDIA}">`,
+      '<link rel="preload" href="/api/status?zone=choco" as="fetch" crossorigin media="(min-width: 1024px)">',
     );
   });
 

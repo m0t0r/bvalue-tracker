@@ -6,7 +6,7 @@ import MARINE from "../../test/fixtures/open-meteo-marine-2026-09-26.json?raw";
 import type { SeaForecast } from "../api-types.ts";
 import { PRODUCTS_CRON } from "../external.ts";
 import worker from "../index.ts";
-import { SEA_DIGEST_VERSION, SEA_URL, digestSea } from "../sea.ts";
+import { SEA_DIGEST_VERSION, digestSea } from "../sea.ts";
 
 /**
  * The daily sea-state job and `GET /api/sea`. Open-Meteo is answered from its reply captured on
@@ -125,7 +125,19 @@ describe("the daily sea-state job", () => {
     const asked = openMeteo();
     expect(await sea()).toBeNull();
     await runDaily();
-    expect(asked.map(String)).toEqual([SEA_URL]);
+    // The block's point, Météo-France's model, three days, and the columns the captured reply holds.
+    expect(asked).toHaveLength(1);
+    expect(Object.fromEntries(asked[0]!.searchParams)).toEqual({
+      latitude: "4.3",
+      longitude: "-78.3",
+      hourly: Object.keys(file().hourly)
+        .filter((k) => k !== "time")
+        .join(","),
+      models: "meteofrance_wave",
+      forecast_days: "3",
+      timezone: "UTC",
+      timeformat: "unixtime",
+    });
     const got = await sea();
     expect(got).toMatchObject({
       source: "open-meteo",
