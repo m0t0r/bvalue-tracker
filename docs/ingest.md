@@ -82,7 +82,10 @@ Each of these was a real bug in production or in review:
     `exceededCpu`** against 58 `ok`, and 112 is exactly the number of abandoned runs. The
     long-standing hypothesis in the security audit — `res.text()` buffering an unbounded SGC
     response and running the isolate out of memory — is **wrong**; no invocation ran out of
-    memory. Do not add a byte cap on that reasoning.
+    memory. Do not add a byte cap on that reasoning. (One was added on 2026-10-02 for another:
+    the Worker reads at most 8 MiB of a response, as a guard against a pathological one; a page
+    past it is a failed run, not retried. Sizing and reasoning in
+    [Security](security.md#the-sgc-response-cap-2026-10-02).)
     - It was not a deploy: `$workers.scriptVersion.id` is the same `1355e096` before, during
       and after. It was not a code path that got slower either — successful scheduled runs
       used a median of **34 ms** CPU in the six hours before and **40 ms** during, while the

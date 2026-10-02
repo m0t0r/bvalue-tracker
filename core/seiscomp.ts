@@ -250,8 +250,8 @@ export function parseCatalogHtml(html: string): CatalogPage {
     skippedRows,
     events: [...byId.values()],
     // Only what this function can honestly know: it was handed a string, so there was no
-    // network. fetchCatalog fills the other two in.
-    cost: { chars: html.length, fetchMs: null, attempts: null },
+    // network. fetchCatalog fills the other three in.
+    cost: { chars: html.length, bytes: null, fetchMs: null, attempts: null },
   };
 }
 
@@ -260,6 +260,81 @@ export interface FetchOptions {
   retries?: number;
   /** Base delay for exponential backoff between retries. */
   backoffMs?: number;
+  /**
+   * The most of a response body that will be read, in bytes. Past it the read is abandoned and
+   * the fetch fails with `SgcResponseTooLarge`. None by default: the CLI is run by a person who
+   * may ask for all of Colombia (~10 MB). The Worker sets one (`SGC_MAX_BYTES` in worker/ingest.ts).
+   */
+  maxBytes?: number;
+}
+
+/**
+ * A response bigger than `maxBytes`. Not retried: the same request would bring the same page back.
+ * The message is what `ingest failed` and the run's `error` say.
+ */
+export class SgcResponseTooLarge extends Error {
+  constructor(
+    readonly maxBytes: number,
+    /** The Content-Length SGC declared, when that alone was over the cap and nothing was read. */
+    readonly declaredBytes: number | null,
+  ) {
+    super(
+      declaredBytes === null
+        ? `SGC response passed the ${maxBytes}-byte cap; abandoned unread past it`
+        : `SGC response declared ${declaredBytes} bytes, over the ${maxBytes}-byte cap; not read`,
+    );
+    this.name = "SgcResponseTooLarge";
+  }
+}
+
+interface BodyRead {
+  text: string;
+  bytes: number;
+  /** The body went past the limit, and the read stopped there; `text` is what came before. */
+  overran: boolean;
+}
+
+/**
+ * Reads a body as UTF-8 text, as `Response.text()` does, but stops once more than `maxBytes` have
+ * arrived and cancels the rest, so a response is never held whole before being judged too big.
+ * The bytes are counted off the stream's own chunks, which costs nothing: counting them from the
+ * decoded string would mean encoding the whole page a second time on a 10 ms CPU budget.
+ */
+async function readBody(res: Response, maxBytes: number): Promise<BodyRead> {
+  if (res.body === null) return { text: "", bytes: 0, overran: false };
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    parts.push(decoder.decode(value, { stream: true }));
+    if (bytes > maxBytes) {
+      // Abandons the rest of the body and the connection, rather than letting it drain. Not awaited:
+      // a cancel can wait on the other end, and nothing here needs it to have finished.
+      reader.cancel().catch(() => {});
+      return { text: parts.join(""), bytes, overran: true };
+    }
+  }
+  parts.push(decoder.decode());
+  return { text: parts.join(""), bytes, overran: false };
+}
+
+/** The catalogue page, whole, or `SgcResponseTooLarge`. */
+async function readCatalogBody(res: Response, maxBytes: number): Promise<{ html: string; bytes: number }> {
+  // A declared length over the cap is refused before a byte is read. When the body is compressed
+  // the header counts the compressed bytes, which are fewer than the page's, so it never refuses
+  // a page the cap would have let through.
+  const declared = res.headers.has("content-length") ? Number(res.headers.get("content-length")) : NaN;
+  if (declared > maxBytes) {
+    res.body?.cancel().catch(() => {});
+    throw new SgcResponseTooLarge(maxBytes, declared);
+  }
+  const { text, bytes, overran } = await readBody(res, maxBytes);
+  if (overran) throw new SgcResponseTooLarge(maxBytes, null);
+  return { html: text, bytes };
 }
 
 /**
@@ -276,6 +351,8 @@ export interface RefusalEvidence {
 const EVIDENCE_HEADERS = 24;
 const EVIDENCE_HEADER_CHARS = 200;
 const EVIDENCE_BODY_CHARS = 600;
+/** How much of a refusal's body is read to find those 600 characters, whitespace and all. */
+const EVIDENCE_BODY_BYTES = 16 * 1024;
 
 /** Bounded here, not by the logger: its cut is one level deep and this is a nested object. */
 async function refusalEvidence(res: Response): Promise<RefusalEvidence> {
@@ -286,8 +363,9 @@ async function refusalEvidence(res: Response): Promise<RefusalEvidence> {
     if (k !== "set-cookie") headers[k] = v.slice(0, EVIDENCE_HEADER_CHARS);
   }
   // The body is a courtesy: a refusal whose body cannot be read is still a refusal.
-  const body = await res.text().then(
-    (t) => t.replace(/\s+/g, " ").trim().slice(0, EVIDENCE_BODY_CHARS),
+  // Read only as far as the evidence needs: a refusal is not a reason to hold a large body.
+  const body = await readBody(res, EVIDENCE_BODY_BYTES).then(
+    ({ text }) => text.replace(/\s+/g, " ").trim().slice(0, EVIDENCE_BODY_CHARS),
     () => "",
   );
   return { headers, body };
@@ -339,10 +417,11 @@ export function sgcHttpError(err: unknown): SgcHttpError | null {
 }
 
 export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Promise<CatalogPage> {
-  const { timeoutMs = 120_000, retries = 3, backoffMs = 1000 } = opts;
+  const { timeoutMs = 120_000, retries = 3, backoffMs = 1000, maxBytes = Infinity } = opts;
   // Only transport/HTTP failures are retried; a parse failure is deterministic.
   let lastErr: unknown;
   let html: string | undefined;
+  let bytes = 0;
   // Every attempt, and the back-off between them, counts: what we want to know from a slow
   // run is how long SGC held us, not how long the last try took. The clock only advances
   // across I/O in workerd, and every await below is I/O, so this span is real there.
@@ -364,16 +443,18 @@ export async function fetchCatalog(q: CatalogQuery, opts: FetchOptions = {}): Pr
       if (!res.ok) {
         throw new SgcHttpError(res.status, parseRetryAfter(res.headers.get("retry-after")), await refusalEvidence(res));
       }
-      html = await res.text();
+      ({ html, bytes } = await readCatalogBody(res, maxBytes));
     } catch (err) {
-      // An answer we would only get again is not worth a second request: stop here.
+      // An answer we would only get again is not worth a second request: stop here. A page past
+      // the cap is one of those; asking again would only make SGC send it twice.
       if (err instanceof SgcHttpError && !retryableStatus(err.status)) throw err;
+      if (err instanceof SgcResponseTooLarge) throw err;
       lastErr = err;
     }
   }
   if (html !== undefined) {
     const page = parseCatalogHtml(html);
-    return { ...page, cost: { ...page.cost, fetchMs: Date.now() - startedAt, attempts } };
+    return { ...page, cost: { ...page.cost, bytes, fetchMs: Date.now() - startedAt, attempts } };
   }
   throw new Error(`SGC catalogue fetch failed after ${retries + 1} attempts`, { cause: lastErr });
 }

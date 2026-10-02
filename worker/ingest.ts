@@ -66,10 +66,20 @@ export interface IngestOptions {
 const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
 /**
+ * The most of one SGC response the Worker will read: 8 MiB. Sized on 2026-10-02 from real pages
+ * (docs/security.md): the largest of the last 30 days held 669 events, ~0.68 MB at the measured
+ * ~1,000 bytes a row, so this is ~12 times it, and still ~6 times it if every character were two
+ * bytes. It sits below the ~10 MB SGC sends for all of Colombia in 2026, which is what a page that
+ * ignored our box would look like. It is a guard against a pathological page, not a fix for the
+ * 2026-09-20 outage, which was CPU and never memory. A page past it fails the run, unread past it.
+ */
+export const SGC_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
  * One SGC request must fit well inside the in-flight window used by POST /api/refresh,
  * so a slow SGC cannot cause several Workers to queue up against it.
  */
-const WORKER_FETCH: FetchOptions = { timeoutMs: 45_000, retries: 1 };
+const WORKER_FETCH: FetchOptions = { timeoutMs: 45_000, retries: 1, maxBytes: SGC_MAX_BYTES };
 
 /**
  * Bring D1 in line with SGC for [windowStart, windowEnd).
@@ -124,7 +134,11 @@ export async function ingest(
    */
   const finish = async (
     fields: Record<string, number | string | null>,
-    sgc: { ms: number | null; chars: number | null; refusal?: RefusalEvidence | null } = { ms: null, chars: null },
+    sgc: { ms: number | null; chars: number | null; bytes: number | null; refusal?: RefusalEvidence | null } = {
+      ms: null,
+      chars: null,
+      bytes: null,
+    },
   ) => {
     const cols = Object.keys(fields);
     await db
@@ -148,6 +162,7 @@ export async function ingest(
       durationMs,
       sgcMs: sgc.ms,
       sgcChars: sgc.chars,
+      sgcBytes: sgc.bytes,
       httpStatus,
       retryAfterS,
       ...(run.error === null ? {} : { error: run.error }),
@@ -161,7 +176,12 @@ export async function ingest(
     else if (run.error !== null) log.warn(line, "ingest ok with a note");
     else log.info(line, "ingest ok");
 
-    recordRun(deps.analytics, run, { lane, zone, durationMs, sgcMs: sgc.ms, httpStatus, retryAfterS }, log);
+    recordRun(
+      deps.analytics,
+      run,
+      { lane, zone, durationMs, sgcMs: sgc.ms, httpStatus, retryAfterS, sgcBytes: sgc.bytes },
+      log,
+    );
     return run;
   };
 
@@ -224,7 +244,7 @@ export async function ingest(
     await runBatched(db, stmts);
     return await finish(
       { ok: 1, fetched: page.events.length, inserted, updated, removed, error: note },
-      { ms: page.cost.fetchMs, chars: page.cost.chars },
+      { ms: page.cost.fetchMs, chars: page.cost.chars, bytes: page.cost.bytes },
     );
   } catch (err) {
     const e = err as Error;
@@ -241,7 +261,7 @@ export async function ingest(
         http_status: http?.status ?? null,
         retry_after_s: http?.retryAfterS ?? null,
       },
-      { ms: null, chars: null, refusal: http?.evidence ?? null },
+      { ms: null, chars: null, bytes: null, refusal: http?.evidence ?? null },
     );
   }
 }

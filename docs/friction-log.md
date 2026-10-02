@@ -47,3 +47,6 @@ paths outside the repo and anything personal.
 ## Entries
 
 - 2026-10-02: Worktree sessions refuse compound commands and heredoc scripts as too complex to verify (#169)
+  - 2026-10-02: again in an Agent-tool worktree, for sourcing `.env` before a `curl` and for a Python heredoc
+- 2026-10-02: Analytics Engine docs: no response size in sgc_ingest, and the example query's quantile() is rejected (#179)
+- 2026-10-02: pnpm logs returned 40 of 275 successful ingest runs over three days, with no sign it was a sample (#180)

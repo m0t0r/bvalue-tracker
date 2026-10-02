@@ -182,6 +182,27 @@ function parseZone(q: Record<string, string>): ZoneId {
   throw new HTTPException(400, { message: `zone must be one of ${ZONE_IDS.join(", ")}` });
 }
 
+/**
+ * The most events one read route answers from. Every read route serves the zone's whole filtered
+ * catalogue, and the statistics need all of it, so this is a ceiling that fails out loud, never a
+ * page size: an answer from the first 20,000 events would be a confident, wrong b-value. No filter
+ * can widen a query past the zone's catalogue, so what it guards is the catalogue's own growth.
+ * 20,000 is ~18 times Tolima's 1,109 events of 2026-10-02, and holds a request to ~30 MB of the
+ * isolate's 128 (~1.4 KB a row as rows, events and JSON, measured in V8). The CPU budget meets a
+ * catalogue first: see docs/security.md.
+ */
+export const READ_ROW_CEILING = 20_000;
+
+/** A read past `READ_ROW_CEILING`, answered by `onError` with a 500 that says so. */
+class CatalogueTooLarge extends Error {
+  constructor(readonly zone: ZoneId) {
+    super(
+      `the catalogue has grown past ${READ_ROW_CEILING} events, more than one answer serves; narrow it with from and to`,
+    );
+    this.name = "CatalogueTooLarge";
+  }
+}
+
 async function queryEvents(db: D1Database, f: EventFilter, zone: ZoneId): Promise<StoredEvent[]> {
   const where: string[] = ["zone = ?"];
   const args: (string | number)[] = [zone];
@@ -202,11 +223,13 @@ async function queryEvents(db: D1Database, f: EventFilter, zone: ZoneId): Promis
     where.push("status = ?");
     args.push(f.status);
   }
-  const sql = `SELECT * FROM events WHERE ${where.join(" AND ")} ORDER BY time`;
+  // One row past the ceiling is how a read knows it was reached, without counting first.
+  const sql = `SELECT * FROM events WHERE ${where.join(" AND ")} ORDER BY time LIMIT ?`;
   const { results } = await db
     .prepare(sql)
-    .bind(...args)
+    .bind(...args, READ_ROW_CEILING + 1)
     .all<EventRow>();
+  if (results.length > READ_ROW_CEILING) throw new CatalogueTooLarge(zone);
   const events = results.map(toStored);
   if (!f.excludeMainshock) return events;
   const mainshock = await zoneMainshockRow(db, zone);
@@ -430,6 +453,15 @@ app.onError((err, c) => {
   if (err instanceof HTTPException) {
     c.header("cache-control", "no-store");
     return c.json({ error: err.message }, err.status);
+  }
+  // Not a bug in a route but the catalogue outgrowing them: its own line, and words that say so.
+  if (err instanceof CatalogueTooLarge) {
+    log(c.env).error(
+      { zone: err.zone, ceiling: READ_ROW_CEILING, path: c.req.path },
+      "read route over its row ceiling",
+    );
+    c.header("cache-control", "no-store");
+    return c.json({ error: err.message }, 500);
   }
   // The route is on the line because a 500 with no path is a 500 you cannot reproduce.
   // `err` is flattened by the logger, so the stack survives JSON — `console.error(err)`

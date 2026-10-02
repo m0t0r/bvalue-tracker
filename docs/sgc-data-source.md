@@ -9,6 +9,9 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
   one day wider on each side and filters by `time` itself.
 - **No pagination and no row cap.** The swarm box since the mainshock is ~800 rows,
   ~0.8 MB, ~2 s. All of Colombia for 2026 was 9,917 rows, ~10 MB, ~49 s, in one response.
+  The Worker reads at most 8 MiB of one (`SGC_MAX_BYTES`), so a response that size fails the run;
+  the CLI has no cap. A page is ~7.7 kB plus ~1,000 bytes a row, ASCII but for
+  22 bytes of its chrome ([Security](security.md#the-sgc-response-cap-2026-10-02)).
 - **The server sometimes repeats a row.** `parseCatalogHtml` collapses duplicates
   and reports `duplicatesDropped`.
 - **Use the bounding box, never the Departamento dropdown.** Posting

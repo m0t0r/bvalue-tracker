@@ -243,9 +243,6 @@ regex-constrained so the outbound SGC link cannot become `javascript:`; map popu
 `textContent`; nothing in `src/` uses `dangerouslySetInnerHTML` (shadcn's chart did, and is gone); `onError`
 leaks nothing; no secrets in source or history; CI cannot deploy from a pull request.
 
-Still open, with no confirmed exploit: the read routes have
-no `LIMIT` or range cap (the rate limit bounds volume, not a single query).
-
 **The CI actions are pinned to commit SHAs** (2026-10-02), each with its release in a comment
 (`actions/checkout@3d3c42e… # v7.0.1`). A major tag such as `@v7` is a pointer its owner, or
 whoever takes over the owner's account, can move; the deploy job holds the Cloudflare token, and
@@ -255,23 +252,87 @@ comment together, so the pins stay current through the same 7-day cooldown and s
 check as before (see [deployment.md](deployment.md#dependency-updates)). A new step takes a SHA
 too: `gh api repos/<owner>/<action>/commits/<tag> -q .sha`.
 
-**One of the four is now answered, and the answer is no.** "SGC responses are buffered with
-no byte cap" was carried as a memory risk, and it was the leading explanation for the
-2026-09-20 kills. It was wrong: those invocations died `exceededCpu`, not out of memory —
-see [Concurrency and failure lessons](ingest.md#concurrency-and-failure-lessons). Nothing here has
-ever been observed running out of memory. A byte cap may still be worth having as a guard
-against a pathological response, but **do not add one believing it fixes the outage**, and
-size it from a week of real `sgcChars` rather than from a guess.
+### The SGC response cap (2026-10-02)
 
-The other two are now *measurable* rather than settled, which is the point of
-[Debugging production](operations.md#debugging-production): every ingest run records `sgcMs` and
-`sgcChars`, so how long SGC holds us and how large its responses get are now on the log
-line and in the three-month analytics history. Read a week of them before changing
-`IN_FLIGHT_MS` — and until today nothing was writing them down.
+**The Worker reads at most 8 MiB of an SGC response** (`SGC_MAX_BYTES` in `worker/ingest.ts`,
+enforced by `fetchCatalog`'s `maxBytes`). Past it the run fails, recorded and logged like any other
+failure (`ingest failed`, `error: "SGC response passed the 8388608-byte cap; abandoned unread past
+it"`), and nothing in `events` changes. It is enforced while the body is read, as
+`/api/client-error`'s `bodyLimit` is: a declared `Content-Length` over the cap is refused before a
+byte is read (`declared N bytes, over the 8388608-byte cap; not read`), and a body without one is
+abandoned the moment it crosses it, never buffered and then rejected. It is not retried: the same
+request would only make SGC send the same page twice. A refusal's body, kept only as evidence, is
+read no further than 16 KiB.
 
-**`sgcChars` is characters, not bytes on the wire**, and a byte cap sized from it would sit
-*below* the real payload and start refusing good responses: SGC's pages are Spanish, and
-every accented character is two UTF-8 bytes to this number's one. It is still the right
-figure for the memory question behind that cap, because it is what the isolate is holding.
-Counting true bytes would mean encoding the whole ~0.8 MB string a second time, which is
-the one thing the 10 ms CPU budget cannot afford.
+**It does not fix the 2026-09-20 outage, and was not added to fix it.** "SGC responses are buffered with no
+byte cap" was carried as a memory risk and was the leading explanation for those kills; they were
+`exceededCpu`, not memory (see
+[Concurrency and failure lessons](ingest.md#concurrency-and-failure-lessons)), and nothing here has
+ever been observed running out of memory. The cap is a guard against a pathological response: an
+endless body, or a page that ignored our box. SGC sends ~10 MB for all of Colombia in 2026, and the
+ingest files every event of a response under the zone it asked for, so that page would have been
+both a memory risk and a catalogue polluted with the rest of the country.
+
+**How it was sized, from real responses.** The task was a week of `sgcChars`. Analytics Engine has
+no size field (it had `sgcMs`, never `sgcChars`, though this file said both were in the three-month
+history), so the size came from two sources:
+
+| Source | Window | Runs | Largest |
+|---|---|---|---|
+| `pnpm logs --msg "ingest ok"`, `sgcChars` | 3 days to 2026-10-02 | 40 lines, against 275 ok runs in Analytics Engine over the same days (#180) | **503,562 chars**, a Tolima sweep of 496 events; p99 the same |
+| Analytics Engine `sgc_ingest`, `double2` (events per response) | 30 days | 1,544 ok runs | **669 events**, a Tolima sweep (p99 669); Tolima's wide and fast lanes ≤ 514, Chocó ≤ 279 |
+
+The 40 logged runs fit **7.7 kB of page plus 998 characters an event** (997–1,000 across every run
+over 50 events), so 669 events is ~0.68 M characters. **Characters are bytes here, almost exactly**:
+SGC's rows are ASCII, and the captured page is 796,900 characters and 796,922 bytes, its 22 two-byte
+characters (á, í, °) all in the page's chrome. 8 MiB is therefore ~12 times the largest page of the
+month, and still ~6 times it if every character were two bytes, which is the allowance
+`sgcChars` asked for. A swarm several times busier than September's still fits; a tick that parsed
+8 MiB of HTML would take ~250 ms of CPU at htmlparser2's ~25 ms for 0.8 MB, so the 10 ms budget
+would fail it long before the cap did.
+
+**The log line now carries `sgcBytes` beside `sgcChars`, and Analytics Engine keeps it as
+`double10`**, so the next sizing can read a season of bytes instead of reconstructing them. The bytes
+are counted off the stream's own chunks as they are decoded, so they cost no second encode of the
+page, which is what kept a byte count off the line before: encoding the decoded ~0.8 MB string again
+is the one thing the 10 ms CPU budget cannot afford. The read decodes the chunks with `TextDecoder`
+(UTF-8, as `Response.text()` does), not `res.text()`, and joins them once. In Node's V8, on the
+captured page in 16 KiB chunks, both take 0.66 ms (300 runs each, warm); workerd cannot time a span
+with no I/O in it, so production's `pnpm logs cpu` is the real check.
+
+**`sgcChars` is characters, not bytes on the wire.** It is what the isolate holds once the page is
+decoded; `sgcBytes` is what the cap counts. Size a byte cap from bytes.
+
+`sgcMs`, on the log line and in Analytics Engine (`double7`), is what to read before changing
+`IN_FLIGHT_MS`; see [Debugging production](operations.md#debugging-production).
+
+### The read routes' row ceiling (2026-10-02)
+
+**`/api/events`, `/api/events.csv`, `/api/stats` and `/api/b-windows.csv` answer from at most 20,000
+events** (`READ_ROW_CEILING` in `worker/index.ts`), and past it they fail out loud: a 500,
+`no-store`, `{ "error": "the catalogue has grown past 20000 events, more than one answer serves;
+narrow it with from and to" }`, and a `read route over its row ceiling` line at error with `zone`,
+`ceiling` and `path`. The query asks for one row more than the ceiling (`LIMIT 20001`), so it knows
+without counting first, and holds a request to that many rows whatever the catalogue holds.
+
+- **A ceiling, never a page size.** Every one of these routes serves the zone's whole filtered
+  catalogue, and the statistics need all of it: an answer from the first 20,000 events would be a
+  confident, wrong b-value, and a truncated CSV a quietly short download. A query-level `LIMIT` with a
+  "truncated" flag was the alternative; it would have needed every consumer (the page, the CSV
+  buttons, scripts) to handle a partial answer, for a state that should never happen. A refusal needs
+  nothing of them: the page shows its load error after its usual retries, and the log line says why.
+- **What it guards is the catalogue's growth, not a caller.** The audit's wording, "no `LIMIT` or
+  range cap", read as if a caller could widen a query. No filter can: `from`, `to`, `minMag`,
+  `status`, `cluster` and `excludeMainshock` only narrow, `includeRemoved` adds back the zone's own
+  withdrawn rows, and every query is one zone's. So the largest answer is the zone's whole catalogue, which
+  the page itself asks for on every load. The per-IP rate limit (120 a minute) still bounds how often.
+- **Why 20,000.** On 2026-10-02 Tolima had 1,109 events and Chocó 891 (`/api/health`); the ceiling
+  is ~18 and ~22 times those. A row costs ~1.4 KB in V8 as D1's row, the mapped event and its JSON
+  together (measured in Node on synthetic rows, 2,000 and 50,000 alike), so 20,000 is ~30 MB of the
+  isolate's 128 MB, leaving room for D1's own copy of the result. **The CPU budget meets a growing
+  catalogue first**: the Worker's fetch invocations ran ~5 ms median when Chocó held ~800 events (see
+  [the CPU budget](ingest.md#the-cpu-budget)), and grow with it. At Tolima's ~90 events a day the
+  ceiling is about seven months away; long before then the page's whole-catalogue design needs a
+  look, and this line is the tripwire if it gets none.
+- **Not on `/api/status` or `/api/health`**: they read a `COUNT(*)` and single rows, never the
+  catalogue. `excludeMainshock`'s lookup reads two rows (`LIMIT 2`).

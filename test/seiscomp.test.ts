@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   CHOCO_SWARM_BBOX,
   SEISCOMP_ENDPOINT,
+  SgcResponseTooLarge,
   buildFormBody,
   fetchCatalog,
   formatFormDate,
@@ -117,7 +118,7 @@ describe("parseCatalogHtml failure modes", () => {
       skippedRows: [],
       events: [],
       // Parsed from a string, so there was no network to describe.
-      cost: { chars: EMPTY.length, fetchMs: null, attempts: null },
+      cost: { chars: EMPTY.length, bytes: null, fetchMs: null, attempts: null },
     });
   });
 
@@ -272,6 +273,74 @@ describe("fetchCatalog", () => {
     serves(() => new Response("", { status: 500 }));
     const err = await fetchCatalog(query, { retries: 1, backoffMs: 1 }).catch((e: unknown) => e);
     expect(sgcHttpError(err)).toMatchObject({ status: 500, retryAfterS: null });
+  });
+
+  /**
+   * How much of a response the Worker will hold (docs/security.md). The captured page is
+   * 796,922 bytes on disk and 796,900 characters: 22 of its characters (á, í, °) are two bytes
+   * in UTF-8, so a cap that counted characters would let through a response one byte over it.
+   */
+  describe("with a byte cap", () => {
+    const FULL_BYTES = 796_922;
+
+    /** A body of `chunks` × 1 KiB that counts how much of it was pulled. */
+    function counted(chunks: number): { body: ReadableStream<Uint8Array>; pulled: () => number } {
+      let pulled = 0;
+      const kib = new TextEncoder().encode("x".repeat(1024));
+      const body = new ReadableStream<Uint8Array>({
+        pull(ctl) {
+          if (pulled === chunks) return ctl.close();
+          pulled++;
+          ctl.enqueue(kib);
+        },
+      });
+      return { body, pulled: () => pulled };
+    }
+
+    it("reads a response exactly at the cap, and reports its size in bytes and in characters", async () => {
+      serves(ok);
+      const page = await fetchCatalog(query, { maxBytes: FULL_BYTES });
+      expect(page.events).toHaveLength(786);
+      expect(page.cost.bytes).toBe(FULL_BYTES);
+      expect(page.cost.chars).toBe(796_900);
+    });
+
+    it("counts bytes, not characters: a cap one byte under the response refuses it, though its characters fit", async () => {
+      const calls = serves(ok);
+      const err = await fetchCatalog(query, { maxBytes: FULL_BYTES - 1, retries: 3, backoffMs: 1 }).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(SgcResponseTooLarge);
+      expect((err as Error).message).toBe("SGC response passed the 796921-byte cap; abandoned unread past it");
+      // The same request would only bring the same page back: one request, never a retry.
+      expect(calls()).toBe(1);
+    });
+
+    it("abandons a body that streams past the cap instead of reading it to the end", async () => {
+      const { body, pulled } = counted(1000);
+      serves(() => new Response(body, { headers: { "content-type": "text/html" } }));
+      await expect(fetchCatalog(query, { maxBytes: 4096 })).rejects.toThrow(/4096-byte cap/);
+      // 1,000 KiB were on offer; the read stops within a few KiB of the cap.
+      expect(pulled()).toBeLessThan(10);
+    });
+
+    it("refuses a response whose declared length is over the cap without reading its body", async () => {
+      const { body, pulled } = counted(1000);
+      serves(() => new Response(body, { headers: { "content-type": "text/html", "content-length": "1024000" } }));
+      const err = await fetchCatalog(query, { maxBytes: 4096 }).catch((e: unknown) => e);
+      expect((err as Error).message).toBe("SGC response declared 1024000 bytes, over the 4096-byte cap; not read");
+      expect(pulled()).toBeLessThan(3);
+    });
+
+    // Only the first 600 characters of a refusal are kept, so nothing past the first few KiB is
+    // worth reading, whatever cap the catalogue has.
+    it("reads no more of a refusal's body than its evidence needs", async () => {
+      const { body, pulled } = counted(20_000);
+      serves(() => new Response(body, { status: 410 }));
+      const { evidence } = sgcHttpError(await fetchCatalog(query).catch((e: unknown) => e))!;
+      expect(evidence!.body).toBe("x".repeat(600));
+      expect(pulled()).toBeLessThan(20);
+    });
   });
 });
 
