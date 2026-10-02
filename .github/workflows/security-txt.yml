@@ -1,0 +1,31 @@
+name: security.txt expiry
+
+# RFC 9116 says a security.txt past its Expires must not be trusted, and nothing else would notice
+# ours going stale (public/.well-known/security.txt; docs/security.md). This fails, which is to say
+# emails the repository owner, once the date is less than 30 days away: move it a year ahead.
+# Its own job rather than a test, so the reminder never blocks a deploy or a Dependabot merge.
+on:
+  schedule:
+    - cron: "41 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expiry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Expires is more than 30 days away
+        run: |
+          expires=$(sed -n 's/^Expires: *//p' public/.well-known/security.txt)
+          # The date part only: every `date` parses YYYY-MM-DD, not every one the fractional seconds.
+          left=$(( ($(date -u -d "${expires:0:10}" +%s) - $(date -u +%s)) / 86400 ))
+          echo "Expires $expires: $left days left"
+          if [ "$left" -lt 30 ]; then
+            echo "::error file=public/.well-known/security.txt::Expires is $left days away; move it a year ahead"
+            exit 1
+          fi

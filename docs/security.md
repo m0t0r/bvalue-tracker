@@ -193,15 +193,22 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
     that claims to be from it.
   - **DNSSEC**, so a resolver can tell a forged answer for the domain from Cloudflare's.
   - **CAA**, so only the CAs Cloudflare uses can issue a certificate for it.
-  - **A WAF custom rule** blocks the paths scanners try (`*.php`, `/wp-*`, `/.env*`, `/.git*`) at
-    the edge. They found nothing before, but each was a Worker invocation and a log event, because
+  - **A WAF custom rule** blocks the paths scanners try at the edge: any path ending `.php` or
+    `.env`, containing `/.env` or `/.git`, or starting `/wp-`. It began narrower (`/.env*` and
+    `/.git*` at the root only) and was widened the same day, when the Worker's logs showed
+    `/api/.env`, `/app/.env` and `/config/.env` still reaching it. They found nothing before, but each was a Worker invocation and a log event, because
     an asset miss runs the Worker.
   - **Bot Fight Mode stays off.** On the free plan it cannot be skipped for a path or an agent, and
     it would challenge `ingest-health.yml`'s `curl` and PageSpeed Insights, which `/api/health` and
     the Lighthouse exception exist for.
   - **`/.well-known/security.txt`** (RFC 9116, `public/.well-known/`) points to GitHub's private
     vulnerability reporting, which is on for the repository. Its `Expires` is a year ahead and
-    has to be moved before it passes (next: 2027-10-01).
+    has to be moved before it passes (next: 2027-10-01). `.github/workflows/security-txt.yml`
+    fails every Monday from 30 days before, which emails the owner; a test would have blocked
+    deploys instead.
+  - **Secret scanning and push protection are on** for the repository. Its two extras, validity
+    checks and non-provider patterns, are not offered to it: GitHub accepted the request to turn
+    them on and left them off (2026-10-02).
 - **The daily USGS job fetches only `https://earthquake.usgs.gov/`.** Its detail and product URLs
   are read out of USGS's own answer, so each is checked against that origin before it is fetched
   (`usgsUrl` in `worker/external.ts`), and a redirect is treated as a failure rather than followed,
@@ -229,12 +236,16 @@ regex-constrained so the outbound SGC link cannot become `javascript:`; map popu
 leaks nothing; no secrets in source or history; CI cannot deploy from a pull request.
 
 Still open, with no confirmed exploit: the read routes have
-no `LIMIT` or range cap (the rate limit bounds volume, not a single query); and the CI
-actions are pinned to major tags (`checkout@v7`, `setup-node@v7`, `pnpm/action-setup@v6`,
-all on the `node24` runtime) rather than commit SHAs. Dependabot keeps them and the npm
-dependencies current, and patch/minor updates merge and deploy with no review; the 7-day
-cooldown and the signed-commit check are the guards (see
-[deployment.md](deployment.md#dependency-updates)).
+no `LIMIT` or range cap (the rate limit bounds volume, not a single query).
+
+**The CI actions are pinned to commit SHAs** (2026-10-02), each with its release in a comment
+(`actions/checkout@3d3c42e… # v7.0.1`). A major tag such as `@v7` is a pointer its owner, or
+whoever takes over the owner's account, can move; the deploy job holds the Cloudflare token, and
+a patch or minor Dependabot bump merges and deploys with no review, so a moved tag would have run
+in that job unseen. A SHA cannot be moved. Dependabot reads the comment and proposes SHA and
+comment together, so the pins stay current through the same 7-day cooldown and signed-commit
+check as before (see [deployment.md](deployment.md#dependency-updates)). A new step takes a SHA
+too: `gh api repos/<owner>/<action>/commits/<tag> -q .sha`.
 
 **One of the four is now answered, and the answer is no.** "SGC responses are buffered with
 no byte cap" was carried as a memory risk, and it was the leading explanation for the

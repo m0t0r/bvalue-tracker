@@ -33,7 +33,7 @@ reset can be noticed and a fork can copy it. As set on 2026-10-02, everything on
 | DNSSEC | on, DS record at the registrar | the zone's answers are signed |
 | Email | null MX, `v=spf1 -all`, DMARC `p=reject`, empty DKIM key | the domain sends and receives no mail, so nobody can send as it |
 | CAA | `0 issue "letsencrypt.org"` | Cloudflare adds the other CAs Universal SSL uses itself |
-| Security | WAF custom rule "scanner paths" blocks `*.php`, `/wp-*`, `/.env*`, `/.git*` | an asset miss runs the Worker (`not_found_handling: "none"`), so scanners spent invocations and log events on 404s |
+| Security | WAF custom rule "scanner paths": `ends_with(path, ".php") or path contains "/.env" or path contains "/.git" or starts_with(path, "/wp-") or ends_with(path, ".env")`, Block | an asset miss runs the Worker (`not_found_handling: "none"`), so scanners spent invocations and log events on 404s |
 | Security | Bot Fight Mode **off**, Browser Integrity Check on, security level medium | Bot Fight Mode cannot be bypassed on the free plan and would challenge `ingest-health.yml`'s `curl` and PageSpeed Insights |
 | Speed | HTTP/3, 0-RTT, Brotli | 0-RTT is replay-safe here: Cloudflare only sends `GET`s early, and no `GET` changes anything |
 | Analytics | Web Analytics, *Enable with JS Snippet installation* (the snippet is in the pages) | see [Operations](operations.md#the-domains-analytics) |
@@ -146,6 +146,8 @@ Dependabot update or a production fix.
 ## Scheduled checks
 
 `sgc-canary.yml` runs the live SGC test daily so a change to their form is noticed.
+`security-txt.yml` fails weekly once `public/.well-known/security.txt`'s `Expires` is under 30
+days away ([Security](security.md)).
 `ingest-health.yml` asks production every half hour how stale the catalogue is, and fails —
 which is to say, emails you — when it has gone an hour without a successful ingest. It needs
 `PRODUCTION_URL` and nothing else.
