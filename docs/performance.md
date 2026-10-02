@@ -980,3 +980,16 @@ practices stayed at 100.
     rows the lens, a ring or the header's scan can reach, and nothing runs while nothing moves. On a
     phone the epicenter's rings are redrawn at 15 frames a second, and only while they are on screen in
     a visible tab.
+
+## The pages run worker-first (2026-10-02)
+
+`/`, `/choco` and `/insights` are in `run_worker_first`, so each page's HTML now starts a Worker
+invocation, where before the asset layer answered it alone. It is there to send the old workers.dev
+name to bvalue.site ([Deployment](deployment.md#the-old-urls)); on the domain the Worker hands the
+request to `env.ASSETS` before any middleware, a few lines of work, and every other file, the
+`/assets/*` bundle included, is still served without it. The cost is in time to first byte, and it
+had not been measured against production when this was written; compare TTFB before and after the
+deploy (the measuring method is above) and take the page paths out of `run_worker_first` if it shows.
+Web Analytics' beacon is the other change: a deferred script, loaded after the page's own, so it
+should move neither LCP nor the critical path.
+

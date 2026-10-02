@@ -8,26 +8,71 @@ first (the Workers dashboard lists each Worker's triggers).
 The `sgc-swarm` names predate the project's rename to bvalue-tracker and are kept, because
 renaming a D1 database means migrating its data.
 
-## The old URL
+## The domain
 
-Until 2026-09 the Worker was called `choco`, so the site lived at `choco.<subdomain>.workers.dev`.
-A workers.dev hostname is the Worker's name, and Cloudflare's Redirect Rules and Bulk
-Redirects only apply to a zone you own, not to workers.dev. So the old name is still a Worker:
-`worker/redirect/`, which answers every request with a 301 to the same path and query on
-`TARGET_ORIGIN` (its `vars`). CI deploys it after the app, with
-`wrangler deploy -c worker/redirect/wrangler.jsonc`. It costs nothing extra on the free plan.
+The site is at **<https://bvalue.site>**, since 2026-10-02: a Cloudflare zone on the free plan, in the
+same account as the Worker. `routes` in `wrangler.jsonc` attaches the apex to the Worker as a
+**Workers Custom Domain**, so Cloudflare keeps the DNS record and the certificate and every deploy
+re-asserts them. Two things have to be true before a deploy carrying that route can succeed:
 
-- Its config states `"triggers": { "crons": [] }`. The first deploy under the old name
-  replaced the old app Worker, and the empty list is what removed its ingest crons. Leave it
-  in, so the redirect can never start polling SGC.
-- The account's workers.dev subdomain is shared by every Worker on the account. Changing it
-  moves the old hostname too, and the redirect stops catching it.
-- A fork does not need `worker/redirect/`. Drop it and the matching CI step.
+- **No other record at the apex.** Custom Domains refuse a hostname that already has DNS records;
+  the registrar's parking `A` records were deleted for this reason. The deploy fails, it does not
+  overwrite them.
+- **The deploy token can edit Workers Routes on the zone.** The "Edit Cloudflare Workers" template
+  has *Zone · Workers Routes · Edit*; its zone resources have to include `bvalue.site` (or all
+  zones in the account).
+
+Everything else about the zone is a dashboard setting, not code, so it is listed here so that a
+reset can be noticed and a fork can copy it. As set on 2026-10-02, everything on the free plan:
+
+| Area | Setting | Why |
+|---|---|---|
+| DNS | apex: the Worker's Custom Domain; `www`: `AAAA 100::`, proxied | `www` only exists to be redirected |
+| Rules | Redirect Rule: `www.bvalue.site/*` → `https://bvalue.site/${1}`, 301, query kept | one name for the site; Redirect Rules cost no Worker invocation |
+| SSL/TLS | Full (strict), Always Use HTTPS, minimum TLS 1.2, TLS 1.3, HSTS **off at the zone** | HSTS comes from `public/_headers` and `secureHeaders()`; a second copy from the zone would only duplicate it |
+| DNSSEC | on, DS record at the registrar | the zone's answers are signed |
+| Email | null MX, `v=spf1 -all`, DMARC `p=reject`, empty DKIM key | the domain sends and receives no mail, so nobody can send as it |
+| CAA | `0 issue "letsencrypt.org"` | Cloudflare adds the other CAs Universal SSL uses itself |
+| Security | WAF custom rule "scanner paths" blocks `*.php`, `/wp-*`, `/.env*`, `/.git*` | an asset miss runs the Worker (`not_found_handling: "none"`), so scanners spent invocations and log events on 404s |
+| Security | Bot Fight Mode **off**, Browser Integrity Check on, security level medium | Bot Fight Mode cannot be bypassed on the free plan and would challenge `ingest-health.yml`'s `curl` and PageSpeed Insights |
+| Speed | HTTP/3, 0-RTT, Brotli | 0-RTT is replay-safe here: Cloudflare only sends `GET`s early, and no `GET` changes anything |
+| Analytics | Web Analytics, automatic setup | see [Operations](operations.md#the-domains-analytics) |
+
+`.github/workflows/ci.yml` and `ingest-health.yml` read `PRODUCTION_URL`, which is
+`https://bvalue.site`.
+
+## The old URLs
+
+Two older names still answer, and both send the reader to the domain with a 301. A workers.dev
+hostname is the Worker's name and is outside any zone, so Cloudflare's Redirect Rules and Bulk
+Redirects cannot reach it: in both cases a Worker does it.
+
+- **`bvalue-tracker.<subdomain>.workers.dev`**, the address from 2026-09 to 2026-10-02. The app
+  Worker itself redirects its pages (`movedPage` in `worker/index.ts`): `run_worker_first` names
+  `/`, `/choco` and `/insights` so that the Worker sees them, and on any host but the old name it
+  hands them to the asset layer untouched. `/api/*` is not redirected, so a tab left open on the
+  old name keeps working (a 301 would also turn its `POST /api/refresh` into a `GET`). Preview URLs
+  (`<version>-bvalue-tracker.…`) never match. `workers_dev: true` is stated in `wrangler.jsonc`,
+  because the name has to keep answering for this to work.
+- **`choco.<subdomain>.workers.dev`**, the address until 2026-09, when the Worker was called
+  `choco`. That name is still a Worker, `worker/redirect/`, which answers every request with a 301
+  to the same path and query on `TARGET_ORIGIN` (its `vars`), now the domain, so an old link takes
+  one hop. CI deploys it after the app, with `wrangler deploy -c worker/redirect/wrangler.jsonc`.
+  It costs nothing extra on the free plan.
+  - Its config states `"triggers": { "crons": [] }`. The first deploy under the old name
+    replaced the old app Worker, and the empty list is what removed its ingest crons. Leave it
+    in, so the redirect can never start polling SGC.
+
+The account's workers.dev subdomain is shared by every Worker on the account. Changing it moves
+both old hostnames, and the redirects stop catching them. A fork needs neither: drop
+`worker/redirect/` and its CI step, `WORKERS_DEV_HOST` and the page paths in `run_worker_first`.
 
 ## Deploying your own copy
 
 1. **Point `wrangler.jsonc` at your account.** It pins `account_id` so a deploy can never
    land in the wrong account; replace it with yours (`pnpm exec wrangler whoami` prints it).
+   Replace `routes` with your own domain, or delete it to serve from workers.dev only, and set
+   `CANONICAL_ORIGIN` and `WORKERS_DEV_HOST` in `vars` to match (or see "The old URLs").
 2. **Create the database** with `pnpm exec wrangler d1 create sgc-swarm` and put the
    returned id in `d1_databases[0].database_id`, then run `pnpm types`.
 3. **Enable Analytics Engine once per account**, before the first deploy that carries the
@@ -55,7 +100,7 @@ repository settings:
 
 - secret `CLOUDFLARE_API_TOKEN`: the "Edit Cloudflare Workers" template plus *Account · D1 · Edit*, limited to your account. Add *Account · Workers Observability · Read* to the same token — or a separate one — if you want `pnpm logs` to work; CI does not need it
 - secret `CLOUDFLARE_ACCOUNT_ID`
-- variable `PRODUCTION_URL` = the deployed URL, e.g. `https://bvalue-tracker.<subdomain>.workers.dev` (optional; enables the smoke test)
+- variable `PRODUCTION_URL` = the deployed URL, `https://bvalue.site` here, or `https://bvalue-tracker.<subdomain>.workers.dev` for a fork without a domain (optional; enables the smoke test)
 
 The two secrets are set on the D1 migration and `wrangler deploy` steps only, never on the
 job. `pnpm install` runs the build scripts of the dependencies allowed in
@@ -106,7 +151,8 @@ which is to say, emails you — when it has gone an hour without a successful in
 
 ## Propagation
 
-A brand-new `workers.dev` hostname takes about a minute to resolve; `curl` returns
+A brand-new `workers.dev` hostname takes about a minute to resolve, and a new Custom Domain's
+certificate a few minutes more; `curl` returns
 `000` until then. That is propagation, not a failed deploy. A *new version* of an
 existing Worker also takes a few seconds to reach every edge, so the smoke test can
 still hit the version being replaced — which 404s any route the deploy is adding.

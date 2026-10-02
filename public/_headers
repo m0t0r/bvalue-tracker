@@ -4,11 +4,11 @@
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
-  # The site is HTTPS-only (workers.dev has no HTTP listener of its own worth using).
-  # Two years, and `preload` states the intent; the name cannot actually be submitted to
-  # the browser preload list, because workers.dev is a public suffix and the list takes
-  # registrable domains only. Browsers ignore the token until a name is on the list, so
-  # it costs nothing and is what securityheaders.com looks for.
+  # The site is HTTPS-only: the zone's "Always Use HTTPS" sends http:// to https:// before the
+  # Worker sees it. Two years, every subdomain, and `preload`, which is what hstspreload.org asks
+  # for. bvalue.site is a registrable domain, so unlike the old workers.dev name it can be put on
+  # the browser preload list; whether it is, is in docs/security.md. Do not drop includeSubDomains
+  # or shorten max-age while it is listed or pending: that is how a listing is undone.
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   # The page asks for no device permissions at all: no geolocation (the map has no
   # locate control), no camera, microphone or clipboard. Deny the lot, so a future
@@ -30,7 +30,11 @@
   #   tiles.openfreemap.org  basemap style, sprites, glyphs and vector tiles
   #   tiles.mapterhorn.com   the map's relief (elevation tiles); connect-src only, since
   #                          MapLibre fetches raster-dem tiles and never loads them as <img>
-  Content-Security-Policy: default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org https://tiles.mapterhorn.com; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+  #   static.cloudflareinsights.com  Cloudflare Web Analytics' beacon, which the edge adds to each
+  #                          page on bvalue.site (automatic setup). Host only: the injected URL has
+  #                          a version after /beacon.min.js, which a path source would refuse. It
+  #                          reports to /cdn-cgi/rum on the site itself, so connect-src needs nothing.
+  Content-Security-Policy: default-src 'self'; script-src 'self' blob: https://static.cloudflareinsights.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org https://tiles.mapterhorn.com; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
 
 # Everything Vite emits under /assets/ has a content hash in its name, so a changed file is a
 # new URL and this can be cached for good. Without a rule the asset layer answers

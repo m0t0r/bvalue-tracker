@@ -60,8 +60,11 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   [the page's own failures](operations.md#the-pages-own-failures).
 - **`/api/health` gained an age, not a catalogue.** `ingestAgeS` and `lastRunOk` say how
   fresh the data is, which an external alarm needs and no event is described by.
-- Static assets bypass the Worker (`run_worker_first: ["/api/*"]`), so page headers come
-  from `public/_headers`, not from Hono.
+- Static assets bypass the Worker, so page headers come from `public/_headers`, not from Hono.
+  The three pages run worker-first since 2026-10-02, only so the old workers.dev name can be
+  redirected ([Deployment](deployment.md#the-old-urls)); the Worker hands them to `env.ASSETS`
+  before Hono, so they get `_headers` and nothing of `secureHeaders()`. Checked against
+  `pnpm preview`: `X-Frame-Options: DENY` alone, the CSP and `Speculation-Rules` all present.
   The CSP there is narrow and was checked against the running page: MapLibre needs
   `blob:` for its worker, the header's CSS inlined in each page's HTML needs `style-src
   'unsafe-inline'` (issues #97 and #120: compiled at build time from `index.css` for the header's own
@@ -85,6 +88,15 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   too, for sources the page names without a card: ESA forbids its logo without written permission,
   esa.int's branding FAQ; GEBCO and Open-Meteo publish no policy.) A link's preview is words written here, not the
   destination's own preview fetched from it: nothing is scraped, and SGC is not asked for anything.
+  **One script comes from another host: Cloudflare Web Analytics' beacon** (2026-10-02), which the
+  edge adds to every page on bvalue.site ("automatic setup"), so it is in no file of this repo, and
+  never appears on localhost, a preview URL or the old workers.dev name. `script-src` names its host,
+  `https://static.cloudflareinsights.com`, and not its path, because the injected URL carries a
+  version after `/beacon.min.js` that a path source would refuse. It reports to `/cdn-cgi/rum` on the
+  site itself, so `connect-src` gains nothing. It sets no cookie and stores no identifier. The owner
+  chose it over edge analytics alone for the real readers' Core Web Vitals
+  ([Operations](operations.md#the-domains-analytics)). Turning it off in the dashboard is the whole
+  rollback; the CSP entry can stay.
   **There is no inline script, and none is allowed** (no `'unsafe-inline'`, hash or nonce in
   `script-src`). The head script that sets the page's language and theme before the first paint
   (`src/boot.ts`, 2026-09-28) is a same-origin file under `/assets/`, which `'self'` already covers.
@@ -151,9 +163,12 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   `Permissions-Policy` denies every feature: the page asks for no geolocation, camera,
   microphone or clipboard, and the map has no locate control, so an allow-list anywhere
   in it would be a mistake. `Strict-Transport-Security` is two years with
-  `includeSubDomains`; the `preload` token is there for the grader's sake and is inert —
-  `workers.dev` is a public suffix, so this name cannot be submitted to the browser
-  preload list. `Cross-Origin-Embedder-Policy` is deliberately **absent**:
+  `includeSubDomains` and `preload`. On the old workers.dev name the token was inert, since
+  `workers.dev` is a public suffix; `bvalue.site` is a registrable domain and qualifies for the
+  browser preload list (hstspreload.org: HTTPS on the apex, `http://` redirected to `https://` on
+  the same host, which "Always Use HTTPS" does, and this header). Submitting it is the owner's
+  call: a listing ships inside browsers, takes months to undo, and holds every future subdomain to
+  HTTPS. `Cross-Origin-Embedder-Policy` is deliberately **absent**:
   neither `tiles.openfreemap.org` nor `tiles.mapterhorn.com` sends
   `Cross-Origin-Resource-Policy`, so `require-corp` would blank the map.
   This is what takes securityheaders.com from B to A+; it was B because HSTS and
@@ -168,6 +183,22 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   also made Lighthouse call robots.txt invalid. An asset miss now falls through to the Worker,
   whose `notFound` handler answers `404 not found` as `text/plain`, with the headers above.
 
+- **The domain (2026-10-02) adds what a workers.dev name could not have.** Each is a zone setting,
+  listed in [Deployment](deployment.md#the-domain):
+  - **It cannot be used to send mail.** The registrar's email forwarding was removed; a null MX,
+    `v=spf1 -all`, an empty DKIM key and DMARC `p=reject` tell receivers to refuse any message
+    that claims to be from it.
+  - **DNSSEC**, so a resolver can tell a forged answer for the domain from Cloudflare's.
+  - **CAA**, so only the CAs Cloudflare uses can issue a certificate for it.
+  - **A WAF custom rule** blocks the paths scanners try (`*.php`, `/wp-*`, `/.env*`, `/.git*`) at
+    the edge. They found nothing before, but each was a Worker invocation and a log event, because
+    an asset miss runs the Worker.
+  - **Bot Fight Mode stays off.** On the free plan it cannot be skipped for a path or an agent, and
+    it would challenge `ingest-health.yml`'s `curl` and PageSpeed Insights, which `/api/health` and
+    the Lighthouse exception exist for.
+  - **`/.well-known/security.txt`** (RFC 9116, `public/.well-known/`) points to GitHub's private
+    vulnerability reporting, which is on for the repository. Its `Expires` is a year ahead and
+    has to be moved before it passes (next: 2027-10-01).
 - **The daily USGS job fetches only `https://earthquake.usgs.gov/`.** Its detail and product URLs
   are read out of USGS's own answer, so each is checked against that origin before it is fetched
   (`usgsUrl` in `worker/external.ts`), and a redirect is treated as a failure rather than followed,

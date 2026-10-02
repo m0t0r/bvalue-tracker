@@ -80,6 +80,11 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
     [2026-09-30 postmortem](incidents/2026-09-30-sgc-refusal-returns.md).
   - Every outbound Worker request carries a `CF-Worker: sgc-swarm.workers.dev` header that
     we cannot remove, so a block need not be by address at all.
+    **Since the domain (2026-10-02) that header may differ by trigger:** Cloudflare sets it to
+    the zone a request came in on, so an SGC request made by `POST /api/refresh` on bvalue.site
+    should carry `CF-Worker: bvalue.site`, while a cron tick, which arrives on no zone, may still
+    carry the workers.dev subdomain. Neither half has been checked. If a refusal now hits only one
+    trigger's runs (`trigger` on the `ingest failed` line), that is the header, not the address.
   - **The other end of the chain, confirmed from off Cloudflare's network** (a manual
     request from outside Cloudflare, 2026-09-20 16:16:53 UTC, while the Worker was being refused): the same URL answers
     `200 OK`, `Server: Apache/2.2.11 (Unix) mod_ssl/2.2.11 OpenSSL/0.9.8k DAV/2 PHP/5.2.9

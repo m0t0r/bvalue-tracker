@@ -239,8 +239,10 @@ Other points:
 - **CORS**: `createMcpHandler` defaults to wildcard CORS. Remote MCP clients are servers, not
   browsers, except the Inspector and MCP Apps iframes, so set `corsOptions` deliberately.
   `docs/security.md` explains why the API deliberately sends no CORS headers.
-- `allowedHostnames`: the production host is a `workers.dev` name (see `README.md`), which the
-  default covers. Set it explicitly anyway.
+- `allowedHostnames`: the production host is `bvalue.site` since 2026-10-02 (see `README.md`), which
+  the default (localhost / `workers.dev`) does **not** cover. Set it explicitly to `bvalue.site`. On the
+  old workers.dev name, `movedPage` (worker/index.ts) 301s every path outside `/api/`, so `/mcp` there
+  would redirect: exempt it, or serve the MCP server on the domain only.
 - Input bounds: zod enforces the same ranges as `parseFilter`. Any tool that fits b needs a
   bounded `mc` (for example 1.0–5.0), because a bin count sizes an array in `fmd`
   (`docs/security.md`).

@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { toCsv, windowsToCsv, type CsvLang } from "../core/csv.ts";
 import { clusterOf, computeClusterStats, type Cluster } from "../core/clusters.ts";
 import { computeStats, type CatalogStats } from "@bvalue/seismo";
+import { ZONE_PATHS } from "../core/zone-pages.ts";
 import { DEFAULT_ZONE, ZONE_IDS, isZoneId, type ZoneId } from "../core/zones.ts";
 import type {
   ContextResponse,
@@ -19,6 +20,7 @@ import { PRODUCTS_CRON, readContext, refreshProducts } from "./external.ts";
 import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
 import { asLevel, logger, type Logger } from "./log.ts";
 import { INGEST_CRON, dueNow, sgcUnwell, tickMinute } from "./plan.ts";
+import { redirectTo } from "./redirect/index.ts";
 import { readSea, refreshSea } from "./sea.ts";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -437,8 +439,36 @@ app.onError((err, c) => {
   return c.json({ error: "internal error" }, 500);
 });
 
+/**
+ * The site moved from the Worker's workers.dev name to bvalue.site on 2026-10-02. A workers.dev
+ * hostname is outside any zone, so no Redirect Rule can reach it; only this Worker can. The pages
+ * run worker-first for this alone (`run_worker_first` in wrangler.jsonc): on the old name they get a
+ * 301 to the same path and query on the domain, and everywhere else they go to the asset layer
+ * untouched, before Hono, so `secureHeaders()` never mixes into the headers `public/_headers` sets.
+ * The API is not redirected: a tab still open on the old name keeps working, and a 301 would turn
+ * its `POST /api/refresh` into a `GET`.
+ */
+export function movedPage(
+  request: Request,
+  env: { CANONICAL_ORIGIN: string; WORKERS_DEV_HOST: string },
+): string | null {
+  const url = new URL(request.url);
+  if (url.hostname !== env.WORKERS_DEV_HOST || url.pathname.startsWith("/api/")) return null;
+  // A copy with no domain of its own names its workers.dev host as both; a 301 to itself would loop.
+  if (new URL(env.CANONICAL_ORIGIN).hostname === url.hostname) return null;
+  return redirectTo(request.url, env.CANONICAL_ORIGIN);
+}
+
+/** The pages `run_worker_first` sends here; any other path outside /api/ is an asset miss, for Hono's 404. */
+const PAGES = new Set([...Object.values(ZONE_PATHS), "/insights"]);
+
 export default {
-  fetch: app.fetch,
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const moved = movedPage(request, env);
+    if (moved !== null) return Response.redirect(moved, 301);
+    if (PAGES.has(new URL(request.url).pathname)) return env.ASSETS.fetch(request);
+    return app.fetch(request, env, ctx);
+  },
   /**
    * Every lane hangs off the one cron, and is chosen from the tick rather than from a
    * pattern of its own. At the five-minute cadence a second pattern was provably unsafe —

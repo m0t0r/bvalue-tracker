@@ -1,7 +1,7 @@
 # bvalue-tracker
 
 [![CI](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml)
-[![Mozilla Observatory](https://img.shields.io/mozilla-observatory/grade/bvalue-tracker.sgc-swarm.workers.dev)](https://developer.mozilla.org/en-US/observatory/analyze?host=bvalue-tracker.sgc-swarm.workers.dev)
+[![Mozilla Observatory](https://img.shields.io/mozilla-observatory/grade/bvalue.site)](https://developer.mozilla.org/en-US/observatory/analyze?host=bvalue.site)
 
 A live monitor for the earthquake sequence in Chocó, Colombia, that followed the
 M7.4 San José del Palmar earthquake of 2026-08-10 12:34:27 UTC, and for the
@@ -9,12 +9,12 @@ earthquake swarm at Chaparral, Tolima, that began on 2026-09-20. It keeps a
 catalogue of each up to date from the Colombian Geological Survey (SGC), and
 computes its Gutenberg–Richter **b-value**, over the whole catalogue and over time.
 
-**Live:** <https://bvalue-tracker.sgc-swarm.workers.dev>
+**Live:** <https://bvalue.site>
 
 The page is written for a reader who is interested in the science but is not a
 seismologist, and explains its terms in plain words, in Spanish and in English.
 
-<a href="https://bvalue-tracker.sgc-swarm.workers.dev/insights?tab=3d">
+<a href="https://bvalue.site/insights?tab=3d">
   <img src="docs/images/3d-block.webp" width="100%" alt="The 3D block of Colombia's Pacific coast and the Andes, 500 km across and 240 km deep, seen from the south: the Pacific swelling with the day's forecast on the left, the mountains with Istmina, Buenaventura, Pereira and Chaparral pinned on top, and below the ground the sinking Nazca plate, the two groups of Chocó's earthquakes, the orange plane where the rock broke in the M7.4 and the Chaparral swarm near the surface.">
 </a>
 
@@ -128,7 +128,8 @@ flowchart LR
   See [Ingest](docs/ingest.md#the-daily-sea-state-job).
 - **Backend:** one Cloudflare Worker ([Hono](https://hono.dev)) serves the page and
   a JSON API, stores events in D1, and runs the ingest on a Cron Trigger. It fits the
-  Workers free plan.
+  Workers free plan, and so does the domain in front of it, a Cloudflare zone on the free plan
+  (see [Deployment](docs/deployment.md#the-domain)).
 - **Frontend:** React with shadcn/ui, TanStack Query, Form and Table, D3 and
   MapLibre GL for the monitor; D3 for the explanations page, and OGL (WebGL 2) for its
   [3D viewer](#3d-viewer).
@@ -211,6 +212,12 @@ code itself. Read the relevant document before changing that area.
 | [Performance](docs/performance.md) | Load performance and how it is measured |
 | [Ideas](docs/ideas.md) | Discussed but not built |
 | [Incidents](docs/incidents/) | Postmortems |
+
+## Reporting a security problem
+
+Use GitHub's [private vulnerability reporting](https://github.com/m0t0r/bvalue-tracker/security/advisories/new)
+on this repository, which is also what the site's
+[`security.txt`](https://bvalue.site/.well-known/security.txt) says.
 
 ## Data and disclaimer
 
