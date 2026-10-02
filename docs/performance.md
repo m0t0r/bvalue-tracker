@@ -987,9 +987,11 @@ practices stayed at 100.
 invocation, where before the asset layer answered it alone. It is there to send the old workers.dev
 name to bvalue.site ([Deployment](deployment.md#the-old-urls)); on the domain the Worker hands the
 request to `env.ASSETS` before any middleware, a few lines of work, and every other file, the
-`/assets/*` bundle included, is still served without it. The cost is in time to first byte, and it
-had not been measured against production when this was written; compare TTFB before and after the
-deploy (the measuring method is above) and take the page paths out of `run_worker_first` if it shows.
+`/assets/*` bundle included, is still served without it. **Measured on 2026-10-02, it costs nothing
+that shows:** time to first byte from one place, 15 `curl`s each, was a median 288 ms (p90 383 ms) for
+`/`, which runs the Worker, against 273 ms and 301 ms for `/favicon.svg` and `/robots.txt`, which do
+not: inside the spread between two files the Worker never sees. `pnpm logs cpu` gave `GET /` a median
+of 1 ms CPU. Re-measure the same way before reading anything into a slow page.
 Web Analytics' beacon is the other change: a module script after the page's own, so deferred, and
 it should move neither LCP nor the critical path. That has not been measured either.
 
