@@ -88,15 +88,18 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   too, for sources the page names without a card: ESA forbids its logo without written permission,
   esa.int's branding FAQ; GEBCO and Open-Meteo publish no policy.) A link's preview is words written here, not the
   destination's own preview fetched from it: nothing is scraped, and SGC is not asked for anything.
-  **One script comes from another host: Cloudflare Web Analytics' beacon** (2026-10-02), which the
-  edge adds to every page on bvalue.site ("automatic setup"), so it is in no file of this repo, and
-  never appears on localhost, a preview URL or the old workers.dev name. `script-src` names its host,
-  `https://static.cloudflareinsights.com`, and not its path, because the injected URL carries a
-  version after `/beacon.min.js` that a path source would refuse. It reports to `/cdn-cgi/rum` on the
-  site itself, so `connect-src` gains nothing. It sets no cookie and stores no identifier. The owner
-  chose it over edge analytics alone for the real readers' Core Web Vitals
-  ([Operations](operations.md#the-domains-analytics)). Turning it off in the dashboard is the whole
-  rollback; the CSP entry can stay.
+  **One script comes from another host: Cloudflare Web Analytics' beacon** (2026-10-02), a
+  `<script type="module">` at the end of `index.html` and `insights.html` (so `choco.html` too).
+  `script-src` names its host, `https://static.cloudflareinsights.com`, not its path, so a versioned
+  beacon URL still loads; it reports to `https://cloudflareinsights.com`, in `connect-src`.
+  `test/headers.test.ts` fails if a page loads a script from a host the CSP does not allow, since
+  `pnpm dev` would never show the block. It sets no cookie and stores no identifier, and its
+  `data-cf-beacon` token is public by design: Cloudflare counts a report only from bvalue.site (and
+  its subdomains), so localhost and preview URLs load it and are not counted. The edge's "automatic
+  setup" was tried first and added nothing to this Worker's pages (checked 2026-10-02, three pages,
+  uncached); the dashboard is set to snippet installation so the edge never adds a second copy. The
+  owner chose it over edge analytics alone for the real readers' Core Web Vitals
+  ([Operations](operations.md#the-domains-analytics)).
   **There is no inline script, and none is allowed** (no `'unsafe-inline'`, hash or nonce in
   `script-src`). The head script that sets the page's language and theme before the first paint
   (`src/boot.ts`, 2026-09-28) is a same-origin file under `/assets/`, which `'self'` already covers.

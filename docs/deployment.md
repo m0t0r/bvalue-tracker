@@ -36,7 +36,8 @@ reset can be noticed and a fork can copy it. As set on 2026-10-02, everything on
 | Security | WAF custom rule "scanner paths" blocks `*.php`, `/wp-*`, `/.env*`, `/.git*` | an asset miss runs the Worker (`not_found_handling: "none"`), so scanners spent invocations and log events on 404s |
 | Security | Bot Fight Mode **off**, Browser Integrity Check on, security level medium | Bot Fight Mode cannot be bypassed on the free plan and would challenge `ingest-health.yml`'s `curl` and PageSpeed Insights |
 | Speed | HTTP/3, 0-RTT, Brotli | 0-RTT is replay-safe here: Cloudflare only sends `GET`s early, and no `GET` changes anything |
-| Analytics | Web Analytics, automatic setup | see [Operations](operations.md#the-domains-analytics) |
+| Analytics | Web Analytics, *Enable with JS Snippet installation* (the snippet is in the pages) | see [Operations](operations.md#the-domains-analytics) |
+| Observability | Traces on, 10% sampled, persisted in Cloudflare | see [Operations](operations.md#the-domains-analytics) |
 
 `.github/workflows/ci.yml` and `ingest-health.yml` read `PRODUCTION_URL`, which is
 `https://bvalue.site`.

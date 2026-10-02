@@ -48,6 +48,23 @@ describe("public/_headers", () => {
     for (const host of hosts) expect(connect, `${host} in connect-src`).toContain(`https://${host}`);
   });
 
+  it("lets every page load the scripts it names from another host, and their reports out", () => {
+    // Like the tile hosts: `pnpm dev` ignores _headers, so a blocked beacon shows only in production,
+    // as Web Analytics quietly counting nobody.
+    const directive = (name: string) =>
+      value("Content-Security-Policy")
+        .split(";")
+        .map((d) => d.trim().split(/\s+/))
+        .find(([n]) => n === name);
+    for (const page of ["index.html", "insights.html"]) {
+      const html = readFileSync(new URL(`../${page}`, import.meta.url), "utf8");
+      const hosts = [...html.matchAll(/<script[^>]*\ssrc="https:\/\/([a-z0-9.-]+)\//g)].map((m) => m[1]!);
+      expect(hosts, `${page}'s beacon`).toContain("static.cloudflareinsights.com");
+      for (const host of hosts) expect(directive("script-src"), `${host} in script-src`).toContain(`https://${host}`);
+    }
+    expect(directive("connect-src")).toContain("https://cloudflareinsights.com");
+  });
+
   it("promises HSTS for at least a year", () => {
     const hsts = value("Strict-Transport-Security");
     expect(Number(/max-age=(\d+)/.exec(hsts)?.[1])).toBeGreaterThanOrEqual(31_536_000);

@@ -131,17 +131,26 @@ the dashboard, under the zone or the account:
 |---|---|---|---|
 | **Zone analytics** (*bvalue.site → Analytics & Logs → HTTP Traffic*) | every request at the edge: count, bytes, country, status, cached or not | 30 days | "Is anyone reading it, and from where?" "Did the 5xx rate change after a deploy?" |
 | **Web Analytics** (*Analytics & Logs → Web Analytics*, site bvalue.site) | page views and visits by path, country, browser and referrer, and the real readers' **LCP, INP and CLS** (Core Web Vitals), with the element and URL behind each poor score | 6 months | "Is the page as fast on readers' phones as in the lab?" — the measured numbers in [Performance](performance.md) are lab runs |
+| **Traces** (*Observability → Traces*, account level) | a sample of requests followed through Cloudflare: the edge's own steps, the Worker, and its D1 and outbound calls, each as a timed span | 7 days, 0.5 GB a day (free plan, open beta) | "Where did the time go on that slow request?" "Did the 500 come from the Worker or before it?" |
 | **Security events** (*Security → Analytics / Events*) | what the WAF custom rule and the managed rules blocked or challenged, with path and agent | free plan: a sample | "Is that 403 the Worker's same-origin check, or the edge?" — an edge block never reaches Workers Logs |
 
-- **Web Analytics is a script on the page**: the edge adds Cloudflare's beacon to each page's HTML
-  on bvalue.site ("automatic setup"), so readers on the old name, a preview URL or localhost send
-  nothing. It uses no cookie. It cannot be added to a response sent with `Cache-Control:
-  no-transform`, and it counts only readers whose browser ran the script, so it reads lower than
-  zone analytics, which counts crawlers and the readers who block it. See
-  [Security](security.md) for the CSP entry.
+- **Web Analytics is a script in each page's HTML** (`index.html`, `insights.html`): the edge's
+  "automatic setup" added nothing to this Worker's pages (2026-10-02), so the snippet is committed,
+  and the dashboard's site setting is *Enable with JS Snippet installation*, so the edge never adds a
+  second copy that would count every view twice. Its token only counts reports from bvalue.site;
+  the old name redirects its pages, and localhost and preview URLs are discarded. It uses no cookie,
+  and it counts only readers whose browser ran the script, so it reads lower than zone analytics,
+  which counts crawlers and the readers who block it. See [Security](security.md) for the CSP.
 - **Speculation rules prerender pages** that may never be opened. Whether the beacon counts a
   prerender nobody opened as a visit has not been checked; compare its page views with zone
   analytics' HTML requests before reading much into a small count.
+- **Traces are on for 10% of requests and kept in Cloudflare** (zone setting, 2026-10-02: `enabled`,
+  `persist`, `sampling_ratio: 0.1`, no export destinations). It needs no code: Cloudflare writes the
+  spans itself. Set and read with Cloudflare's `cf` CLI, run once through npx, since the project's
+  own tooling is Wrangler, which has no command for it:
+  `npx cf@1.0.0-beta.12 observability tracing settings get --zone <zone id>` (after `cf auth login`;
+  the repo's API token has no zone edit rights). Raise the ratio for an investigation, then put it
+  back: at 10% a quiet hour may hold no trace at all.
 - An edge block (WAF, the "scanner paths" rule) leaves no line in Workers Logs and no invocation:
   if a reader reports a Cloudflare error page and the logs are clean, look at Security events.
 
