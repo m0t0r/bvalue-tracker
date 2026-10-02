@@ -35,5 +35,13 @@
          before the bundle has run; React hydrates it (src/static-shell.tsx, src/lib/hydrate.ts). -->
     <div id="root"><!--static-shell--><!--/static-shell--></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Cloudflare Web Analytics (docs/operations.md, "The domain's analytics"). The edge's automatic
+         setup never added it to this Worker's pages, so it is here. The token is public and only counts
+         visits on bvalue.site; elsewhere (localhost, previews) the beacon's reports are discarded. -->
+    <script
+      type="module"
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon='{"token": "5fe9964461f346068c98630aebdf5ca2"}'
+    ></script>
   </body>
 </html>

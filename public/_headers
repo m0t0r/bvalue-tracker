@@ -30,11 +30,11 @@
   #   tiles.openfreemap.org  basemap style, sprites, glyphs and vector tiles
   #   tiles.mapterhorn.com   the map's relief (elevation tiles); connect-src only, since
   #                          MapLibre fetches raster-dem tiles and never loads them as <img>
-  #   static.cloudflareinsights.com  Cloudflare Web Analytics' beacon, which the edge adds to each
-  #                          page on bvalue.site (automatic setup). Host only: the injected URL has
-  #                          a version after /beacon.min.js, which a path source would refuse. It
-  #                          reports to /cdn-cgi/rum on the site itself, so connect-src needs nothing.
-  Content-Security-Policy: default-src 'self'; script-src 'self' blob: https://static.cloudflareinsights.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org https://tiles.mapterhorn.com; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+  #   static.cloudflareinsights.com  Cloudflare Web Analytics' beacon, a <script> in each page's HTML
+  #                          (index.html, insights.html). Host only, so a versioned beacon URL
+  #                          still loads.
+  #   cloudflareinsights.com  where that beacon reports; connect-src only
+  Content-Security-Policy: default-src 'self'; script-src 'self' blob: https://static.cloudflareinsights.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org https://tiles.mapterhorn.com https://cloudflareinsights.com; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
 
 # Everything Vite emits under /assets/ has a content hash in its name, so a changed file is a
 # new URL and this can be cached for good. Without a rule the asset layer answers

@@ -990,6 +990,6 @@ request to `env.ASSETS` before any middleware, a few lines of work, and every ot
 `/assets/*` bundle included, is still served without it. The cost is in time to first byte, and it
 had not been measured against production when this was written; compare TTFB before and after the
 deploy (the measuring method is above) and take the page paths out of `run_worker_first` if it shows.
-Web Analytics' beacon is the other change: a deferred script, loaded after the page's own, so it
-should move neither LCP nor the critical path.
+Web Analytics' beacon is the other change: a module script after the page's own, so deferred, and
+it should move neither LCP nor the critical path. That has not been measured either.
 
