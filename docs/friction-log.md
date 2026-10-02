@@ -5,6 +5,12 @@ workflow can be fixed at its source: a doc that was wrong, missing or hard to fi
 or command that failed, a permission refusal, a check that gave a misleading result, a step
 that had to be worked out by hand, an instruction that contradicted another.
 
+Duplication you load into your context is friction too. When a doc, skill, plan or
+instruction you read repeats something you already loaded elsewhere, and the repeat adds
+nothing (same facts, same rule, same steps), log it: it costs every agent context and
+drifts out of date when only one copy is edited. Name both places in the issue and, as the
+suggested fix, which copy should stay and what the other should link to instead.
+
 Each friction gets a GitHub issue with the details and a one-line entry here that links to
 it. The issue is where the fix is discussed and tracked; this file is the running list.
 
