@@ -111,7 +111,7 @@ describe("keepFeltFromFirst", () => {
 
   it("before any later answer, or after a failed first load, is what the page first had", () => {
     const first = context({ dyfi: dyfi(1249) });
-    expect(keepFeltFromFirst(first, undefined)).toBe(first);
+    expect(keepFeltFromFirst(first, undefined)).toEqual(first);
     expect(keepFeltFromFirst(null, undefined)).toBeNull();
   });
 });

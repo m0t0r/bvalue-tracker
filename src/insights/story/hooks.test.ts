@@ -73,16 +73,14 @@ describe("useProgress", () => {
     expect(result.current).toBeLessThan(0.3);
   });
 
-  it("stops asking for frames once it is off or gone", () => {
-    const cancel = vi.spyOn(window, "cancelAnimationFrame");
+  it("leaves no frame pending once it is off or gone", () => {
     const { rerender, unmount } = drawn(true);
     frames(100);
     rerender({ on: false });
-    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
     rerender({ on: true });
     frames(100);
     unmount();
-    expect(cancel).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
   });
 

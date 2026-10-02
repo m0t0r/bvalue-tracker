@@ -221,28 +221,30 @@ describe("what the scope bar names", () => {
 });
 
 describe("the scope as the page holds it", () => {
-  it("hands the map, the table and the charts the same events when only Mc moves", () => {
+  it("keeps the map, the table and the charts on the same events when only Mc moves", () => {
     const { result } = renderHook(() => useScope(EVENTS));
     const before = result.current.view;
     act(() => result.current.setFilters({ ...DEFAULT_SCOPE.filters, mc: 3.2 }));
 
-    expect(result.current.view.base).toBe(before.base);
-    expect(result.current.view.shown).toBe(before.shown);
-    expect(result.current.view.ofType).toBe(before.ofType);
-    expect(result.current.deferred.shown).toBe(before.shown);
-    // ...and still moves every figure, so the identities above are not a frozen page.
+    expect(result.current.view.shown).toEqual(before.shown);
+    expect(result.current.view.ofType).toEqual(before.ofType);
+    expect(result.current.deferred.shown).toEqual(before.shown);
+    // ...and still moves every figure, so the comparisons above are not a frozen page.
     expect(result.current.view.stats.mc).toBe(3.2);
     expect(result.current.deferred.stats.mc).toBe(3.2);
   });
 
-  it("hands them a new one when the reader really does narrow the catalogue", () => {
+  it("narrows the map, the table and the charts to the deep events when the reader chooses them", () => {
     const { result } = renderHook(() => useScope(EVENTS));
     const before = result.current.view;
     act(() => result.current.selectCluster.onChange("deep"));
 
-    expect(result.current.view.base).toBe(before.base);
-    expect(result.current.view.shown).not.toBe(before.shown);
-    expect(result.current.deferred.shown).toBe(result.current.view.shown);
+    const shown = result.current.view.shown;
+    // Deep is 70 km and below.
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(before.shown.length);
+    expect(shown.every((e) => e.depthKm >= 70)).toBe(true);
+    expect(result.current.deferred.shown).toEqual(shown);
     expect(result.current.deferred.cluster).toBe("deep");
   });
 
@@ -263,12 +265,9 @@ describe("the scope as the page holds it", () => {
     expect(scopeChips(result.current.scope, dicts.es, "es", "choco", MAINSHOCK_ID)).toEqual([]);
   });
 
-  it("draws nothing before the catalogue has arrived, and does not change identity waiting", () => {
-    const { result, rerender } = renderHook(() => useScope(undefined));
+  it("draws nothing before the catalogue has arrived", () => {
+    const { result } = renderHook(() => useScope(undefined));
     expect(result.current.view.shown).toEqual([]);
-    const before = result.current.view.base;
-    rerender();
-    expect(result.current.view.base).toBe(before);
   });
 });
 

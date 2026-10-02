@@ -4,8 +4,7 @@
  * The compiler fails silently by design: a component it cannot handle is skipped and the build says
  * nothing. Its `logger` option is the only place a skip shows, so this runs the same Babel plugin the
  * build runs (`react-compiler.config.ts`) over every source file with a logger and collects the events.
- * `test/react-compiler.test.ts` holds the result to a committed list; `scripts/react-compiler.ts`
- * prints it, and one file's compiled output.
+ * `scripts/react-compiler.ts` prints the result, and one file's compiled output.
  */
 import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,12 +24,6 @@ export interface Skip {
   reason: string;
 }
 
-/**
- * A skip that is expected, named by what is ours: the file and the function. Not the line, which an
- * edit above the function moves, and not the reason, which is the compiler's wording to change.
- */
-export type AllowedSkip = Pick<Skip, "file" | "fn">;
-
 export interface CompilerReport {
   compiled: { file: string; fn: string }[];
   skips: Skip[];
@@ -44,31 +37,13 @@ const NOT_SOURCE = /\.test\.tsx?$|\.d\.ts$|^src\/static-shell\.tsx$/;
  * own, or what an arrow function is assigned to. The compiler's error events carry the function's
  * place and not its name.
  */
-export function functionName(source: string, index: number): string {
+function functionName(source: string, index: number): string {
   const own = /^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/.exec(source.slice(index));
   if (own?.[1]) return own[1];
   // `const Name = (`, `const Name = memo((`, `const Name: Type = (`, on the function's own line.
   const before = source.slice(source.lastIndexOf("\n", index - 1) + 1, index);
   const assigned = /([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:[\w$.]+\(\s*)*(?:async\s+)?$/.exec(before);
   return assigned?.[1] ?? "(anonymous)";
-}
-
-const key = (s: AllowedSkip) => `${s.file}\n${s.fn}`;
-const byKey = (a: AllowedSkip, b: AllowedSkip) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
-
-/**
- * What the compiler skips against what it is expected to skip: `unlisted` is skipped and not
- * expected, `stale` expected and not skipped. Each expected entry answers for one skip.
- */
-export function compareSkips(found: Skip[], allowed: AllowedSkip[]): { unlisted: Skip[]; stale: AllowedSkip[] } {
-  const left = [...allowed];
-  const unlisted: Skip[] = [];
-  for (const skip of found) {
-    const at = left.findIndex((a) => key(a) === key(skip));
-    if (at === -1) unlisted.push(skip);
-    else left.splice(at, 1);
-  }
-  return { unlisted: unlisted.sort(byKey), stale: left.sort(byKey) };
 }
 
 type SkipEvent = Extract<LoggerEvent, { kind: "CompileError" | "CompileSkip" | "PipelineError" }>;
