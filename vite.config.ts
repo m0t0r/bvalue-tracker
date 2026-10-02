@@ -428,7 +428,7 @@ function reactProfiling(): Plugin {
  * React Compiler (issue #130; docs/development.md, "React Compiler"): every component and hook of the
  * pages is memoised at build time, so a render redoes only what its changed inputs reach. Through
  * Babel, the stable route, where a function the compiler cannot handle shows in its logger
- * (`test/react-compiler.test.ts` holds that list) and is left exactly as written. The plugin itself
+ * (`pnpm tsx scripts/react-compiler.ts skips` lists them) and is left exactly as written. The plugin itself
  * is `reactCompiler` in `react-compiler.config.ts`, shared with the tests. It compiles the client
  * environment only: the static headers are rendered by `renderShells` and the head script built by
  * `bundleBoot`, both with no config file, and the Worker has no React.

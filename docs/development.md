@@ -128,8 +128,9 @@ DevTools MCP, but everything in it comes from React itself. Three pieces:
 2. **A stand-in for the DevTools hook: `test/browser/react-profile.js`**, an `agent-browser`
    `--init-script`, so it is there before React loads (which is also what makes React time its
    renders). Its header has the commands: `__prof.on = true`, interact, `__prof.summary()`. It reads
-   React's fibers, which are not public API; `src/lib/react-profile.test.ts` holds it to the React
-   installed, so an upgrade that moves them fails a test rather than a profile.
+   React's fibers, which are not public API, so a React upgrade can break it, and nothing tests it:
+   a test that held it to React's internals was removed on 2026-10-02 ([Writing tests](#writing-tests)).
+   A profile that comes back empty after an upgrade is the first sign.
 3. **A server with no Worker behind it: `scripts/fixture-server.ts`.** It serves a build's files with
    brotli and answers `/api/*` from JSON captured once, by `GET`, from a dev server with a populated
    local database (`capture`, then `serve`; its header has both). Nothing in that setup can reach SGC,
@@ -192,8 +193,16 @@ file on 2026-10-02):
 - **Independent oracles stay**: hand-worked values, the captured fixtures in `test/fixtures/`, two
   files that must agree (code and `wrangler.jsonc`, `es` and `en`, the CSS easing and its JS twin).
   A check that a test's own data still sets off the trap it is about may stay beside real assertions.
-- Nothing the type system already guarantees, and nothing of a dependency's internals (the owner's
-  rule: [React Compiler](#tooling-gotchas)).
+- **Nothing the type system already guarantees, nothing of our own tooling, and nothing of a
+  dependency's behaviour or internals** (owner's rule): not which functions React Compiler skips or
+  memoises, not React's fibers, not a library's markup such as Radix's `data-state`. Removed on these
+  grounds (2026-10-02): the compiler's skip list, the profile script's test and the two "runs
+  compiled" guards. `reactCompilerRan` in `vite.config.ts` stays: it stops a build that compiled
+  nothing, and is not a test.
+- **No render counts or object identity.** Whether a component rendered again, or a hook handed back
+  the same array, is how React and the compiler do their work, not what a reader gets. Assert the
+  outcome: the width a label is drawn at once the web font arrives (`measure.test.ts`), the events
+  shown, no animation frame left pending. A callback of ours called once per press is an outcome.
 - **Prove a new assertion can fail**: break the production line it guards, watch it fail, restore.
   The ingest test "does not remove events outside the requested window" served the whole catalogue
   for a late window and could not fail at all, until it was given a response without the early rows.
@@ -226,8 +235,8 @@ file on 2026-10-02):
     `git diff pnpm-lock.yaml` after touching it, and keep a change of tool versions out of a PR that
     is about something else.
   - **It does not report what the compiler skips for its own limitations**, only what breaks React's
-    rules. Those skips show only in the compiler's logger, which `test/react-compiler.test.ts` reads
-    (the next bullet).
+    rules. Those skips show only in the compiler's logger, which `pnpm tsx scripts/react-compiler.ts
+    skips` prints (the next bullet).
 
 - **React Compiler compiles the pages, through Babel** (issue #130; what it buys is in
   [Performance](performance.md), how to write for it in [the page](frontend.md#writing-for-react-compiler)).
@@ -237,8 +246,8 @@ file on 2026-10-02):
   is left exactly as written, and nothing is printed.** Everything below follows from that silence.
   - **One file holds the setup, `react-compiler.config.ts`**: the compiler's options, which files it
     compiles (`src/` and the chart kit's `packages/charts/src/`; `core/` and `packages/seismo` have no
-    component or hook) and the plugin. The build, the `page` and `charts` test projects and the
-    skipped-list test all read it, so an option added for one cannot leave the tests passing on code
+    component or hook) and the plugin. The build, the `page` and `charts` test projects and
+    `scripts/react-compiler.ts` all read it, so an option added for one cannot leave the tests passing on code
     the reader does not get (code review). **A new package with components or hooks goes in its
     `SOURCE_DIRS`**: the chart kit's tooltip, drawing and reading were compiled while they were in
     `src/`, and moving them to a package (issue #138) took them out of the build's compiler without a
@@ -247,24 +256,19 @@ file on 2026-10-02):
     `babel-plugin-react-compiler` 1.0 skips every component that has a destructured prop with a
     default (`Expected object property value to be an LVal, got: AssignmentPattern`): 65 functions
     instead of 15 when it was tried (2026-09-30), with no error. `.github/dependabot.yml` ignores its
-    majors; lift that when the compiler supports Babel 8, and let the skipped-list test say whether it
-    does.
-  - **The skipped list is held by a test**: `test/react-compiler.test.ts` runs the same plugin over
-    the same folders with a `logger` and compares what it skips with `ALLOWED` in that file. It
-    fails on a skip that is not listed **and** on a listed one that no longer happens, so a new
-    component cannot quietly lose its optimisation, and the list can only shrink on purpose. The list
-    started at 11 in 7 files (214 compiled): issues #131 and #132 empty it.
-    - **An entry is a file and a function of ours, and nothing of the compiler's** (owner's rule,
-      2026-09-30: no test of a third party's implementation details). A first version also matched
-      the compiler's reason, word for word, internal messages such as
-      `[Codegen] Internal error: MethodCall::property…` included: a release that reworded one would
-      have failed the test with nothing of ours changed. The reason and the line are printed in a
-      failure and by the command below, for a person to read, and never compared. No line number
-      either: an edit above the function would move it.
-    - **A compiler release can still fail it**, by skipping another of our functions or starting to
-      compile a listed one, and should: both change what ships. So Dependabot sends
-      `babel-plugin-react-compiler` in a PR of its own, outside the weekly group, where a red test
-      waits for a person and holds back nothing else.
+    majors; lift that when the compiler supports Babel 8, and check with
+    `pnpm tsx scripts/react-compiler.ts skips` whether it does.
+  - **What it skips is listed by a command, not held by a test**: `pnpm tsx scripts/react-compiler.ts
+    skips` runs the same plugin over the same folders with a `logger` and prints every function it
+    leaves as written, with its line and the compiler's reason. It started at 11 in 7 files (214
+    compiled); issues #131 and #132 empty it. Run it after writing a component or a hook, and after a
+    compiler update. A test held the list until 2026-10-02 and was removed with the other tests of a
+    dependency's behaviour ([Writing tests](#writing-tests)): which functions the compiler skips is
+    the compiler's choice. A function it starts skipping runs as written, slower but no different;
+    one it starts compiling can behave differently (the values frozen in render, in
+    [the page](frontend.md#writing-for-react-compiler)). So `babel-plugin-react-compiler` still comes
+    in a Dependabot PR of its own, outside the group that merges and deploys by itself: run the command
+    on it and on `main`, and walk in a browser any function that moved.
   - **Only the client environment is compiled** (the preset's `applyToEnvironmentHook`). The static
     headers are rendered once at build time by `renderShells`, with no config file, and the Worker has
     no React; memoisation does nothing for a single server render, and the markup is the same, so
@@ -280,17 +284,11 @@ file on 2026-10-02):
     do). Checked by building with the Babel plugin taken out.
   - **Vitest does not read `vite.config.ts`**, so the `page` and `charts` projects are given the same
     plugin in `vitest.config.ts`. Without it every page test would pass against code no reader runs.
-    `packages/charts/test/compiled.test.ts` guards the `charts` project the same way, by what the kit's
-    own hook does: rendered again with nothing changed, `useReading` hands back the same handlers.
-    `src/lib/react-compiler.test.tsx` fails if that project stops compiling, **by what React does,
-    not by what compiled code looks like**: a parent renders again and a child with unchanged props
-    does not, with no `memo` written. (A first version matched the compiler's cache variable in a
-    component's source text, which is the compiler's to rename.) It is the project's one `.tsx` test:
-    the compiler memoises JSX elements, and the same tree written as `createElement` calls is not
-    memoised apart from its parent. Issue #130 expected the preset's client-only check to keep the
-    compiler out of a test run; it does not, the `page` project is a client environment (checked:
-    the test passes with the preset as it is, and fails with the plugin removed). Test files are
-    compiled too, as any file with a component or a hook in it is.
+    No test checks that they do: two did, by counting a child's renders and comparing a hook's
+    handlers, which is the compiler's behaviour rather than ours, and were removed on 2026-10-02
+    ([Writing tests](#writing-tests)). Issue #130 expected the preset's client-only check to keep the
+    compiler out of a test run; it does not, the `page` project is a client environment. Test files
+    are compiled too, as any file with a component or a hook in it is.
   - **To see what the compiler makes of a file**: `pnpm tsx scripts/react-compiler.ts show
     src/components/theme-button.tsx` prints it with its JSX and types kept. A compiled function opens
     with `const $ = _c(n)`, its cache of n slots, and each `if ($[i] !== dep)` block is one memoised

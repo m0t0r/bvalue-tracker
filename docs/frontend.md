@@ -2233,7 +2233,7 @@ step ([development](development.md#tooling-gotchas)).
 - **The kit is compiled by React Compiler, as `src/` is** (`SOURCE_DIRS` in `react-compiler.config.ts`;
   [development](development.md#tooling-gotchas)). Its code was compiled in `src/`, and the move to a
   package took it out of the build's compiler until it was listed there. It compiles with no skips,
-  and its tests run compiled (`compiled.test.ts`).
+  and its tests run compiled (`vitest.config.ts`).
 - **Where the tooltip goes did not change** (checked 2026-09-30 after the rebase onto React Compiler,
   `main` at `6f0a0d4` against this, both served by `scripts/fixture-server.ts` from one capture,
   DevTools-protocol mouse moves and touches, in-page keys one per call, each box read after its
@@ -2387,6 +2387,9 @@ is left as written, silently, which is why these are conventions and not only li
 - **No ref is read or written during render** (`ref.current` belongs in an event handler or an
   effect), **and no prop, state or hook result is mutated.** The lint above reports both; the
   compiler skips the whole component for either.
+- **`EventsTable` is skipped today** (a default parameter that is an expression; issue #131). It
+  holds a TanStack Table, which keeps its state inside one stable object: when it compiles, by #131
+  or by a compiler release, walk the table's sorting and paging in a browser before trusting it.
 - **No `useMemo`, `useCallback` or `memo` by default.** The compiler does their work, with finer
   grain. Reach for one only where a measurement shows a need the compiler does not meet, and say
   which in a comment. The ones already in the code stay until issue #133 removes them area by area:
@@ -2395,12 +2398,10 @@ is left as written, silently, which is why these are conventions and not only li
 - **A default parameter is a plain value**, not an expression over another parameter or JSX
   (`of = events.length`, `placeholder = <Skeleton />`): default those in the body. And a few shapes
   trip compiler bugs, such as a method call nested in `Math.round(…)`: hoist the inner call to a
-  `const`. The lint reports none of these; `test/react-compiler.test.ts` does, by failing on a
-  skipped function that is not in its list.
+  `const`. The lint reports none of these; `pnpm tsx scripts/react-compiler.ts skips` lists them.
 - **`"use no memo"` is the escape hatch**: as the first statement of a function, it tells the
   compiler to leave that function alone. Use it only for a component that misbehaves compiled, with
-  a comment that says what went wrong, and add it to the test's list with the issue that will
-  remove it. None is in the code today.
+  a comment that says what went wrong and names the issue that will remove it. None is in the code today.
 - **What to check after a change to something that updates over time**: the compiler changes *when*
   a component renders again, so a value read from outside React during render (a clock, a DOM
   measurement, a module variable) can freeze. `useNow` is the pattern: the time is state, so

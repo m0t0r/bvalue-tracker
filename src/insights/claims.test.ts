@@ -550,10 +550,4 @@ describe("chocoReach", () => {
     const far = Array.from({ length: 90 }, () => under(200));
     expect(chocoReach(near, far).beyondKm).toBe(50);
   });
-
-  it("is worked out once per catalogue, not on every minute the page's clock ticks", () => {
-    const a = insights(fixture, NOW).chocoReach;
-    expect(a.beyondKm).toBe(110);
-    expect(insights(fixture, NOW + 60_000).chocoReach).toBe(a);
-  });
 });

@@ -1,7 +1,7 @@
 /**
  * React Compiler's setup, in one place (issue #130; docs/development.md, "React Compiler"). Three
  * things run the compiler and must agree on what it compiles and how: the build (`vite.config.ts`),
- * the `page` test project (`vitest.config.ts`) and the skipped-list test
+ * the `page` and `charts` test projects (`vitest.config.ts`) and the skips command
  * (`scripts/react-compiler-skips.ts`). An option added for one and not the others would have the
  * tests pass on code the reader does not get, so all three read this file.
  */
@@ -22,7 +22,7 @@ export const COMPILER_OPTIONS: Partial<PluginOptions> = {};
  */
 const SOURCE_DIRS = ["src", "packages/charts/src"];
 
-/** The pages' source, as the globs the skipped-list test walks. */
+/** The pages' source, as the globs the skips command walks. */
 export const PAGE_SOURCES = SOURCE_DIRS.map((dir) => `${dir}/**/*.{ts,tsx}`);
 
 const escape = (dir: string) =>
