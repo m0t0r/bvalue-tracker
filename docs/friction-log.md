@@ -46,4 +46,4 @@ paths outside the repo and anything personal.
 
 ## Entries
 
-<!-- None yet. -->
+- 2026-10-02: Worktree sessions refuse compound commands and heredoc scripts as too complex to verify (#169)

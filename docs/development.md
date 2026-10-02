@@ -440,6 +440,14 @@ Driving the page for a profile:
   so the touch sizes cannot be seen that way. To measure them, rewrite the rules in the page:
   walk `document.styleSheets` and set every `CSSMediaRule` whose `media.mediaText` mentions
   `pointer: coarse` to `all`.
+- **A worktree session (`EnterWorktree`) refuses commands it cannot prove stay inside the
+  worktree**, with "too complex to verify", even when nothing leaves it (issue #169, 2026-10-02):
+  a command that joins git to other commands with `&&` or `;`, a background `( … &)`, a `python3 -
+  <<'EOF'` heredoc that edits one file. Nothing is lost, only a retry. Run `git` as a command of
+  its own, start a server with the Bash tool's `run_in_background` rather than a subshell, and put
+  any multi-line script (a heredoc, an edit script, `agent-browser` init scripts) in a file in the
+  scratchpad and run it by path (`python3 <scratchpad>/edit.py`). The same goes for `agent-browser`
+  with `eval`, loops or `$()`.
 - **Checking the page headlessly**: `agent-browser` (CLI, on PATH) drives a real
   browser against `pnpm dev`; `agent-browser skills get core` is its own guide. Full-page
   screenshots often miss the charts and the map, so scroll and take viewport screenshots
