@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { IngestRun } from "../api-types.ts";
 import {
-  CADENCE,
   dueNow,
   REFRESH_MIN_INTERVAL_S,
-  TRAILING_DAYS,
   type Caller,
   type IngestHistory,
   type IngestPlan,
@@ -253,9 +251,7 @@ describe("while SGC is refusing us", () => {
 
   it("never stops probing: the hour's tick still goes", () => {
     const plan = chaparral(cron(30), NOW, refused(7200, 3601));
-    expect(plan.steps).toEqual([
-      { lane: "wide", trigger: "cron", days: CADENCE.tolima.trailingDays, allowRemovals: true },
-    ]);
+    expect(plan.steps).toEqual([{ lane: "wide", trigger: "cron", days: 1, allowRemovals: true }]);
   });
 
   // A 5xx is their bad day, not a door: the probe is what recovers from it, at full rate.
@@ -284,9 +280,7 @@ describe("while SGC is refusing us", () => {
 
   it("lets the button through once that hour has passed, and holds the claim to it", () => {
     const plan = chaparral(MANUAL, NOW, refused(7200, 3601));
-    expect(plan.steps).toEqual([
-      { lane: "wide", trigger: "manual", days: CADENCE.tolima.trailingDays, allowRemovals: true },
-    ]);
+    expect(plan.steps).toEqual([{ lane: "wide", trigger: "manual", days: 1, allowRemovals: true }]);
     expect(plan.minIntervalS).toBe(3600);
   });
 
@@ -368,10 +362,7 @@ describe("the Chocó zone", () => {
   });
 
   it("re-reads three trailing days on the wide tick, with removals", () => {
-    expect(choco(cron(30)).steps).toEqual([
-      { lane: "wide", trigger: "cron", days: TRAILING_DAYS, allowRemovals: true },
-    ]);
-    expect(TRAILING_DAYS).toBe(3);
+    expect(choco(cron(30)).steps).toEqual([{ lane: "wide", trigger: "cron", days: 3, allowRemovals: true }]);
   });
 
   it("sweeps on the hour, like Chaparral", () => {
@@ -396,12 +387,11 @@ describe("the Chocó zone", () => {
 
   // Its throttle is its own period, so a press lands on a run that was happening anyway.
   it("holds the button to its own thirty minutes, counted from its own last run", () => {
-    const wait = CADENCE.choco.refreshMinIntervalS;
-    expect(wait).toBe(1800);
+    const wait = 1800;
     const h = history({ lastRun: finishedAt(NOW), lastSent: NOW.toISOString() });
     expect(choco(MANUAL, h, at(wait - 60)).retryAfterS).toBe(60);
     expect(choco(MANUAL, h, at(wait + 1)).steps).toEqual([
-      { lane: "wide", trigger: "manual", days: TRAILING_DAYS, allowRemovals: true },
+      { lane: "wide", trigger: "manual", days: 3, allowRemovals: true },
     ]);
   });
 

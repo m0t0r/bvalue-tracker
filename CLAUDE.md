@@ -14,7 +14,7 @@ and interface conventions. Most of it cannot be inferred from the code.
 | the page: layout, copy, colour, motion | `docs/frontend.md`, `docs/performance.md` |
 | logging, alerts, investigating production | `docs/operations.md`, `docs/incidents/` |
 | deploy, CI, `wrangler.jsonc` | `docs/deployment.md` |
-| tests, build, dependencies | `docs/development.md` ("Tooling gotchas") |
+| tests, build, dependencies | `docs/development.md` ("Writing tests", "Tooling gotchas") |
 
 - Checks before finishing any change: `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
   `pnpm test`. Fix lint errors rather than silencing them; `docs/frontend.md` ("Design-system

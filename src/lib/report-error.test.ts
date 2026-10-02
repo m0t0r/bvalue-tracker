@@ -1,53 +1,50 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
-/**
- * The reporter keeps per-page-load state — what it has already sent, and whether it is
- * mid-send — so each test gets a fresh module. Without this the cap and the dedupe would
- * leak across tests and the last few would pass for the wrong reason.
- */
-async function fresh() {
-  vi.resetModules();
-  return import("./report-error");
-}
-
-let fetchMock: ReturnType<typeof vi.fn>;
-let removeListeners: (() => void)[] = [];
-
-/**
- * happy-dom's `window` outlives each test while `fresh()` hands out a new module every
- * time, so without this every install leaves another pair of listeners attached — each
- * bound to a different module's state — and one dispatched event fans out to all of them.
- */
-function install(installErrorReporting: () => void): void {
-  const add = window.addEventListener.bind(window);
-  const added: [string, EventListener][] = [];
-  window.addEventListener = ((type: string, fn: EventListener, opts?: AddEventListenerOptions) => {
-    added.push([type, fn]);
-    add(type, fn, opts);
-  }) as typeof window.addEventListener;
-  installErrorReporting();
-  window.addEventListener = add;
-  removeListeners.push(() => {
-    for (const [t, fn] of added) window.removeEventListener(t, fn);
-  });
-}
-
-beforeEach(() => {
-  fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
-  vi.stubGlobal("fetch", fetchMock);
-});
 afterEach(() => {
-  for (const off of removeListeners) off();
-  removeListeners = [];
   vi.unstubAllGlobals();
 });
 
-/** What the one call carried, as the Worker will read it. */
-const sent = (call = 0) => JSON.parse((fetchMock.mock.calls[call]![1] as RequestInit).body as string);
+/**
+ * A fresh reporter over a stubbed `fetch`, which answers 204 unless the test says otherwise.
+ *
+ * The reporter keeps per-page-load state — what it has already sent, and whether it is mid-send — so
+ * each test gets a fresh module. Without this the cap and the dedupe would leak across tests and the
+ * last few would pass for the wrong reason.
+ */
+async function setup(answer: () => Promise<Response> = () => Promise.resolve(new Response(null, { status: 204 }))) {
+  const fetchMock = vi.fn<typeof fetch>(answer);
+  vi.stubGlobal("fetch", fetchMock);
+  vi.resetModules();
+  const { reportError, installErrorReporting } = await import("./report-error");
+  return {
+    fetchMock,
+    reportError,
+    /** What the one call carried, as the Worker will read it. */
+    sent: (call = 0) => JSON.parse((fetchMock.mock.calls[call]![1] as RequestInit).body as string),
+    /**
+     * happy-dom's `window` outlives each test while each test imports a new module, so without
+     * removing them every install leaves another pair of listeners attached — each bound to a
+     * different module's state — and one dispatched event fans out to all of them.
+     */
+    install() {
+      const add = window.addEventListener.bind(window);
+      const added: [string, EventListener][] = [];
+      window.addEventListener = ((type: string, fn: EventListener, opts?: AddEventListenerOptions) => {
+        added.push([type, fn]);
+        add(type, fn, opts);
+      }) as typeof window.addEventListener;
+      installErrorReporting();
+      window.addEventListener = add;
+      onTestFinished(() => {
+        for (const [t, fn] of added) window.removeEventListener(t, fn);
+      });
+    },
+  };
+}
 
 describe("reportError", () => {
   it("posts the report same-origin, as JSON", async () => {
-    const { reportError } = await fresh();
+    const { reportError, fetchMock, sent } = await setup();
     reportError({ message: "TypeError: x is not a function", stack: "at foo", source: "error" });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -62,20 +59,20 @@ describe("reportError", () => {
   // A broken page breaks repeatedly: a chart that throws on every render would otherwise
   // spend the day's log budget on one reader.
   it("sends one report per distinct message", async () => {
-    const { reportError } = await fresh();
+    const { reportError, fetchMock } = await setup();
     for (let i = 0; i < 4; i++) reportError({ message: "same", source: "error" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("stops after five distinct messages", async () => {
-    const { reportError } = await fresh();
+    const { reportError, fetchMock } = await setup();
     for (let i = 0; i < 9; i++) reportError({ message: `different ${i}`, source: "error" });
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   // The Worker refuses a body over 4 KB, so a long stack must not cost us the whole report.
   it("cuts the message and the stack to what the Worker will accept", async () => {
-    const { reportError } = await fresh();
+    const { reportError, sent } = await setup();
     reportError({ message: "m".repeat(5000), stack: "s".repeat(9000), source: "error" });
     expect(sent().message).toHaveLength(500);
     expect(sent().stack).toHaveLength(2000);
@@ -86,18 +83,18 @@ describe("reportError", () => {
   // is already broken.
   it("cuts the URL too, however long a link made it", async () => {
     window.history.replaceState({}, "", `/?utm=${"x".repeat(4000)}`);
-    const { reportError } = await fresh();
+    onTestFinished(() => window.history.replaceState({}, "", "/"));
+    const { reportError, sent } = await setup();
     reportError({ message: "boom", source: "error" });
     expect(sent().path).toHaveLength(200);
     expect(JSON.stringify(sent()).length).toBeLessThan(4096);
-    window.history.replaceState({}, "", "/");
   });
 });
 
 describe("installErrorReporting", () => {
   it("reports an uncaught error, with its stack", async () => {
-    const { installErrorReporting } = await fresh();
-    install(installErrorReporting);
+    const { install, fetchMock, sent } = await setup();
+    install();
 
     const err = new RangeError("Invalid array length");
     window.dispatchEvent(new ErrorEvent("error", { message: "Uncaught RangeError", error: err }));
@@ -108,8 +105,8 @@ describe("installErrorReporting", () => {
   });
 
   it("reports an unhandled rejection, and says which it was", async () => {
-    const { installErrorReporting } = await fresh();
-    install(installErrorReporting);
+    const { install, sent } = await setup();
+    install();
 
     const e = new Event("unhandledrejection") as Event & { reason: unknown };
     e.reason = new TypeError("Failed to fetch");
@@ -119,8 +116,8 @@ describe("installErrorReporting", () => {
   });
 
   it("describes a rejection that is not an Error at all", async () => {
-    const { installErrorReporting } = await fresh();
-    install(installErrorReporting);
+    const { install, sent } = await setup();
+    install();
 
     const e = new Event("unhandledrejection") as Event & { reason: unknown };
     e.reason = "just a string";
@@ -132,12 +129,11 @@ describe("installErrorReporting", () => {
   // The reporter's own failure reaches the same listener that called it. Without the guard
   // a Worker that is down turns one page error into a loop against it.
   it("never reports its own failure", async () => {
-    fetchMock.mockImplementation(() => {
+    const { install, fetchMock, sent } = await setup(() => {
       window.dispatchEvent(new ErrorEvent("error", { message: "the report itself failed" }));
       return Promise.reject(new Error("network down"));
     });
-    const { installErrorReporting } = await fresh();
-    install(installErrorReporting);
+    install();
 
     window.dispatchEvent(new ErrorEvent("error", { message: "the real error" }));
 

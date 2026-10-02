@@ -131,7 +131,8 @@ describe("headlineStats", () => {
     expect(headlineStats([])).toEqual({ mcMaxc: null, mc: null, fit: null });
     expect(headlineStats([2.1])).toEqual({ mcMaxc: null, mc: null, fit: null });
     const few = headlineStats([2.0, 2.0, 2.1], 5);
-    expect(few).toEqual({ mcMaxc: mcMaxCurvature([2.0, 2.0, 2.1]), mc: 5, fit: null });
+    // The modal bin, 2.0, plus 0.2.
+    expect(few).toEqual({ mcMaxc: 2.2, mc: 5, fit: null });
     expect(few).toEqual({ mcMaxc: computeStats(events([2.0, 2.0, 2.1]), 5).mcMaxc, mc: 5, fit: null });
   });
 });

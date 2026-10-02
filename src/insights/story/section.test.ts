@@ -13,14 +13,13 @@ const cut = (lat: number, trenchLon: number): Cut => {
 describe("frameSections", () => {
   const short = { cut: cut(4.65, -78), lon1: -76 };
   const long = { cut: cut(3.86, -78.5), lon1: -75.5 };
-  const km = (s: typeof short) => (s.lon1 - s.cut.trenchLon) * kmPerDegLon(s.cut.lat);
 
   it("draws every cut at the one scale that fits the longest", () => {
     const f = frameSections({ short, long }, 200, 800, 900, false);
     expect(f.short.px).toBe(f.long.px);
-    // 800 wide less 60 + 24 of padding, over the longer cut's ~333 km; the height would allow more.
-    expect(f.long.px).toBeCloseTo((800 - 84) / km(long), 12);
+    // The longer cut spans the 800 px less 60 + 24 of padding; the height would allow more.
     expect(f.long.x1 - f.long.x0).toBeCloseTo(800 - 84, 9);
+    expect(f.short.x1 - f.short.x0).toBeLessThan(800 - 84);
   });
 
   it("is true to scale: a kilometre across is a kilometre down", () => {
@@ -37,7 +36,7 @@ describe("frameSections", () => {
   it("takes its scale only from the cuts it is told to, so a hidden cut does not shrink a shown one", () => {
     const both = frameSections({ short, long }, 200, 800, 900, false);
     const alone = frameSections({ short, long }, 200, 800, 900, false, ["short"]);
-    expect(alone.short.px).toBeCloseTo((800 - 84) / km(short), 12);
+    expect(alone.short.x1 - alone.short.x0).toBeCloseTo(800 - 84, 9);
     expect(alone.short.px).toBeGreaterThan(both.short.px);
   });
 

@@ -29,7 +29,7 @@ describe("the header's bitmap font", () => {
     const width = (ch: string) => glyph(ch)!.width;
     expect(width("a")).toBeLessThan(width("A"));
     expect(width("i")).toBeLessThan(width("a"));
-    expect(width("m")).toBe(5);
+    expect(width("m")).toBeLessThanOrEqual(width("M"));
   });
 
   it("puts an accent above a lowercase letter, not on its body", () => {

@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PRODUCTS_CRON, lastProductsRun } from "../../core/products";
 import type { ContextResponse, ExternalProduct, ForecastDigest } from "../../worker/api-types";
-import {
-  CONTEXT_RECHECK_FOR_MS,
-  CONTEXT_RECHECK_MS,
-  PRODUCTS_RUN_MARGIN_MS,
-  contextRecheckDue,
-  keepFeltFromFirst,
-} from "./context-refresh";
+import { contextRecheckDue, keepFeltFromFirst } from "./context-refresh";
 
 const T = (iso: string) => Date.parse(iso);
 const MIN = 60_000;
@@ -50,7 +44,7 @@ describe("lastProductsRun", () => {
 
 /**
  * The forecast is due 2026-09-28T16:00Z; the first job that can store the next one runs
- * 2026-09-29T11:07Z, and is given PRODUCTS_RUN_MARGIN_MS (5 min) to finish.
+ * 2026-09-29T11:07Z, and is given 5 minutes to finish.
  */
 describe("contextRecheckDue", () => {
   const DUE = T("2026-09-28T16:00:00Z");
@@ -58,7 +52,6 @@ describe("contextRecheckDue", () => {
   const fetched = T("2026-09-25T12:00:00Z");
 
   it("waits past the due time for the first job run after it, which is when the server can have the next forecast", () => {
-    expect(PRODUCTS_RUN_MARGIN_MS).toBe(5 * MIN);
     expect(contextRecheckDue(context(), fetched, fetched, DUE)).toBe(false);
     expect(contextRecheckDue(context(), fetched, fetched, RUN - 1)).toBe(false);
     expect(contextRecheckDue(context(), fetched, fetched, RUN)).toBe(true);
@@ -78,15 +71,13 @@ describe("contextRecheckDue", () => {
   });
 
   it("after a failed attempt, 10 minutes before the next, so a failing server is not asked on every return", () => {
-    expect(CONTEXT_RECHECK_MS).toBe(10 * MIN);
     const failed = RUN + 1 * MIN;
     expect(contextRecheckDue(context(), fetched, failed, failed + 10 * MIN - 1)).toBe(false);
     expect(contextRecheckDue(context(), fetched, failed, failed + 10 * MIN)).toBe(true);
   });
 
   it("stops two days after the due time: a forecast that never comes back is not asked for for ever", () => {
-    expect(CONTEXT_RECHECK_FOR_MS).toBe(2 * 24 * 60 * MIN);
-    const end = DUE + CONTEXT_RECHECK_FOR_MS;
+    const end = DUE + 2 * 24 * 60 * MIN;
     expect(contextRecheckDue(context(), fetched, fetched, end - 1)).toBe(true);
     expect(contextRecheckDue(context(), fetched, fetched, end)).toBe(false);
   });

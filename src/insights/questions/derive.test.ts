@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { QuakeLike } from "../claims";
-import { fmtInt } from "../shared";
 import {
   colombianDays,
   dailyCounts,
@@ -76,7 +75,7 @@ describe("energy and amplitude", () => {
     // M7.3 against M7.4 in energy: 10^-0.15, about 1/1.4, never "1/1".
     expect(ratioPhrase(10 ** -0.15)).toEqual({ kind: "less", x: "1.4" });
     expect(ratioPhrase(1 / 317.4)).toEqual({ kind: "less", x: "320" });
-    expect(ratioPhrase(1 / 12_345)).toEqual({ kind: "less", x: fmtInt(12_000) });
+    expect(ratioPhrase(1 / 12_345)).toEqual({ kind: "less", x: "12\u202F000" });
     expect(ratioPhrase(31.6)).toEqual({ kind: "more", x: "32" });
     expect(ratioPhrase(Number.NaN)).toEqual({ kind: "same" });
   });

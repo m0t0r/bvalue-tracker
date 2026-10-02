@@ -13,14 +13,20 @@ import { useReading, type ReadingHandlers, type ReadingOptions } from "../src";
 afterEach(cleanup);
 
 const read: ReadingOptions["read"] = () => null;
-const seen: ReadingHandlers["frame"][] = [];
-function Chart() {
-  seen.push(useReading({ n: 3, read }).frame);
-  return null;
+
+/** A chart that keeps the handlers each of its renders was handed. */
+function makeChart() {
+  const seen: ReadingHandlers["frame"][] = [];
+  function Chart() {
+    seen.push(useReading({ n: 3, read }).frame);
+    return null;
+  }
+  return { Chart, seen };
 }
 
 describe("the charts project", () => {
   it("runs the kit compiled: a render with nothing changed hands back the same handlers", () => {
+    const { Chart, seen } = makeChart();
     const view = render(createElement(Chart));
     view.rerender(createElement(Chart));
     expect(seen).toHaveLength(2);

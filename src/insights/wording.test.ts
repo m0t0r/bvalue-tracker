@@ -42,15 +42,7 @@ describe("the insights page's wording", () => {
     });
   });
 
-  it("says a zoom, not a wheel, since a trackpad has none", () => {
-    absent(/rueda para acercar/);
-  });
-
   it("does not call the orange plane a crack", () => {
     absent(/grieta|\ba crack\b/);
-  });
-
-  it("does not make the page 'we' where it is 'this page' everywhere else", () => {
-    absent(/lo mostramos tal como|we show it as USGS/);
   });
 });

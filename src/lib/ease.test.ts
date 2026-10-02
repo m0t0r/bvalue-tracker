@@ -31,8 +31,8 @@ describe("cubicBezier", () => {
 });
 
 describe("cssEasing", () => {
-  // `test/ease-token.test.ts` holds it to `index.css`.
-  it("writes the curve as CSS writes it", () => {
-    expect(cssEasing(EASE_MOVE)).toBe("cubic-bezier(0.2, 0, 0, 1)");
+  // `test/ease-token.test.ts` holds `EASE_MOVE` to `index.css` through it.
+  it("writes the curve as CSS writes it, its four numbers in order", () => {
+    expect(cssEasing([0.25, 0.1, 0.25, 1])).toBe("cubic-bezier(0.25, 0.1, 0.25, 1)");
   });
 });

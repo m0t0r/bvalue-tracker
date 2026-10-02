@@ -1,14 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import {
-  calculationTable,
-  GROUPS,
-  MODES,
-  OPERATORS,
-  parseLimit,
-  queryBody,
-  sinceMs,
-  WORKER,
-} from "../scripts/logs-query";
+import { calculationTable, GROUPS, MODES, parseLimit, queryBody, sinceMs } from "../scripts/logs-query";
 
 /**
  * `pnpm logs` is how production is read (docs/operations.md), and the API it talks to reports a
@@ -20,14 +12,11 @@ import {
 const at = { from: 1_000, to: 2_000, limit: 100 };
 
 describe("pnpm logs query bodies", () => {
-  it("asks only for operators the API accepts, so cpu's median is not p50", () => {
-    const cpu = queryBody("cpu", at);
-    const operators = cpu.parameters.calculations!.map((c) => c.operator);
+  // That every operator is one the API accepts is held by the type of `Calculation`.
+  it("asks for cpu's median by the API's name for it, `median`, not `p50`", () => {
+    const operators = queryBody("cpu", at).parameters.calculations!.map((c) => c.operator);
     expect(operators).toContain("median");
     expect(operators).not.toContain("p50");
-    for (const mode of MODES)
-      for (const c of queryBody(mode, at).parameters.calculations ?? [])
-        expect(OPERATORS, `${mode}: ${c.operator}`).toContain(c.operator);
   });
 
   it("reads CPU per trigger, from the runtime's own figure", () => {
@@ -40,12 +29,13 @@ describe("pnpm logs query bodies", () => {
 
   it("asks for more groups than the API's default of 10 on every calculation", () => {
     // 13 triggers over 3 days on 2026-09-29; the lanes query groups lane × message, which grows too.
-    expect(GROUPS).toBeGreaterThan(13);
-    for (const mode of ["cpu", "lanes"] as const) expect(queryBody(mode, at).parameters.limit).toBe(GROUPS);
+    for (const mode of ["cpu", "lanes"] as const) expect(queryBody(mode, at).parameters.limit).toBeGreaterThan(13);
   });
 
   it("scopes every query to this Worker, whatever else it filters on", () => {
-    const service = { key: "$metadata.service", operation: "eq", type: "string", value: WORKER };
+    // The name the Worker is deployed under, and so the one its logs carry.
+    const worker = /"name":\s*"([^"]+)"/.exec(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"))![1];
+    const service = { key: "$metadata.service", operation: "eq", type: "string", value: worker };
     const level = { key: "level", operation: "eq", type: "string", value: "error" };
     const msg = { key: "msg", operation: "includes", type: "string", value: "ingest failed" };
     for (const mode of ["events", "lanes"] as const) {

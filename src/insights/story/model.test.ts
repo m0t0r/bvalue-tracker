@@ -1,7 +1,6 @@
 import captured from "../../../test/fixtures/api-events-2026-09-24.json";
 import { describe, expect, it } from "vitest";
 import { insights, type Catalogues } from "../claims";
-import { horizontalErrorKm, median } from "../shared";
 import { energyShares, omoriCurve, storyModel, strongByWeek, type Ev } from "./model";
 
 const DAY = 86_400_000;
@@ -82,8 +81,9 @@ describe("storyModel on the production catalogue of 2026-09-24", () => {
   });
 
   it("measures horizontal error as latitude and longitude together, the drift claim's measure", () => {
-    const choco = m.choco.flatMap((e) => (horizontalErrorKm(e) === null ? [] : [horizontalErrorKm(e)!]));
-    expect(m.errors.choco.h).toBeCloseTo(median(choco)!, 12);
+    // Median of hypot(errLatKm, errLonKm) over the fixture's 834 Chocó events, recomputed in Python;
+    // latitude's error alone would give 2.93.
+    expect(m.errors.choco.h).toBeCloseTo(4.156, 3);
     expect(m.errors.choco.depth).toBeGreaterThan(0);
   });
 

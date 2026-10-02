@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoredEvent } from "@/lib/api";
 import type { DayRange } from "@/lib/daily-counts";
+import { dicts } from "@/lib/i18n";
 import { ZoneProvider } from "@/lib/zone";
 import { ZONES } from "../../../core/zones";
 import { MagnitudeTimeChart } from "./magnitude-time";
@@ -11,20 +12,10 @@ const DAY = 86_400_000;
 // 10 August 2026, 00:00 in Colombia: the first day of every catalogue here.
 const AUG_10 = Date.UTC(2026, 7, 10, 5);
 
-let fine = false;
 // happy-dom lays nothing out: every box is 400 × 320 at (0, 0), so the chart takes its scrolling form
 // (under 768 px), a day 28 px wide less the margins' share.
 beforeEach(() => {
-  fine = false;
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ width: 400, height: 320 }));
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: fine && query.includes("pointer: fine"),
-    media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-  }));
 });
 afterEach(() => {
   cleanup();
@@ -53,7 +44,16 @@ const EVENTS = [
   event("last", 19, 20, 2.4),
 ];
 
-function draw(events: StoredEvent[] = EVENTS, days: DayRange | null = null) {
+/** Draws the chart for a reader with a finger (`coarse`) or a mouse (`fine`). */
+function draw(events: StoredEvent[] = EVENTS, days: DayRange | null = null, pointer: "coarse" | "fine" = "coarse") {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: pointer === "fine" && query.includes("pointer: fine"),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+  }));
   const onDays = vi.fn();
   const props = (e: StoredEvent[], d: DayRange | null) =>
     createElement(
@@ -87,9 +87,9 @@ const dayX = (day: number) => 30 + ((560 - 30 - 12) / 20) * (day + 0.5);
 describe("'Magnitud en el tiempo' drawn without Recharts", () => {
   it("draws a dot per event, a star for the mainshock, and names both drawings", () => {
     const { view, dots, bars } = draw();
-    expect(dots.querySelector("title")?.textContent).toBe("Magnitude over time");
-    expect(bars.querySelector("title")?.textContent).toBe("Events per day");
-    expect(bars.querySelector("desc")?.textContent).toMatch(/^With the keyboard/);
+    expect(dots.querySelector("title")?.textContent).toBe(dicts.en.magTimeTitle);
+    expect(bars.querySelector("title")?.textContent).toBe(dicts.en.dailyTitle);
+    expect(bars.querySelector("desc")?.textContent).toBe(dicts.en.dailyKeys);
     expect(dots.querySelectorAll("path[id]")).toHaveLength(7);
     // One in the mainshock's colour, drawn last, over the others, and larger than a dot.
     const star = dots.querySelector(".fill-chart-2 path")!;
@@ -176,8 +176,7 @@ describe("the dots' tooltip", () => {
     expect(tips()).toEqual([]);
     cleanup();
 
-    fine = true;
-    const mouse = draw();
+    const mouse = draw(EVENTS, null, "fine");
     fireEvent.mouseMove(mouse.dots.parentElement!, { clientX: Number(x) + 10, clientY: Number(y) });
     expect(mouse.tips()).toEqual([]);
     fireEvent.mouseMove(mouse.dots.parentElement!, { clientX: Number(x) + 5, clientY: Number(y) - 5 });
@@ -238,8 +237,7 @@ describe("the dots' tooltip", () => {
   });
 
   it("reads the mainshock's star anywhere on it", () => {
-    fine = true;
-    const { dots, tips } = draw();
+    const { dots, tips } = draw(EVENTS, null, "fine");
     const star = dotAt(dots, "main");
     // Ten pixels from its centre: inside the star, past a dot's reach.
     fireEvent.mouseMove(dots.parentElement!, { clientX: star.x + 10, clientY: star.y });
@@ -355,8 +353,7 @@ describe("choosing days on the bars", () => {
   });
 
   it("takes a drag with a mouse, followed on the window, and shows it on the bars while it lasts", () => {
-    fine = true;
-    const { bars, onDays } = draw();
+    const { bars, onDays } = draw(EVENTS, null, "fine");
     const box = bars.parentElement!;
     fireEvent.mouseDown(box, { clientX: dayX(0), button: 0 });
     expect(document.documentElement.dataset.dragDays).toBe("");
@@ -371,8 +368,7 @@ describe("choosing days on the bars", () => {
   });
 
   it("takes a press with a mouse as a drag that went nowhere, and a shift-press from the last day pressed", () => {
-    fine = true;
-    const { bars, onDays, rerender } = draw();
+    const { bars, onDays, rerender } = draw(EVENTS, null, "fine");
     const box = bars.parentElement!;
     fireEvent.mouseDown(box, { clientX: dayX(1), button: 0 });
     fireEvent.mouseUp(window, { clientX: dayX(1) });
@@ -388,8 +384,7 @@ describe("choosing days on the bars", () => {
   });
 
   it("drops a drag on Escape, on a lost mouse-up and when the window loses focus, choosing nothing", () => {
-    fine = true;
-    const { bars, onDays } = draw();
+    const { bars, onDays } = draw(EVENTS, null, "fine");
     const box = bars.parentElement!;
     const start = () => {
       fireEvent.mouseDown(box, { clientX: dayX(0), button: 0 });

@@ -3,7 +3,7 @@ import { CHOCO_SWARM_BBOX, fetchCatalog } from "../core/seiscomp.ts";
 
 // Hits the real SGC server. Run with `pnpm test:live`.
 describe.skipIf(!process.env.LIVE)("live SGC", () => {
-  it("returns the mainshock and every event already in the captured fixture window", async () => {
+  it("answers the form with the mainshock at M7 or more, and more than 50 events for its first two days", async () => {
     const page = await fetchCatalog({
       start: new Date("2026-08-10T00:00:00Z"),
       end: new Date("2026-08-12T00:00:00Z"),

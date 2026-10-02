@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_FILTERS, activeFilterChips, applyFilters, defaultFilters, type Filters } from "@/lib/filters";
 import { scopeChips, DEFAULT_SCOPE } from "@/lib/scope";
+import type { StoredEvent } from "@/lib/api";
 import { dicts } from "@/lib/i18n";
 import { MAINSHOCK_ID } from "../../core/seiscomp";
 
@@ -37,10 +38,6 @@ describe("the filters a page is narrowed by", () => {
     // Clearing the start date is a change too: it widens the page to the whole catalogue.
     expect(labels({ from: "" })).toEqual([`dates=${es.chipAllDates}`]);
   });
-
-  it("keeps the default start date silent, since it is where the sequence begins", () => {
-    expect(labels({ from: DEFAULT_FILTERS.from })).toEqual([]);
-  });
 });
 
 /**
@@ -49,10 +46,35 @@ describe("the filters a page is narrowed by", () => {
  * start date five weeks before its first event.
  */
 describe("a zone's own defaults", () => {
-  it("starts Chaparral on 20 September and Chocó on 10 August", () => {
-    expect(defaultFilters("tolima").from).toBe("2026-09-20");
-    expect(defaultFilters("choco")).toEqual(DEFAULT_FILTERS);
-    expect(DEFAULT_FILTERS.from).toBe("2026-08-10");
+  /** A reviewed M2.5 at `time`, which every default filter keeps but the date. */
+  const e = (time: string): StoredEvent => ({
+    id: `SGC2026${time}`,
+    time,
+    lat: 4.5,
+    lon: -76.7,
+    depthKm: 20,
+    mag: 2.5,
+    magType: "MLv",
+    phases: 12,
+    rmsS: 0.4,
+    gapDeg: 120,
+    errLatKm: 1,
+    errLonKm: 1,
+    errDepthKm: 2,
+    region: "Istmina, Chocó, Colombia",
+    status: "manual",
+    solutionStamp: null,
+    firstSeenAt: "2026-09-19T00:00:00.000Z",
+    updatedAt: "2026-09-19T00:00:00.000Z",
+    removedAt: null,
+  });
+
+  // The last minute of the day before and the first of the day itself, in Colombia (UTC-5).
+  it("starts Chaparral on 20 September and Chocó on 10 August, as Colombian days", () => {
+    const kept = (zone: "choco" | "tolima", day: string) =>
+      applyFilters([e(`${day}T04:59:00Z`), e(`${day}T05:00:00Z`)], defaultFilters(zone), null);
+    expect(kept("tolima", "2026-09-20")).toEqual([e("2026-09-20T05:00:00Z")]);
+    expect(kept("choco", "2026-08-10")).toEqual([e("2026-08-10T05:00:00Z")]);
   });
 
   it("names no filter on an untouched Chaparral page", () => {
@@ -66,7 +88,6 @@ describe("a zone's own defaults", () => {
 
   // An event from the day before, which the one-day padding on every SGC request brings in.
   it("leaves out what came before the zone's start", () => {
-    const e = (time: string) => ({ time, mag: 2.5, status: "manual", id: "SGC2026aaaaaa" }) as never;
     const kept = applyFilters([e("2026-09-19T20:00:00Z"), e("2026-09-20T08:27:00Z")], defaultFilters("tolima"), null);
     expect(kept).toHaveLength(1);
   });

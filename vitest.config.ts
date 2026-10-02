@@ -3,6 +3,20 @@ import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import { reactCompiler } from "./react-compiler.config.ts";
 
+// happy-dom follows a clicked link by fetching its URL from the internet (the explainer's
+// `target="_blank"` links did, to example.org, on every run). Tests run offline, so no frame navigates.
+const offlineDom = {
+  happyDOM: {
+    settings: {
+      navigation: {
+        disableMainFrameNavigation: true,
+        disableChildFrameNavigation: true,
+        disableChildPageNavigation: true,
+      },
+    },
+  },
+};
+
 export default defineConfig({
   test: {
     projects: [
@@ -14,7 +28,12 @@ export default defineConfig({
         // page. `happy-dom` because what it holds is what a pointer, a finger and the keyboard do to a
         // drawing. It ships compiled, like the pages (react-compiler.config.ts), so its tests run it
         // compiled; `packages/charts/test/compiled.test.ts` fails if they stop.
-        test: { name: "charts", include: ["packages/charts/test/**/*.test.ts"], environment: "happy-dom" },
+        test: {
+          name: "charts",
+          include: ["packages/charts/test/**/*.test.ts"],
+          environment: "happy-dom",
+          environmentOptions: offlineDom,
+        },
         plugins: [reactCompiler()],
       },
       {
@@ -29,7 +48,12 @@ export default defineConfig({
         // that a deferred card waits for its own margin and the map's picture leaves only once the
         // map has drawn, or cannot (issue #72, against a stand-in for MapLibre). Everything else
         // in this project is a pure function and does not touch the DOM.
-        test: { name: "page", include: ["src/**/*.test.{ts,tsx}"], environment: "happy-dom" },
+        test: {
+          name: "page",
+          include: ["src/**/*.test.{ts,tsx}"],
+          environment: "happy-dom",
+          environmentOptions: offlineDom,
+        },
         // The pages ship compiled by React Compiler (vite.config.ts), so that is what these tests
         // run: the build's own plugin. `src/lib/react-compiler.test.tsx` fails if this stops
         // compiling.

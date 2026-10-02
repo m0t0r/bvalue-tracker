@@ -1,18 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { cooldownMs, recordFailure, retryAt } from "./refresh-backoff";
+import { recordFailure, retryAt } from "./refresh-backoff";
 
-describe("cooldownMs", () => {
-  it("is nothing before a press has failed", () => {
-    expect(cooldownMs(0)).toBe(0);
-  });
+/**
+ * The waits a reader meets who presses as soon as the button lets them and fails every time, as the
+ * status bar keeps them: each failure recorded with `recordFailure`, the button resting until `retryAt`.
+ */
+function pressThroughOutage(presses: number) {
+  let failures: number[] = [];
+  let at = 1_000;
+  const waits: number[] = [];
+  for (let i = 0; i < presses; i++) {
+    failures = recordFailure(failures, at);
+    const until = retryAt(failures)!;
+    waits.push(until - at);
+    at = until;
+  }
+  return { waits, failures };
+}
 
+describe("the wait after a failed press", () => {
   it("doubles from 5 s with each failure in a row", () => {
-    expect([1, 2, 3, 4].map(cooldownMs)).toEqual([5_000, 10_000, 20_000, 40_000]);
+    expect(pressThroughOutage(4).waits).toEqual([5_000, 10_000, 20_000, 40_000]);
   });
 
-  it("stops at a minute, the status poll's own interval", () => {
-    expect(cooldownMs(5)).toBe(60_000);
-    expect(cooldownMs(50)).toBe(60_000);
+  it("stops at a minute, the status poll's own interval, however many fail in a row", () => {
+    expect(pressThroughOutage(12).waits.slice(4)).toEqual(Array(8).fill(60_000));
+  });
+
+  // The status bar holds the list in state for as long as the tab is open.
+  it("remembers no more failures than it takes to reach the longest wait", () => {
+    // The fifth failure in a row is the first to wait the full minute.
+    expect(pressThroughOutage(40).failures).toHaveLength(pressThroughOutage(5).failures.length);
   });
 });
 
@@ -32,16 +50,5 @@ describe("retryAt", () => {
   it("starts a new run after two quiet minutes", () => {
     expect(retryAt([1_000, 7_000, 7_000 + 120_001])).toBe(7_000 + 120_001 + 5_000);
     expect(retryAt([1_000, 7_000, 7_000 + 120_000])).toBe(7_000 + 120_000 + 20_000);
-  });
-});
-
-describe("recordFailure", () => {
-  it("adds the failure's time", () => {
-    expect(recordFailure([], 42)).toEqual([42]);
-  });
-
-  // The wait stops growing at the fifth failure, so no more are ever needed.
-  it("keeps the last five", () => {
-    expect(recordFailure([1, 2, 3, 4, 5], 6)).toEqual([2, 3, 4, 5, 6]);
   });
 });

@@ -2,6 +2,7 @@ import { bValue, fmd } from "@bvalue/seismo";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dicts } from "@/lib/i18n";
 import type { Stats } from "@/lib/stats";
 import { FmdChart } from "./fmd";
 
@@ -43,8 +44,8 @@ describe("'Distribución frecuencia–magnitud' drawn without Recharts", () => {
   it("draws a square and a circle only for a magnitude with events, and names itself", () => {
     const { svg } = draw(stats(MAGS, 2));
     expect(svg.getAttribute("tabindex")).toBe("0");
-    expect(svg.querySelector("title")?.textContent).toBe("Frequency–magnitude distribution");
-    expect(svg.querySelector("desc")?.textContent).toMatch(/^Log scale/);
+    expect(svg.querySelector("title")?.textContent).toBe(dicts.en.fmdTitle);
+    expect(svg.querySelector("desc")?.textContent).toBe(dicts.en.fmdAlt);
     expect(svg.querySelectorAll(".fill-chart-3 path")).toHaveLength(4);
     expect(svg.querySelectorAll(".fill-chart-1 path")).toHaveLength(4);
     expect(svg.textContent).toContain("Mc 2.0");
@@ -131,7 +132,7 @@ describe("'Distribución frecuencia–magnitud' drawn without Recharts", () => {
       expect.stringMatching(/^Mc/),
     );
     // The key names the fit without a b it does not have.
-    expect(view.container.textContent).toContain("G–R fit");
+    expect(view.container.textContent).toContain(dicts.en.grFit);
     expect(view.container.textContent).not.toContain("b =");
   });
 });
