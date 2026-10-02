@@ -58,9 +58,10 @@ which is its cadence (it has no fast lane), not a fault. The Analytics Engine po
 | `msg` | Level | When | The fields that matter |
 |---|---|---|---|
 | `tick planned` / `tick stood down` | info | every cron tick | `tickMinute`, `lanes`, `sgcUnwell`, `backfill`, `inFlight` |
-| `ingest ok` | info | a run finished cleanly | `runId`, `fetched`, `inserted`, `updated`, `removed`, `durationMs`, `sgcMs`, `sgcChars` |
+| `ingest ok` | info | a run finished cleanly | `runId`, `fetched`, `inserted`, `updated`, `removed`, `durationMs`, `sgcMs`, `sgcChars`, `sgcBytes` |
 | `ingest ok with a note` | warn | it worked, but skipped a removal or a bad row | `error` carries the note |
-| `ingest failed` | error | SGC or D1 refused | `httpStatus`, `retryAfterS`, `error`, and on an HTTP refusal `sgcHeaders`, `sgcBody` |
+| `ingest failed` | error | SGC or D1 refused, or SGC's page passed the 8 MiB cap (`error` names the cap, `httpStatus` is null) | `httpStatus`, `retryAfterS`, `error`, and on an HTTP refusal `sgcHeaders`, `sgcBody` |
+| `read route over its row ceiling` | error | a catalogue route refused a zone of more than 20,000 events with a 500 ([API](api.md)) | `zone`, `ceiling`, `path` |
 | `reaped abandoned runs: an invocation was killed` | **warn** | a claimed run never wrote a result | `reaped` |
 | `refresh stood down` | info | the button did nothing | `why`: `throttled`, `in flight`, `claim held` |
 | `unhandled error` | error | a route threw | `err.stack`, `method`, `path` |
@@ -85,8 +86,9 @@ which is its cadence (it has no fast lane), not a fault. The Analytics Engine po
 - **"Invocations are being killed."** That is the 2026-09-20 fault, and `reaped` is the
   only signal for it. The invocation log for the killed tick carries the outcome and
   `$workers.cpuTimeMs`; `exceededCpu` there means the 10 ms limit, and the fix is the paid
-  plan or a smaller `SWEEP_CHUNK_DAYS`. If CPU is fine, the suspect is memory — `sgcMs` and
-  `sgcChars` on the *last* successful run of that lane say how large the responses had got.
+  plan or a smaller `SWEEP_CHUNK_DAYS`. If CPU is fine, the suspect is memory — `sgcMs`,
+  `sgcChars` and `sgcBytes` on the *last* successful run of that lane say how large the responses
+  had got. The Worker reads no more than 8 MiB of one (an `ingest failed` naming the cap, not a kill).
 - **"Nothing has reached SGC for ages and there are no failures."** `pnpm logs lanes
   --since 24h`. A healthy day at `*/15` is 96 `wide` runs (both zones on :00 and :30), 48
   `sweep` runs (both zones on the hour) and 48 `fast` runs (Tolima on :15 and :45). All `fast` and no `sweep` is the `tickMinute` fault returning; only `wide` and
@@ -107,7 +109,9 @@ Three days is shorter than this project's slowest fault. Anything older than tha
 Analytics Engine, one row per ingest run, for three months. The field positions are the
 schema and are listed in `worker/analytics.ts` — **only ever append to them**; a query says
 `blob2`, not a column name, so inserting a field in the middle silently re-labels every
-point already written.
+point already written. A response's size is `double10`, in bytes, from 2026-10-02 only; before
+that the dataset held no size at all (`sgcChars` was on the log line alone), and `double2`, the
+events a response held, at ~1,000 bytes each, is the way to estimate one.
 
 ```sh
 # Failed runs per lane, per day, over the last month.
@@ -115,10 +119,14 @@ curl "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/analy
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" --data "
     SELECT toDate(timestamp) AS day, blob2 AS lane,
            SUM(double1) AS ok, COUNT() - SUM(double1) AS failed,
-           quantile(0.9)(double6) AS p90_ms, MAX(double7) AS slowest_sgc_ms
+           quantileExactWeighted(0.9)(double6, _sample_interval) AS p90_ms, MAX(double7) AS slowest_sgc_ms
     FROM sgc_ingest WHERE timestamp > NOW() - INTERVAL '30' DAY
     GROUP BY day, lane ORDER BY day DESC"
 ```
+
+The SQL API has no `quantile`: it answers `unknown function call: QUANTILE`, which this example
+asked for until 2026-10-02. `quantileExactWeighted(q)(field, _sample_interval)` works, and weighs
+each point by its sampling.
 
 <a id="the-domains-analytics"></a>
 ### The domain's analytics

@@ -280,6 +280,35 @@ describe("ingest", () => {
     expect(run.error).toBeTruthy();
     expect(await count("removed_at IS NULL")).toBe(786);
   });
+
+  /**
+   * The Worker reads at most 8 MiB of an SGC response (docs/security.md): ~12 times the largest
+   * page of the last 30 days, and below the ~10 MB SGC sends for all of Colombia in 2026, which
+   * is what a page that ignored our box would look like. The captured page, padded with an HTML
+   * comment the parser skips, is a valid catalogue of any size.
+   */
+  describe("a response near the 8 MiB cap", () => {
+    const MIB_8 = 8 * 1024 * 1024;
+    const padded = (bytes: number) => {
+      const room = bytes - new TextEncoder().encode(FULL).byteLength - "<!---->".length;
+      return `${FULL}<!--${"x".repeat(room)}-->`;
+    };
+
+    it("is read and ingested when it is exactly 8 MiB", async () => {
+      const run = (await ingest(deps(padded(MIB_8)), FROM, TO, "manual"))!;
+      expect(run).toMatchObject({ ok: true, inserted: 786 });
+    });
+
+    it("fails the run with the cap in its error, after one request, when it is a byte over", async () => {
+      await ingest(deps(FULL), FROM, TO, "manual");
+      const calls = serving(padded(MIB_8 + 1));
+      const run = (await ingest({ db: env.DB, now: NOW, fetchOptions: FETCH_FAST }, FROM, TO, "cron"))!;
+      expect(run.ok).toBe(false);
+      expect(run.error).toMatch(/8388608-byte cap/);
+      expect(calls()).toBe(1);
+      expect(await count("removed_at IS NULL")).toBe(786);
+    });
+  });
 });
 
 describe("sweep", () => {
@@ -384,6 +413,71 @@ describe("API", () => {
     const es = (await (await call("/api/b-windows.csv?mc=2.5&lang=es")).text()).trimEnd().split("\n");
     expect(es[0]).toBe("desde,hasta,n,mc,b,sigma_b,a,magnitud_media");
     expect(es.slice(1)).toEqual(lines.slice(1));
+  });
+
+  /**
+   * Every read route answers from the zone's whole filtered catalogue, and the statistics need all
+   * of it, so past its ceiling a route fails out loud rather than answering from part of it
+   * (docs/security.md). 20,000 is ~18 times Tolima's 1,109 events of 2026-10-02.
+   */
+  describe("a catalogue at the 20,000-row ceiling", () => {
+    /** `n` Chaparral events, one a minute from 2026-09-21, written in one statement. */
+    const fill = (n: number) =>
+      env.DB.prepare(
+        `WITH RECURSIVE k(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM k WHERE i < ?)
+         INSERT INTO events (id, time, lat, lon, depth_km, mag, mag_type, region, status, first_seen_at, updated_at, zone)
+         SELECT 'SGC2026t' || i, strftime('%Y-%m-%dT%H:%M:%SZ', '2026-09-21', '+' || i || ' minutes'),
+                3.75, -75.65, 8, 1.0 + (i % 30) / 10.0, 'MLr_1', 'Chaparral - Tolima, Colombia', 'manual',
+                '2026-09-21T00:00:00Z', '2026-09-21T00:00:00Z', 'tolima'
+         FROM k`,
+      )
+        .bind(n)
+        .run();
+
+    const ROUTES = [
+      "/api/events?zone=tolima",
+      "/api/events.csv?zone=tolima",
+      "/api/stats?zone=tolima",
+      "/api/b-windows.csv?zone=tolima",
+    ];
+
+    it("is served whole by every read route", async () => {
+      await fill(20_000);
+      expect(((await (await call("/api/events?zone=tolima")).json()) as unknown[]).length).toBe(20_000);
+      expect((await (await call("/api/events.csv?zone=tolima")).text()).trim().split("\n")).toHaveLength(20_000 + 1);
+      expect(((await (await call("/api/stats?zone=tolima")).json()) as { count: number }).count).toBe(20_000);
+      expect((await call("/api/b-windows.csv?zone=tolima")).status).toBe(200);
+    });
+
+    it("is refused out loud by every read route one row past it, never answered from part of it", async () => {
+      await fill(20_001);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      for (const path of ROUTES) {
+        const res = await call(path);
+        expect(res.status, path).toBe(500);
+        expect(res.headers.get("cache-control"), path).toBe("no-store");
+        expect(await res.json(), path).toEqual({
+          error: "the catalogue has grown past 20000 events, more than one answer serves; narrow it with from and to",
+        });
+      }
+      // Nobody reads a 500 the page retries and then hides: the line is what says it happened.
+      const said = errors.mock.calls.map((c) => c[0] as Record<string, unknown>);
+      errors.mockRestore();
+      expect(said.filter((l) => l.msg === "read route over its row ceiling")).toHaveLength(ROUTES.length);
+      expect(said[0]).toMatchObject({ level: "error", zone: "tolima", ceiling: 20_000, path: "/api/events" });
+    });
+
+    it("still serves a range of it narrowed below the ceiling", async () => {
+      await fill(20_001);
+      // 2026-09-21 holds the events of minutes 1 to 1,439, one a minute.
+      const day = (await (await call("/api/events?zone=tolima&from=2026-09-21&to=2026-09-21")).json()) as unknown[];
+      expect(day).toHaveLength(1_439);
+    });
+
+    it("does not count the other zone's events against it", async () => {
+      await fill(20_001);
+      expect((await call("/api/events?zone=choco")).status).toBe(200);
+    });
   });
 
   it("filters events and hides removed ones by default", async () => {
@@ -1115,6 +1209,43 @@ describe("what a tick writes to the log", () => {
     // recorded before — the second has been an open audit question with no measurement.
     expect(ok.sgcMs).toEqual(expect.any(Number));
     expect(ok.sgcChars as number).toBeGreaterThan(0);
+    // The fast tick asks for Chaparral, answered with the empty page: 7,679 bytes on disk, which
+    // is the figure the byte cap is held to, and 7,657 characters.
+    expect(ok).toMatchObject({ sgcBytes: 7_679, sgcChars: 7_657 });
+  });
+
+  it("puts a response over the byte cap on the line at error, with the cap in its words", async () => {
+    await completeBackfill();
+    serves(
+      () => HttpResponse.html(FULL),
+      () => HttpResponse.html(`${EMPTY}<!--${"x".repeat(8 * 1024 * 1024)}-->`),
+    );
+    const got = lines();
+
+    await tick(15);
+    expect(withMsg(got(), "ingest failed")[0]).toMatchObject({
+      level: "error",
+      zone: "tolima",
+      httpStatus: null,
+      error: expect.stringMatching(/8388608-byte cap/),
+    });
+  });
+
+  // Analytics Engine keeps three months where the log keeps three days, so the next time the cap is
+  // sized it can be sized from a season of real responses. Its field positions are its schema.
+  it("records the response's bytes in the run's analytics point, as double10", async () => {
+    await completeBackfill();
+    serving(FULL);
+    const points: AnalyticsEngineDataPoint[] = [];
+    const analytics = { writeDataPoint: (p?: AnalyticsEngineDataPoint) => points.push(p!) } as AnalyticsEngineDataset;
+    lines();
+
+    await worker.scheduled!(
+      { cron: "*/15 * * * *", scheduledTime: Date.UTC(2026, 8, 19, 12, 15, 45), noRetry() {} },
+      { ...env, INGEST_ANALYTICS: analytics },
+    );
+    expect(points).toHaveLength(1);
+    expect(points[0]!.doubles![9]).toBe(7_679);
   });
 
   it("puts an SGC refusal on the line at error, with its status", async () => {

@@ -56,14 +56,17 @@ export interface SeismicEvent {
  */
 export interface CatalogCost {
   /**
-   * Length of the HTML, in UTF-16 code units — **characters, not bytes on the wire.**
-   * SGC's pages are Spanish, so accented characters make the encoded response larger than
-   * this number, and a byte cap sized from it would sit below the real payload and start
-   * refusing good responses. It is nonetheless the figure that matters for the memory
-   * question behind that cap, because it is what the isolate is holding. Counting true
-   * bytes would mean encoding the whole 0.8 MB string again, on a 10 ms CPU budget.
+   * Length of the HTML, in UTF-16 code units — **characters, not bytes on the wire.** It is
+   * what the isolate holds once the page is decoded.
    */
   chars: number;
+  /**
+   * The body's size in bytes as it was read, which is what the byte cap (`maxBytes`) counts.
+   * Counted off the stream's own chunks, so it costs no second encode of the page. A two-byte
+   * accent makes it larger than `chars`; on the captured page by 22 in 796,922. null when a
+   * page was parsed from a string we already had.
+   */
+  bytes: number | null;
   /** Time on the network, ms. null when a page was parsed from a string we already had. */
   fetchMs: number | null;
   /** How many requests it took, including the retry. null when nothing was fetched. */

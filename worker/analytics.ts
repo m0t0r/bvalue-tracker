@@ -43,6 +43,7 @@ import type { Logger } from "./log.ts";
  * | 7      | the SGC request alone, ms                    |
  * | 8      | HTTP status from SGC, 0 when there was none  |
  * | 9      | Retry-After SGC asked for, seconds, 0 if none|
+ * | 10     | the SGC response's size in bytes, 0 when none was read (from 2026-10-02) |
  */
 
 /** Blobs are capped at 16 KB per point in total; an SGC error can quote a whole page. */
@@ -59,6 +60,8 @@ export interface RunMetrics {
   sgcMs: number | null;
   httpStatus: number | null;
   retryAfterS: number | null;
+  /** The SGC response's size in bytes as read, which the byte cap counts. */
+  sgcBytes: number | null;
 }
 
 /**
@@ -100,6 +103,7 @@ export function recordRun(
         m.sgcMs ?? 0,
         m.httpStatus ?? 0,
         m.retryAfterS ?? 0,
+        m.sgcBytes ?? 0,
       ],
     });
   } catch (err) {

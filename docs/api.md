@@ -15,6 +15,13 @@ none or while it awaits review. It reads the zone's rows unindexed on `mag`; onl
 asks, and the page never sends it. With `cluster`, the statistics keep the Mc of the whole
 filtered catalogue, as the page does.
 
+**The four catalogue routes answer from at most 20,000 events, and fail rather than truncate past
+it** (`READ_ROW_CEILING` in `worker/index.ts`): a 500, `no-store`, with
+`{ "error": "the catalogue has grown past 20000 events, more than one answer serves; narrow it with from and to" }`,
+and a `read route over its row ceiling` log line. The ceiling counts the filtered rows before
+`cluster` and `excludeMainshock`, so a narrower `from`/`to` still answers. It is ~18 times the largest
+zone today; why it is a ceiling and not a page size is in [Security](security.md#the-read-routes-row-ceiling-2026-10-02).
+
 **`/api/*` is same-origin only.** The Worker serves a request only when it carries
 `Sec-Fetch-Site: same-origin`, or an `Origin` equal to its own; anything else gets 403.
 A caller that sends neither header — `curl`, a script, a link in someone else's page —
