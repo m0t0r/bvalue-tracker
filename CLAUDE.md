@@ -47,6 +47,7 @@ and interface conventions. Most of it cannot be inferred from the code.
 - The repo is public. Keep account names, account-specific dashboard URLs, local paths
   outside the repo and anything personal out of committed docs.
 - Friction: when something slows or blocks you (a wrong or missing doc, a failing tool, a
-  permission refusal, a step you had to work out by hand), open a GitHub issue labelled
+  permission refusal, a step you had to work out by hand, information repeated across docs
+  you loaded that adds nothing the first copy did not), open a GitHub issue labelled
   `friction` and add an entry to `docs/friction-log.md`, as its top section says, then tell
   the user you logged it.
