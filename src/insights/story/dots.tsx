@@ -10,7 +10,7 @@ import { useIsDark } from "@/lib/theme";
 import { TOKEN, token, type Tone } from "../tones";
 import { useReducedMotion } from "../use-reduced-motion";
 import { at, progress, settled, toward, type Motion, type Tween } from "./glide";
-import { star } from "./marks";
+import { star } from "../drawing";
 
 /**
  * One mark where the current scene puts it: a dot of radius `r`, or the mainshock's star of that size.

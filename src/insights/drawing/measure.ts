@@ -6,32 +6,32 @@ import { useSyncExternalStore } from "react";
  * generous estimate. A width measured before the web font has loaded is used but not cached, so a
  * later call measures again in the real font. A component calls it through `useTextWidth`, which
  * is what makes that later call happen.
+ *
+ * The chart kit measures with a function of its own (`labelWidth` in `@bvalue/charts`), and the two
+ * stay apart because their callers need opposite things. This one reserves room: it pads every width
+ * by 3 % and guesses one without a canvas, so a label is given more room than it takes. The kit's
+ * chooses which axis labels to draw, and reproduces a recorded choice of labels
+ * (`test/fixtures/recharts-3.10.1-ticks.json`), so it measures exactly and pads nothing.
  */
 let ctx: CanvasRenderingContext2D | null | undefined;
 let family = "";
 const cache = new Map<string, number>();
 
-export function textWidth(
-  text: string,
-  fontSize: number,
-  { weight = 400, letterSpacingEm = 0, uppercase = false } = {},
-): number {
-  const s = uppercase ? text.toUpperCase() : text;
-  const spacing = letterSpacingEm * fontSize * s.length;
+export function textWidth(text: string, fontSize: number, { weight = 400 }: { weight?: number } = {}): number {
   if (ctx === undefined) {
     ctx = typeof document === "undefined" ? null : (document.createElement("canvas").getContext("2d") ?? null);
     family = ctx ? getComputedStyle(document.documentElement).fontFamily : "";
   }
   // Tabular figures, which the labels' numbers use, are a little wider than the canvas's own.
-  if (!ctx || !family) return s.length * fontSize * 0.62 + spacing;
+  if (!ctx || !family) return text.length * fontSize * 0.62;
   const font = `${weight} ${fontSize}px ${family}`;
-  const key = `${font}|${s}`;
+  const key = `${font}|${text}`;
   const hit = cache.get(key);
-  if (hit !== undefined) return hit + spacing;
+  if (hit !== undefined) return hit;
   ctx.font = font;
-  const w = ctx.measureText(s).width * 1.03;
+  const w = ctx.measureText(text).width * 1.03;
   if (document.fonts.check(font)) cache.set(key, w);
-  return w + spacing;
+  return w;
 }
 
 /** `textWidth` while the web font is still on its way: the same measurement under another identity. */

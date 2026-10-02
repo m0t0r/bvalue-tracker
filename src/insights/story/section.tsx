@@ -3,17 +3,15 @@
  * ground under them, their depth axis and a locator map for each. Both are true to scale and share
  * one scale, so the distance from each source down to the plate compares by eye (docs/science.md).
  */
-import { geoMercator, geoPath } from "d3-geo";
 import { useId, useMemo } from "react";
 import type { Lang } from "@/lib/i18n";
 import { PEREIRA } from "../../../core/places";
 import { CONVERGENCE_CM_PER_YEAR, plateAlong, type Cut, type Plate } from "../plate";
-import { REGION } from "../region";
 import { fmtKm } from "../shared";
 import { storyCopy } from "./copy";
 import { Rich } from "@/lib/rich";
+import { HaloText, fitRegion, kmPerDegLon } from "../drawing";
 
-export const KM_PER_DEG = 111.2;
 /** The plate's rate as the copy's `{rate}` writes it, with a no-break space before the unit. */
 export const RATE = `${CONVERGENCE_CM_PER_YEAR}\u00a0cm`;
 /**
@@ -48,7 +46,6 @@ export interface CutSpan {
   lon1: number;
 }
 
-export const kmPerDegLon = (lat: number) => KM_PER_DEG * Math.cos((lat * Math.PI) / 180);
 const spanKm = ({ cut, lon1 }: CutSpan) => (lon1 - cut.trenchLon) * kmPerDegLon(cut.lat);
 
 /** The easternmost longitude a cut has ground for: a cut drawn past it would end without a surface. */
@@ -232,13 +229,12 @@ function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; la
         {c.trench}
       </text>
       {at && (
-        <text
+        <HaloText
           x={sec.x(at.lon)}
           y={sec.y(at.topKm + at.thicknessKm * 0.35)}
           fontSize={fs}
-          className="fill-foreground stroke-background"
-          paintOrder="stroke"
-          strokeWidth={4}
+          className="fill-foreground"
+          halo={4}
         >
           <tspan fontWeight={600}>{c.plate}</tspan>
           {/* What the arrow just below shows. An arrow alone read as a path, or as nothing (owner
@@ -263,20 +259,17 @@ function PlateAndGround({ sec, small, lang }: { sec: Section; small: boolean; la
               {c.plateBand}
             </tspan>
           )}
-        </text>
+        </HaloText>
       )}
     </g>
   );
 }
 
 /** What every locator shows, whichever cut it is for: both zones, Pereira and the coast. */
-const LOCATOR_BOX = {
-  type: "MultiPoint" as const,
-  coordinates: [
-    [-79, 3.2],
-    [-74.8, 5.6],
-  ],
-};
+const LOCATOR_BOX = [
+  [-79, 3.2],
+  [-74.8, 5.6],
+] as const;
 
 /**
  * Where the cut runs, on a small map in the drawing's lower-left corner: under the plate near the
@@ -294,20 +287,16 @@ function Locator({ sec, small, lang }: { sec: Section; small: boolean; lang: Lan
     const h = small ? 38 : 72;
     const x = sec.x0 + 6;
     const y = sec.y(sec.maxDepth) - h - 6;
-    const proj = geoMercator().fitExtent(
-      [
-        [x, y],
-        [x + w, y + h],
-      ],
-      LOCATOR_BOX,
-    );
-    const path = geoPath(proj);
+    const { proj, outlines } = fitRegion(LOCATOR_BOX, [
+      [x, y],
+      [x + w, y + h],
+    ]);
     return {
       x,
       y,
       w,
       h,
-      outlines: REGION.features.map((f) => ({ name: f.properties.name, d: path(f) ?? undefined })),
+      outlines,
       a: proj([sec.lon0, sec.cut.lat]),
       b: proj([sec.lon1, sec.cut.lat]),
       P: proj([PEREIRA.lon, PEREIRA.lat]),
@@ -330,32 +319,17 @@ function Locator({ sec, small, lang }: { sec: Section; small: boolean; lang: Lan
         <g>
           <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} className="stroke-foreground" strokeWidth={small ? 1.5 : 2} />
           {/* Under the line's west end. It crosses the coast at this scale, so it has the page's halo. */}
-          <text
-            x={a[0] + 2}
-            y={a[1] + fs + 2}
-            fontSize={fs}
-            className="fill-foreground stroke-background"
-            paintOrder="stroke"
-            strokeWidth={3}
-          >
+          <HaloText x={a[0] + 2} y={a[1] + fs + 2} fontSize={fs} className="fill-foreground" halo={3}>
             {c.locatorCut}
-          </text>
+          </HaloText>
         </g>
       )}
       {P && (
         <g>
           <circle cx={P[0]} cy={P[1]} r={small ? 2 : 2.5} className="fill-place" />
-          <text
-            x={P[0] + 3}
-            y={P[1] - 4}
-            textAnchor="end"
-            fontSize={fs}
-            className="fill-foreground stroke-background"
-            paintOrder="stroke"
-            strokeWidth={3}
-          >
+          <HaloText x={P[0] + 3} y={P[1] - 4} textAnchor="end" fontSize={fs} className="fill-foreground" halo={3}>
             Pereira
-          </text>
+          </HaloText>
         </g>
       )}
     </g>

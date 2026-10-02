@@ -508,7 +508,7 @@ practices stayed at 100.
     label measured before then is in the stand-in face, which is cut to Geist's width (with the font
     blocked, both builds chose the same labels, 42 px wide against 43), and Recharts' span did not
     measure again either; choosing again would draw the whole chart a second time, inside a phone's
-    load. *Sharing `src/insights/measure.ts`:* it pads widths by 3 % and guesses one without a canvas,
+    load. *Sharing `src/insights/measure.ts` (now `src/insights/drawing/measure.ts`):* it pads widths by 3 % and guesses one without a canvas,
     to reserve room, where this must match Recharts' measure exactly or fall back to it. *`clientWidth`
     over `getBoundingClientRect`:* the latter is what `ResponsiveContainer` reads on mounting, and
     matching it is what keeps the chart drawn once; the row's entry transition only translates.

@@ -21,9 +21,23 @@ import { fmt, fmtKm, fmtMag, fmtTimes, medianHorizontalErrorKm } from "../shared
 import { FILL, STROKE } from "../tones";
 import { useProgress } from "./hooks";
 import { fitRanks, flowRow, type RankItem } from "./layout";
-import { useTextWidth } from "../measure";
-import { INSIGHTS_LABEL_GAP, crosses, crossesRing, firstClear, forwardLabels, textBox, type Box } from "../place";
-import { SceneTitle, diamond, radius } from "./marks";
+import {
+  FONT_FLOOR,
+  HaloText,
+  INSIGHTS_LABEL_GAP,
+  crosses,
+  crossesRing,
+  diamond,
+  firstClear,
+  forwardLabels,
+  kmPerDegLon,
+  largestFit,
+  radius,
+  textBox,
+  useTextWidth,
+  type Box,
+} from "../drawing";
+import { SceneTitle } from "./marks";
 import type { StoryModel } from "./model";
 import { Rich, fill } from "@/lib/rich";
 
@@ -189,12 +203,11 @@ function Durations({
     const below = 2 * fs + 16;
     return { fs, barH, labelH, rowH, fits: top + rows.length * rowH + below <= height };
   };
-  let l = layout(small ? 11 : 13);
-  while (!l.fits && l.fs > 9) l = layout(l.fs - 1);
-  if (!rows.length || !l.fits) return null;
-  const { fs, barH, labelH, rowH } = l;
-  // The axis text is a pixel smaller than the labels, but never under the 9 px floor.
-  const axisFs = Math.max(9, fs - 1);
+  const fitted = largestFit(small ? 11 : 13, (f) => layout(f).fits);
+  if (!rows.length || fitted === null) return null;
+  const { fs, barH, labelH, rowH } = layout(fitted);
+  // The axis text is a pixel smaller than the labels, but never under the floor.
+  const axisFs = Math.max(FONT_FLOOR, fs - 1);
   const longest = Math.max(...rows.map((r) => Math.max(r.solid[1], r.faint?.[1] ?? 0)));
   const x = scaleLinear()
     .domain([0, Math.max(10, Math.ceil(longest / 10) * 10)])
@@ -802,7 +815,7 @@ export function TolimaScene({
     proj && at
       ? (() => {
           const a = proj([at.lon, at.lat])!;
-          const b = proj([at.lon + 1 / (111.2 * Math.cos((at.lat * Math.PI) / 180)), at.lat])!;
+          const b = proj([at.lon + 1 / kmPerDegLon(at.lat), at.lat])!;
           return b[0] - a[0];
         })()
       : 0;
@@ -940,19 +953,18 @@ export function TolimaScene({
             )}
           </g>
           {trackLabel && (
-            <text
+            <HaloText
               x={trackLabel.x}
               y={trackLabel.y}
               textAnchor={trackLabel.anchor}
               fontSize={fs}
               fontWeight={600}
               data-on={!drift || trackProgress >= 1 || undefined}
-              className="fill-foreground stroke-background opacity-0 transition-opacity data-on:opacity-100 motion-reduce:transition-none"
-              paintOrder="stroke"
-              strokeWidth={4}
+              className="fill-foreground opacity-0 transition-opacity data-on:opacity-100 motion-reduce:transition-none"
+              halo={4}
             >
               {c.track}
-            </text>
+            </HaloText>
           )}
           <g transform={`translate(${padX}, ${mapBottom - 4})`}>
             <line x1={0} x2={kmPx} y1={0} y2={0} className="stroke-foreground" strokeWidth={2} />
@@ -965,19 +977,18 @@ export function TolimaScene({
           {errText !== null && err !== null && (
             <g transform={`translate(${width - padX - err * kmPx}, ${mapBottom - err * kmPx - 4})`}>
               <circle r={err * kmPx} fill="none" className="stroke-muted-foreground" strokeDasharray="3 3" />
-              <text
+              <HaloText
                 y={-err * kmPx - 6}
                 x={err * kmPx}
                 textAnchor="end"
                 fontSize={fs - 1.5}
                 // The page's halo: on a phone the label crosses the swarm's dots.
-                className="fill-muted-foreground stroke-background"
-                paintOrder="stroke"
-                strokeWidth={3}
+                className="fill-muted-foreground"
+                halo={3}
               >
                 {/* The string the drift label was kept clear of. */}
                 {errText}
-              </text>
+              </HaloText>
             </g>
           )}
         </g>

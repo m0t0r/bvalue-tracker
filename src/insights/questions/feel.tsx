@@ -1,6 +1,6 @@
 /** Question 1: why earthquakes this far away are felt in Pereira. */
 import { energyRatio } from "@bvalue/seismo";
-import { geoCircle, geoMercator, geoPath } from "d3-geo";
+import { geoCircle } from "d3-geo";
 import { scaleLog } from "d3-scale";
 import { PlayIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -9,17 +9,26 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { P_WAVE_KMS, S_WAVE_KMS, SOURCES, arrivalSeconds, type Insights } from "../claims";
 import { PEREIRA } from "../../../core/places";
-import { REGION, TOWNS } from "../region";
+import { TOWNS } from "../region";
 import { questionsCopy, type Named } from "./copy";
 import { fmtInt, fmtKm } from "../shared";
 import { FILL } from "../tones";
 import { useReducedMotion } from "../use-reduced-motion";
 import { presets, ratioPhrase, relativeAmplitude, toPereira, type Preset } from "./derive";
 import { Choice, Figure, RangeField, Swatch, useWidth } from "./ui";
-import { useTextWidth } from "../measure";
-import { firstClear, textBox, type Box } from "../place";
+import {
+  HaloText,
+  KM_PER_DEG,
+  PereiraMark,
+  TownMark,
+  firstClear,
+  fitRegion,
+  textBox,
+  useTextWidth,
+  type Box,
+  type PereiraLook,
+} from "../drawing";
 
-const KM_PER_DEG = 111.195;
 const MAP = 400;
 
 type PresetId = Preset["id"] | "custom";
@@ -149,6 +158,22 @@ export function FeelExplorer({
   );
 }
 
+/**
+ * Pereira on this map. Not the story's look (`pereiraLook` in `../drawing`): a smaller disc that does
+ * not pulse, a thinner outline, a bolder label and a thinner halo. The two drifted apart, and are kept
+ * as they were until they are settled as one (issue #168).
+ */
+const MAP_PEREIRA: PereiraLook = {
+  disc: 9,
+  beacon: false,
+  dot: 4.5,
+  outline: 1.5,
+  dx: 9,
+  fontSize: 14,
+  weight: 700,
+  halo: 3,
+};
+
 /** Pereira, every event coloured by source, a ring at the sources' distance and the reader's chosen one. */
 function MiniMap({
   data,
@@ -165,26 +190,18 @@ function MiniMap({
   const measure = useTextWidth();
   const c = questionsCopy[lang].far;
   const [box, w] = useWidth(MAP);
-  const { path, project } = useMemo(() => {
-    const box = {
-      type: "Feature" as const,
-      properties: {},
-      geometry: {
-        type: "MultiPoint" as const,
-        coordinates: [
-          [-77.3, 3.3],
-          [-74.4, 5.95],
-        ],
-      },
-    };
-    const projection = geoMercator().fitExtent(
+  const { path, outlines, project } = useMemo(() => {
+    const { proj, path, outlines } = fitRegion(
+      [
+        [-77.3, 3.3],
+        [-74.4, 5.95],
+      ],
       [
         [4, 4],
         [MAP - 4, MAP - 4],
       ],
-      box,
     );
-    return { path: geoPath(projection), project: (lon: number, lat: number) => projection([lon, lat]) ?? [0, 0] };
+    return { path, outlines, project: (lon: number, lat: number) => proj([lon, lat]) ?? [0, 0] };
   }, []);
   const circle = (km: number) =>
     path(
@@ -222,7 +239,8 @@ function MiniMap({
     const at = Math.min(MAP - 4 - width / 2, Math.max(4 + width / 2, x));
     return { ...l, x: at, y, box: textBox({ x: at, y, width, fontSize: 12 * k, anchor: "middle" }) };
   });
-  const pereira = { x: px + 9, y: py - 8 };
+  const look = MAP_PEREIRA;
+  const pereira = { x: px + look.dx, y: py - 8 };
   // A town is drawn only where its dot is on the map, and its name only where it stays inside the map
   // and clear of the sources' labels, Pereira's and the towns before it; otherwise the town is left
   // off. Medellín and Bogotá lie off the map at every width, and at 320 px "Manizales" sat under the
@@ -230,7 +248,11 @@ function MiniMap({
   // reaches about a quarter of an em past the letters above and below, so the words stay apart.
   const avoid: Box[] = [
     ...labels.map((l) => l.box),
-    textBox({ ...pereira, width: measure("Pereira", 14, { weight: 700 }) * k, fontSize: 14 * k }),
+    textBox({
+      ...pereira,
+      width: measure("Pereira", look.fontSize, { weight: look.weight }) * k,
+      fontSize: look.fontSize * k,
+    }),
   ];
   const towns = TOWNS.filter((t) => t.kind === "city").flatMap((t) => {
     const [x, y] = project(t.lon, t.lat);
@@ -250,8 +272,8 @@ function MiniMap({
         className="aspect-square w-full rounded-lg bg-background"
       >
         <g className="fill-muted stroke-border">
-          {REGION.features.map((f) => (
-            <path key={f.properties.name} d={path(f) ?? ""} strokeWidth={0.8} />
+          {outlines.map((o) => (
+            <path key={o.name} d={o.d ?? ""} strokeWidth={0.8} />
           ))}
         </g>
         <path d={circle(ringKm)} fill="none" strokeDasharray="4 4" className="stroke-muted-foreground" />
@@ -277,51 +299,29 @@ function MiniMap({
             className="stroke-foreground"
           />
         ) : null}
-        {towns.map((t) => {
-          return (
-            <g key={t.id} transform={`translate(${t.x},${t.y})`} className="fill-muted-foreground">
-              <circle r={2} />
-              {/* The halo lifts the grey off the grey land: 4.34:1 on it in light mode, 4.73:1 on the page. */}
-              <text x={5} y={4} fontSize={11 * k} paintOrder="stroke" strokeWidth={3 * k} className="stroke-background">
-                {t.name}
-              </text>
-            </g>
-          );
-        })}
+        {/* The halo lifts the grey off the grey land: 4.34:1 on it in light mode, 4.73:1 on the page. */}
+        {towns.map((t) => (
+          <TownMark key={t.id} x={t.x} y={t.y} name={t.name} fontSize={11} k={k} dot={2} />
+        ))}
         {labels.map((l) => {
           return (
-            <text
+            <HaloText
               key={l.s}
               x={l.x}
               y={l.y}
               textAnchor="middle"
               fontSize={12 * k}
               fontWeight={600}
-              paintOrder="stroke"
-              strokeWidth={3 * k}
-              className="fill-foreground stroke-background"
+              halo={3 * k}
+              className="fill-foreground"
             >
               {/* The words in the text colour and the source's colour on a dot: the blue (4.42:1, light)
                   and the violet (3.87:1, dark) are too faint for 12 px text. */}
               <tspan className={FILL[l.s]}>●</tspan> {l.text}
-            </text>
+            </HaloText>
           );
         })}
-        <g transform={`translate(${px},${py})`}>
-          <circle r={9} className="fill-place/25" />
-          <circle r={4.5} strokeWidth={1.5} className="fill-place stroke-background" />
-          <text
-            x={9}
-            y={-8}
-            fontSize={14 * k}
-            fontWeight={700}
-            paintOrder="stroke"
-            strokeWidth={3 * k}
-            className="fill-foreground stroke-background"
-          >
-            Pereira
-          </text>
-        </g>
+        <PereiraMark x={px} y={py} label="Pereira" look={look} k={k} />
       </svg>
       <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">

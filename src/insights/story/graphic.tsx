@@ -3,7 +3,7 @@
  * west–east cross-section share one layer of event dots, which slide from their place on the map to
  * their depth when the earth is turned on its side. Every position comes from the data at render.
  */
-import { geoCircle, geoMercator, geoPath, type GeoProjection } from "d3-geo";
+import { geoCircle, geoPath, type GeoProjection } from "d3-geo";
 import { quantileSorted } from "d3-array";
 import { useId, useMemo } from "react";
 import type { Lang } from "@/lib/i18n";
@@ -11,24 +11,39 @@ import { fmtDateTime, fmtDay } from "@/lib/format";
 import { SOURCES, type Insights, type Source } from "../claims";
 import { PEREIRA } from "../../../core/places";
 import { CUTS, groundAt } from "../plate";
-import { REGION, TOWNS, onCut } from "../region";
+import { TOWNS, onCut } from "../region";
 import { insightsCopy } from "../copy";
 import { storyCopy } from "./copy";
 import type { Compared } from "../history";
 import { fmtKm, fmtMag, fmtTimes, roundSig } from "../shared";
-import { overlaps, textBox, type Box } from "../place";
 import { shakingParts } from "../durations";
 import { FILL, STROKE } from "../tones";
 import { flowRow } from "./layout";
 import { pickCorner } from "./side";
 import { SideView, sideLayout, type SideLayout } from "./side-view";
 import { DotLayer, type Mark } from "./dots";
-import { Layer, SceneTitle, radius, star } from "./marks";
-import { useTextWidth, type textWidth } from "../measure";
+import { Layer, SceneTitle } from "./marks";
+import {
+  HaloText,
+  KM_PER_DEG,
+  PereiraMark,
+  TownMark,
+  FONT_FLOOR,
+  fitRegion,
+  largestFit,
+  overlaps,
+  pereiraLook,
+  radius,
+  star,
+  textBox,
+  useTextWidth,
+  type Box,
+  type textWidth,
+} from "../drawing";
 import type { Ev, StoryModel } from "./model";
 import { Rich, fill } from "@/lib/rich";
 import { ClocksScene, EnergyScene, FeltScene, TolimaScene } from "./scenes";
-import { KM_PER_DEG, RATE, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
+import { RATE, SECTION_DEPTH_KM, SectionFrame, frameSections, type Section } from "./section";
 
 export type SceneId = "where" | "energy" | "section" | "clocks" | "tolima" | "tolimaSection" | "felt" | "unknown";
 export interface SceneState {
@@ -90,9 +105,9 @@ export function Graphic({
     const lons = model.all.map((e) => e.lon).sort((a, b) => a - b);
     const lats = model.all.map((e) => e.lat).sort((a, b) => a - b);
     const q = (xs: number[], p: number, fallback: number) => (xs.length ? quantileSorted(xs, p)! : fallback);
-    const box = {
-      type: "MultiPoint" as const,
-      coordinates: [
+    const top = small ? 40 : 76;
+    const fitted = fitRegion(
+      [
         // West far enough to take in the Pacific coast, which is what makes the map read as Colombia.
         [
           Math.min(q(lons, 0.02, PEREIRA.lon), PEREIRA.lon) - 0.75,
@@ -103,16 +118,12 @@ export function Graphic({
           Math.max(q(lats, 0.98, PEREIRA.lat), PEREIRA.lat) + 0.25,
         ],
       ],
-    };
-    const top = small ? 40 : 76;
-    const proj = geoMercator().fitExtent(
       [
         [small ? 4 : 12, top],
         [Math.max(small ? 5 : 13, width - (small ? 4 : 12)), Math.max(top + 1, height - (small ? 8 : 16))],
       ],
-      box,
     );
-    return { proj, path: geoPath(proj), top };
+    return { ...fitted, top };
   }, [model.all, width, height, small]);
 
   // The first scene's lines, labels and side view, laid out once for the map and the ocean's name.
@@ -229,8 +240,8 @@ export function Graphic({
       <svg width={width} height={height} viewBox={viewBox} className="absolute inset-0 block overflow-hidden">
         <Layer on={onMap}>
           <g>
-            {REGION.features.map((f) => (
-              <path key={f.properties.name} d={map.path(f) ?? undefined} className="fill-muted stroke-border" />
+            {map.outlines.map((o) => (
+              <path key={o.name} d={o.d} className="fill-muted stroke-border" />
             ))}
           </g>
           {!(scene === "where" && where?.oceanHidden) && (
@@ -405,23 +416,20 @@ function GroupLegend({
     ...(mainLabel ? [{ key: "main", label: mainLabel }] : []),
   ];
   const x0 = small ? 4 : 8;
-  // Spaced by the labels' measured widths, a pixel smaller at a time (to 9 px) until one row fits:
-  // at 320 px the four entries ran 37 px past the edge at 10 px.
-  const place = (fs: number) => {
-    const at = flowRow(
+  // Spaced by the labels' measured widths, a pixel smaller at a time (to the floor) until one row
+  // fits, and at the floor when none does: at 320 px the four entries ran 37 px past the edge at 10 px.
+  const place = (fs: number) =>
+    flowRow(
       items.map((it) => 12 + measure(it.label, fs)),
       small ? 8 : 14,
       width - 2 * x0,
     );
-    return { fs, at, rows: Math.max(...at.map((a) => a.row)) + 1 };
-  };
-  let laid = place(small ? 10 : 11.5);
-  while (laid.rows > 1 && laid.fs > 9) laid = place(Math.max(9, laid.fs - 1));
-  const { fs } = laid;
+  const fs = largestFit(small ? 10 : 11.5, (f) => place(f).every((a) => a.row === 0)) ?? FONT_FLOOR;
+  const at = place(fs);
   return (
     <g transform={`translate(${x0}, ${small ? 30 : 46})`}>
       {items.map((it, i) => (
-        <g key={it.key} transform={`translate(${laid.at[i]!.x}, ${laid.at[i]!.row * (fs + 4)})`}>
+        <g key={it.key} transform={`translate(${at[i]!.x}, ${at[i]!.row * (fs + 4)})`}>
           {it.source ? (
             <circle cx={4} cy={-4} r={4} className={FILL[it.source]} />
           ) : (
@@ -432,65 +440,6 @@ function GroupLegend({
           </text>
         </g>
       ))}
-    </g>
-  );
-}
-
-/**
- * A town the reader knows: a grey dot and its name with the page's halo, to the right on a map or
- * `above` it on a cut's surface.
- */
-function TownMark({
-  x,
-  y,
-  name,
-  fontSize,
-  above = false,
-}: {
-  x: number;
-  y: number;
-  name: string;
-  fontSize: number;
-  above?: boolean;
-}) {
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <circle r={2.2} className="fill-muted-foreground" />
-      <text
-        x={above ? 0 : 5}
-        y={above ? -7 : 4}
-        textAnchor={above ? "middle" : undefined}
-        fontSize={fontSize}
-        paintOrder="stroke"
-        strokeWidth={3}
-        className="fill-muted-foreground stroke-background"
-      >
-        {name}
-      </text>
-    </g>
-  );
-}
-
-/** Pereira, the reader's own place, in its own red (`--place`); the label stays in the text colour. */
-function PereiraMark({ x, y, small, label }: { x: number; y: number; small: boolean; label: string }) {
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <circle
-        r={small ? 10 : 13}
-        className="origin-center fill-place/25 [transform-box:fill-box] motion-safe:animate-beacon"
-      />
-      <circle r={small ? 4.5 : 5.5} className="fill-place stroke-background" strokeWidth={2} />
-      <text
-        x={small ? 8 : 10}
-        y={-8}
-        fontSize={small ? 12 : 14}
-        fontWeight={650}
-        className="fill-foreground stroke-background"
-        paintOrder="stroke"
-        strokeWidth={4}
-      >
-        {label}
-      </text>
     </g>
   );
 }
@@ -589,7 +538,8 @@ function planWhere({
       [m, upper],
       [width - side.width - m, upper],
     ].map(([x, y]) => ({ x0: x!, y0: y!, x1: x! + side.width, y1: y! + side.height }));
-    const pereiraR = small ? 10 : 13;
+    const look = pereiraLook(small);
+    const pereiraR = look.disc;
     const star = model.main && proj([model.main.lon, model.main.lat]);
     const starR = small ? 10 : 13;
     card = pickCorner(corners, {
@@ -597,7 +547,7 @@ function planWhere({
         ...lines.flatMap((l) => l.boxes),
         {
           x0: P[0] - pereiraR,
-          x1: P[0] + (small ? 8 : 10) + measure(c.legend.pereira, small ? 12 : 14, { weight: 650 }),
+          x1: P[0] + look.dx + measure(c.legend.pereira, look.fontSize, { weight: look.weight }),
           y0: P[1] - pereiraR - 12,
           y1: P[1] + pereiraR,
         },
@@ -651,30 +601,22 @@ function WhereOverlay({ plan, lang, width }: { plan: WherePlan; lang: Lang; widt
         <g key={s}>
           <line x1={P[0]} y1={P[1]} x2={xy[0]} y2={xy[1]} className={STROKE[s]} strokeWidth={1.75} />
           <g transform={`translate(${mx},${my})`}>
-            <text
+            <HaloText
               textAnchor="middle"
               fontSize={fs}
               fontWeight={600}
-              className="fill-foreground stroke-background tabular-nums"
-              paintOrder="stroke"
-              strokeWidth={4}
+              className="fill-foreground tabular-nums"
+              halo={4}
             >
               {fmtKm(km)}
-            </text>
-            <text
-              textAnchor="middle"
-              y={fs + 2}
-              fontSize={fs - 1.5}
-              className="fill-muted-foreground stroke-background"
-              paintOrder="stroke"
-              strokeWidth={4}
-            >
+            </HaloText>
+            <HaloText textAnchor="middle" y={fs + 2} fontSize={fs - 1.5} className="fill-muted-foreground" halo={4}>
               {c.legend[s]}
-            </text>
+            </HaloText>
           </g>
         </g>
       ))}
-      <PereiraMark x={P[0]} y={P[1]} small={small} label={c.legend.pereira} />
+      <PereiraMark x={P[0]} y={P[1]} label={c.legend.pereira} look={pereiraLook(small)} />
       <text x={small ? 4 : 8} y={small ? 50 : 66} fontSize={fs - 2} className="fill-muted-foreground">
         {c.graphic.mapNote}
       </text>
@@ -694,23 +636,22 @@ function UnknownOverlay({ model, proj, small }: { model: StoryModel; proj: GeoPr
         // The mark sits on its own group's dots, in their colour, so a background halo keeps its
         // outline apart from them.
         return (
-          <text
+          <HaloText
             key={s}
             x={xy[0]}
             y={xy[1] + (small ? 14 : 24)}
             textAnchor="middle"
             fontSize={small ? 44 : 72}
             fontWeight={500}
-            className={`${FILL[s]} stroke-background`}
-            paintOrder="stroke"
-            strokeWidth={small ? 5 : 7}
+            className={FILL[s]}
+            halo={small ? 5 : 7}
             strokeLinejoin="round"
           >
             ?
-          </text>
+          </HaloText>
         );
       })}
-      {P && <PereiraMark x={P[0]} y={P[1]} small={small} label="Pereira" />}
+      {P && <PereiraMark x={P[0]} y={P[1]} label="Pereira" look={pereiraLook(small)} />}
     </g>
   );
 }
@@ -763,45 +704,42 @@ function SectionBase({
             className="stroke-foreground/60"
             strokeDasharray="2 4"
           />
-          <text
+          <HaloText
             x={(P + sec.x(main.lon)) / 2 + 8}
             y={(sec.y(0) + sec.y(main.depthKm)) / 2}
             fontSize={fs}
-            className="fill-foreground stroke-background tabular-nums"
-            paintOrder="stroke"
-            strokeWidth={4}
+            className="fill-foreground tabular-nums"
+            halo={4}
           >
             {fmtKm(model.mainHypoKm)}
-          </text>
-          <text
+          </HaloText>
+          <HaloText
             x={sec.x(main.lon) + (small ? 12 : 18)}
             y={sec.y(main.depthKm) + 4}
             fontSize={fs}
             fontWeight={600}
-            className="fill-foreground stroke-background"
-            paintOrder="stroke"
-            strokeWidth={4}
+            className="fill-foreground"
+            halo={4}
           >
             {/* On a phone the cut is ~1 px per km and the star sits near its east edge: the depth,
                 which the scale and the prose both give, would run off it. */}
             {small ? `M${main.mag.toFixed(1)}` : `M${main.mag.toFixed(1)} · ${fmtKm(main.depthKm)}`}
-          </text>
+          </HaloText>
         </g>
       )}
       {groups.map((g) => (
-        <text
+        <HaloText
           key={g.s}
           x={g.x + (g.s === "deep" ? (small ? -16 : -30) : 0)}
           y={g.y + (g.s === "shallow" ? (small ? -22 : -30) : small ? 24 : 36)}
           textAnchor={g.s === "deep" ? "end" : "middle"}
           fontSize={fs}
           fontWeight={600}
-          className="fill-foreground stroke-background"
-          paintOrder="stroke"
-          strokeWidth={4}
+          className="fill-foreground"
+          halo={4}
         >
           <Rich text={c.groupAt[g.s]} parts={{ km: fmtKm(g.depth) }} />
-        </text>
+        </HaloText>
       ))}
       {eastDeeper && (
         <g className="text-muted-foreground">
@@ -830,17 +768,16 @@ function SectionBase({
           {/* Above and right of the arrow's middle, in the empty band between the two groups, with
               the page's halo so a stray dot under it cannot break a letter. On a phone the cut is too
               narrow for it, and the sentence beside the drawing says it. */}
-          <text
+          <HaloText
             display={small ? "none" : undefined}
             x={shallow.x + (deep.x - shallow.x) * 0.5 + 10}
             y={shallow.y + (deep.y - shallow.y) * 0.5 + (small ? 18 : 26) - 8}
             fontSize={fs - 0.5}
-            className="fill-muted-foreground stroke-background italic"
-            paintOrder="stroke"
-            strokeWidth={4}
+            className="fill-muted-foreground italic"
+            halo={4}
           >
             {c.eastDeeper}
-          </text>
+          </HaloText>
         </g>
       )}
       {sub === "caveat" && err.h !== null && err.depth !== null && (
@@ -905,33 +842,31 @@ function TolimaSectionBase({
         return <TownMark key={t.id} x={x} y={y} name={t.name} fontSize={fs} above />;
       })}
       {model.tolimaToPereiraKm !== null && (
-        <text
+        <HaloText
           x={sec.x1}
           // On a phone the note is as wide as half the cut and would run into the towns' names, so it
           // sits a line higher, beside the legend, which on this cut holds one short entry.
           y={sec.y(0) - (small ? 26 : 20)}
           textAnchor="end"
           fontSize={fs}
-          className="fill-foreground stroke-background"
-          paintOrder="stroke"
-          strokeWidth={4}
+          className="fill-foreground"
+          halo={4}
         >
           <Rich text={c.pereiraNorth} parts={{ km: fmtKm(roundSig(model.tolimaToPereiraKm, 2)) }} />
-        </text>
+        </HaloText>
       )}
       {at && depth !== undefined && (
-        <text
+        <HaloText
           x={Math.min(sec.x(at.lon) + (small ? 10 : 16), sec.x1)}
           y={sec.y(depth) + (small ? 24 : 36)}
           textAnchor="end"
           fontSize={fs}
           fontWeight={600}
-          className="fill-foreground stroke-background"
-          paintOrder="stroke"
-          strokeWidth={4}
+          className="fill-foreground"
+          halo={4}
         >
           <Rich text={c.swarmAt} parts={{ km: fmtKm(depth) }} />
-        </text>
+        </HaloText>
       )}
     </g>
   );

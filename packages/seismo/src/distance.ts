@@ -8,7 +8,8 @@ export interface LatLon {
   lon: number;
 }
 
-const EARTH_RADIUS_KM = 6371;
+/** The mean Earth radius every distance here is measured on. */
+export const EARTH_RADIUS_KM = 6371;
 const RAD = Math.PI / 180;
 
 /** Great-circle distance in km between two points on the surface (haversine). */

@@ -10,6 +10,7 @@
 import { bearingDeg, epicentralKm } from "@bvalue/seismo";
 import { GROUND, RUPTURE } from "../block";
 import { compassPoint, type Insights, type QuakeLike, type Source } from "../claims";
+import { KM_PER_DEG, kmPerDegLon } from "../drawing/km";
 import { TOWNS } from "../region";
 import { commonDepths } from "../shared";
 import { USGS_ASSESSED } from "../story/model";
@@ -17,13 +18,12 @@ import type { SeaForecast, SeaHour, WaveTrain } from "../../../worker/api-types"
 
 const LON0 = -76.75;
 const LAT0 = 4.4;
-const KM_LAT = 111.195;
-const KM_LON = KM_LAT * Math.cos((LAT0 * Math.PI) / 180);
+const KM_LON = kmPerDegLon(LAT0);
 /** The block's floor: deep enough for the plate under Pereira (~160 km) and its body. */
 export const FLOOR_KM = 240;
 
 export const x = (lon: number) => (lon - LON0) * KM_LON;
-export const z = (lat: number) => -(lat - LAT0) * KM_LAT;
+export const z = (lat: number) => -(lat - LAT0) * KM_PER_DEG;
 export const WEST = x(GROUND.lon0);
 export const EAST = x(GROUND.lon0 + (GROUND.nx - 1) * GROUND.step);
 export const SOUTH = z(GROUND.lat0);

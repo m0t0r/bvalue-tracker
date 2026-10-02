@@ -3,12 +3,12 @@
  * so they can be tested. Widths come from `measure`, which the page passes from `useTextWidth`.
  */
 import { rankLayout, type RankRow } from "../history";
-import { textWidth } from "../measure";
+import { FONT_FLOOR, largestFit, textWidth } from "../drawing";
 
 type Measure = (text: string, fontSize: number, opts?: { weight?: number }) => number;
 
 /** The energy drawing's labels step down from these sizes, a pixel at a time, to the floor. */
-export const RANK_FS = { small: 11, wide: 13, floor: 9 } as const;
+export const RANK_FS = { small: 11, wide: 13, floor: FONT_FLOOR } as const;
 
 export interface RankItem {
   id: string;
@@ -48,7 +48,7 @@ export function fitRanks(
   const gap = small ? 10 : 16;
   const left = small ? 6 : 24;
   for (const short of [false, true]) {
-    for (let fs: number = small ? RANK_FS.small : RANK_FS.wide; fs >= RANK_FS.floor; fs--) {
+    const fit = (fs: number): RankFit | null => {
       const labelW = Math.max(
         ...items.map((i) =>
           Math.max(measure(short ? i.line1Short : i.line1, fs, { weight: 600 }), measure(i.line2, fs)),
@@ -56,13 +56,15 @@ export function fitRanks(
       );
       const minRow = 2 * fs + (small ? 5 : 8);
       const maxSide = width - 2 * left - gap - labelW;
-      if (maxSide < 2 * minRow) continue;
+      if (maxSide < 2 * minRow) return null;
       const { rows } = rankLayout(
         items.map((i) => i.mag),
         { height, maxSide, minRow, gap: small ? 3 : 8 },
       );
-      if (rows.length) return { fs, rows, short, left, gap };
-    }
+      return rows.length ? { fs, rows, short, left, gap } : null;
+    };
+    const fs = largestFit(small ? RANK_FS.small : RANK_FS.wide, (f) => fit(f) !== null, RANK_FS.floor);
+    if (fs !== null) return fit(fs);
   }
   return null;
 }

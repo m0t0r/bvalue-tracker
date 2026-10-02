@@ -6,10 +6,9 @@
 import { useId } from "react";
 import type { Lang } from "@/lib/i18n";
 import { SOURCES, type Insights, type Source } from "../claims";
-import { textBox, overlaps, type Box } from "../place";
+import { HaloText, overlaps, textBox, type Box, type textWidth } from "../drawing";
 import { fmtKm } from "../shared";
 import { FILL, STROKE } from "../tones";
-import type { textWidth } from "../measure";
 import { storyCopy } from "./copy";
 import { ARC_KM, sideFocus, sideScale } from "./side";
 
@@ -171,18 +170,17 @@ export function SideView({ at, layout, lang }: { at: Box; layout: SideLayout; la
       {layout.foci.map((f) => (
         <g key={f.source}>
           <circle cx={f.x} cy={f.y} r={dotR} className={`${FILL[f.source]} stroke-background`} />
-          <text
+          <HaloText
             x={f.label.x}
             y={f.label.y}
             textAnchor="end"
             fontSize={fs}
             fontWeight={600}
-            className="fill-foreground stroke-background tabular-nums"
-            paintOrder="stroke"
-            strokeWidth={3}
+            className="fill-foreground tabular-nums"
+            halo={3}
           >
             {fmtKm(f.km)}
-          </text>
+          </HaloText>
         </g>
       ))}
       <circle cx={P[0]} cy={P[1]} r={small ? 3.5 : 4} className="fill-place stroke-background" strokeWidth={1.5} />

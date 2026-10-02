@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CUTS, type Cut } from "../plate";
 import { TOWNS, onCut } from "../region";
-import { cutEnd, frameSections, kmPerDegLon } from "./section";
+import { kmPerDegLon } from "../drawing";
+import { cutEnd, frameSections } from "./section";
 
 /** A cut with ground data from 0.2° west of its trench to −74°. */
 const cut = (lat: number, trenchLon: number): Cut => {

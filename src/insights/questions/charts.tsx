@@ -18,8 +18,7 @@ import { fmtKm, median, medianHorizontalErrorKm, timeWindows } from "../shared";
 import { BG, FILL } from "../tones";
 import { colombianDays, dailyCounts, dayIndexOf, kmFrom, omoriFromFirstDay } from "./derive";
 import { Figure, RangeField, Swatch, useWidth } from "./ui";
-import { useTextWidth } from "../measure";
-import { INSIGHTS_LABEL_GAP, firstClear, forwardLabels, textBox } from "../place";
+import { INSIGHTS_LABEL_GAP, firstClear, forwardLabels, textBox, useTextWidth } from "../drawing";
 
 const DAY = 86_400_000;
 

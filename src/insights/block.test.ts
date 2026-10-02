@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { GROUND, RUPTURE } from "./block";
+import { KM_PER_DEG } from "./drawing";
 import { CUTS, SLAB2 } from "./plate";
 
-const KM_PER_DEG = 111.195;
 /** Distance and bearing on a local flat projection: at this size (~150 km) it is good to ~0.1%. */
 function offset(a: readonly [number, number], b: readonly [number, number]) {
   const cos = Math.cos((((a[1] + b[1]) / 2) * Math.PI) / 180);
