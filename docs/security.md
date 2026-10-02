@@ -100,6 +100,14 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   uncached); the dashboard is set to snippet installation so the edge never adds a second copy. The
   owner chose it over edge analytics alone for the real readers' Core Web Vitals
   ([Operations](operations.md#the-domains-analytics)).
+  **Declined: an `integrity` attribute on it** (2026-10-02). Mozilla Observatory grades the domain
+  A+ (125) and takes its only 5 points off for that. Cloudflare's Web Analytics FAQ: "There is no
+  current way to safely apply an `integrity` attribute because we do not support version-pinning our
+  beacon script"; only their automatic injection adds one, and it never reached these pages. Pinning
+  a versioned beacon URL copied from another site would rest on something unsupported that can
+  vanish, and would freeze out Cloudflare's own security fixes to the beacon. What bounds the script
+  instead: the CSP lets it load only from that one host and report only to `cloudflareinsights.com`,
+  and nothing on the page depends on it. Revisit if Cloudflare starts pinning versions.
   **There is no inline script, and none is allowed** (no `'unsafe-inline'`, hash or nonce in
   `script-src`). The head script that sets the page's language and theme before the first paint
   (`src/boot.ts`, 2026-09-28) is a same-origin file under `/assets/`, which `'self'` already covers.
