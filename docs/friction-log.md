@@ -48,7 +48,8 @@ paths outside the repo and anything personal.
 
 - 2026-10-02: Worktree sessions refuse compound commands and heredoc scripts as too complex to verify (#169)
   - 2026-10-02: again in an Agent-tool worktree, for sourcing `.env` before a `curl` and for a Python heredoc
-  - 2026-10-11: again, for `cd <worktree> && python3 - <<'EOF'` with the session already in the worktree
+  - 2026-10-11: again, for `cd <worktree> && python3 - <<'EOF'` with the session already in the worktree, and for a `gh issue create` or `printf` whose text merely contained the words of a push command
 - 2026-10-02: Analytics Engine docs: no response size in sgc_ingest, and the example query's quantile() is rejected (#179)
 - 2026-10-02: pnpm logs returned 40 of 275 successful ingest runs over three days, with no sign it was a sample (#180)
 - 2026-10-11: verify: no local data to run the page with, and the events fixture lacks fields the page reads (#184)
+- 2026-10-11: Pushing over HTTPS hangs on a hidden prompt, and the gh token cannot update workflow files (#186)
