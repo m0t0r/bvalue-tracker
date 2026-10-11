@@ -308,7 +308,7 @@ refused with a 503**: the guard fails closed.
   whose code set the lock writes its own random id into `locked_by`, and only it logs `sync locked
   out`: comparing the lock's end with its own named every request of that millisecond (code review).
 - **The caller is stored and logged as a hash, never as its address**: the first 32 hex characters of
-  SHA-256 over `cf-connecting-ip` (its /64 for IPv6), the header the rate limiter already keys on. It
+  SHA-256 over `cf-connecting-ip` (its /48 for IPv6), the header the rate limiter already keys on. It
   is pseudonymous, not anonymous: an IPv4 hash can be reversed by hashing all 2^32 addresses, so the
   hash keeps addresses out of the table, a D1 export and the log at a glance, and nothing more. Rows
   are deleted once a caller has sent no code for a day and is not locked (`purgeIdleCallers`, run under

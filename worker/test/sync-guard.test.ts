@@ -193,6 +193,12 @@ describe("the lockout", () => {
     expect((await refresh(CODE, "2001:db8:2::1")).status).toBe(200);
   });
 
+  it("counts a malformed address as itself rather than failing the request", async () => {
+    await setCode(CODE);
+    expect((await refresh(OTHER, "1:2:3:4::5:6:7:8")).status).toBe(403);
+    expect((await refresh(OTHER, "1:2:3:4:5::6:7:8:9")).status).toBe(403);
+  });
+
   it("ends after 15 minutes, and the next three wrong codes count afresh", async () => {
     await setCode(CODE);
     for (let i = 0; i < 3; i++) await refresh(OTHER);
