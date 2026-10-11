@@ -256,6 +256,60 @@ comment together, so the pins stay current through the same 7-day cooldown and s
 check as before (see [deployment.md](deployment.md#dependency-updates)). A new step takes a SHA
 too: `gh api repos/<owner>/<action>/commits/<tag> -q .sha`.
 
+### The sync code (2026-10-11)
+
+**`POST /api/refresh` syncs only with a 4-digit code** (owner's decision), the one route that reaches
+SGC. The page asks for it in a dialog ([the page](frontend.md)), sends it in the `x-sync-code` header on
+every request of a press, and the Worker checks it before it reads anything else (`checkSyncCode` in
+`worker/sync-guard.ts`; the answers are in [API](api.md)). The code is a row in D1 (`sync_code`,
+`migrations/0010_sync_guard.sql`), set by the owner with one command
+([Deployment](deployment.md#the-sync-code)), and **never in the repo**: not a migration, a test, a doc,
+a commit or a PR body. Tests and local runs use made-up codes. **Until the row exists every sync is
+refused with a 503**: the guard fails closed.
+
+- **A 4-digit code is only as good as its lockout.** It is 10,000 guesses, which a script would walk
+  through in minutes. **Three wrong codes in a row from one caller lock that caller out for 15
+  minutes, and the right code is refused too until then** (owner's call: per caller, not the whole
+  sync; "block the sync" came first and was changed). That is at most 3 guesses every 15 minutes, 288
+  a day, so one caller needs about 17 days for an even chance at the code and 35 to be sure of it. A
+  right code puts the count back to 0, and so does setting a lock, so after the 15 minutes three more
+  count afresh. Guesses sent while locked count nothing and do not lengthen the lock.
+  - **What it does not stop is many callers.** Each address has its own three tries, so a thousand
+    addresses get a thousand times the guesses. The owner chose per-caller knowing this; a global
+    lock would let any one person turn sync off for everyone. If guessing ever shows up in the logs
+    (`sync code refused`, `sync locked out`, each with the caller's hash), changing the code is one
+    command, and a longer code is a migration and a dialog with more slots.
+  - **An IPv6 caller counts by its /64**, not its address (`callerKey`). A subscriber usually holds a
+    whole /64, and per address it could walk 2^64 of them, each with three fresh tries.
+  - **Refusals that are not a guess count nothing**: no header (a tab left open from before the
+    deploy sends none, and must not lock anyone out), a header that is not four ASCII digits, and any
+    code while none is set (so setting one later finds nobody locked out).
+- **One statement decides, so a burst cannot outrun the counter.** The lock check, the comparison and
+  the counter's move are a single upsert into `sync_lockouts` with `RETURNING`, and D1 runs statements
+  one at a time. Read-then-write would let eight parallel guesses each be compared at 0 failures, the
+  same race the refresh claim had ([above](#security-decisions)). Tested: eight wrong codes in
+  parallel get two 403s and six 429s, and a burst that hides the right code among wrong ones from a
+  locked caller gets three 429s and asks SGC nothing (`worker/test/sync-guard.test.ts`).
+- **The caller is stored and logged as a hash, never as its address**: the first 32 hex characters of
+  SHA-256 over `cf-connecting-ip` (its /64 for IPv6), the header the rate limiter already keys on. It
+  is pseudonymous, not anonymous: an IPv4 hash can be reversed by hashing all 2^32 addresses, so the
+  hash keeps addresses out of the table, a D1 export and the log at a glance, and nothing more. Rows
+  are deleted once a caller has sent no code for a day and is not locked (`purgeIdleCallers`, run after
+  each accepted code, under `waitUntil`). Nothing schedules it: the site has no cron, a lock ends by its
+  own time whether or not the row is deleted, and an idle row is a hash and a counter.
+- **The code is never logged.** `refuseSync` writes the caller's hash, the tries left and the lock's
+  length; a test sends wrong and right codes through every path and holds every line to containing
+  neither code nor the address. **Not checked yet**: whether Cloudflare's own invocation log or its
+  sampled traces keep request headers, and so `x-sync-code`. Look at the first production press's
+  invocation in the dashboard; if they do, that is a 3-day copy readable only from the account.
+- **Compared in SQL, in plain text, not in constant time.** A timing difference in comparing four
+  characters inside D1 is far below the network's jitter, and the lockout caps guesses whatever a
+  timing leak could tell. Hashing the stored code would add nothing either: 10,000 candidates hash in
+  milliseconds.
+- **Lifting a lock by hand**, for the owner who has locked themselves out:
+  `DELETE FROM sync_lockouts` ([Deployment](deployment.md#the-sync-code)). Rows hold hashes, so lifting
+  everyone's is simpler than finding one.
+
 ### The SGC response cap (2026-10-02)
 
 **The Worker reads at most 8 MiB of an SGC response** (`SGC_MAX_BYTES` in `worker/ingest.ts`,

@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FlowNumber } from "@/components/flow-number";
+import { SyncCodeDialog } from "@/components/sync-code-dialog";
 import { Explain } from "@/components/explainer/explain";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,6 +25,7 @@ import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
 import { recordFailure, retryAt } from "@/lib/refresh-backoff";
 import { behind, syncZone } from "@/lib/sync";
+import { acceptCode, acceptedCode, forgetCode, refusalOf, type Refusal } from "@/lib/sync-code";
 import { useNow } from "@/lib/use-now";
 import { useZone } from "@/lib/zone";
 import type { ZoneMainshock } from "../../core/mainshock";
@@ -215,18 +217,29 @@ export function StatusBar({
   const restS = until === null ? 0 : Math.max(0, Math.ceil((until - clockMs) / 1000));
   const resting = restS > 0;
 
+  // The sync code's dialog (worker/sync-guard.ts): open while a press waits for a code, with why the last
+  // one was turned away. A code the Worker accepted is kept for the page's life (`acceptedCode`), so
+  // the dialog opens only on the first press, and again after a refusal.
+  const [asking, setAsking] = useState(false);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+
   /**
    * "Sincronizar ahora", the one way the page reads SGC (docs/ingest.md, "On demand only"). Nothing
    * starts it but a press: not loading the page, not returning to the tab, not history left to load.
    * `syncZone` catches a zone up one chunk per request and says which chunk it is on; the first request
    * also asks for USGS's products and the sea forecast (`context`), which the Worker fetches when due.
+   * Every request carries the code; the first answer means it was accepted, and the dialog closes.
    */
   const sync = useMutation({
     mutationKey: syncKey(zone),
-    mutationFn: (pendingAtPress: number) =>
+    mutationFn: ({ pendingAtPress, code }: { pendingAtPress: number; code: string }) =>
       syncZone(pendingAtPress, {
-        post: (first) => postRefresh(zone, { context: first }),
-        answer: (res: StatusResponse) => qc.setQueryData(["status", zone], res),
+        post: (first) => postRefresh(zone, { code, context: first }),
+        answer: (res: StatusResponse) => {
+          acceptCode(code);
+          setAsking(false);
+          qc.setQueryData(["status", zone], res);
+        },
         step: (i, n) => setStep({ i, n }),
       }),
     onMutate: () => {
@@ -234,8 +247,17 @@ export function StatusBar({
       setMore(false);
     },
     // Only a press rests the button, and only one whose request failed: SGC failing is a 200 with a
-    // failed run, which the alert reports.
-    onError: () => {
+    // failed run, which the alert reports. The code turned away is not a request failing either: the
+    // dialog asks again and says why, and the button does not rest.
+    onError: (err) => {
+      const turnedAway = refusalOf(err);
+      if (turnedAway !== null) {
+        forgetCode();
+        setRefusal(turnedAway);
+        setAsking(true);
+        return;
+      }
+      setAsking(false);
       const at = Date.now();
       setFailures((f) => recordFailure(f, at));
       setClockMs(at);
@@ -255,11 +277,31 @@ export function StatusBar({
     },
   });
   const pending = sync.isPending;
-  const startSync = () => {
-    if (pending || resting) return;
+  const runSync = (code: string) => {
     // The pixel background answers the press with a ring of pixels (src/backdrop/pixels.ts).
     window.dispatchEvent(new Event("backdrop:ripple"));
-    sync.mutate(status ? behind(status) : 0);
+    sync.mutate({ pendingAtPress: status ? behind(status) : 0, code });
+  };
+  // Where focus goes back to when the dialog closes: the button that was pressed, or "Sincronizar ahora"
+  // when that one has gone (the gap notice hides while a press catches up). Radix's Dialog returns focus
+  // to its own trigger, and this dialog has none: the press opens it, and so can a refusal later on.
+  const opener = useRef<HTMLElement | null>(null);
+  const syncButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = () => {
+    const to = opener.current?.isConnected ? opener.current : syncButton.current;
+    to?.focus();
+  };
+  const startSync = () => {
+    if (pending || resting) return;
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const code = acceptedCode();
+    if (code !== null) return runSync(code);
+    setRefusal(null);
+    setAsking(true);
+  };
+  // The dialog's own press. A sync under way already carries a code; the dialog then only waits.
+  const submitCode = (code: string) => {
+    if (!pending) runSync(code);
   };
 
   const ok = status?.lastSuccessfulRun ?? null;
@@ -309,7 +351,8 @@ export function StatusBar({
       : t.syncing
     : resting && cooldown
       ? cooldown
-      : sync.isError
+      : // The code turned away is said in the dialog, never as a sync that failed.
+        sync.isError && refusalOf(sync.error) === null
         ? t.syncFailed
         : stoodDown !== null && !syncedRecently
           ? t.syncRetryIn(Math.max(1, Math.ceil(stoodDown / 60)))
@@ -447,7 +490,13 @@ export function StatusBar({
             {/* One label and one icon: the button keeps its width while it works. `aria-disabled`, not
                 `disabled`: a disabled button drops the keyboard focus it holds to the page. Busy, it
                 keeps its colour and spins; off after failed presses, it dims (`aria-busy` in `Button`). */}
-            <Button size="default-touch" aria-disabled={pending || resting} aria-busy={pending} onClick={startSync}>
+            <Button
+              ref={syncButton}
+              size="default-touch"
+              aria-disabled={pending || resting}
+              aria-busy={pending}
+              onClick={startSync}
+            >
               <RefreshCwIcon data-icon="inline-start" className={pending ? "animate-spin" : undefined} />
               {t.sync}
             </Button>
@@ -473,6 +522,14 @@ export function StatusBar({
           </div>
         </CardContent>
       </Card>
+      <SyncCodeDialog
+        open={asking}
+        onOpenChange={setAsking}
+        refusal={refusal}
+        pending={pending}
+        onSubmit={submitCode}
+        onClosed={returnFocus}
+      />
       {/* Hidden while a press catches up, so it does not come and go under the reader with each chunk;
           the line under the button says where the press is. Its action is the same sync. */}
       {alert === "backfill" && status ? (

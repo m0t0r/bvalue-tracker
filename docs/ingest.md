@@ -16,7 +16,9 @@ rather than leaving the key out, because an empty list is what removes the crons
 place (the 15-minute ingest and the daily USGS job until that date); a missing key would have left them
 firing at a handler that no longer exists. `worker/test/ingest.test.ts` holds the list empty.
 
-**The one way in is "Sincronizar ahora" ("Sync now"), which is `POST /api/refresh`.** Each request runs
+**The one way in is "Sincronizar ahora" ("Sync now"), which is `POST /api/refresh`**, and from
+2026-10-11 only with the 4-digit sync code, checked before anything below
+([Security](security.md#the-sync-code-2026-10-11)). Each request runs
 one plan from `dueNow(now, history, zone)` in `worker/plan.ts`:
 
 | The zone's state | What one request does |

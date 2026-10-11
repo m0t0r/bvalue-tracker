@@ -14,6 +14,7 @@ import PAGER_CITIES from "../../test/fixtures/usgs-us6000tjl2-pager-cities-2026-
 import type { ContextResponse } from "../api-types.ts";
 import { insertStmt } from "../db.ts";
 import { refreshProducts } from "../external.ts";
+import { TEST_SYNC_CODE, seedSyncCode } from "./sync-code.ts";
 import worker from "../index.ts";
 import { silentLogger } from "../log.ts";
 
@@ -291,7 +292,7 @@ describe("on a sync", () => {
     const res = await worker.fetch(
       new Request(`https://x.test/api/refresh?zone=choco&${query}`, {
         method: "POST",
-        headers: { "sec-fetch-site": "same-origin" },
+        headers: { "sec-fetch-site": "same-origin", "x-sync-code": TEST_SYNC_CODE },
       }),
       env,
       ctx,
@@ -304,6 +305,7 @@ describe("on a sync", () => {
 
   beforeEach(async () => {
     await env.DB.batch([env.DB.prepare("DELETE FROM ingest_runs"), env.DB.prepare("DELETE FROM sea_forecast")]);
+    await seedSyncCode();
   });
 
   it("asks USGS and Open-Meteo when nothing is stored, and serves what they answered", async () => {

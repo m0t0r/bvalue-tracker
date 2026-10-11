@@ -13,6 +13,7 @@ import type {
   SeaForecast,
   StatusResponse,
   StoredEvent,
+  SyncRefusal,
   ZoneHealth,
 } from "./api-types.ts";
 import { lastRun, toStored, zoneMainshockRow, type EventRow } from "./db.ts";
@@ -22,6 +23,7 @@ import { asLevel, logger, type Logger } from "./log.ts";
 import { REFRESH_MIN_INTERVAL_S, dueNow } from "./plan.ts";
 import { redirectTo } from "./redirect/index.ts";
 import { readSea, refreshSea } from "./sea.ts";
+import { LOCKOUT_S, SYNC_CODE_HEADER, checkSyncCode, purgeIdleCallers, type Verdict } from "./sync-guard.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -401,6 +403,31 @@ async function refreshContext(env: Env, now: Date): Promise<void> {
 }
 
 /**
+ * A sync the code turned away (worker/sync-guard.ts): its status, `no-store`, and what the page needs to
+ * say why. A lock also carries `retry-after`. A wrong code and a lock set are warnings, with the caller's
+ * hash and never the code; a missing code is a tab from before the guard and is not logged; no code set
+ * is an error, since nobody can sync until the owner sets one.
+ */
+function refuseSync(c: Context<{ Bindings: Env }>, v: Exclude<Verdict, { ok: true }>, l: Logger) {
+  c.header("cache-control", "no-store");
+  switch (v.status) {
+    case 403:
+      l.warn({ ipHash: v.ipHash, attemptsLeft: v.attemptsLeft }, "sync code refused");
+      return c.json({ error: v.error, attemptsLeft: v.attemptsLeft } satisfies SyncRefusal, 403);
+    case 429:
+      if (v.lockedNow) l.warn({ ipHash: v.ipHash, lockoutS: LOCKOUT_S }, "sync locked out");
+      else l.info({ ipHash: v.ipHash, retryAfterS: v.retryAfterS }, "sync refused while locked out");
+      c.header("retry-after", String(v.retryAfterS));
+      return c.json({ error: v.error, retryAfterS: v.retryAfterS } satisfies SyncRefusal, 429);
+    case 503:
+      l.error({}, "sync code not set");
+      return c.json({ error: v.error } satisfies SyncRefusal, 503);
+    default:
+      return c.json({ error: v.error } satisfies SyncRefusal, v.status);
+  }
+}
+
+/**
  * "Sincronizar ahora": the only way anything is read from SGC (docs/ingest.md, "On demand only"). One
  * request runs one plan (`dueNow`): a history chunk while the zone is behind, which the page repeats
  * until it has caught up, or the trailing window (and an hourly revision sweep) once it has.
@@ -414,6 +441,12 @@ app.post("/api/refresh", async (c) => {
   const q = c.req.query();
   const zone = parseZone(q);
   const l = log(c.env, { trigger: "manual", zone });
+
+  // The code first, before anything reads the run history (worker/sync-guard.ts). Never logged.
+  const verdict = await checkSyncCode(db, c.req.header(SYNC_CODE_HEADER), c.req.header("cf-connecting-ip"), now);
+  if (!verdict.ok) return refuseSync(c, verdict, l);
+  c.executionCtx.waitUntil(purgeIdleCallers(db, now));
+
   const standDown = async (retryAfterS: number, why: string) => {
     // Not a warning: a second press inside the throttle stands down by design. It is logged because
     // "the button does nothing" is the report we would get, and the reason is otherwise nowhere.

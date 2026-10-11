@@ -100,6 +100,22 @@ press's own ingest has finished; a press that stands down asks them nothing. The
 first request of a press only. A refresh without `zone` is Chocó's,
 like every route.
 
+**`POST /api/refresh` takes a 4-digit sync code** (from 2026-10-11) in the `x-sync-code` header, on every
+request, including each step of a catch-up; never in the query string, which is logged. The code is
+checked before anything else the route does, and its refusals are all `no-store`
+(`SyncRefusal` in `worker/api-types.ts`; why, and the lockout, in
+[Security](security.md#the-sync-code-2026-10-11)):
+
+| Answer | When | Counted |
+|---|---|---|
+| 401 `{ error: "sync code required" }` | no header (a tab from before the guard) | no |
+| 400 `{ error: "sync code must be 4 digits" }` | anything but four ASCII digits | no |
+| 403 `{ error: "wrong sync code", attemptsLeft }` | a wrong code | yes |
+| 429 `{ error: "too many wrong sync codes", retryAfterS }` and `retry-after` | the caller is locked out: three wrong codes in a row lock it for 15 minutes, and the right code is refused too until then | no |
+| 503 `{ error: "sync code not set" }` | the owner has not set one ([Deployment](deployment.md#the-sync-code)) | no |
+
+The rate limit's own 429 is `{ error: "rate limited" }`, so a caller tells the two apart by the body.
+
 `/api/status` (and so every refresh answer) carries `syncedThrough`, where the synced data stops (the
 oldest gap's start while there is one, else the last successful run's end; null before any sync), which
 the pages end every "last 7 days" at, and `backfill: { done, total, gaps }`: history chunks
