@@ -211,6 +211,11 @@ export interface IngestClaim {
   inFlightSince: string;
   /** If set, refuse when a run of this zone finished after this instant (the visitor-facing throttle). */
   finishedSince: string | null;
+  /**
+   * If set, refuse when the newest run of any zone started after this instant: the gap every request to
+   * SGC keeps from the one before (`SGC_REQUEST_GAP_S`). The newest row by id, so one primary-key step.
+   */
+  sentSince?: string | null;
 }
 
 /**
@@ -235,9 +240,21 @@ export async function claimIngestRun(db: D1Database, c: IngestClaim): Promise<nu
          AND (?6 IS NULL OR NOT EXISTS (
                SELECT 1 FROM ingest_runs WHERE zone = ?7 AND finished_at IS NOT NULL AND finished_at > ?6
              ))
+         AND (?8 IS NULL OR NOT EXISTS (
+               SELECT 1 FROM (SELECT started_at FROM ingest_runs ORDER BY id DESC LIMIT 1) WHERE started_at > ?8
+             ))
        RETURNING id`,
     )
-    .bind(c.startedAt, c.trigger, c.windowStart, c.windowEnd, c.inFlightSince, c.finishedSince, c.zone)
+    .bind(
+      c.startedAt,
+      c.trigger,
+      c.windowStart,
+      c.windowEnd,
+      c.inFlightSince,
+      c.finishedSince,
+      c.zone,
+      c.sentSince ?? null,
+    )
     .first<{ id: number }>();
   return row?.id ?? null;
 }

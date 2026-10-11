@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IngestRun, StatusResponse } from "@/lib/api";
-import { IN_FLIGHT_WAIT_MAX_S, MAX_SYNC_STEPS, syncZone } from "./sync";
+import { SGC_REQUEST_GAP_S } from "../../worker/plan.ts";
+import { IN_FLIGHT_WAIT_MAX_S, MAX_SYNC_STEPS, MAX_SYNC_WAITS, syncZone } from "./sync";
+
+const GAP_MS = SGC_REQUEST_GAP_S * 1000;
 
 const run = (ok: boolean): IngestRun => ({
   id: 1,
@@ -89,9 +92,34 @@ describe("one press of Sincronizar ahora", () => {
 
   it("waits out another reader's run in flight, then goes on", async () => {
     const r = await press(2, [answer(20, { refreshed: false, retryAfterS: 5 }), answer(21), answer(22)]);
-    expect(r.waits).toEqual([5000]);
+    expect(r.waits).toEqual([5000, GAP_MS]);
     expect(r.posts).toHaveLength(3);
     expect(r.progressed).toBe(true);
+  });
+
+  // Never parallel, and not back to back either: the Worker holds the same gap, so pacing here only
+  // spares it the stand-downs (owner's request, 2026-10-11).
+  it("waits the gap between requests before every chunk after the first", async () => {
+    const r = await press(3, [answer(20), answer(21), answer(22)]);
+    expect(r.waits).toEqual([GAP_MS, GAP_MS]);
+  });
+
+  it("counts only chunks against the cap, not the stand-downs it waits out", async () => {
+    const short = answer(0, { refreshed: false, retryAfterS: 5, backfill: { done: 0, total: 99, gaps: 0 } });
+    const chunk = answer(0, { backfill: { done: 0, total: 99, gaps: 0 } });
+    const answers = [chunk, short, ...Array.from({ length: MAX_SYNC_STEPS + 5 }, () => chunk)];
+    const r = await press(99, answers);
+    expect(r.posts).toHaveLength(MAX_SYNC_STEPS + 1);
+  });
+
+  it(`gives up after ${MAX_SYNC_WAITS} stand-downs: another reader is syncing too`, async () => {
+    const short = answer(20, { refreshed: false, retryAfterS: 5 });
+    const r = await press(
+      2,
+      Array.from({ length: MAX_SYNC_WAITS + 5 }, () => short),
+    );
+    expect(r.posts).toHaveLength(MAX_SYNC_WAITS + 1);
+    expect(r.progressed).toBe(false);
   });
 
   // The throttle, a refusal's hour or a 429's cooldown: the press ends and the line gives the wait.

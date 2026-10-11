@@ -164,7 +164,9 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   that preceded the refusal below. A revision chunk on every press would have made it 16 (code review,
   2026-10-11);
   a zone that is behind costs one request per missing chunk (a day of Chaparral, a week of Chocó),
-  sent one after another, at most 31 per press. A day without a sync costs nothing. The bullets below,
+  sent one at a time and at least `SGC_REQUEST_GAP_S` (15 s) apart, which the Worker holds in the
+  atomic claim for every request from anyone, so at most four a minute and 31 per press. A day without
+  a sync costs nothing. The bullets below,
   down to "Visitors do not add to that", are the cron's budget until that date, kept for the
   measurements.
 - **With two zones the budget was ~192 requests/day, 8 an hour** (cron era): one zone on every lane (120),
@@ -202,7 +204,8 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   included, and **it was set to the cron's own period** so a press nearly always coincided with a tick
   that was going to happen anyway. With no cron it still counts any run of the zone, and **that
   number, not the number of people with the page open, still bounds a caught-up zone's load on SGC**;
-  the catch-up has no throttle, and its bound is the number of missing chunks.
+  the catch-up has no throttle, only the 15-second gap every request keeps, and its bound is the
+  number of missing chunks.
 - **Only a 5xx other than 503 is ever retried** (`retryableStatus` in `core/seiscomp.ts`).
   The retry loop exists for a flaky connection, and a status line is not one: SGC answered.
   429 and 503 are SGC asking us to stop, and retrying is the one thing that makes being rate

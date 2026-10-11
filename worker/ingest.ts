@@ -18,7 +18,14 @@ import {
   type RunRow,
 } from "./db.ts";
 import { silentLogger, type Logger } from "./log.ts";
-import { IN_FLIGHT_MS, TRAILING_DAYS, type IngestHistory, type IngestLane, type IngestPlan } from "./plan.ts";
+import {
+  IN_FLIGHT_MS,
+  SGC_REQUEST_GAP_S,
+  TRAILING_DAYS,
+  type IngestHistory,
+  type IngestLane,
+  type IngestPlan,
+} from "./plan.ts";
 
 const DAY_MS = 86_400_000;
 /**
@@ -39,8 +46,11 @@ export interface IngestDeps {
   db: D1Database;
   now?: Date;
   fetchOptions?: FetchOptions;
-  /** Guard widths for the atomic claim. A visitor's refresh also passes minIntervalS. */
-  guard?: { inFlightMs?: number; minIntervalS?: number | null };
+  /**
+   * Guard widths for the atomic claim. A sync's first step also passes `minIntervalS` (its zone's
+   * throttle) and `gapS` (the gap from the last request of any zone, `SGC_REQUEST_GAP_S`).
+   */
+  guard?: { inFlightMs?: number; minIntervalS?: number | null; gapS?: number | null };
   /**
    * Where this invocation says what it did. Defaults to silence so a caller that has no
    * invocation to hang a log off — a test calling ingest() directly — needs no ceremony.
@@ -120,6 +130,7 @@ export async function ingest(
     windowEnd: to,
     inFlightSince: new Date(nowMs - (deps.guard?.inFlightMs ?? IN_FLIGHT_MS)).toISOString(),
     finishedSince: minIntervalS === null ? null : new Date(nowMs - minIntervalS * 1000).toISOString(),
+    sentSince: deps.guard?.gapS == null ? null : new Date(nowMs - deps.guard.gapS * 1000).toISOString(),
   });
   if (runId === null) {
     // Not a failure: another run holds the claim and this one must stand down. Worth a line
@@ -426,7 +437,16 @@ export async function runPlan(
   for (const [i, step] of plan.steps.entries()) {
     // The throttle guards the opening step only: a plan's own first run must not be what
     // refuses its second (a caught-up sync's revision sweep).
-    const d: IngestDeps = { ...deps, guard: { ...deps.guard, minIntervalS: i === 0 ? plan.minIntervalS : null } };
+    // So does the gap from the last request: it spaces presses and catch-up steps, not a plan's own two
+    // steps (a caught-up press's revision sweep, at most hourly).
+    const d: IngestDeps = {
+      ...deps,
+      guard: {
+        ...deps.guard,
+        minIntervalS: i === 0 ? plan.minIntervalS : null,
+        gapS: i === 0 ? SGC_REQUEST_GAP_S : null,
+      },
+    };
     const run =
       step.lane === "sweep"
         ? await ingestSweep(d, zone)

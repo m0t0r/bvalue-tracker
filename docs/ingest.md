@@ -21,7 +21,8 @@ one plan from `dueNow(now, history, zone)` in `worker/plan.ts`:
 
 | The zone's state | What one request does |
 |---|---|
-| Another run in flight (any zone) | Stands down with `retryAfterS: 5`. The claim is atomic, so a burst of presses still sends one SGC request. |
+| Another run in flight (any zone) | Stands down with `retryAfterS: 5`. The claim is atomic, so a burst of presses still sends one SGC request. **Requests to SGC are never parallel**, from any reader, for any zone. |
+| The last request to SGC, from anyone, left under 15 s ago | Stands down with what is left of the gap (`SGC_REQUEST_GAP_S`). The atomic claim holds it too, against the newest run of any zone, so two readers or a script cannot close it up. It applies to every press, the catch-up's included, but not between a plan's own two steps (a caught-up press's hourly revision sweep). Added at the owner's request, 2026-10-11: requests were never parallel, but a catch-up sent them back to back as fast as SGC answered. |
 | **Behind**: `backfill.done < total` | One history chunk (`SWEEP_CHUNK_DAYS`: a day of Chaparral, a week of Chocó), **missing chunks first**: never attempted before attempted, oldest first, and only then a loaded one. **No throttle** while SGC is answering. Least recently attempted alone sent a catch-up back to loaded chunks while one that had just failed waited behind them, so a press could spend its 31 requests loading nothing (code review, 2026-10-11). Every day without a sync adds a chunk to `total`, so after a quiet spell a zone is behind by that many chunks. |
 | **Caught up** | The trailing window with removals (`SYNC_WINDOW_DAYS`: 1 day for Chaparral, 3 for Chocó), at most once per `REFRESH_MIN_INTERVAL_S` (900 s, both zones), counted from the zone's last run. Then, if the zone has had no sweep for an hour (`REVISION_SWEEP_EVERY_S`), one more chunk, the least recently attempted, for SGC's late revisions. A failed trailing read ends the plan there, so the failure is the last run and the last sync does not move (code review, 2026-10-11). |
 | SGC failing (the zone's last run failed, or a 429/503 cooldown) | The catch-up closes: every request waits the throttle, then runs as above. A 429 or 503's cooldown (`Retry-After`, clamped to 5 min–6 h, 30 min without one) is honoured by the request itself when it is longer than the throttle: with no cron, nothing else would (code review, 2026-10-11). |
@@ -29,10 +30,13 @@ one plan from `dueNow(now, history, zone)` in `worker/plan.ts`:
 
 **The page repeats the request while the zone is behind** (`syncZone` in `src/lib/sync.ts`, tested
 in `sync.test.ts`, run by `StatusBar`). One press sends one request, and while the answer says the zone is
-still behind it sends the next, one at a time and at most `MAX_SYNC_STEPS` (31) per press: a month of
-Chaparral's days, or as many of Chocó's weeks. The line under the button counts them ("Sincronizando:
-día 3 de 12…"). It waits out an in-flight stand-down of up to 30 s (`IN_FLIGHT_WAIT_MAX_S`), and stops
-on a failed run (the alert says so) or on any longer wait. A press that stops at the cap says
+still behind it sends the next, one at a time, `SGC_REQUEST_GAP_S` (15 s) apart, and at most
+`MAX_SYNC_STEPS` (31) chunks per press: a month of Chaparral's days, or as many of Chocó's weeks, which
+takes about ten minutes. It waits the gap itself, so the Worker's own gap normally turns nothing away.
+The line under the button counts the chunks ("Sincronizando: día 3 de 12…"). It waits out a stand-down
+of up to 30 s (`IN_FLIGHT_WAIT_MAX_S`: another reader's run in flight, the rest of a gap), at most 10 of
+them (`MAX_SYNC_WAITS`), which do not count against the 31, and stops on a failed run (the alert says so)
+or on any longer wait. A press that stops at the cap says
 "Queda historial por cargar: vuelve a pulsar para seguir." The first request of a press carries
 `context=1`, which also refreshes USGS and the sea (see [below](#usgs-and-the-sea-on-a-sync)).
 
@@ -52,7 +56,7 @@ gaps; the page dates them with "Última sincronización" under the button instea
 
 **What bounds the load on SGC now** is presses, not readers or a schedule: a caught-up zone costs at most
 one request per 15 minutes plus one revision chunk an hour (10 an hour for both zones at worst), and a
-catch-up one request per missing chunk, in sequence, at most 31 per press. See [the request budget](sgc-data-source.md#sgc-rate-limits-and-the-request-budget).
+catch-up one request per missing chunk, one at a time and at least 15 s apart, at most 31 per press. See [the request budget](sgc-data-source.md#sgc-rate-limits-and-the-request-budget).
 
 ## Until 2026-10-11: the cron lanes
 
