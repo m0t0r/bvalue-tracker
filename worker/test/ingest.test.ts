@@ -11,6 +11,7 @@ import { ABANDONED_ERROR, insertStmt, lastRun, runInFlight, sgcHealth } from "..
 import worker from "../index.ts";
 import { backfillProgress, ingest, ingestSweep, sweepChunks } from "../ingest.ts";
 import { IN_FLIGHT_MS, SGC_REQUEST_GAP_S } from "../plan.ts";
+import { TEST_SYNC_CODE, seedSyncCode } from "./sync-code.ts";
 
 // The fixture covers 2026-08-10 .. 2026-09-18 22:08 UTC.
 const FROM = new Date("2026-08-10T00:00:00Z");
@@ -155,12 +156,16 @@ beforeEach(() => {
 });
 const callerIp = () => `192.0.2.${caller % 250}`;
 
-/** Calls the Worker as the page does: same-origin, which /api/* now requires. */
+/**
+ * Calls the Worker as the page does: same-origin, which /api/* requires, and on a refresh with the sync
+ * code, which every press carries (worker/sync-guard.ts; its own tests are sync-guard.test.ts).
+ */
 async function call(path: string, init: RequestInit = {}) {
   const ctx = createExecutionContext();
   const headers = new Headers(init.headers);
   if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin");
   if (!headers.has("cf-connecting-ip")) headers.set("cf-connecting-ip", callerIp());
+  if (path.startsWith("/api/refresh") && !headers.has("x-sync-code")) headers.set("x-sync-code", TEST_SYNC_CODE);
   const res = await worker.fetch(new Request(`https://x.test${path}`, { ...init, headers }), env, ctx);
   await waitOnExecutionContext(ctx);
   return res;
@@ -178,6 +183,7 @@ async function callRaw(path: string, init: RequestInit = {}) {
 
 beforeEach(async () => {
   await env.DB.batch([env.DB.prepare("DELETE FROM events"), env.DB.prepare("DELETE FROM ingest_runs")]);
+  await seedSyncCode();
 });
 afterEach(() => server.resetHandlers());
 
@@ -1374,7 +1380,7 @@ describe("what a sync writes to the log", () => {
     await worker.fetch(
       new Request("https://x.test/api/refresh?zone=tolima", {
         method: "POST",
-        headers: { "sec-fetch-site": "same-origin" },
+        headers: { "sec-fetch-site": "same-origin", "x-sync-code": TEST_SYNC_CODE },
       }),
       { ...env, INGEST_ANALYTICS: analytics },
       ctx,

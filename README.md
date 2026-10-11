@@ -36,7 +36,9 @@ OpenStreetMap · © Mapterhorn.</sub>
   request per missing day (Chaparral) or week (Chocó) while the zone is behind, then the last days
   again at most once every 15 minutes, with one older chunk an hour for SGC's late revisions. The same press
   refreshes USGS's context and the sea forecast. Events SGC withdraws are marked as removed, never
-  deleted. Until 2026-10-11 a Cron Trigger did this every 15 minutes.
+  deleted. Until 2026-10-11 a Cron Trigger did this every 15 minutes. A sync takes a 4-digit code,
+  kept in D1 and never in the repo; three wrong codes in a row lock that connection out of syncing for
+  15 minutes (see [Security](docs/security.md#the-sync-code-2026-10-11)).
 - **b-value with its caveats.** Magnitude of completeness (Mc) by maximum curvature,
   b with its error bar, b over time with one fixed Mc, and a comparison by magnitude
   type. The page states plainly that a b-value describes the sequence and is not a
@@ -168,11 +170,12 @@ pnpm db:migrate:local   # create the local D1 schema
 pnpm dev                # page + Worker + local D1 on one port
 ```
 
-The local database starts empty. Each call below loads one missing week from SGC,
-so a fresh database needs a handful of them:
+The local database starts empty, with no sync code. Set one (any four digits), then each call below
+loads one missing week from SGC, so a fresh database needs a handful of them:
 
 ```sh
-curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
+pnpm exec wrangler d1 execute sgc-swarm --local --command "INSERT INTO sync_code (id, code, updated_at) VALUES (1, '1234', datetime('now')) ON CONFLICT(id) DO UPDATE SET code = excluded.code, updated_at = excluded.updated_at"
+curl -X POST -H 'Sec-Fetch-Site: same-origin' -H 'x-sync-code: 1234' http://localhost:5173/api/refresh
 ```
 
 Please keep this to what you need. SGC is a public government service, and this

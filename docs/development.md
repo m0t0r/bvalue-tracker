@@ -23,10 +23,15 @@ pnpm install
 pnpm db:migrate:local     # once, and again whenever database_id in wrangler.jsonc changes (see Tooling gotchas)
 pnpm dev                  # page + Worker + local D1 on one port
 
+# a sync code for the local database: any four digits, never production's (docs/deployment.md)
+pnpm exec wrangler d1 execute sgc-swarm --local --command "INSERT INTO sync_code (id, code, updated_at) VALUES (1, '1234', datetime('now')) ON CONFLICT(id) DO UPDATE SET code = excluded.code, updated_at = excluded.updated_at"
+
 # fill the local database: each call loads one missing chunk, a week of Chocó (the default
 # zone); add ?zone=tolima for a day of Chaparral. It is one step of "Sincronizar ahora".
-# The header is required: /api/* refuses a caller with no same-origin signal (see docs/api.md).
-curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
+# Sec-Fetch-Site is required: /api/* refuses a caller with no same-origin signal (see docs/api.md);
+# x-sync-code is the code above (docs/api.md). Three wrong ones lock localhost out for 15 minutes;
+# `DELETE FROM sync_lockouts` lifts it.
+curl -X POST -H 'Sec-Fetch-Site: same-origin' -H 'x-sync-code: 1234' http://localhost:5173/api/refresh
 
 pnpm test                 # offline
 pnpm test:live            # one test against the real SGC server
@@ -460,8 +465,12 @@ file on 2026-10-02):
   slider naming, `CardTitle` as `h2`, touch hit
   areas, press scale, no `transition-all`, the lint's extra `Button` sizes and variant and
   `Table`'s `size`, focus outlines on tab panels, the Sheet's `motion-safe:` slides, default `name`s on Slider and Switch (#73), the
-  card header's grid). Re-adding a
-  component with the shadcn CLI would overwrite those; use `--diff` first. oxfmt formats this
+  card header's grid, the Dialog's `motion-safe:` zoom and translated `closeLabel`, the OTP slot growing
+  on a coarse pointer). Re-adding a
+  component with the shadcn CLI would overwrite those; use `--diff` first. **`shadcn add` also rewrites
+  dependencies it lists**: `add dialog input-otp` (2026-10-11) wanted to overwrite `button.tsx` and
+  stopped at the prompt without writing `dialog.tsx`, which was then written by hand from
+  `--view` with the local changes; `input-otp.tsx` and the `input-otp` package did land. oxfmt formats this
   directory in shadcn's own style (no semicolons, 80 columns) so that diff stays readable.
 - **oxfmt leaves Markdown alone** (`**/*.md` in `.oxfmtrc.json`). It pads every table to its
   widest cell, which pushed these hand-wrapped docs' table rows past 140 columns and rewrote a

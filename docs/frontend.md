@@ -1122,6 +1122,36 @@ colour, motion). Keep to them:
   "Esta página no sigue la actividad en tiempo real. Los datos se cargan del SGC solo cuando alguien
   pulsa «Sincronizar ahora»." (`syncNote`). The one-minute `/api/status` poll stays (owner's choice),
   so an open tab picks up another reader's sync; `refetchOnWindowFocus` is off on both pages.
+- **A press asks for the sync code first** (owner's decision, 2026-10-11; the guard is in
+  [Security](security.md#the-sync-code-2026-10-11)). "Sincronizar ahora" and the gap notice's "Cargar lo
+  que falta" open `SyncCodeDialog` (`src/components/sync-code-dialog.tsx`): shadcn's `Dialog` with an
+  `InputOTP` of four digit slots, "Código de sincronización", "Escribe el código de 4 cifras para
+  sincronizar con el SGC." and a "Sincronizar" button. The code goes in the `x-sync-code` header of
+  every request of the press, never the URL (`postRefresh`).
+  - **Nothing is sent when the fourth digit lands**: a slip on the last digit would cost one of the three
+    tries before a lock, so the reader presses "Sincronizar" or Enter. The button is `aria-disabled`
+    until four digits are in, and spins while the first answer is awaited; the field is never
+    `disabled`, which would drop the focus a retry needs.
+  - **The first answer closes it, and the code is kept for the page's life** (`acceptedCode` in
+    `src/lib/sync-code.ts`, a module variable: both zones' bars share it, a reload asks again, nothing is
+    stored). A second press does not ask.
+  - **A refusal keeps it open, empties the field and says why under it** (`FieldError`, `role="alert"`,
+    the input `aria-invalid` and described by it): a wrong code with the tries left ("te quedan 2
+    intentos", "te queda 1 intento"), a lock with the minutes left, rounded up ("Demasiados códigos
+    incorrectos. Inténtalo de nuevo en 14 min."), no code set yet ("La sincronización aún no está
+    disponible."). A 401 or 400 asks again with nothing to say. Any refusal forgets the kept code, so a
+    code changed by the owner is asked for at the next press. **A refusal never rests the button**
+    (`refresh-backoff.ts`) and never shows "No se pudo sincronizar" under it: nothing failed.
+    `refusalOf` tells it from the rate limit's own 429 (`{ error: "rate limited" }`) and from an outage,
+    which still rest it (`src/lib/sync-code.test.ts`).
+  - **Focus goes back to the button that opened it** (or to "Sincronizar ahora" when that one has gone,
+    as the gap notice does while a press catches up). Radix's `Dialog` returns focus to its own
+    `DialogTrigger`, and this one has none, so without `onCloseAutoFocus` focus fell to `<body>`
+    (found in the browser walk).
+  - Checked 2026-10-11 on the built page served by `scripts/fixture-server.ts`, every refusal answered
+    by `fault.js`: 390 × 844 and 360 × 400 (the whole dialog on screen, error and all), 1280 × 900,
+    both themes, both languages, Escape, a slow answer, an accepted code then a second press with no
+    dialog. `Dialog` and `InputOTP` are shadcn's, with the local changes `development.md` lists.
 
 - **The page opens in the browser's language** (owner's call, 2026-09-27; Spanish for everyone
   before that): the first of `navigator.languages` it has, by primary subtag, so `es-CO` is

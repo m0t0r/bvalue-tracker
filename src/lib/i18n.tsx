@@ -145,6 +145,24 @@ const es = {
   syncRetryIn: (min: number) => `Puedes volver a intentarlo en ${min}\u00A0min.`,
   /** A catch-up that stopped at its cap with chunks still missing: the next press goes on. */
   syncMore: "Queda historial por cargar: vuelve a pulsar para seguir.",
+  /**
+   * The dialog a press opens until the Worker has accepted a sync code (worker/sync-guard.ts). Its
+   * errors sit under the code: each says what to do next, and none blames the reader.
+   */
+  syncCode: {
+    title: "Código de sincronización",
+    description: "Escribe el código de 4 cifras para sincronizar con el SGC.",
+    /** The code field's name: the slots have no visible label of their own. */
+    input: "Código de 4 cifras",
+    submit: "Sincronizar",
+    close: "Cerrar",
+    wrong: (left: number) =>
+      `Código incorrecto. Revísalo e inténtalo de nuevo: ${left === 1 ? "te queda 1 intento" : `te quedan ${left} intentos`}.`,
+    /** Three wrong codes in a row lock this connection out for 15 minutes, the right code included. */
+    locked: (min: number) => `Demasiados códigos incorrectos. Inténtalo de nuevo en ${min} min.`,
+    /** No code has been set on the server yet: nothing the reader types can work. */
+    unset: "La sincronización aún no está disponible. Inténtalo más tarde.",
+  },
   ingestFailed: "La última sincronización con el SGC falló",
   ingestFailedBody:
     "Se muestran los últimos datos guardados. Vuelve a intentarlo más tarde con «Sincronizar ahora»; no hace falta recargar.",
@@ -464,6 +482,16 @@ const en: Dict = {
   syncCooldownSr: (s) => `Could not sync. Try again in ${s} seconds.`,
   syncRetryIn: (min) => `You can try again in ${min}\u00A0min.`,
   syncMore: "Some history is still to load: sync again to continue.",
+  syncCode: {
+    title: "Sync code",
+    description: "Enter the 4-digit code to sync with SGC.",
+    input: "4-digit code",
+    submit: "Sync",
+    close: "Close",
+    wrong: (left) => `Wrong code. Check it and try again: ${left === 1 ? "1 attempt" : `${left} attempts`} left.`,
+    locked: (min) => `Too many wrong codes. Try again in ${min} min.`,
+    unset: "Syncing is not available yet. Try again later.",
+  },
   ingestFailed: "The last sync with SGC failed",
   ingestFailedBody: "Showing the most recent stored data. Try again later with “Sync now”; there is no need to reload.",
   technicalDetail: "Technical detail",

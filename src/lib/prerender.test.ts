@@ -39,12 +39,15 @@ describe("postRefresh", () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({ refreshed: false }), { status: 200 }));
     vi.stubGlobal("fetch", fetch);
     prerendering(true);
-    const res = postRefresh("tolima");
+    const res = postRefresh("tolima", { code: "4821" });
     await new Promise((r) => setTimeout(r, 0));
     expect(fetch).not.toHaveBeenCalled();
     activate();
     await res;
     expect(fetch).toHaveBeenCalledOnce();
-    expect(fetch).toHaveBeenCalledWith("/api/refresh?zone=tolima", { method: "POST" });
+    expect(fetch).toHaveBeenCalledWith("/api/refresh?zone=tolima", {
+      method: "POST",
+      headers: { "x-sync-code": "4821" },
+    });
   });
 });

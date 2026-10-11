@@ -171,3 +171,25 @@ export interface ContextResponse {
   pager: ExternalProduct<PagerDigest> | null;
   forecast: ExternalProduct<ForecastDigest> | null;
 }
+
+/**
+ * The request header `POST /api/refresh` takes the sync code in, on every request of a press
+ * (worker/sync-guard.ts). Never the query string, which ends up in logs.
+ */
+export const SYNC_CODE_HEADER = "x-sync-code";
+
+/**
+ * `POST /api/refresh`'s refusals by the sync code, all `no-store`. The route's other answers are a
+ * `StatusResponse`; the rate limit's 429 is `{ error: "rate limited" }`.
+ */
+export type SyncRefusal =
+  /** 401: no code sent. Not counted. */
+  | { error: "sync code required" }
+  /** 400: not four digits. Not counted. */
+  | { error: "sync code must be 4 digits" }
+  /** 403: a wrong code, counted. */
+  | { error: "wrong sync code"; attemptsLeft: number }
+  /** 429, with `retry-after`: locked out after wrong codes in a row; the right code is refused too. */
+  | { error: "too many wrong sync codes"; retryAfterS: number }
+  /** 503: the owner has not set a code yet. */
+  | { error: "sync code not set" };

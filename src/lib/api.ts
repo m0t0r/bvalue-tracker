@@ -1,15 +1,25 @@
 import { contextPath, eventsPath, statusPath } from "../../core/page-data";
 import type { ZoneId } from "../../core/zones";
 import { whenActivated } from "./prerender";
-import type { ContextResponse, SeaForecast, StatusResponse, StoredEvent } from "../../worker/api-types";
+import {
+  SYNC_CODE_HEADER,
+  type ContextResponse,
+  type SeaForecast,
+  type StatusResponse,
+  type StoredEvent,
+} from "../../worker/api-types";
 
-export type { ContextResponse, IngestRun, StatusResponse, StoredEvent } from "../../worker/api-types";
+export type { ContextResponse, IngestRun, StatusResponse, StoredEvent, SyncRefusal } from "../../worker/api-types";
 
-/** A response the Worker answered with an error status, as opposed to a request that never got one. */
+/**
+ * A response the Worker answered with an error status, as opposed to a request that never got one.
+ * `body` is its JSON, or null when it had none: what the sync code's refusals say (`SyncRefusal`).
+ */
 export class HttpError extends Error {
   constructor(
     path: string,
     readonly status: number,
+    readonly body: unknown = null,
   ) {
     super(`${path}: HTTP ${status}`);
   }
@@ -17,7 +27,7 @@ export class HttpError extends Error {
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
-  if (!res.ok) throw new HttpError(path, res.status);
+  if (!res.ok) throw new HttpError(path, res.status, await res.json().catch(() => null));
   return (await res.json()) as T;
 }
 
@@ -45,10 +55,14 @@ export const getSea = () => json<SeaForecast | null>("/api/sea");
 /**
  * The one request that reaches SGC: one step of "Sincronizar ahora". `context` asks the Worker to
  * refresh USGS's products and the sea forecast too, when they are due; the page sends it on the first
- * step of a press only. From a prerendered page it waits until the reader opens it, whoever asks: the
+ * step of a press only. `code` is the sync code, sent in a header on every step (worker/sync-guard.ts),
+ * never in the URL. From a prerendered page it waits until the reader opens it, whoever asks: the
  * reader may have pressed the link and slid off it (`src/lib/prerender.ts`).
  */
-export const postRefresh = async (zone: ZoneId, { context = false }: { context?: boolean } = {}) => {
+export const postRefresh = async (zone: ZoneId, { code, context = false }: { code: string; context?: boolean }) => {
   await whenActivated();
-  return json<StatusResponse>(`/api/refresh?zone=${zone}${context ? "&context=1" : ""}`, { method: "POST" });
+  return json<StatusResponse>(`/api/refresh?zone=${zone}${context ? "&context=1" : ""}`, {
+    method: "POST",
+    headers: { [SYNC_CODE_HEADER]: code },
+  });
 };

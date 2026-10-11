@@ -93,6 +93,30 @@ pnpm db:migrate:remote
 pnpm deploy
 ```
 
+## The sync code
+
+"Sincronizar ahora" (`POST /api/refresh`) asks for a 4-digit code, which lives in D1 and never in
+the repo ([Security](security.md#the-sync-code-2026-10-11)). **Until it is set, every sync is refused
+with a 503**: the guard fails closed. CI applies `0010_sync_guard.sql` on the deploy that carries it;
+set the code right after, or apply the migration first (`pnpm db:migrate:remote`, which only adds two
+tables) and set it before merging, so there is no window with sync off.
+
+Set it, or change it, with this command. `read -s` keeps the code off the screen and out of the
+shell's history, and the table refuses anything but exactly four digits:
+
+```sh
+read -rs "CODE?Sync code (4 digits): "; echo; pnpm exec wrangler d1 execute sgc-swarm --remote --command "INSERT INTO sync_code (id, code, updated_at) VALUES (1, '$CODE', datetime('now')) ON CONFLICT(id) DO UPDATE SET code = excluded.code, updated_at = excluded.updated_at"; unset CODE
+```
+
+(`read -rs "CODE?…"` is zsh; in bash, `read -rsp "Sync code (4 digits): " CODE`.) A changed code takes
+effect at once: a page holding the old one is refused at its next press and asks again.
+
+Lift every lock and forget every caller's wrong codes, for an owner who has locked themselves out:
+
+```sh
+pnpm exec wrangler d1 execute sgc-swarm --remote --command "DELETE FROM sync_lockouts"
+```
+
 ## Continuous deployment
 
 Pushes to `main` run `.github/workflows/ci.yml`: typecheck → lint → format check → tests →
