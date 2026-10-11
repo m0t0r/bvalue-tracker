@@ -1128,6 +1128,11 @@ colour, motion). Keep to them:
   `InputOTP` of four digit slots, "Código de sincronización", "Escribe el código de 4 cifras para
   sincronizar con el SGC." and a "Sincronizar" button. The code goes in the `x-sync-code` header of
   every request of the press, never the URL (`postRefresh`).
+  - **The four slots are the dialog's subject, so they are large** (owner's call, 2026-10-11): 56 px
+    tall with 24 px digits (`size="lg"` on `InputOTPGroup` and `InputOTPSlot`). On a phone the group
+    fills the dialog's width and the slots share it (78 px each at 390 px, 60 at 320, no overflow);
+    from `sm` each is a 56 px square and the group sits centred. shadcn's 32 px squares, left-aligned,
+    read as a detail beside the description.
   - **Nothing is sent when the fourth digit lands**: a slip on the last digit would cost one of the three
     tries before a lock, so the reader presses "Sincronizar" or Enter. The button is `aria-disabled`
     until four digits are in, and spins while the first answer is awaited; the field is never

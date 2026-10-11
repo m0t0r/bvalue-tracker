@@ -101,6 +101,7 @@ function CodeForm({
       <FieldGroup>
         <Field data-invalid={message !== null}>
           <InputOTP
+            containerClassName="justify-center"
             maxLength={SLOTS.length}
             pattern={REGEXP_ONLY_DIGITS}
             inputMode="numeric"
@@ -112,9 +113,9 @@ function CodeForm({
             aria-invalid={message !== null}
             aria-describedby={message === null ? undefined : errorId}
           >
-            <InputOTPGroup>
+            <InputOTPGroup size="lg">
               {SLOTS.map((i) => (
-                <InputOTPSlot key={i} index={i} aria-invalid={message !== null} />
+                <InputOTPSlot key={i} index={i} size="lg" aria-invalid={message !== null} />
               ))}
             </InputOTPGroup>
           </InputOTP>
