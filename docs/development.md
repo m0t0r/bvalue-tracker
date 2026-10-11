@@ -466,7 +466,7 @@ file on 2026-10-02):
   areas, press scale, no `transition-all`, the lint's extra `Button` sizes and variant and
   `Table`'s `size`, focus outlines on tab panels, the Sheet's `motion-safe:` slides, default `name`s on Slider and Switch (#73), the
   card header's grid, the Dialog's `motion-safe:` zoom and translated `closeLabel`, the OTP slot growing
-  on a coarse pointer). Re-adding a
+  on a coarse pointer and the OTP group's and slot's `size="lg"`). Re-adding a
   component with the shadcn CLI would overwrite those; use `--diff` first. **`shadcn add` also rewrites
   dependencies it lists**: `add dialog input-otp` (2026-10-11) wanted to overwrite `button.tsx` and
   stopped at the prompt without writing `dialog.tsx`, which was then written by hand from
