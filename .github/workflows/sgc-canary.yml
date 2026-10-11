@@ -1,10 +1,13 @@
 name: SGC canary
 
-# Hits the real SGC server once a day so a change to their form or table
-# layout is noticed from CI, not only from a failing cron in production.
+# Hits the real SGC server so a change to their form or table layout is noticed from CI, not
+# only from a failing sync in production.
+#
+# By hand only since 2026-10-11, when the site went to on-demand syncing: the daily schedule was a
+# request to SGC that no reader asked for. Run it before or after a sync that failed, to tell a
+# change on SGC's side from a fault on ours. Put `schedule` back if the Worker reads SGC on a cron
+# again.
 on:
-  schedule:
-    - cron: "23 11 * * *"
   workflow_dispatch:
 
 # Reads the repository and nothing else; say so rather than inheriting the default scope.

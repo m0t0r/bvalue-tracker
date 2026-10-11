@@ -1,7 +1,7 @@
 import { Explain } from "@/components/explainer/explain";
 import { Rich } from "@/lib/rich";
 import { SGC_QUERY_URL } from "@/lib/format";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
 import { lazy, useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useMediaQuery } from "usehooks-ts";
@@ -22,7 +22,7 @@ import { LoadError } from "@/components/load-error";
 import { MonitorShell } from "@/components/monitor-shell";
 import { MapPlaceholder, mapDescription } from "@/components/map-legend";
 import { SiteFooter } from "@/components/site-footer";
-import { StatusBar } from "@/components/status-bar";
+import { StatusBar, syncKey } from "@/components/status-bar";
 import { TechnicalDetail } from "@/components/technical-detail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,7 +40,6 @@ import { toggleTheme } from "@/lib/theme";
 import { ZoneProvider, useZoneState } from "@/lib/zone";
 import { mainshockId } from "../core/mainshock";
 import { ZONES, ZONE_IDS, type ZoneId } from "../core/zones";
-import { updateEveryMin } from "../worker/plan.ts";
 
 // The three chart cards and the map are the page's heavy chunks; `Deferred` says why they
 // are only fetched once the reader is near them. Everything above the b-value — the number
@@ -85,36 +84,46 @@ export function App() {
 /** One zone's whole page: its catalogue, its status and everything drawn from them. */
 function ZonePage({ zone }: { zone: ZoneId }) {
   const { t, lang } = useI18n();
-  // The Worker's cron updates the database on its own schedule; an open page picks that up by itself.
-  // Status is the cheap heartbeat: polled every minute, and again whenever the tab comes back to the
-  // front, because interval polling pauses while a tab is hidden. Events are refetched when status
-  // reports a newer ingest, so the figures never lag the "last update" shown above them, and when
-  // the reader returns after more than the one-minute stale time.
+  // The database changes only when someone presses "Sincronizar ahora" (docs/ingest.md, "On demand
+  // only"), here or on another reader's page. Status is the cheap heartbeat that notices it: polled every
+  // minute while the tab is shown, and nothing on returning to the tab (the poll resumes by itself).
+  // Events are refetched when status reports a newer sync, so the figures never lag the last sync shown
+  // above them, and after a refetch that failed, on the next poll that answers, so the stale-data line's
+  // "se actualizarán solas" holds.
   const qc = useQueryClient();
   const events = useQuery({ queryKey: ["events", zone], queryFn: () => getEvents(zone) });
-  const status = useQuery({
-    queryKey: ["status", zone],
-    queryFn: () => getStatus(zone),
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: "always",
-  });
+  const status = useQuery({ queryKey: ["status", zone], queryFn: () => getStatus(zone), refetchInterval: 60_000 });
   const lastIngest = status.data?.lastSuccessfulRun?.finishedAt ?? null;
   const seenIngest = useRef<string | null>(null);
+  // While this page's own press catches up, each chunk moves the last sync; the press refetches events
+  // once when it ends (`StatusBar`), rather than the whole catalogue once per chunk.
+  const syncing = useIsMutating({ mutationKey: syncKey(zone) }) > 0;
   useEffect(() => {
     if (lastIngest === null) return;
-    if (seenIngest.current !== null && seenIngest.current !== lastIngest)
+    if (seenIngest.current !== null && seenIngest.current !== lastIngest && !syncing)
       void qc.invalidateQueries({ queryKey: ["events", zone] });
     seenIngest.current = lastIngest;
-  }, [lastIngest, qc, zone]);
+  }, [lastIngest, syncing, qc, zone]);
+  // Only over figures already on screen: a first load that failed has its own "Reintentar".
+  const eventsFailed = events.isError && events.data !== undefined;
+  useEffect(() => {
+    if (eventsFailed && status.dataUpdatedAt > 0) void qc.invalidateQueries({ queryKey: ["events", zone] });
+  }, [eventsFailed, status.dataUpdatedAt, qc, zone]);
 
   // What the page is narrowed to, and every figure read off it. `deferred` is the same view one
   // render behind, for the drawings that must not hold up the rolling digits — `src/lib/scope.ts`
   // says why, and holds the rule that every b-value here shares the catalogue's Mc.
-  const { scope, view, deferred, selectCluster, magTabs, setFilters, clear } = useScope(events.data, zone);
+  const { scope, view, deferred, selectCluster, magTabs, setFilters, clear } = useScope(
+    events.data,
+    zone,
+    status.data?.syncedThrough ?? null,
+  );
   // The mainshock is detected over the whole catalogue, whatever the filters leave (`pageView`).
   const mainshock = mainshockId(view.mainshock);
   const chips = useMemo(() => scopeChips(scope, t, lang, zone, mainshock), [scope, t, lang, zone, mainshock]);
-  const incomplete = !!status.data && status.data.backfill.done < status.data.backfill.total;
+  // A hole in the synced history, never the days since the last sync (`backfill.gaps`). Not while a
+  // press is catching up: its holes are the ones it is filling, and the badge would come and go.
+  const incomplete = !!status.data && status.data.backfill.gaps > 0 && !syncing;
   // The days the "Eventos por día" bars have chosen. They narrow the catalogue table and nothing else
   // (`src/lib/day-selection.ts` says why), over the same deferred events both of them draw.
   const picked = useDaySelection(deferred.shown);
@@ -355,7 +364,7 @@ function ZonePage({ zone }: { zone: ZoneId }) {
               bdrsnc.sgc.gov.co
             </Explain>
           </p>
-          <p>{t.autoUpdateLong(updateEveryMin(zone))}</p>
+          <p>{t.syncNote}</p>
         </SiteFooter>
       ) : null}
     </>

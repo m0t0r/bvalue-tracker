@@ -224,8 +224,16 @@ b could be shown more accurately. Measured in Python on production's `/api/event
   "Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre."
 - **A half-filled database produces a confident, wrong number.** Production once
   showed b = 0.49 because it held only the trailing 3 days. `/api/status` now
-  reports `backfill: {done, total}`, and the page warns and demotes b until history
-  is complete. Keep that guard whenever ingest changes.
+  reports `backfill: {done, total, gaps}`, and the page warns and demotes b while history
+  has gaps. Keep that guard whenever ingest changes.
+  - **A gap is a hole, not a day since the last sync** (from 2026-10-11, when syncs became on
+    demand). Every day without a sync adds a chunk to `total` that is not yet `done`, and a page that
+    warned on `done < total` would have called its figures unrepresentative nearly always. `gaps`
+    counts only the missing chunks that begin before the zone's last successful run started: a press
+    that stopped part-way, or a database still filling. Those warn, on both pages, and the b card
+    keeps its "Historial incompleto" badge. The days after the last sync are dated instead
+    ("Última sincronización" under the button), and the windows that would run past them end at the
+    sync (below).
 
 ## The insights page (`/insights`, from 2026-09-24)
 
@@ -240,6 +248,21 @@ the reader's own questions). Everything above still applies to it; this section 
   returns a neutral case, and the page says less rather than something false. When a situation
   arises that no sentence covers (a clear mainshock in Chaparral, say), a person adds one. No
   language model writes or rewrites any of it (owner decision, 2026-09-24).
+- **Every claim is made as of the last sync, not the clock** (from 2026-10-11; `asOf` in
+  `src/lib/as-of.ts`). The catalogue grows only when someone presses "Sincronizar ahora", so "the last
+  7 days" or "the recent pace" measured up to the clock would run on past the data, and a week nobody
+  synced would read as a week with no earthquakes: confident and false. `useInsights` passes
+  `insights()` the older of the two zones' `syncedThrough` as its `now`: where the synced data stops,
+  the oldest gap's start while there is one, else the last successful run's end (the clock if that is
+  earlier, or while a status is unknown). Not the last run alone: a catch-up that stopped part-way
+  moves it to now while recent days are missing (code review, 2026-10-11). It waits for both statuses'
+  first answer before drawing, so no claim is drawn on the clock and redrawn on the sync under the
+  reader. Once that sync is more than a day old
+  (`SYNC_NOTICE_AFTER_MS`), a notice says the figures describe the sequence up to that date ("Cifras
+  hasta la última sincronización"), after the stale-data and incomplete-history notices in priority.
+  The monitor's groups card ends its "last 7 days" at the zone's own `syncedThrough` the same way. A time
+  that is a fact about one event ("hace 3 días" on the newest event) stays on the clock. USGS's
+  forecast is hidden on the clock too: its freshness is about the real date, not the data.
 - **The rules, and why their thresholds are what they are:**
   - *Pace* (`pace`): a source's last 120 h at or above the zone's Mc against its median day since
     its first event. Quieter below half, busier above 1.5×. A sliding 120 h, not the last five
@@ -607,7 +630,7 @@ the reader's own questions). Everything above still applies to it; this section 
   - *Declined in that review*: rounding Chaparral's map line like the Chaparral cut's note. The line
     reads 107 km and the note "~110 km al norte", one distance (`centreKm.tolima`, which the note
     now reads too) to two significant figures there, with its "~".
-- **USGS's products for the M7.4, as the daily job reads them** (re-fetched 2026-09-24 for
+- **USGS's products for the M7.4, as the USGS job reads them** (re-fetched 2026-09-24 for
   us6000tjl2; `worker/usgs.ts`, [the daily USGS job](ingest.md#the-daily-usgs-job)). DYFI and PAGER
   are on the questions tab (below), and so is the forecast (the last rule in this section). The facts:
   - *DYFI*: the 10 km cell that contains Pereira's point has **CDI 8 from 41 responses**, of 1,249
@@ -671,17 +694,13 @@ the reader's own questions). Everything above still applies to it; this section 
     file's `expireTime` is a year after issue and is ignored. A stale box is hidden, never greyed, at
     the due time to the millisecond: the page's clock is rounded to the minute, so `useInsights` also
     re-renders at the due time itself (the code review found a replaced forecast staying up to 90 s).
-    **Known gap, kept on purpose** (code review, 2026-09-25): the daily job (`7 11 * * *`) stores
-    USGS's next forecast only on its next run, and USGS publishes about two hours after the nominal
-    time, so the box is missing for up to about a day each week (on the fixture, from 28 Sept 16:00
-    UTC to the job of the 29th). A grace period would show a probability USGS has already replaced;
-    the fix, if the gap matters, is for the job to fetch soon after `nextUpdateAt`. For the same
-    reason a page left open across `nextUpdateAt` drops the box then. It then asks `/api/context`
-    again on a return to the tab, but only once a job run has finished since the due time (the job's
-    schedule is `core/products.ts`, shared with the Worker's cron), so a reader flipping tabs through
-    the gap sends nothing the server could not answer; after a failed attempt, 10 minutes before the
-    next; and for two days past the due time at most (`contextRecheckDue` in `context-refresh.ts`).
-    So the page shows USGS's next forecast once the job has stored it, without a reload.
+    **Known gap, kept on purpose** (code review, 2026-09-25): the job stores USGS's next forecast
+    only when it next runs, and since 2026-10-11 that is the first sync after USGS publishes it (until
+    then, the daily `7 11 * * *` run), so the box is missing from the due time until someone syncs. A
+    grace period would show a probability USGS has already replaced. A page left open across
+    `nextUpdateAt` drops the box then; it asks `/api/context` once per load (the recheck on returning
+    to the tab, `contextRecheckDue`, went with the daily job), so a reload after a sync shows the next
+    one.
     Chocó only: the page asks USGS for nothing about Tolima, where SGC's position rules out a
     probability of a larger event (above).
   - **USGS's windows start at the forecast's start, not today** (2026-09-21 16:00 UTC for all four

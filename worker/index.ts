@@ -16,10 +16,10 @@ import type {
   ZoneHealth,
 } from "./api-types.ts";
 import { lastRun, toStored, zoneMainshockRow, type EventRow } from "./db.ts";
-import { PRODUCTS_CRON, readContext, refreshProducts } from "./external.ts";
+import { readContext, refreshProducts } from "./external.ts";
 import { backfillProgress, readHistory, runPlan } from "./ingest.ts";
 import { asLevel, logger, type Logger } from "./log.ts";
-import { INGEST_CRON, dueNow, sgcUnwell, tickMinute } from "./plan.ts";
+import { REFRESH_MIN_INTERVAL_S, dueNow } from "./plan.ts";
 import { redirectTo } from "./redirect/index.ts";
 import { readSea, refreshSea } from "./sea.ts";
 
@@ -106,7 +106,8 @@ app.use("/api/*", async (c, next) => {
  * to a caller without a same-origin signal and therefore the only thing an external alarm
  * can ask. That number is what the two real outages had in common: the Worker was up, the
  * page rendered, `/api/health` would have said `ok`, and the catalogue was nine hours
- * stale. `ingestAgeS` is the field to alert on — see .github/workflows/ingest-health.yml.
+ * stale. Since syncs are on demand an old `ingestAgeS` is normal, and the alarm that read it,
+ * .github/workflows/ingest-health.yml, runs only by hand.
  *
  * Per zone, because each zone is its own catalogue and a stale one is a fault even while the
  * other is fresh. The top-level `ingestAgeS` is the **stalest** zone's, and null while any zone
@@ -250,12 +251,23 @@ async function status(db: D1Database, zone: ZoneId): Promise<StatusResponse> {
     )
     .bind(zone)
     .first<{ id: string; time: string; mag: number; region: string }>();
+  const lastSuccessfulRun = await lastRun(db, true, zone);
+  const { done, total, gaps, oldestGap } = await backfillProgress(
+    db,
+    new Date(),
+    zone,
+    lastSuccessfulRun?.startedAt ?? null,
+  );
   return {
     totalEvents: agg?.n ?? 0,
     newestEvent: newest,
     lastRun: await lastRun(db, false, zone),
-    lastSuccessfulRun: await lastRun(db, true, zone),
-    backfill: await backfillProgress(db, new Date(), zone),
+    lastSuccessfulRun,
+    backfill: { done, total, gaps },
+    // Where the synced data stops: the oldest gap's start while there is one, else the last successful
+    // run. Not the last run alone, which a catch-up of old chunks moves to now while recent days are
+    // still missing (code review, 2026-10-11).
+    syncedThrough: oldestGap ?? lastSuccessfulRun?.finishedAt ?? null,
   };
 }
 
@@ -345,15 +357,66 @@ app.get("/api/sea", async (c) => {
   return c.json((await readSea(c.env.DB)) satisfies SeaForecast | null);
 });
 
+/**
+ * How old USGS's digests and the sea forecast may be before a sync asks for them again: the sync
+ * throttle, so a reader who syncs twice in a row asks USGS and Open-Meteo once.
+ */
+const CONTEXT_MAX_AGE_MS = REFRESH_MIN_INTERVAL_S * 1000;
+
+/**
+ * Whether the context a sync carries along is due: USGS's products (whichever zones have a matched
+ * mainshock) or the sea forecast checked longer ago than `CONTEXT_MAX_AGE_MS`, or the sea never. No
+ * product rows means no zone has a matched mainshock yet, which is not staleness: the sea's age decides
+ * then, and a run it starts looks for a new mainshock too. Otherwise every press would fetch the sea
+ * again while no zone had one (code review). One read of at most four rows. A failed fetch keeps the
+ * old time, so a failing USGS is asked once per press.
+ */
+async function contextDue(db: D1Database, now: Date): Promise<boolean> {
+  const row = await db
+    .prepare(
+      "SELECT (SELECT MIN(checked_at) FROM external_products) AS products, (SELECT fetched_at FROM sea_forecast WHERE id = 1) AS sea",
+    )
+    .first<{ products: string | null; sea: string | null }>();
+  const old = (iso: string | null | undefined) => iso == null || now.getTime() - Date.parse(iso) >= CONTEXT_MAX_AGE_MS;
+  return old(row?.sea) || (row?.products != null && old(row.products));
+}
+
+/**
+ * What USGS publishes about each zone's mainshock, then Open-Meteo's sea forecast: the jobs that ran
+ * once a day on their own cron until 2026-10-11, now carried by a sync. Neither touches SGC. Each logs
+ * its own outcome and either failing leaves the other to run; nothing is rethrown, because the press
+ * that started them has already been answered.
+ */
+async function refreshContext(env: Env, now: Date): Promise<void> {
+  try {
+    await refreshProducts({ db: env.DB, log: log(env, { trigger: "usgs" }), now });
+  } catch {
+    // refreshProducts has written a "usgs: …" line for each zone or product that failed.
+  }
+  try {
+    await refreshSea({ db: env.DB, log: log(env, { trigger: "sea" }), now });
+  } catch {
+    // refreshSea has written its own "sea: refresh failed" line.
+  }
+}
+
+/**
+ * "Sincronizar ahora": the only way anything is read from SGC (docs/ingest.md, "On demand only"). One
+ * request runs one plan (`dueNow`): a history chunk while the zone is behind, which the page repeats
+ * until it has caught up, or the trailing window (and an hourly revision sweep) once it has.
+ * `context=1`, which the page sends on the first request of a press only, also refreshes USGS's
+ * products and the sea forecast when they are due, once the press's own ingest has finished, under
+ * `waitUntil`; a press that stands down asks them nothing.
+ */
 app.post("/api/refresh", async (c) => {
   const db = c.env.DB;
   const now = new Date();
-  const zone = parseZone(c.req.query());
+  const q = c.req.query();
+  const zone = parseZone(q);
   const l = log(c.env, { trigger: "manual", zone });
   const standDown = async (retryAfterS: number, why: string) => {
-    // A press that stands down is the normal case with a 5-minute cron, so this is not a
-    // warning. It is logged because "the button does nothing" is the report we would get,
-    // and the reason it did nothing is otherwise nowhere.
+    // Not a warning: a second press inside the throttle stands down by design. It is logged because
+    // "the button does nothing" is the report we would get, and the reason is otherwise nowhere.
     l.info({ retryAfterS, why }, "refresh stood down");
     return c.json({ ...(await status(db, zone)), refreshed: false, retryAfterS } satisfies StatusResponse);
   };
@@ -362,14 +425,20 @@ app.post("/api/refresh", async (c) => {
   // answer with a useful retryAfterS; the guard that actually holds is the atomic claim,
   // which the plan's minIntervalS carries into ingest().
   const history = await readHistory(db, now, l, zone);
-  const plan = dueNow({ kind: "manual" }, now, history, zone);
+  const plan = dueNow(now, history, zone);
   if (plan.steps.length === 0) {
     return standDown(plan.retryAfterS ?? 5, history.inFlight ? "in flight" : "throttled");
   }
 
   const work = runPlan({ db, log: l, analytics: c.env.INGEST_ANALYTICS }, plan, zone);
-  // Keep the ingest alive if the visitor closes the tab mid-request.
-  c.executionCtx.waitUntil(work);
+  // Keep the ingest alive if the visitor closes the tab mid-request. USGS and the sea follow it, never
+  // beside it: a press that stood down asks them nothing, and their parsing never shares the moment
+  // of the SGC page's (code review, 2026-10-11).
+  c.executionCtx.waitUntil(
+    work.then(async () => {
+      if (q.context === "1" && (await contextDue(db, new Date()))) await refreshContext(c.env, new Date());
+    }),
+  );
   // null means a concurrent caller won the claim, so nothing was sent to SGC.
   if ((await work) === null) return standDown(5, "claim held");
   return c.json({ ...(await status(db, zone)), refreshed: true } satisfies StatusResponse);
@@ -500,86 +569,5 @@ export default {
     if (moved !== null) return Response.redirect(moved, 301);
     if (PAGES.has(new URL(request.url).pathname)) return env.ASSETS.fetch(request);
     return app.fetch(request, env, ctx);
-  },
-  /**
-   * Every lane hangs off the one cron, and is chosen from the tick rather than from a
-   * pattern of its own. At the five-minute cadence a second pattern was provably unsafe —
-   * the furthest a non-multiple-of-5 minute can sit from a tick is 120 s, inside
-   * IN_FLIGHT_MS (150 s), so the two kept landing in each other's claim window, dropping a
-   * run silently in one direction and querying SGC twice at once in the other. At fifteen
-   * minutes that particular arithmetic no longer bites, but the rule stays: one pattern has
-   * no spacing to get wrong, and the cadence is a constant that moves. Running the lanes in
-   * sequence in one invocation is race-free by construction.
-   */
-  async scheduled(controller, env) {
-    // The daily USGS job is its own invocation with its own CPU, and never touches SGC.
-    // The sea state rides on the same invocation, after USGS: one small request, and either failing
-    // leaves the other to run. The first failure is rethrown, so the invocation is recorded as failed.
-    if (controller.cron === PRODUCTS_CRON) {
-      const now = new Date(controller.scheduledTime);
-      let failed: unknown = null;
-      try {
-        await refreshProducts({ db: env.DB, log: log(env, { trigger: "usgs" }), now });
-      } catch (err) {
-        failed = err;
-      }
-      try {
-        await refreshSea({ db: env.DB, log: log(env, { trigger: "sea" }), now });
-      } catch (err) {
-        failed ??= err;
-      }
-      if (failed !== null) throw failed;
-      return;
-    }
-    if (controller.cron !== INGEST_CRON) {
-      // A pattern in wrangler.jsonc that no branch here answers. Running the ingest for it would
-      // be an unplanned request to SGC, at a minute the lanes were never designed for.
-      log(env, { trigger: "cron" }).error({ cron: controller.cron }, "unknown cron pattern");
-      return;
-    }
-    const minute = tickMinute(controller.scheduledTime);
-    const l = log(env, { trigger: "cron", tickMinute: minute });
-    // The zones one after another, in this one invocation: never two requests to SGC at once,
-    // and no second cron pattern to land inside the first one's claim window. Each zone reads
-    // the history afresh, so the second sees what the first just did — a refusal the first
-    // zone met holds the second one's probe to the same hour.
-    let thrown: unknown = null;
-    for (const zone of ZONE_IDS) {
-      const zl = l.child({ zone });
-      try {
-        // The real clock, not the scheduled minute: a failure recorded seconds ago still counts
-        // against the fast lane, while which lane this tick *is* comes from scheduledTime.
-        const now = new Date();
-        const history = await readHistory(env.DB, now, zl, zone);
-        const plan = dueNow({ kind: "cron", scheduledTime: controller.scheduledTime }, now, history, zone);
-        /**
-         * The line that would have caught the tickMinute fault in one query. `lanes` is what
-         * this tick decided to do; grouping 24 hours of these by it should show four fast
-         * ticks for every wide one and a sweep on the hour. For a day it was `["fast"]` every
-         * single time and nothing said so. `scheduledAt` is on the line too, because the
-         * dispatch is at :45 past and that offset is the whole reason the snap exists.
-         */
-        zl.info(
-          {
-            scheduledAt: new Date(controller.scheduledTime).toISOString(),
-            lanes: plan.steps.map((s) => s.lane),
-            sgcUnwell: sgcUnwell(history.health, now),
-            backfill: `${history.backfill.done}/${history.backfill.total}`,
-            inFlight: history.inFlight,
-          },
-          plan.steps.length === 0 ? "tick stood down" : "tick planned",
-        );
-
-        await runPlan({ db: env.DB, log: zl, analytics: env.INGEST_ANALYTICS }, plan, zone);
-      } catch (err) {
-        // A throw here is otherwise only an uncaught-exception log with no idea which lane
-        // it was in. Logged with the tick's own fields, and rethrown once every zone has had
-        // its turn, so the runtime still records the invocation as failed but one zone's
-        // fault does not also cost the other zone its tick.
-        zl.error({ err }, "tick failed");
-        thrown ??= err;
-      }
-    }
-    if (thrown !== null) throw thrown;
   },
 } satisfies ExportedHandler<Env>;

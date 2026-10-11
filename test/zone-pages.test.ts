@@ -10,7 +10,6 @@ import {
   zonePath,
 } from "../core/zone-pages.ts";
 import { ZONE_IDS } from "../core/zones.ts";
-import { CADENCE } from "../worker/plan.ts";
 
 const INDEX = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
@@ -34,12 +33,10 @@ describe("each zone's page", () => {
     expect(withZoneMeta(INDEX, HOME_ZONE)).toBe(INDEX);
   });
 
-  // Moving the focus is three edits in three files — HOME_ZONE, the order of ZONE_IDS and
-  // CADENCE — and a swap that made only one of them would open the site on a zone re-read every
-  // 30 minutes, second in its own tab bar.
-  it("puts the home zone first in the tabs and gives it the fast lane, and no other zone", () => {
+  // Moving the focus is two edits in two files — HOME_ZONE and the order of ZONE_IDS — and a swap
+  // that made only one of them would open the site on a zone second in its own tab bar.
+  it("puts the home zone first in the tabs", () => {
     expect(ZONE_IDS[0]).toBe(HOME_ZONE);
-    expect(ZONE_IDS.filter((z) => CADENCE[z].fastLane)).toEqual([HOME_ZONE]);
   });
 
   it.each(ZONE_IDS)("says what %s is in every tag a link preview reads", (zone) => {

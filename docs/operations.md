@@ -6,6 +6,11 @@ Everything below exists because two faults ran for hours with nothing to read. S
 before guessing; the reasoning behind each piece is under
 [Observability decisions](#observability-decisions).
 
+**Since 2026-10-11 the Worker reads SGC only when a reader presses "Sincronizar ahora"**
+([Ingest](ingest.md#on-demand-only)). There are no cron ticks to read, an old catalogue is the normal
+state, and every run in the logs is a press's (`trigger: "manual"` on the `wide` run, `"sweep"` on a
+chunk).
+
 Written-up incidents live in `docs/incidents/`. The one to read first is
 [2026-09-20](incidents/2026-09-20-ingest-outage-and-sgc-refusal.md): a 9-hour ingest
 outage and the SGC refusal that followed it, with the measurements behind both — including
@@ -43,65 +48,67 @@ pnpm logs                                  # the last hour, oldest first
 pnpm logs --since 12h --level error        # just the failures
 pnpm logs --since 3d --msg "ingest failed"
 pnpm logs lanes --since 24h                # how many runs each lane made
-pnpm logs cpu --since 24h                  # median/p90/p99/max CPU per route and per cron
+pnpm logs cpu --since 24h                  # median/p90/p99/max CPU per route (and per cron, before 2026-10-11)
 pnpm exec wrangler tail choco --format json  # live, for something happening now
 ```
 
 ### Every line the Worker writes
 
 One JSON object per line. `level`, `time` and `msg` are always there; a line about a run
-also carries `lane`, `trigger` and `zone`. The daily USGS job's lines carry `trigger: "usgs"`, and
-its invocation is the one at 11:07 UTC, which `pnpm logs cpu` shows on its own row, `7 11 * * *`. A cron tick writes one `tick planned` / `tick stood
-down` line **per zone** — Chocó's says `stood down` with `lanes: []` on the :15 and :45 ticks,
-which is its cadence (it has no fast lane), not a fault. The Analytics Engine point carries the zone in `blob7`.
+also carries `lane`, `trigger` and `zone`. The USGS job's lines carry `trigger: "usgs"` and the sea's
+`trigger: "sea"`; since 2026-10-11 both run inside a press's `POST /api/refresh` invocation, after
+its answer, where until then they had their own at 11:07 UTC (`7 11 * * *` in `pnpm logs cpu`). A
+cron tick wrote one `tick planned` / `tick stood down` line per zone until 2026-10-11; nothing writes
+them now. The Analytics Engine point carries the zone in `blob7`.
 
 | `msg` | Level | When | The fields that matter |
 |---|---|---|---|
-| `tick planned` / `tick stood down` | info | every cron tick | `tickMinute`, `lanes`, `sgcUnwell`, `backfill`, `inFlight` |
+| `tick planned` / `tick stood down` | info | every cron tick, until 2026-10-11 | `tickMinute`, `lanes`, `sgcUnwell`, `backfill`, `inFlight` |
 | `ingest ok` | info | a run finished cleanly | `runId`, `fetched`, `inserted`, `updated`, `removed`, `durationMs`, `sgcMs`, `sgcChars`, `sgcBytes` |
 | `ingest ok with a note` | warn | it worked, but skipped a removal or a bad row | `error` carries the note |
 | `ingest failed` | error | SGC or D1 refused, or SGC's page passed the 8 MiB cap (`error` names the cap, `httpStatus` is null) | `httpStatus`, `retryAfterS`, `error`, and on an HTTP refusal `sgcHeaders`, `sgcBody` |
 | `read route over its row ceiling` | error | a catalogue route refused a zone of more than 20,000 events with a 500 ([API](api.md)) | `zone`, `ceiling`, `path` |
 | `reaped abandoned runs: an invocation was killed` | **warn** | a claimed run never wrote a result | `reaped` |
-| `refresh stood down` | info | the button did nothing | `why`: `throttled`, `in flight`, `claim held` |
+| `refresh stood down` | info | a press sent nothing to SGC | `why`: `throttled`, `in flight`, `claim held` |
 | `unhandled error` | error | a route threw | `err.stack`, `method`, `path` |
 | `page error` | warn | the reader's browser threw | `page.message`, `page.stack`, `page.userAgent` |
 | `ingest stood down: claim held` | debug | two runs raced for the same window | — |
-| `unknown cron pattern` | error | a pattern in `wrangler.jsonc` that `scheduled()` has no branch for; it ran nothing | `cron` |
-| `usgs: product stored` | info | the daily USGS job stored a new version of a product | `zone`, `kind`, `sgcEventId`, `sourceEventId`, `productUrl`, `sourceUpdatedAt` |
+| `unknown cron pattern` | error | until 2026-10-11: a pattern in `wrangler.jsonc` that `scheduled()` had no branch for | `cron` |
+| `usgs: product stored` | info | the USGS job, on a sync, stored a new version of a product | `zone`, `kind`, `sgcEventId`, `sourceEventId`, `productUrl`, `sourceUpdatedAt` |
 | `usgs: no mainshock to match` | info | a zone with no found mainshock; USGS was not asked | `zone` |
 | `usgs: product not published` | info | USGS has no such product (or file) for the event yet | `zone`, `kind` |
 | `usgs: no single match` | warn | USGS's search found none or several events near the mainshock; nothing stored | `sgcEventId`, `candidates` |
-| `usgs: product failed` / `usgs: zone failed` | warn | USGS refused, redirected, timed out or sent a file a digest could not read; the stored digest stays, the rest still runs, and the invocation then fails with the first error | `err` |
+| `usgs: product failed` / `usgs: zone failed` | warn | USGS refused, redirected, timed out or sent a file a digest could not read; the stored digest stays and the rest still runs (the press was answered before the job began, so nothing else fails) | `err` |
 
 ### Symptom → what to ask
 
-- **"The page is showing old data."** `curl $PRODUCTION_URL/api/health` first: `ingestAgeS`
-  is the whole answer to *how* stale, and `zones` says *which* catalogue. Then `pnpm logs --since 6h --level error`. An
+- **"The page is showing old data."** Usually nobody has synced: since 2026-10-11 the data is as
+  old as the last press, and the note under the button says when that was. `curl
+  $PRODUCTION_URL/api/health`: `ingestAgeS` says how long ago the last sync succeeded, and `zones`
+  which catalogue. If a press did not bring it up to date, `pnpm logs --since 6h --level error`. An
   `ingest failed` line with `httpStatus` means we were refused — read `sgcHeaders` before
-  saying by whom; the 2026-09-20 refusal came from Cloudflare, not from SGC — the back-off is working as
-  designed and the wide tick is still probing. **No error lines at all is the worse case**:
-  look for `reaped abandoned runs`, which means invocations are being killed rather than
-  failing.
+  saying by whom; the 2026-09-20 refusal came from Cloudflare, not from SGC — and the next press waits
+  as the back-off says. **No error lines at all after a press is the worse case**: look for `reaped
+  abandoned runs`, which means invocations are being killed rather than failing.
 - **"Invocations are being killed."** That is the 2026-09-20 fault, and `reaped` is the
-  only signal for it. The invocation log for the killed tick carries the outcome and
+  only signal for it. The invocation log for the killed tick or press carries the outcome and
   `$workers.cpuTimeMs`; `exceededCpu` there means the 10 ms limit, and the fix is the paid
   plan or a smaller `SWEEP_CHUNK_DAYS`. If CPU is fine, the suspect is memory — `sgcMs`,
   `sgcChars` and `sgcBytes` on the *last* successful run of that lane say how large the responses
   had got. The Worker reads no more than 8 MiB of one (an `ingest failed` naming the cap, not a kill).
-- **"Nothing has reached SGC for ages and there are no failures."** `pnpm logs lanes
-  --since 24h`. A healthy day at `*/15` is 96 `wide` runs (both zones on :00 and :30), 48
-  `sweep` runs (both zones on the hour) and 48 `fast` runs (Tolima on :15 and :45). All `fast` and no `sweep` is the `tickMinute` fault returning; only `wide` and
-  `sweep` means `sgcUnwell` is holding the fast lane down, so look for the 429/503 or the
-  failed run that did it.
-- **"The refresh button does nothing."** Usually correct behaviour: `refresh stood down`
-  with `why: throttled` means a cron run happened within 5 minutes, which is most presses.
-  `why: in flight` or `claim held` means a run was already talking to SGC.
+- **"Nothing has reached SGC for ages and there are no failures."** Since 2026-10-11 that is what
+  no presses look like, and it is normal. `pnpm logs lanes --since 24h` counts what presses sent: a
+  caught-up press is one `wide` run and one `sweep`, a catch-up one `sweep` per chunk. (At `*/15` a
+  healthy day was 96 `wide`, 48 `sweep` and 48 `fast`.)
+- **"The sync button does nothing."** Usually correct behaviour: `refresh stood down` with
+  `why: throttled` means the zone was synced within the last 15 minutes (or the last sync failed and
+  the press is waiting, see `retryAfterS`). `why: in flight` or `claim held` means a run was already
+  talking to SGC, someone else's press as a rule.
 - **"It broke in the browser."** `pnpm logs --since 24h --msg "page error"`. Nobody is
   watching that console — it is one researcher's tab — so this is the only record.
-- **"Is `b` wrong?"** Not an observability question. Check `backfill` on any `tick planned`
-  line: statistics from an incomplete history are confidently wrong (see
-  [the science](science.md)).
+- **"Is `b` wrong?"** Not an observability question. Check `backfill.gaps` on
+  `/api/status?zone=` (from the page; the route is same-origin): statistics from a history with gaps
+  are confidently wrong (see [the science](science.md)). Days since the last sync are not gaps.
 
 ### The history that outlives the logs
 
@@ -193,8 +200,8 @@ why it is shaped the way it is. All of it was measured here, on 2026-09-20.
   the rule in the one place, not at every door.
 - **The read routes log nothing per request, on purpose.** Their status and CPU time are
   already in the invocation log Cloudflare writes for free. The free plan allows 200,000 log
-  events a day and an invocation log spends one of them; this Worker's own lines are 288
-  cron ticks × 3–5, plus whatever the page polls. Adding a line to `/api/events` would
+  events a day and an invocation log spends one of them; this Worker's own lines were 288
+  cron ticks × 3–5 until 2026-10-11, and are a few per press now, plus whatever the page polls. Adding a line to `/api/events` would
   double the bill for something we already have.
 - **`Date.now()` does not advance between I/O in workerd.** So any span that contains no
   `await` measures 0 ms, and timing a parse inside the Worker is not possible. That is why
@@ -208,8 +215,9 @@ why it is shaped the way it is. All of it was measured here, on 2026-09-20.
   kept **3 months**, and currently not billed at all. Source maps: free. Tail Workers and
   Logpush are **paid-only** and are not used. The zone's own analytics, Web Analytics and
   Security events came with the domain and are free too ([above](#the-domains-analytics)). Cloudflare has no Workers alert on the free
-  plan either, which is why the alarm is a scheduled GitHub Actions job against
-  `/api/health`.
+  plan either, which is why the alarm was a scheduled GitHub Actions job against `/api/health`
+  (`ingest-health.yml`). Since 2026-10-11 it runs only by hand: with syncs on demand, an old
+  catalogue is not a fault.
 - **Three days is shorter than this project's slowest fault**, which is the entire argument
   for the Analytics Engine dataset: one row per ingest run, ~350 a day, ~0.35% of the free
   allowance, and every run stays readable for a season. Its **field positions are its

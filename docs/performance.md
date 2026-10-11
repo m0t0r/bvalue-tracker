@@ -87,7 +87,7 @@ practices stayed at 100.
   a validator would let a repeat request skip the body. It is not worth it, as measured in
   production over the 3 days Workers Logs keeps (`pnpm logs cpu --since 3d`, and the browser
   against production):
-  - **The CPU is in the cron, not here.** `GET /api/events`: about 300 calls, a median of 7 ms
+  - **The CPU was in the cron, not here** (the cron went on 2026-10-11). `GET /api/events`: about 300 calls, a median of 7 ms
     (p90 14, max 25). The `*/15` ticks: 289, a median of 68 ms (p90 153, max 264), and 24 of
     them killed `exceededCpu`: 2026-09-27 07:30–12:00 and 09-27 23:30–09-28 05:30 UTC, nearly
     all wide ticks, most stopped at 10–11 ms, so the 10 ms limit was being enforced as on
@@ -244,11 +244,12 @@ practices stayed at 100.
     28.8 kB gzipped): `history.json` and its rules. The shell did not move.
   - USGS's forecast box (2026-09-25, `vite build`, against the same commit built without it) took the
     shell from 26.26 kB to 32.17 kB (10.17 → 12.22 kB gzipped), since its rule and sentences are in
-    `claims.ts` and `copy.ts`, and the recheck rule (`context-refresh.ts`) is in `useInsights`; the
+    `claims.ts` and `copy.ts`, and the recheck rule (`context-refresh.ts`, removed 2026-10-11) is in `useInsights`; the
     questions chunk from 72.36 kB to 79.53 kB (23.95 → 25.86 kB gzipped) and the story chunk from
     93.78 kB to 94.23 kB (measured on top of the history step). The monitor did not move. No new request on load: the forecast was already
     in `/api/context`. On an open page, one more `/api/context` (a few hundred bytes) per daily job
-    run after the forecast is due, on a return to the tab, for two days at most.
+    run after the forecast is due, on a return to the tab, for two days at most; none since
+    2026-10-11, when the page began asking once per load.
 - **How sure b over time is** (2026-09-28, against a build of `main` with the same `.wrangler/` copy).
   Every Mc step now also fits the other magnitude reading and each window's own Mc: one step of
   `measure`'s statistics went from a median of 1.1 to 1.7 ms on Chocó and 0.9 to 1.9 ms on Tolima
@@ -258,7 +259,7 @@ practices stayed at 100.
   5025 ms (the bimodal simulation below, not a gain), TBT 66 → 70 ms, CLS 0 on both.
   - **The Worker pays for `mcOwn` too, and that is kept** (code review, 2026-09-28). `computeStats` on
     the whole catalogue went 0.71 → 1.24 ms (Chocó) and 0.40 → 0.69 ms (Tolima), medians of 200 in
-    Node. Only `/api/stats` and `/api/b-windows.csv` call it, on request; the ingest cron never does,
+    Node. Only `/api/stats` and `/api/b-windows.csv` call it, on request; the ingest never does,
     and the page's CSV button builds its file in the browser. Half a millisecond per request is far
     from the CPU limit; making the field optional would put a flag on the one statistics pipeline
     the page, the API and the CLI share so they cannot disagree.

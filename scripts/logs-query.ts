@@ -79,12 +79,12 @@ export function queryBody(
       // The free plan allows 10 ms of CPU per invocation (docs/ingest.md, "The CPU budget"). The
       // runtime is the only thing that can see it, and it publishes it on the invocation log.
       //
-      // Grouped by trigger, which is the route for a request ("GET /api/events") and the cron
-      // pattern for a tick ("*/15 * * * *"). **Not** by lane, which is not obtainable here
-      // however the query is written: cpuTimeMs lives on the invocation log, `lane` lives on
-      // the lines the Worker itself writes, and all three lanes hang off the one */15 cron, so
-      // they share a trigger. To separate them, take the lanes' ticks from `pnpm logs lanes`
-      // and compare their invocations' CPU against the rest by timestamp.
+      // Grouped by trigger, which is the route for a request ("POST /api/refresh"), and was the cron
+      // pattern for a tick until the crons went on 2026-10-11. **Not** by lane, which is not
+      // obtainable here however the query is written: cpuTimeMs lives on the invocation log, `lane`
+      // lives on the lines the Worker itself writes, and every lane now runs inside the one route,
+      // so they share a trigger. To separate them, take the lanes' runs from `pnpm logs lanes` and
+      // compare their invocations' CPU against the rest by timestamp.
       parameters: {
         filters,
         calculations: [
@@ -107,10 +107,9 @@ export function queryBody(
     return {
       queryId: "sgc-lanes",
       timeframe,
-      // At */15 (worker/plan.ts), a wide run for each zone on :00 and :30, a sweep for each on
-      // the hour, and a fast run on :15 and :45 for Tolima only: 96 wide, 48 sweep and 48 fast a
-      // day, which is what 2026-09-29 read. All fast and no sweep is the 2026-09-20 tickMinute
-      // fault.
+      // Since 2026-10-11 every run is a reader's sync (worker/plan.ts, `dueNow`): a caught-up press
+      // is one wide run and one sweep, a catch-up one sweep per missing chunk, so the counts follow
+      // the presses. Until then, at */15, a day read 96 wide, 48 sweep and 48 fast.
       parameters: {
         filters: [...filters, { key: "lane", operation: "exists", type: "string", value: "" }],
         calculations: [{ operator: "count", alias: "runs" }],

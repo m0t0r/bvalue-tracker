@@ -9,7 +9,9 @@
 > every 5 for a day, once SGC's own publication lag was measured at 2–5 minutes, then went
 > back to 15 — as one cron alternating a narrow 1-day window with the full trailing 3 days.
 > See [ingest.md](ingest.md) and [sgc-data-source.md](sgc-data-source.md). Still open:
-> §4.1, and measuring CPU time.
+> §4.1, and measuring CPU time. **Since 2026-10-11 there is no cron ingest at all**: the project
+> is in support mode and syncs only when a reader presses "Sincronizar ahora"
+> ([ingest.md](ingest.md#on-demand-only)).
 
 You are building the hosted part of this project end to end. A working, tested
 proof of concept already exists in this repo. Read this whole file, then

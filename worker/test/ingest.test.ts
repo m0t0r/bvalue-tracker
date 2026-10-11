@@ -6,6 +6,7 @@ import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import { CHAPARRAL_BBOX, ZONE_IDS, type ZoneId } from "../../core/zones.ts";
 import FULL from "../../test/fixtures/seiscomp-2026-08-10_2026-09-18.html?raw";
 import EMPTY from "../../test/fixtures/seiscomp-empty.html?raw";
+import WRANGLER from "../../wrangler.jsonc?raw";
 import { ABANDONED_ERROR, insertStmt, lastRun, runInFlight, sgcHealth } from "../db.ts";
 import worker from "../index.ts";
 import { backfillProgress, ingest, ingestSweep, sweepChunks } from "../ingest.ts";
@@ -33,9 +34,9 @@ const zoneOf = async (req: { formData(): Promise<FormData> }) =>
 /**
  * Makes SGC answer this way, and hands back how many requests it has taken so far.
  *
- * The count is Chocó's, which is what every test written before the second zone counts; the
- * cron now asks for Chaparral in the same invocation, and those requests are answered by
- * `tolima` (an empty catalogue unless a test says otherwise) and counted by `.tolima()`.
+ * The count is Chocó's, which is what every test written before the second zone counts; a request
+ * for Chaparral is answered by `tolima` (an empty catalogue unless a test says otherwise) and
+ * counted by `.tolima()`.
  * Answering Chaparral with the Chocó fixture would not be a catalogue at all: every one of its
  * ids already belongs to the other zone.
  */
@@ -144,11 +145,22 @@ function dropOldest(html: string, n: number): string {
   return recount(html.slice(0, start) + html.slice(end), n);
 }
 
+/**
+ * Each test calls from an address of its own, so the per-IP rate limit (120 a minute) counts one
+ * test's requests, never the whole file's: a catch-up walks every history chunk, one call each.
+ */
+let caller = 0;
+beforeEach(() => {
+  caller++;
+});
+const callerIp = () => `192.0.2.${caller % 250}`;
+
 /** Calls the Worker as the page does: same-origin, which /api/* now requires. */
 async function call(path: string, init: RequestInit = {}) {
   const ctx = createExecutionContext();
   const headers = new Headers(init.headers);
   if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin");
+  if (!headers.has("cf-connecting-ip")) headers.set("cf-connecting-ip", callerIp());
   const res = await worker.fetch(new Request(`https://x.test${path}`, { ...init, headers }), env, ctx);
   await waitOnExecutionContext(ctx);
   return res;
@@ -157,7 +169,9 @@ async function call(path: string, init: RequestInit = {}) {
 /** Calls the Worker as an outsider does: no same-origin signal at all. */
 async function callRaw(path: string, init: RequestInit = {}) {
   const ctx = createExecutionContext();
-  const res = await worker.fetch(new Request(`https://x.test${path}`, init), env, ctx);
+  const headers = new Headers(init.headers);
+  if (!headers.has("cf-connecting-ip")) headers.set("cf-connecting-ip", callerIp());
+  const res = await worker.fetch(new Request(`https://x.test${path}`, { ...init, headers }), env, ctx);
   await waitOnExecutionContext(ctx);
   return res;
 }
@@ -239,13 +253,14 @@ describe("ingest", () => {
     expect(await runCount()).toBe(1);
   });
 
-  it("keeps a burst of concurrent refreshes down to a single SGC request", async () => {
+  it("keeps a burst of concurrent refreshes down to a single press's requests", async () => {
     await completeBackfill();
     const calls = serving(FULL);
     const burst = await Promise.all(Array.from({ length: 8 }, () => call("/api/refresh", { method: "POST" })));
     const bodies = (await Promise.all(burst.map((r) => r.json()))) as any[];
     expect(bodies.filter((b) => b.refreshed)).toHaveLength(1);
-    expect(calls()).toBe(1);
+    // The one press that won the claim: its trailing window, then its revision chunk.
+    expect(calls()).toBe(2);
   });
 
   it("does not remove events outside the requested window", async () => {
@@ -325,6 +340,19 @@ describe("sweep", () => {
     expect(bad.ok).toBe(false);
     const next = (await ingestSweep(deps(FULL, new Date(NOW.getTime() + 60_000))))!;
     expect(next.windowStart).not.toBe(bad.windowStart);
+  });
+
+  // A catch-up asks for the next chunk once per request with no throttle. Least recently attempted
+  // alone sent it back to loaded chunks while one that had just failed waited behind them, so a press
+  // could spend all 31 requests loading nothing (code review, 2026-10-11).
+  it("goes back to a missing chunk before re-reading a loaded one, even one that failed a moment ago", async () => {
+    const at = (i: number) => new Date(NOW.getTime() + i * 60_000);
+    for (let i = 0; i < 5; i++) expect((await ingestSweep(deps(FULL, at(i))))!.ok).toBe(true);
+    serves(() => new Response("", { status: 503 }));
+    const bad = (await ingestSweep({ db: env.DB, now: at(5), fetchOptions: { backoffMs: 1, retries: 0 } }))!;
+    expect(bad.ok).toBe(false);
+    const next = (await ingestSweep(deps(FULL, at(6))))!;
+    expect(next.windowStart).toBe(bad.windowStart);
   });
 
   it("visits never-swept chunks first, then the least recently swept", async () => {
@@ -595,7 +623,7 @@ describe("API", () => {
     expect(day.every((e) => e.time.startsWith("2026-08-10"))).toBe(true);
   });
 
-  it("stops fast-laning the back-fill once SGC starts failing", async () => {
+  it("closes the catch-up once SGC starts failing", async () => {
     const calls = serves(() => new Response("", { status: 503 }));
     const first = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(first.refreshed).toBe(true);
@@ -608,9 +636,8 @@ describe("API", () => {
     expect(calls()).toBe(attempts);
   });
 
-  // One availability rule for both fast lanes. The button used to open its no-wait back-fill
-  // lane on "the last run succeeded" alone, which ignores a cooldown SGC asked for, so after
-  // a 429 and a later success it reached SGC while the cron's own fast lane was standing down.
+  // The button used to open its no-wait back-fill lane on "the last run succeeded" alone, which
+  // ignores a cooldown SGC asked for, so after a 429 and a later success it reached SGC at once.
   it("makes the refresh button wait out a 429's cooldown even after SGC answers again", async () => {
     const now = Date.now();
     await recordRun(0, { http_status: 429, retry_after_s: 3600 }, new Date(now - 60_000));
@@ -618,46 +645,59 @@ describe("API", () => {
     const calls = serving(FULL);
 
     const res = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
-    expect(res.backfill.done).toBe(0); // history incomplete: the fast lane is what would have run
+    expect(res.backfill.done).toBe(0); // behind: the no-wait catch-up is what would have run
     expect(res.lastRun.ok).toBe(true); // and SGC is answering again, so only the cooldown holds
     expect(res.refreshed).toBe(false);
     expect(res.retryAfterS).toBeGreaterThan(0);
     expect(calls()).toBe(0);
   });
 
-  it("refresh loads missing history first, one chunk per call, and reports progress", async () => {
+  // What the page's catch-up does after a long gap: it asks again until the zone has caught up,
+  // one request at a time, and each one loads the oldest chunk still missing, with no wait.
+  it("refresh catches up one chunk per call, oldest first, and reports progress", async () => {
     const calls = serving(FULL);
     const before = (await (await call("/api/status")).json()) as any;
-    expect(before.backfill.done).toBe(0);
+    expect(before.backfill).toMatchObject({ done: 0, gaps: 0 });
     const total = before.backfill.total as number;
     expect(total).toBeGreaterThanOrEqual(6);
 
+    const starts: string[] = [];
     for (let i = 1; i <= total; i++) {
       const res = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
-      expect(res.backfill).toEqual({ done: i, total });
+      expect(res.refreshed).toBe(true);
+      // Until it has caught up, what is still missing lies before the run that just succeeded.
+      expect(res.backfill).toEqual({ done: i, total, gaps: total - i });
       expect(res.lastRun.trigger).toBe("sweep");
+      starts.push(res.lastRun.windowStart);
     }
+    expect(starts).toEqual(sweepChunks(new Date()).map((c) => c.start.toISOString()));
+    expect(calls()).toBe(total);
+
+    // The last chunk already reaches today, so the next press is inside the throttle.
+    const next = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
+    expect(next.refreshed).toBe(false);
+    expect(next.retryAfterS).toBeGreaterThan(0);
     expect(calls()).toBe(total);
   });
 
-  it("refresh queries SGC once, then is rate limited", async () => {
+  it("refresh reads the trailing window and one revision chunk once caught up, then is throttled", async () => {
     await completeBackfill();
     const calls = serving(FULL);
     const first = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(first.refreshed).toBe(true);
-    expect(first.lastSuccessfulRun.trigger).toBe("manual");
-    expect(calls()).toBe(1);
+    expect(first.lastSuccessfulRun.trigger).toBe("sweep");
+    expect(calls()).toBe(2);
 
     const second = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(second.refreshed).toBe(false);
     expect(second.retryAfterS).toBeGreaterThan(0);
-    expect(calls()).toBe(1);
+    expect(calls()).toBe(2);
   });
 
   it("refresh stands down while another run is in flight", async () => {
     const calls = serving(FULL);
     await env.DB.prepare(
-      "INSERT INTO ingest_runs (started_at, trigger, window_start, window_end) VALUES (?, 'cron', ?, ?)",
+      "INSERT INTO ingest_runs (started_at, trigger, window_start, window_end) VALUES (?, 'manual', ?, ?)",
     )
       .bind(new Date().toISOString(), FROM.toISOString(), TO.toISOString())
       .run();
@@ -828,20 +868,11 @@ describe("API", () => {
   });
 });
 
-/**
- * Fires the scheduled handler as Cloudflare really does. `scheduledTime` is **not** the round
- * minute in production: this Worker's ticks are dispatched at :45 past, and reading the lane
- * off the nearest *minute* turned every one of them into the minute after — never a multiple
- * of 15, so for a day neither the wide tick nor the sweep ran at all. The offset is the
- * default here so that every lane test below runs against the shape production sends.
- */
-async function tick(minute: number, { hour = 12, offsetS = 45 } = {}) {
-  // scheduled() awaits its own work, so unlike the refresh route it needs no execution context.
-  const at = new Date(Date.UTC(2026, 8, 19, hour, minute) + offsetS * 1000);
-  await worker.scheduled!({ cron: "*/15 * * * *", scheduledTime: at.getTime(), noRetry() {} }, env);
-}
+/** A press of "Sincronizar ahora" on the zone, as the page sends it, and the Worker's answer. */
+const press = async (zone: ZoneId = "choco") =>
+  (await (await call(`/api/refresh?zone=${zone}`, { method: "POST" })).json()) as any;
 
-/** One zone's newest run. A tick runs both zones, Chaparral first, so "the newest run" alone would be Chocó's. */
+/** One zone's newest run. */
 const latestRun = async (zone: ZoneId = "choco") =>
   (await env.DB.prepare("SELECT * FROM ingest_runs WHERE zone = ? ORDER BY id DESC LIMIT 1")
     .bind(zone)
@@ -860,7 +891,7 @@ const recordRun = (
   finishedAt = NOW,
 ) =>
   env.DB.prepare(`INSERT INTO ingest_runs (started_at, finished_at, trigger, window_start, window_end, ok, http_status, retry_after_s, zone)
-              VALUES (?, ?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?, ?, ?, ?)`)
+              VALUES (?, ?, 'manual', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?, ?, ?, ?)`)
     .bind(
       finishedAt.toISOString(),
       finishedAt.toISOString(),
@@ -871,91 +902,152 @@ const recordRun = (
     )
     .run();
 
-describe("cron lanes", () => {
-  it("loads one trailing day on Chaparral's narrow tick and three on Chocó's wide one", async () => {
-    // Otherwise the wide tick also pulls a history chunk, and that would be the latest run.
-    await completeBackfill();
-    serving(FULL);
+/** Forgets that one of the zone's history chunks was ever loaded: the newest, or the oldest. */
+async function unloadChunk(zone: ZoneId, which: "newest" | "oldest") {
+  const chunks = sweepChunks(new Date(), zone);
+  const chunk = which === "newest" ? chunks.at(-1)! : chunks[0]!;
+  await env.DB.prepare("DELETE FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' AND window_start = ?")
+    .bind(zone, chunk.start.toISOString())
+    .run();
+  return chunk;
+}
 
-    await tick(15);
-    const fast = await latestRun("tolima");
-    expect(fast.window_start).toBe(expectedWindowStart(fast.started_at as string, 1));
-
-    await tick(30);
-    const wide = await latestRun("choco");
-    expect(wide.window_start).toBe(expectedWindowStart(wide.started_at as string, 3));
+/**
+ * Nothing reads SGC on a schedule any more (from 2026-10-11): the Worker has no Cron Trigger and no
+ * `scheduled()` handler. The empty list is what removes the crons a deploy finds in place.
+ */
+describe("on demand only", () => {
+  it("declares no Cron Trigger, as an empty list rather than a missing key", () => {
+    const crons = /"crons":\s*(\[[^\]]*\])/.exec(WRANGLER)?.[1];
+    expect(JSON.parse(crons!)).toEqual([]);
   });
 
-  // A second cron pattern would land within 120 s of this one, inside IN_FLIGHT_MS, and the
-  // two would steal each other's claim. The sweep runs in the wide tick's own invocation.
-  it("sweeps on the hour, in the same invocation as the wide tick, and not on other quarters", async () => {
-    await completeBackfill();
-    serving(FULL);
+  it("has no scheduled handler to run one", () => {
+    expect("scheduled" in worker).toBe(false);
+  });
+});
 
-    await tick(0);
-    const triggers = await env.DB.prepare(
-      "SELECT trigger FROM ingest_runs WHERE zone = 'choco' AND started_at > ? ORDER BY id",
+describe("a sync once the zone is caught up", () => {
+  it("re-reads one trailing day on Chaparral and three on Chocó, then one older chunk for revisions", async () => {
+    await completeBackfill();
+    const calls = serving(FULL);
+
+    await press("tolima");
+    const tolima = await env.DB.prepare(
+      "SELECT trigger, window_start, started_at FROM ingest_runs WHERE zone = 'tolima' AND finished_at > ? ORDER BY id",
     )
-      .bind("2026-09-19T00:00:00.000Z")
-      .all<{ trigger: string }>();
-    expect(triggers.results.map((r) => r.trigger)).toEqual(["cron", "sweep"]);
+      .bind("2026-02-01T00:00:00.000Z")
+      .all<Record<string, string>>();
+    expect(tolima.results.map((r) => r.trigger)).toEqual(["manual", "sweep"]);
+    expect(tolima.results[0]!.window_start).toBe(expectedWindowStart(tolima.results[0]!.started_at!, 1));
 
-    await tick(30, { hour: 13 });
-    expect((await latestRun()).trigger).toBe("cron");
+    await press("choco");
+    const choco = await env.DB.prepare(
+      "SELECT trigger, window_start, started_at FROM ingest_runs WHERE zone = 'choco' AND finished_at > ? ORDER BY id",
+    )
+      .bind("2026-02-01T00:00:00.000Z")
+      .all<Record<string, string>>();
+    expect(choco.results.map((r) => r.trigger)).toEqual(["manual", "sweep"]);
+    expect(choco.results[0]!.window_start).toBe(expectedWindowStart(choco.results[0]!.started_at!, 3));
+    expect([calls(), calls.tolima()]).toEqual([2, 2]);
   });
 
-  it("still sweeps on every wide tick while history is incomplete", async () => {
+  // A sweep on every press would have made the worst case 16 SGC requests an hour across both zones,
+  // past the 12 an hour that preceded SGC's refusal of 2026-09-20 (code review, 2026-10-11).
+  it("adds the revision sweep at most once an hour", async () => {
+    await completeBackfill();
     serving(FULL);
-    await tick(30);
-    expect((await latestRun()).trigger).toBe("sweep");
+    const triggers = async () =>
+      (
+        await env.DB.prepare(
+          "SELECT trigger FROM ingest_runs WHERE zone = 'tolima' AND finished_at > '2026-02-01' ORDER BY id",
+        ).all<{ trigger: string }>()
+      ).results.map((r) => r.trigger);
+    /** Moves every run of the zone `minutes` into the past, as if that long had passed. */
+    const age = (minutes: number) =>
+      env.DB.prepare(
+        "UPDATE ingest_runs SET started_at = strftime('%Y-%m-%dT%H:%M:%fZ', started_at, ?), finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', finished_at, ?) WHERE zone = 'tolima' AND finished_at > '2026-02-01'",
+      )
+        .bind(`-${minutes} minutes`, `-${minutes} minutes`)
+        .run();
+
+    await press("tolima");
+    expect(await triggers()).toEqual(["manual", "sweep"]);
+    await age(16); // past the throttle, inside the hour
+    await press("tolima");
+    expect(await triggers()).toEqual(["manual", "sweep", "manual"]);
+    await age(50); // the sweep is now over an hour old
+    await press("tolima");
+    expect(await triggers()).toEqual(["manual", "sweep", "manual", "manual", "sweep"]);
   });
 
-  // The fast lane's window holds a handful of events — too few for MAX_REMOVAL_SHARE to
-  // engage — so one short response could retire real ones. Only the wide lanes retire.
-  it("never retires an event on the fast lane, and still does on the wide one", async () => {
+  // The revision sweep after a failed trailing read would become the last run: the failure would not
+  // show, and the last sync would move to a moment whose recent days were never read (code review).
+  it("stops after a failed trailing read, so the failure is the last run", async () => {
+    await completeBackfill();
+    const calls = serves(() => new Response("", { status: 503 }));
+    const res = await press("choco");
+    expect(calls()).toBe(1);
+    expect(res.lastRun).toMatchObject({ ok: false, trigger: "manual" });
+    const fresh = await env.DB.prepare("SELECT COUNT(*) AS n FROM ingest_runs WHERE finished_at > '2026-02-01'").first<{
+      n: number;
+    }>();
+    expect(fresh!.n).toBe(1);
+  });
+
+  // The trailing window and the sweep retire what SGC stopped returning; `allowRemovals` is how a
+  // caller of ingest() can still ask for a run that never does.
+  it("retires nothing when removals are off, and does when they are on", async () => {
     await ingest(deps(FULL), FROM, TO, "manual");
 
-    const fast = (await ingest(deps(dropRows(FULL, 1)), FROM, TO, "cron", { allowRemovals: false }))!;
-    expect(fast).toMatchObject({ ok: true, removed: 0 });
+    const kept = (await ingest(deps(dropRows(FULL, 1)), FROM, TO, "manual", { allowRemovals: false }))!;
+    expect(kept).toMatchObject({ ok: true, removed: 0 });
     expect(await count("removed_at IS NOT NULL")).toBe(0);
 
-    const wide = (await ingest(deps(dropRows(FULL, 1)), FROM, TO, "cron"))!;
-    expect(wide).toMatchObject({ ok: true, removed: 1 });
+    const retired = (await ingest(deps(dropRows(FULL, 1)), FROM, TO, "manual"))!;
+    expect(retired).toMatchObject({ ok: true, removed: 1 });
     expect(await count("removed_at IS NOT NULL")).toBe(1);
   });
 });
 
-// The rule itself lives in worker/plan.ts and is tested there, without a database. What is
-// left here is the wiring: that the rows readHistory reads really do drive the lanes. The fast
-// lane is Chaparral's, so these count Chaparral's requests.
-describe("fast lane back-off, through the cron", () => {
-  it("stands the fast lane down after a failure, and the wide tick's success lets it back in", async () => {
+/**
+ * Every day without a sync leaves a chunk of the zone's history unloaded. That is behind, not a
+ * fault, and the statistics stay representative of what was synced; a missing chunk *before* the last
+ * successful run is a hole in it, and only that counts as a gap.
+ */
+describe("what /api/status says about the history", () => {
+  const status = async (zone: ZoneId) => (await (await call(`/api/status?zone=${zone}`)).json()) as any;
+
+  it("counts a day not yet synced as behind, not as a gap", async () => {
     await completeBackfill();
-    const calls = serving(FULL);
-
-    await tick(15);
-    expect(calls.tolima()).toBe(1);
-
-    await recordRun(0, { http_status: 500, zone: "tolima" });
-    await tick(45);
-    expect(calls.tolima()).toBe(1);
-
-    await tick(30); // the wide tick keeps probing, whatever SGC has been doing
-    expect(calls.tolima()).toBe(2);
-    await tick(15, { hour: 13 });
-    expect(calls.tolima()).toBe(3);
+    await unloadChunk("tolima", "newest");
+    const { backfill } = await status("tolima");
+    expect(backfill.done).toBe(backfill.total - 1);
+    expect(backfill.gaps).toBe(0);
   });
 
-  it("keeps the wide tick running while a Retry-After holds the fast lane down", async () => {
+  it("counts a chunk missing from before the last successful run as a gap", async () => {
     await completeBackfill();
-    await recordRun(0, { http_status: 429, retry_after_s: 86_400, zone: "tolima" });
-    const calls = serving(FULL);
+    await unloadChunk("tolima", "oldest");
+    await recordRun(1, { zone: "tolima" }, new Date());
+    const { backfill } = await status("tolima");
+    expect(backfill).toMatchObject({ done: backfill.total - 1, gaps: 1 });
+  });
 
-    await tick(15);
-    expect([calls(), calls.tolima()]).toEqual([0, 0]);
+  // Where every "last 7 days" ends (`asOf`). A catch-up that stopped part-way moved the last run to now
+  // while recent days were missing; the synced data stops at the oldest gap (code review, 2026-10-11).
+  it("says the synced data stops at the oldest gap while there is one, else at the last success", async () => {
+    await completeBackfill();
+    const at = new Date();
+    await recordRun(1, { zone: "tolima" }, at);
+    expect((await status("tolima")).syncedThrough).toBe(at.toISOString());
+    const oldest = await unloadChunk("tolima", "oldest");
+    expect((await status("tolima")).syncedThrough).toBe(oldest.start.toISOString());
+  });
 
-    await tick(30);
-    expect([calls(), calls.tolima()]).toEqual([1, 1]);
+  it("reports no gap while the zone has never synced", async () => {
+    const { backfill } = await status("tolima");
+    expect(backfill).toMatchObject({ done: 0, gaps: 0 });
   });
 });
 
@@ -963,30 +1055,32 @@ describe("fast lane back-off, through the cron", () => {
  * The failure nothing could see. On 2026-09-20 the Worker was killed mid-ingest on 112
  * consecutive ticks: each had claimed its row and none ever wrote a result. Every reader of
  * the history asks about *finished* runs, so the newest finished row stayed a success for
- * nine hours — the fast lane kept its cadence, the page showed no error, and the catalogue
- * quietly stopped moving. A run past the in-flight window with no result is not in progress.
+ * nine hours, the page showed no error, and the catalogue quietly stopped moving. A run past
+ * the in-flight window with no result is not in progress.
  */
 describe("a run the Worker was killed in the middle of", () => {
   /** A claimed run that never came back, started `agoMs` ago on the real clock. */
   const openRun = (agoMs: number, zone: ZoneId = "choco") =>
     env.DB.prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end, zone)
-                VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?)`)
+                VALUES (?, 'manual', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', ?)`)
       .bind(new Date(Date.now() - agoMs).toISOString(), zone)
       .run();
+  const firstManual = async () =>
+    (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'manual' ORDER BY id LIMIT 1").first<
+      Record<string, unknown>
+    >())!;
 
   it("is closed as failed once it is past the in-flight window, and says so", async () => {
     await completeBackfill();
     await openRun(10 * 60_000);
     serving(FULL);
 
-    await tick(30); // any tick: readHistory reaps before it reads
-    const reaped = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1").first<
-      Record<string, unknown>
-    >())!;
+    await press(); // readHistory reaps before it reads
+    const reaped = await firstManual();
     expect(reaped.ok).toBe(0);
     expect(reaped.error).toBe(ABANDONED_ERROR);
     // Dated when it stopped counting as in flight, never later: a row that sat there for
-    // hours must not push the visitor's five-minute throttle out by hours with it.
+    // hours must not push the visitor's throttle out by hours with it.
     const finished = Date.parse(reaped.finished_at as string);
     expect(finished).toBeLessThanOrEqual(Date.now() - IN_FLIGHT_MS);
     expect(finished).toBeGreaterThanOrEqual(Date.parse(reaped.started_at as string));
@@ -997,42 +1091,40 @@ describe("a run the Worker was killed in the middle of", () => {
     await openRun(30_000);
     const calls = serving(FULL);
 
-    await tick(15);
-    const row = (await env.DB.prepare("SELECT * FROM ingest_runs WHERE trigger = 'cron' ORDER BY id LIMIT 1").first<
-      Record<string, unknown>
-    >())!;
-    expect(row.finished_at).toBeNull();
-    // And it still holds the claim, so this tick did not reach SGC either — for either zone.
+    const res = await press();
+    expect((await firstManual()).finished_at).toBeNull();
+    // And it still holds the claim, so this press did not reach SGC either — for either zone.
+    expect(res.refreshed).toBe(false);
     expect([calls(), calls.tolima()]).toEqual([0, 0]);
   });
 
-  // The whole point of recording it: an invocation that died is a failed query, and the
-  // rules that read failures — the fast lane's back-off and the page's alert — must see it.
-  it("stands the fast lane down, and the wide tick still lets it back in", async () => {
+  // The whole point of recording it: an invocation that died is a failed query, and the rules
+  // that read failures — the catch-up's back-off and the page's alert — must see it.
+  it("counts as a failed run: the next press on that zone waits the throttle from when it started", async () => {
     await completeBackfill();
+    await unloadChunk("tolima", "newest"); // behind, so only the failure can hold the press
     await openRun(10 * 60_000, "tolima");
     const calls = serving(FULL);
 
-    await tick(15);
+    const res = await press("tolima");
+    expect(res.refreshed).toBe(false);
+    expect(res.retryAfterS).toBeGreaterThan(200);
+    expect(res.retryAfterS).toBeLessThanOrEqual(300);
     expect(calls.tolima()).toBe(0);
-
-    await tick(30);
-    expect(calls.tolima()).toBe(1);
   });
 
   it("is what /api/status reports as the last run, with the reason in the technical detail", async () => {
     await completeBackfill();
     await openRun(10 * 60_000);
     serving(FULL);
-    await tick(15); // stands down, but still reaps
+    await press(); // reaps, whatever it then does
 
     const body = (await (await call("/api/status")).json()) as any;
     expect(body.lastRun).toMatchObject({ ok: false, error: ABANDONED_ERROR });
   });
 
-  // ingest_runs grows ~312 rows a day and this question is asked on every tick and every
-  // refresh. Unindexed it read the whole table — the fourth hot query over it, and the one
-  // 0003 missed. Partial, so the ordinary case reads a near-empty index.
+  // This question is asked on every press. Unindexed it read the whole table — the fourth hot query
+  // over it, and the one 0003 missed. Partial, so the ordinary case reads a near-empty index.
   it("is looked up through the partial index, not a scan of every run ever recorded", async () => {
     expect(await plans((db) => runInFlight(db, NOW))).toEqual([expect.stringContaining("ingest_runs_unfinished")]);
   });
@@ -1041,9 +1133,9 @@ describe("a run the Worker was killed in the middle of", () => {
 /**
  * The wiring for the refusal back-off. The rule itself lives in worker/plan.ts and is tested
  * there without a database; what is left here is that the rows `sgcHealth` reads really do
- * describe the streak, and that the streak really does slow the probe.
+ * describe the streak, and that the streak really does hold a press to the hour.
  */
-describe("the refusal back-off, through the cron", () => {
+describe("the refusal back-off, through the route", () => {
   const ago = (min: number) => new Date(Date.now() - min * 60_000);
 
   it("reads the unbroken run of failures off the finished runs, and forgets it on a success", async () => {
@@ -1062,31 +1154,35 @@ describe("the refusal back-off, through the cron", () => {
     expect((await sgcHealth(env.DB)).failing).toBeNull();
   });
 
-  it("stands the wide tick down when the refusal has lasted, and lets the hour's probe through", async () => {
+  it("holds a press to the hour once the refusal has lasted, and lets it through after", async () => {
     await completeBackfill();
     const calls = serving(FULL);
 
-    // Refused for 90 minutes, last asked 10 minutes ago: past the grace, inside the hour.
+    // Refused for 90 minutes, last asked 20 minutes ago: past the throttle, inside the hour.
     await recordRun(0, { http_status: 410 }, ago(90));
-    await recordRun(0, { http_status: 410 }, ago(10));
-    await tick(30);
-    expect([calls(), calls.tolima()]).toEqual([0, 0]);
+    await recordRun(0, { http_status: 410 }, ago(20));
+    const held = await press();
+    expect(held.refreshed).toBe(false);
+    expect(held.retryAfterS).toBeGreaterThan(2300);
+    expect(calls()).toBe(0);
 
-    // An hour since anything asked: the probe goes, because a probe that stopped could
-    // never see SGC come back. Chaparral's goes first; its success lets Chocó's through.
+    // An hour since anything asked: the press goes, because a door nobody knocks on again is
+    // one nobody can see open.
+    await env.DB.prepare("DELETE FROM ingest_runs WHERE http_status = 410").run();
+    await recordRun(0, { http_status: 410 }, ago(120));
     await recordRun(0, { http_status: 410 }, ago(61));
-    await tick(30, { hour: 13 }); // a wide tick off the hour, so the sweep is not in it too
-    expect([calls(), calls.tolima()]).toEqual([1, 1]);
+    expect((await press()).refreshed).toBe(true);
+    expect(calls()).toBe(2);
   });
 
-  it("keeps the wide tick at full rate for a plain 500, however long it lasts", async () => {
+  it("waits only the throttle for a plain 500, however long it lasts", async () => {
     await completeBackfill();
     const calls = serving(FULL);
     await recordRun(0, { http_status: 500 }, ago(120));
-    await recordRun(0, { http_status: 500 }, ago(5));
+    await recordRun(0, { http_status: 500 }, ago(16));
 
-    await tick(30);
-    expect(calls()).toBe(1);
+    expect((await press()).refreshed).toBe(true);
+    expect(calls()).toBe(2);
   });
 });
 
@@ -1097,7 +1193,7 @@ describe("the refusal back-off, through the cron", () => {
  * before adding a fifth; adding one to /api/health is what prompted the check.
  */
 describe("the last run is answered from an index", () => {
-  // The newest run of any zone: the refusal probe's "when did a request last leave".
+  // The newest run of any zone: the refusal back-off's "when did a request last leave".
   it("walks the index instead of scanning the table", async () => {
     const [detail] = await plans((db) => lastRun(db, false, null));
     expect(detail).toContain("ingest_runs_finished");
@@ -1105,8 +1201,8 @@ describe("the last run is answered from an index", () => {
   });
 
   // One zone's newest run is what /api/status asks on every poll. Walking the any-zone index
-  // and skipping the other zone's rows would still be cheap while both run all the time, and
-  // a full scan the day one of them stops — so each has an index that leads with the zone.
+  // and skipping the other zone's rows would be a full scan the day one zone stops syncing — so
+  // each has an index that leads with the zone.
   it("finds one zone's last run with a seek, not by walking the other zone's", async () => {
     const [detail] = await plans((db) => lastRun(db, false, "tolima"));
     expect(detail).toContain("ingest_runs_zone_finished");
@@ -1122,8 +1218,8 @@ describe("the last run is answered from an index", () => {
     expect(detail).not.toContain("TEMP B-TREE");
   });
 
-  // sgcHealth's newest 429 or 503, on every tick and every POST /api/refresh. Until 0009 the
-  // planner walked ingest_runs_finished instead, because it matched the ORDER BY and the
+  // sgcHealth's newest 429 or 503, on every POST /api/refresh. Until 0009 the planner walked
+  // ingest_runs_finished instead, because it matched the ORDER BY and the
   // `finished_at IS NOT NULL`, and read the whole table whenever SGC had never rate-limited us:
   // production's top query by rows read, ~1,400 a call (D1 insights, 2026-10-01).
   it("finds the newest rate limit in the partial index, not by walking every run", async () => {
@@ -1132,7 +1228,8 @@ describe("the last run is answered from an index", () => {
     for (const detail of health) expect(detail).not.toContain("TEMP B-TREE");
   });
 
-  // backfillProgress and ingestSweep's order, on every wide tick: covering, so neither reads the table.
+  // backfillProgress and ingestSweep's order, on every press and every status poll: covering, so
+  // neither reads the table.
   it("reads a zone's sweep rows from the covering index alone", async () => {
     const covered = expect.stringContaining("COVERING INDEX ingest_runs_sweep");
     expect(await plans((db) => backfillProgress(db, NOW, "tolima"))).toEqual([covered]);
@@ -1156,7 +1253,7 @@ describe("the last run is answered from an index", () => {
  * Workers Logs dashboard can group by — and each one below is the answer to a question
  * that took hours to answer without it. See docs/operations.md, "Debugging production".
  */
-describe("what a tick writes to the log", () => {
+describe("what a sync writes to the log", () => {
   /** Every console line this block produced, as the single object each one must be. */
   function lines(): () => Record<string, unknown>[] {
     const out: Record<string, unknown>[] = [];
@@ -1173,26 +1270,21 @@ describe("what a tick writes to the log", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  // The line that would have caught the tickMinute fault in one query: for a day every
-  // tick took the fast lane, 195 times in a row, and nothing anywhere wrote the lane down.
-  it("says which lane the tick chose, and which minute chose it", async () => {
+  // "The button does nothing" is the report we would get, and the reason is otherwise nowhere.
+  it("says why a press stood down, and how long it was asked to wait", async () => {
     await completeBackfill();
     serving(FULL);
     const got = lines();
 
-    // The hour's four ticks, each of which should say something different about itself. Each
-    // zone says so on its own line.
-    const planned = () => withMsg(got(), "tick planned").filter((l) => l.zone === "tolima");
-    await tick(15);
-    expect(planned()[0]).toMatchObject({ level: "info", tickMinute: 15, lanes: ["fast"] });
-    expect(withMsg(got(), "tick stood down")[0]).toMatchObject({ zone: "choco", tickMinute: 15, lanes: [] });
-
-    await tick(30);
-    expect(planned()[1]).toMatchObject({ tickMinute: 30, lanes: ["wide"] });
-
-    await tick(0);
-    expect(planned()[2]).toMatchObject({ tickMinute: 0, lanes: ["wide", "sweep"] });
-    expect(withMsg(got(), "tick planned").at(-1)).toMatchObject({ zone: "choco", lanes: ["wide", "sweep"] });
+    await press("tolima");
+    await press("tolima");
+    expect(withMsg(got(), "refresh stood down")[0]).toMatchObject({
+      level: "info",
+      zone: "tolima",
+      trigger: "manual",
+      why: "throttled",
+      retryAfterS: expect.any(Number),
+    });
   });
 
   it("records what the run cost and what it changed", async () => {
@@ -1200,17 +1292,17 @@ describe("what a tick writes to the log", () => {
     serving(FULL);
     const got = lines();
 
-    await tick(15);
+    await press("tolima");
     const ok = withMsg(got(), "ingest ok")[0]!;
-    expect(ok).toMatchObject({ level: "info", lane: "fast", trigger: "cron" });
+    expect(ok).toMatchObject({ level: "info", lane: "wide", trigger: "manual", zone: "tolima" });
     expect(ok.runId).toEqual(expect.any(Number));
     expect(ok.durationMs).toEqual(expect.any(Number));
     // Answers "is SGC slow?" and "how big are these responses?", neither of which anything
     // recorded before — the second has been an open audit question with no measurement.
     expect(ok.sgcMs).toEqual(expect.any(Number));
     expect(ok.sgcChars as number).toBeGreaterThan(0);
-    // The fast tick asks for Chaparral, answered with the empty page: 7,679 bytes on disk, which
-    // is the figure the byte cap is held to, and 7,657 characters.
+    // Chaparral is answered with the empty page: 7,679 bytes on disk, which is the figure the byte
+    // cap is held to, and 7,657 characters.
     expect(ok).toMatchObject({ sgcBytes: 7_679, sgcChars: 7_657 });
   });
 
@@ -1222,7 +1314,7 @@ describe("what a tick writes to the log", () => {
     );
     const got = lines();
 
-    await tick(15);
+    await press("tolima");
     expect(withMsg(got(), "ingest failed")[0]).toMatchObject({
       level: "error",
       zone: "tolima",
@@ -1240,12 +1332,19 @@ describe("what a tick writes to the log", () => {
     const analytics = { writeDataPoint: (p?: AnalyticsEngineDataPoint) => points.push(p!) } as AnalyticsEngineDataset;
     lines();
 
-    await worker.scheduled!(
-      { cron: "*/15 * * * *", scheduledTime: Date.UTC(2026, 8, 19, 12, 15, 45), noRetry() {} },
+    const ctx = createExecutionContext();
+    await worker.fetch(
+      new Request("https://x.test/api/refresh?zone=tolima", {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-origin" },
+      }),
       { ...env, INGEST_ANALYTICS: analytics },
+      ctx,
     );
-    expect(points).toHaveLength(1);
-    expect(points[0]!.doubles![9]).toBe(7_679);
+    await waitOnExecutionContext(ctx);
+    // The trailing day and the revision chunk, both answered with the empty page.
+    expect(points).toHaveLength(2);
+    expect(points.map((p) => p.doubles![9])).toEqual([7_679, 7_679]);
   });
 
   it("puts an SGC refusal on the line at error, with its status", async () => {
@@ -1253,7 +1352,7 @@ describe("what a tick writes to the log", () => {
     serves(() => new Response("", { status: 410 }));
     const got = lines();
 
-    await tick(30); // the wide tick, which never stands down for SGC's health
+    await press();
     expect(withMsg(got(), "ingest failed")[0]).toMatchObject({ level: "error", httpStatus: 410, lane: "wide" });
   });
 
@@ -1262,13 +1361,13 @@ describe("what a tick writes to the log", () => {
   it("warns when it finds a run the Worker was killed in the middle of", async () => {
     await completeBackfill();
     await env.DB.prepare(`INSERT INTO ingest_runs (started_at, trigger, window_start, window_end)
-                VALUES (?, 'cron', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
+                VALUES (?, 'manual', '2026-09-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z')`)
       .bind(new Date(Date.now() - 10 * 60_000).toISOString())
       .run();
     serving(FULL);
     const got = lines();
 
-    await tick(15);
+    await press();
     expect(withMsg(got(), "reaped abandoned runs: an invocation was killed")[0]).toMatchObject({
       level: "warn",
       reaped: 1,
@@ -1424,23 +1523,7 @@ describe("two zones", () => {
     expect((await progress("choco")).backfill.done).toBe(0);
   });
 
-  it("asks for Chocó on the wide ticks only, after Chaparral, in the same invocation", async () => {
-    await completeBackfill();
-    const calls = serving(FULL);
-
-    await tick(15);
-    expect([calls(), calls.tolima()]).toEqual([0, 1]);
-
-    await tick(30);
-    expect([calls(), calls.tolima()]).toEqual([1, 2]);
-    const last = (await env.DB.prepare(
-      "SELECT zone, window_start, started_at FROM ingest_runs ORDER BY id DESC LIMIT 1",
-    ).first<Record<string, string>>())!;
-    expect(last.zone).toBe("choco");
-    expect(last.window_start).toBe(expectedWindowStart(last.started_at!, 3));
-  });
-
-  // The throttle is about one catalogue's freshness: Chocó's tick a minute ago does not make
+  // The throttle is about one catalogue's freshness: Chocó's sync a moment ago does not make
   // Chaparral's data any newer.
   it("lets the button refresh one zone right after the other zone has run", async () => {
     await completeBackfill();
@@ -1448,34 +1531,38 @@ describe("two zones", () => {
     expect(((await (await call("/api/refresh", { method: "POST" })).json()) as any).refreshed).toBe(true);
     const res = (await (await call("/api/refresh?zone=tolima", { method: "POST" })).json()) as any;
     expect(res.refreshed).toBe(true);
-    expect(res.lastSuccessfulRun.windowStart).toBe(expectedWindowStart(res.lastSuccessfulRun.startedAt, 1));
-    expect([calls(), calls.tolima()]).toEqual([1, 1]);
+    expect((await latestRun("tolima")).trigger).toBe("sweep");
+    const trailing = (await env.DB.prepare(
+      "SELECT window_start, started_at FROM ingest_runs WHERE zone = 'tolima' AND trigger = 'manual'",
+    ).first<Record<string, string>>())!;
+    expect(trailing.window_start).toBe(expectedWindowStart(trailing.started_at!, 1));
+    expect([calls(), calls.tolima()]).toEqual([2, 2]);
   });
 
   // Chocó's own failure — a timeout on its wider window, say — is not SGC being unwell for
   // Chaparral. Refusals and rate limits are still read across zones; a plain failure is the zone's.
-  it("keeps Chaparral's fast lane open when only Chocó's last run failed", async () => {
+  it("keeps Chaparral's catch-up open when only Chocó's last run failed", async () => {
     await completeBackfill();
+    await unloadChunk("tolima", "newest");
     const calls = serving(FULL);
     await recordRun(1, { zone: "tolima" }, new Date(Date.now() - 120_000));
     await recordRun(0, { http_status: 500 }, new Date(Date.now() - 60_000));
 
-    await tick(15);
+    expect((await press("tolima")).refreshed).toBe(true);
     expect(calls.tolima()).toBe(1);
   });
 
-  // One door: a refusal persisting past its grace holds every zone to one probe an hour.
-  it("holds the other zone's probe to the same hour while SGC refuses us", async () => {
+  // One door: a refusal persisting past its grace holds every zone to one request an hour.
+  it("holds the other zone's press to the same hour while SGC refuses us", async () => {
     await completeBackfill();
-    const calls = serves(
-      () => new Response("", { status: 410 }),
-      () => new Response("", { status: 410 }),
-    );
+    const calls = serving(FULL);
     const ago = (min: number) => new Date(Date.now() - min * 60_000);
     await recordRun(0, { http_status: 410 }, ago(120));
-    await recordRun(0, { http_status: 410 }, ago(61));
+    await recordRun(0, { http_status: 410 }, ago(20));
 
-    await tick(30, { hour: 13 });
-    expect([calls(), calls.tolima()]).toEqual([0, 1]);
+    const res = await press("tolima");
+    expect(res.refreshed).toBe(false);
+    expect(res.retryAfterS).toBeGreaterThan(2300);
+    expect(calls.tolima()).toBe(0);
   });
 });

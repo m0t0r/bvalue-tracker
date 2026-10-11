@@ -3,11 +3,16 @@
 [![CI](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/m0t0r/bvalue-tracker/actions/workflows/ci.yml)
 [![Mozilla Observatory](https://img.shields.io/mozilla-observatory/grade/bvalue.site)](https://developer.mozilla.org/en-US/observatory/analyze?host=bvalue.site)
 
-A live monitor for the earthquake sequence in Chocó, Colombia, that followed the
+A monitor for the earthquake sequence in Chocó, Colombia, that followed the
 M7.4 San José del Palmar earthquake of 2026-08-10 12:34:27 UTC, and for the
 earthquake swarm at Chaparral, Tolima, that began on 2026-09-20. It keeps a
-catalogue of each up to date from the Colombian Geological Survey (SGC), and
-computes its Gutenberg–Richter **b-value**, over the whole catalogue and over time.
+catalogue of each from the Colombian Geological Survey (SGC), and computes its
+Gutenberg–Richter **b-value**, over the whole catalogue and over time.
+
+**Support mode, since 2026-10-11.** The project no longer tracks either zone in real time.
+Nothing reads SGC on a schedule: the catalogue is brought up to date only when a reader presses
+**"Sincronizar ahora"** ("Sync now"), and the page says when it was last synced. See
+[Ingest](docs/ingest.md#on-demand-only).
 
 **Live:** <https://bvalue.site>
 
@@ -26,11 +31,12 @@ OpenStreetMap · © Mapterhorn.</sub>
 
 - **Two zones, one tab each, named by department.** Chocó (the M7.4 sequence) and Tolima (the
   Chaparral swarm) each have their own catalogue, figures and page, and a shared link previews
-  as the zone it opens. The site opens on Tolima, where the activity is; Chocó is at `/choco`.
-  Tolima is re-read every 15 minutes and Chocó every 30.
-- **Up-to-date catalogue.** A Cron Trigger re-reads SGC every 15 minutes, and a
-  rotating sweep catches the revisions SGC makes to older events. Events SGC
-  withdraws are marked as removed, never deleted.
+  as the zone it opens. The site opens on Tolima, where the activity was; Chocó is at `/choco`.
+- **Synced on demand.** "Sincronizar ahora" brings a zone's catalogue up to date from SGC: one
+  request per missing day (Chaparral) or week (Chocó) while the zone is behind, then the last days
+  again at most once every 15 minutes, with one older chunk an hour for SGC's late revisions. The same press
+  refreshes USGS's context and the sea forecast. Events SGC withdraws are marked as removed, never
+  deleted. Until 2026-10-11 a Cron Trigger did this every 15 minutes.
 - **b-value with its caveats.** Magnitude of completeness (Mc) by maximum curvature,
   b with its error bar, b over time with one fixed Mc, and a comparison by magnitude
   type. The page states plainly that a b-value describes the sequence and is not a
@@ -42,7 +48,7 @@ OpenStreetMap · © Mapterhorn.</sub>
   set of filters.
 - **"What is happening?" (`/insights`).** A second page that explains the two zones in plain words
   to a reader in the coffee region who feels the larger events. It has three tabs: a scrolling story
-  and a set of questions, both drawn with D3 from the live catalogue, and a 3D view of the region
+  and a set of questions, both drawn with D3 from the synced catalogue, and a 3D view of the region
   (see [below](#3d-viewer)). Every sentence about the data is chosen by a tested rule, so it cannot
   drift from the figures beside it.
 - **A pixel-art background drawn from the catalogue.** Behind the header and in the margins, never
@@ -62,7 +68,7 @@ OpenStreetMap · © Mapterhorn.</sub>
 The "In 3D" tab of `/insights` is a block of the region, 500 km across and 240 km deep. A slowly
 turning preview on the tab opens a full-screen viewer, where you can turn and zoom the block.
 
-- **What it shows.** Every event in the live catalogue at its depth; the Nazca plate sinking under
+- **What it shows.** Every event in the synced catalogue at its depth; the Nazca plate sinking under
   Colombia; the plane where the rock broke in the M7.4; the mountains, raised ×5 by default so they
   can be seen at this scale; towns pinned on top, each with its distance from Pereira; and a sea that
   swells with the day's forecast.
@@ -79,7 +85,7 @@ turning preview on the tab opens a full-screen viewer, where you can turn and zo
 
   | Layer | Source |
   |---|---|
-  | Events | The live SGC catalogue |
+  | Events | The SGC catalogue, as last synced |
   | Subducting plate | USGS's [Slab2](https://doi.org/10.5066/F7PV6JNV) model, with its stated uncertainty |
   | M7.4 rupture | USGS's finite-fault model for the mainshock |
   | Sea floor | [GEBCO 2020](https://doi.org/10.5285/a29c5465-b138-234d-e053-6c86abc040b9) bathymetry, every 0.05° |
@@ -89,7 +95,7 @@ turning preview on the tab opens a full-screen viewer, where you can turn and zo
   | Sea colour | ESA's [Ocean Colour CCI](https://esa-oceancolour-cci.org/) |
 
   The plate, the rupture, the relief, the sea floor and the map are prepared once and committed;
-  only the events and the forecast are live. How to regenerate them is in
+  only the events and the forecast change, with each sync. How to regenerate them is in
   [Development](docs/development.md#the-3d-blocks-map).
 
 ## How it works
@@ -103,16 +109,16 @@ flowchart LR
   page["React page"]
   subgraph worker["Cloudflare Worker (Hono)"]
     direction TB
-    cron["Cron Trigger<br/>every 15 min"]
-    daily["Cron Trigger<br/>daily"]
+    sync["POST /api/refresh<br/>(Sincronizar ahora)"]
     api["Same-origin JSON API"]
   end
 
-  sgc <-- "POST / HTML" --> cron
-  cron -- "parsed events" --> d1
-  usgs -- "GeoJSON / JSON" --> daily
-  meteo -- "JSON" --> daily
-  daily -- "digests" --> d1
+  page -- "a reader's press" --> sync
+  sgc <-- "POST / HTML" --> sync
+  sync -- "parsed events" --> d1
+  usgs -- "GeoJSON / JSON" --> sync
+  meteo -- "JSON" --> sync
+  sync -- "digests" --> d1
   d1 --> api
   api -- JSON --> page
 ```
@@ -121,13 +127,14 @@ flowchart LR
   a date range and bounding box, with id, time, location, depth, magnitude and type,
   phases, RMS, GAP, hypocentral errors and review status. The response is HTML; there
   is no official API, so it is parsed.
-- **Context from USGS:** once a day the Worker finds each zone's mainshock in USGS's catalogue and
-  keeps a digest of what USGS publishes about it: felt reports ("Did You Feel It?"), modelled
-  shaking (PAGER) and the aftershock forecast. See [Ingest](docs/ingest.md#the-daily-usgs-job).
-  The same run stores Open-Meteo's three-day marine forecast, which the 3D block's sea swells with.
-  See [Ingest](docs/ingest.md#the-daily-sea-state-job).
+- **Context from USGS:** on a sync, at most once every 15 minutes, the Worker finds each zone's
+  mainshock in USGS's catalogue and keeps a digest of what USGS publishes about it: felt reports
+  ("Did You Feel It?"), modelled shaking (PAGER) and the aftershock forecast. See
+  [Ingest](docs/ingest.md#usgs-and-the-sea-on-a-sync). The same run stores Open-Meteo's three-day
+  marine forecast, which the 3D block's sea swells with. See
+  [Ingest](docs/ingest.md#the-daily-sea-state-job).
 - **Backend:** one Cloudflare Worker ([Hono](https://hono.dev)) serves the page and
-  a JSON API, stores events in D1, and runs the ingest on a Cron Trigger. It fits the
+  a JSON API, stores events in D1, and runs the ingest when a reader syncs; it has no Cron Trigger. It fits the
   Workers free plan, and so does the domain in front of it, a Cloudflare zone on the free plan
   (see [Deployment](docs/deployment.md#the-domain)).
 - **Frontend:** React with shadcn/ui, TanStack Query, Form and Table, D3 and

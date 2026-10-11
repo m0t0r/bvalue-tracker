@@ -40,13 +40,15 @@ export const MAX_RETRIES = 3;
 export const getEvents = (zone: ZoneId) => json<StoredEvent[]>(eventsPath(zone));
 export const getContext = (zone: ZoneId) => json<ContextResponse>(contextPath(zone));
 export const getStatus = (zone: ZoneId) => json<StatusResponse>(statusPath(zone));
-/** The 3D block's sea-state forecast; null before the daily job's first run. Not preloaded: only the 3D tab asks. */
+/** The 3D block's sea-state forecast; null until a sync has stored one. Not preloaded: only the 3D tab asks. */
 export const getSea = () => json<SeaForecast | null>("/api/sea");
 /**
- * The one request that reaches SGC. From a prerendered page it waits until the reader opens it, whoever
- * asks: the reader may have pressed the link and slid off it (`src/lib/prerender.ts`).
+ * The one request that reaches SGC: one step of "Sincronizar ahora". `context` asks the Worker to
+ * refresh USGS's products and the sea forecast too, when they are due; the page sends it on the first
+ * step of a press only. From a prerendered page it waits until the reader opens it, whoever asks: the
+ * reader may have pressed the link and slid off it (`src/lib/prerender.ts`).
  */
-export const postRefresh = async (zone: ZoneId) => {
+export const postRefresh = async (zone: ZoneId, { context = false }: { context?: boolean } = {}) => {
   await whenActivated();
-  return json<StatusResponse>(`/api/refresh?zone=${zone}`, { method: "POST" });
+  return json<StatusResponse>(`/api/refresh?zone=${zone}${context ? "&context=1" : ""}`, { method: "POST" });
 };

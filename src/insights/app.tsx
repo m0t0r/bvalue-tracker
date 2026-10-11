@@ -92,8 +92,21 @@ export function InsightsApp() {
   // The static copy in the HTML selects no tab, since it cannot see the query string, and hydration
   // must draw what it has. The tab is chosen in the render after, in the same frame (`useHydrated`).
   const hydrated = useHydrated();
-  const { data, context, forecast, isPending, isError, error, retrying, retry, incomplete, staleSince, catalogues } =
-    useInsights();
+  const {
+    data,
+    context,
+    forecast,
+    isPending,
+    isError,
+    error,
+    retrying,
+    retry,
+    incomplete,
+    syncedAt,
+    clock,
+    staleSince,
+    catalogues,
+  } = useInsights();
   // The tabs are drawn from a deferred copy, so the render the data triggers (hundreds of ms of it
   // on a phone) runs as a transition React can interrupt, not one task that blocks input. It used
   // to be interruptible by accident: `lazy`'s retry after its suspension was (see `chunks`). And a
@@ -107,14 +120,17 @@ export function InsightsApp() {
   const shown = useDeferredValue(loaded);
   // One notice at a time, and never beside the load error, which replaces the page. Data that stopped
   // updating comes before an unfinished history: it is the one the reader cannot see for themselves,
-  // and it holds for the back-fill's own progress too, which is as old.
+  // and it holds for the back-fill's own progress too, which is as old. Then a last sync over a day
+  // old, which every claim is made as of (`asOf`): with syncs on demand, the commonest of the three.
   const notice = isError
     ? null
     : staleSince !== null && data
-      ? { title: c.staleTitle, body: c.staleBody(staleSince, data.now, lang) }
+      ? { title: c.staleTitle, body: c.staleBody(staleSince, clock, lang) }
       : incomplete
         ? { title: c.incompleteTitle, body: c.incompleteBody }
-        : null;
+        : syncedAt !== null
+          ? { title: c.asOfTitle, body: c.asOfBody(syncedAt, lang) }
+          : null;
   const tabList = useRef<HTMLDivElement>(null);
   const footer = useRef<HTMLElement>(null);
 

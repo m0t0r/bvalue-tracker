@@ -599,7 +599,7 @@ export const FORECAST_MAX_AGE_DAYS = 14;
 
 /**
  * When a stored forecast stops being shown: USGS's next update, or 14 days after issue without one.
- * `context-refresh.ts` asks for the next forecast from the same moment.
+ * The next forecast arrives with the first sync after it (`POST /api/refresh?context=1`).
  */
 export const forecastStaleAt = (d: ForecastDigest) =>
   d.nextUpdateAt === null ? Date.parse(d.issuedAt) + FORECAST_MAX_AGE_DAYS * DAY : Date.parse(d.nextUpdateAt);

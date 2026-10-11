@@ -4,14 +4,15 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import MARINE from "../../test/fixtures/open-meteo-marine-2026-09-26.json?raw";
 import type { SeaForecast } from "../api-types.ts";
-import { PRODUCTS_CRON } from "../external.ts";
 import worker from "../index.ts";
-import { SEA_DIGEST_VERSION, digestSea } from "../sea.ts";
+import { silentLogger } from "../log.ts";
+import { SEA_DIGEST_VERSION, digestSea, refreshSea } from "../sea.ts";
 
 /**
- * The daily sea-state job and `GET /api/sea`. Open-Meteo is answered from its reply captured on
- * 2026-09-26 for the block's point (Météo-France's model, 72 hours); USGS finds no mainshock in an
- * empty catalogue and asks nothing. An unhandled request is an error, so nothing reaches the network.
+ * The sea-state job and `GET /api/sea`. Open-Meteo is answered from its reply captured on 2026-09-26
+ * for the block's point (Météo-France's model, 72 hours). A sync runs the job (`external.test.ts`,
+ * "on a sync"); here it is called directly. An unhandled request is an error, so nothing reaches the
+ * network.
  */
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -33,8 +34,9 @@ function openMeteo(reply: () => Response = () => HttpResponse.text(MARINE)): URL
   return asked;
 }
 
+/** Runs the job as of `at`, the instant it stores as `fetched_at`. */
 async function runDaily(at = Date.UTC(2026, 8, 26, 11, 7)) {
-  await worker.scheduled!({ cron: PRODUCTS_CRON, scheduledTime: at, noRetry() {} }, env);
+  await refreshSea({ db: env.DB, log: silentLogger, now: new Date(at) });
 }
 
 async function sea(): Promise<SeaForecast | null> {
@@ -120,7 +122,7 @@ describe("digestSea", () => {
   });
 });
 
-describe("the daily sea-state job", () => {
+describe("the sea-state job", () => {
   it("asks Open-Meteo once, for the one URL, and serves what it stored", async () => {
     const asked = openMeteo();
     expect(await sea()).toBeNull();

@@ -11,7 +11,9 @@ followSystemTheme();
 installErrorReporting();
 
 // The monitor's settings (src/main.tsx), so the two pages behave alike.
-const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000, retry: shouldRetry } } });
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 60_000, retry: shouldRetry, refetchOnWindowFocus: false } },
+});
 
 // The built page has its header and skeleton in the HTML, and React adopts them, as on the monitor.
 mountPage(

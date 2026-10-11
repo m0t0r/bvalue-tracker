@@ -294,8 +294,9 @@ those, so an untouched tab shows no chips on either side.
     that blocks it, so each case needs a fresh browser.
 - **What is a Chocó finding stays on Chocó's tab**: the depth-groups card and the magnitude chart's
   group legend and tooltip line (`depthClusters` in `core/zones.ts`). The copy that differs lives in
-  `t.zones[zone]` — title, subtitle, back-fill text and the caveats — and the update interval is a
-  number from `worker/plan.ts` (`updateEveryMin`), never written into a string.
+  `t.zones[zone]` — title, subtitle, back-fill text, the catch-up's progress line (`syncStep`: days on
+  Chaparral, weeks on Chocó) and the caveats. The update interval the footer used to quote
+  (`updateEveryMin`) went with the cron on 2026-10-11.
 - **The mainshock is detected, on every tab alike** (`view.mainshock` from `pageView`, over the
   whole catalogue the page holds — never the filtered view; [the rule](science.md#the-mainshock-detected-from-the-catalogue-never-pinned-from-2026-09-24)).
   The map's ring and its legend sentence (`mapRing`), the star, the marker on "Valor b en el
@@ -349,9 +350,9 @@ draws its own copy of any of them:
   The 3D viewer's own language button is not this: it sits in a different header.
 
 The words are shared as well as the markup: `disclaimer`, `timeNote`, `timeNoteCsv` and
-`completesItself` ("Se completa solo.", the back-fill notice's promise on both pages; it does not
-add "no hace falta hacer nada", which the monitor's "Cargar lo que falta ahora" beside it would
-contradict) are in `i18n.tsx`, which `/insights` already reads for the theme button's names, and its
+`completesOnSync` ("Se completa con la próxima sincronización.", the gap notice's line on both pages;
+it was "Se completa solo." until 2026-10-11, when nothing completes a history any more but a sync) are
+in `i18n.tsx`, which `/insights` already reads for the theme button's names, and its
 own dictionary has no copy of them. All three components are markup with no state, so the build draws
 the headers into the HTML as it did, and the hydration tests (`page-root.test.ts`,
 `insights/hydration.test.ts`) pass unchanged.
@@ -405,7 +406,7 @@ shared chunks of both pages.
     as many lines as in Geist in 22 of 22 cases (11 widths from 320 to 1350 px, both languages), so the
     title, subtitle and tabs keep their place when Geist arrives. The back link and the tabs are ~3 px
     narrower in the stand-in, which moves nothing below them. Measured again on 2026-10-01 when the link
-    went from "Volver al inicio" to **"Ver los datos en vivo"** / "See the live data" (issue #143, owner's
+    went from "Volver al inicio" to "Ver los datos en vivo" / "See the live data" (issue #143, owner's
     choice: the old words could be read as "back to the top", beside the round "Volver arriba" button):
     22 of 22 at 320, 360, 375, 390, 414, 480, 640, 768, 1024, 1280 and 1350 px, in both faces, the top
     row one line (28 px) at every width with the controls beside the link, and the header's height equal
@@ -431,19 +432,24 @@ shared chunks of both pages.
   The story's chunk is also preloaded from the HTML, with the data, at every width (issue #108;
   `preloadStoryTab` in `vite.config.ts`): the hero needs both, and the story is the bare URL. A tab
   opened later still loads when it is opened.
-- **Live data, kept current like the monitor.** `useInsights` reads `/api/events` for both zones under
-  `["events", zone]`, and computes every claim with `insights()` over them and a clock rounded to
-  the minute. Status is polled every minute and on returning to the tab, and a zone's events are
-  refetched when its last ingest changes, the monitor's own rule, so a page left open does not keep
-  counting "the last 7 days" over a catalogue that stopped growing. The two pages are separate
-  documents and share no cache. Status also drives the warning while either zone's history is
-  incomplete (`backfill.done < total`); the page never starts the back-fill, so nothing on it can
-  reach SGC. The Worker's cron carries it on, so the notice says it completes by itself. **A refetch
+- **The synced data, kept current like the monitor.** `useInsights` reads `/api/events` for both
+  zones under `["events", zone]`, and computes every claim with `insights()` over them, **as of where
+  the older zone's synced data stops** (`syncedThrough` and `asOf`, from 2026-10-11; [the science](science.md#the-insights-page-insights-from-2026-09-24)),
+  or the clock rounded to the minute if that is earlier or a status is unknown. It waits for both
+  statuses before drawing, so no claim is redrawn under the reader. Status is polled every minute (not
+  on returning to the tab, since 2026-10-11), and a zone's events are refetched when its last sync
+  changes, the monitor's own rule. The two pages are separate documents and share no cache. Status
+  also drives the warning while either zone's history has gaps (`backfill.gaps > 0`); the page has no
+  sync button, so nothing on it can reach SGC, and the notice says the next sync completes it. Once
+  the last sync is over a day old, a third notice says the figures stop there: "Cifras hasta la última
+  sincronización · Las cifras describen la secuencia hasta el <día>…", which points to the
+  button on the data page. The back link reads **"Ver los datos y gráficos"** / "See the data and
+  charts" since that date: "en vivo" was no longer true. **A refetch
   that fails keeps the claims, and the page says so** (2026-09-26): `staleSince` over both catalogues
   and both statuses puts a caution notice in the back-fill notice's slot ("Los datos no se están
   actualizando · No se pudieron actualizar: lo que ves es de las 12:35, y se actualizará solo.",
   worded as the monitor's line, the day only when it is not today). One notice at a time: the load
-  error, then stale data, then an unfinished history. The notice is a `note`; it is announced from an
+  error, then stale data, then an unfinished history, then a sync over a day old. The notice is a `note`; it is announced from an
   always-mounted sr-only `role="status"`, since a live region inserted with its text already in it is
   often not read out (the back-fill notice goes the same way). Checked with a 503 on `/api/` and
   offline, and back.
@@ -653,9 +659,10 @@ shared chunks of both pages.
   `useInsights` asks for it beside the catalogues and counts it in `isPending`, with no retry. A late
   answer or a retried 5xx would have inserted a question above the reader and renumbered the rest
   (code review, 2026-09-25). **Whether question 2 exists is decided by the first settled answer, for
-  good** (`keepFeltFromFirst` in `context-refresh.ts`): a later answer, fetched to keep the forecast
-  current (see its bullet below), may update USGS's felt figures but never adds or removes one, so no
-  refetch renumbers the questions. After a failed first load the page never asks again while open.
+  good**. Until 2026-10-11 a later answer, fetched to keep the forecast current, could update USGS's
+  felt figures but never add or remove one (`keepFeltFromFirst`); since then the page asks once per
+  load and shows that answer, so nothing renumbers the questions. After a failed first load the page
+  never asks again while open.
   The first answer is kept with React's set-during-render pattern, not an effect, so no extra commit
   (and no second skeleton frame) follows it. It is a few hundred bytes and goes
   out with the much larger catalogues, so the wait costs nothing measurable; a failure settles at
@@ -755,17 +762,11 @@ shared chunks of both pages.
   purpose, so the number is never read without its sentence. Its content arrives with
   `/api/context`, which the page already waits for, so it never appears under the reader on load. It
   can leave under one: on a page left open across USGS's next update it is dropped then, the
-  science's staleness rule winning over layout (at most once a week). **The page then picks up the
-  next forecast on its own** (`context-refresh.ts`, tested): `refetchOnWindowFocus` and
-  `refetchOnReconnect` are a function, `contextRecheckDue`, over the answer and the last attempt, and
-  `staleTime` stays `Infinity` so nothing else refetches. A return to the tab asks again only once
-  the daily job has run since the forecast was due and since the page's last answer (its schedule is
-  `core/products.ts`, shared with the Worker), so the gap before the job, up to about 19 hours, sends
-  nothing; after a failed attempt, 10 minutes before the next; for two days past the due time at
-  most. Never with no forecast stored, and never after a failed first load. A failed refetch keeps
-  what the page has. The box coming or going on a return to the tab can move what is below it, once
-  a week at most; that is the price of a page that stays current without a reload, and browsers with
-  scroll anchoring keep the reader's line in place. The first version used a `staleTime` function and
+  science's staleness rule winning over layout (at most once a week). **Until 2026-10-11 the page then
+  picked up the next forecast on its own**, on a return to the tab once the daily job had run since the
+  due time (`contextRecheckDue` in `context-refresh.ts`, timed by `core/products.ts`). With no daily job
+  the next forecast is stored by the first sync after it, and the page asks `/api/context` once per
+  load (`staleTime: Infinity`, no refetch on focus or reconnect), so a reload after a sync shows it. The first version used a `staleTime` function and
   looked right in unit tests, but TanStack counts `staleTime` from the fetch, and a query with no data
   is always stale, so it neither refetched when due nor stayed quiet after a failed load; a browser
   check and the code review caught both. **Checked in a browser on 2026-09-25** (with the recheck then
@@ -1076,7 +1077,7 @@ itself) and pixel art (the owner's own suggestion).
     stray pixels sparking beside them. A crossfade came first and read as "naive". The page's words stay
     in the DOM throughout (selection, find, screen readers). The pointer on a control inside the header
     (the subtitle's "SGC" explainer) switches nothing, so its card opens over words that stay words.
-  - **"Actualizar ahora"** sends one ring of pixels out from where it was pressed, lighting the swarm's
+  - **"Sincronizar ahora"** (then "Actualizar ahora") sends one ring of pixels out from where it was pressed, lighting the swarm's
     events as it passes (`backdrop:ripple`, fired by `status-bar.tsx`).
 - **A phone has no hover, so it gets the epicenter** (owner's request): the largest event as a filled
   orange pixel disc with its magnitude, in the header's most open spot (the point furthest from every
@@ -1085,7 +1086,7 @@ itself) and pixel art (the owner's own suggestion).
   a phone would otherwise be static: the rings roll at 12 px/s, stepped at 15 frames a second, only
   while they are on screen in a visible tab and never under reduced motion. A scroll pushes them 1.5×
   its distance and brightens them (the header is on screen only for a little of a scroll, and the owner
-  asked for it "sensitive to the scroll"); a tap on the pattern and "Actualizar ahora" send one strong
+  asked for it "sensitive to the scroll"); a tap on the pattern and "Sincronizar ahora" send one strong
   ring. It is orange, not the red the owner first suggested: red is the page's colour for a failure,
   and Pereira's on `/insights`. Which version a device gets is `(hover: hover) and (pointer: fine)`.
 - **Reduced motion** keeps every picture and drops every movement: the lens and the text switch jump,
@@ -1102,6 +1103,24 @@ itself) and pixel art (the owner's own suggestion).
 
 Settled in a six-domain interface review (accessibility, layout, copy, typography,
 colour, motion). Keep to them:
+
+- **Synced on demand, and the page says so** (owner's decision, 2026-10-11; [Ingest](ingest.md#on-demand-only)).
+  The project is in support mode: nothing reads SGC on a schedule, and the page never asks it by
+  itself. The button is **"Sincronizar ahora" / "Sync now"** (it was "Actualizar ahora" / "Refresh
+  now"), and it is the only thing on either page that reaches SGC: not a load, not a return to the
+  tab (`useReturnToTab` is gone), not history left to load (the page used to start the back-fill
+  loop by itself). Under it the standing note is the **last sync**, which is the date every figure on
+  the page is as of: "Last sync: 17 days ago · 24 Sept, 13:02" from `sm` up, "Sincronizado: hace ~17 d"
+  on a phone (both read off the page, 2026-10-11). While a zone is behind, one press loads it chunk by
+  chunk, up to 31 requests (`syncZone`, `src/lib/sync.ts`), and the live line counts them
+  ("Sincronizando: día 3 de 12…", "semana" on Chocó, the count held together with no-break spaces so
+  "17…" never wraps alone); a press that stops at that cap says "Queda historial por cargar: vuelve a
+  pulsar para seguir.", and one a cooldown turns away part-way gives the wait ("Puedes volver a
+  intentarlo en 15 min."), never "Ya está al día", which is only true of a zone caught up. Events are
+  refetched once when the press ends, not once per chunk. The footer says it outright:
+  "Esta página no sigue la actividad en tiempo real. Los datos se cargan del SGC solo cuando alguien
+  pulsa «Sincronizar ahora»." (`syncNote`). The one-minute `/api/status` poll stays (owner's choice),
+  so an open tab picks up another reader's sync; `refetchOnWindowFocus` is off on both pages.
 
 - **The page opens in the browser's language** (owner's call, 2026-09-27; Spanish for everyone
   before that): the first of `navigator.languages` it has, by primary subtag, so `es-CO` is
@@ -1144,36 +1163,40 @@ colour, motion). Keep to them:
   magnitude; and the newest event's **place and magnitude** in the status bar, not its time (readers' request,
   2026-09-28: where and how strong is what they look for). A time that identifies no single event
   (the last SGC query) is not a link.
-- **The page says that it updates itself, in the footer** (`autoUpdateLong`): readers were
-  reloading it. It also said so under the refresh button until 2026-09-28, when the last SGC query
-  took that line (see the status bar below). The "15 minutes" in `autoUpdateLong` is the cron in
-  `wrangler.jsonc`, and `refreshWait`'s is `REFRESH_MIN_INTERVAL_S`, which is the same number for
-  the reason given under the budget. `src/lib/i18n.test.ts` holds both to it; change them
-  together.
+- **The footer says how the data arrives** (`syncNote`): that the page does not follow the activity
+  in real time, and that data comes from SGC only when someone presses "Sincronizar ahora", by the
+  button's own label. Until 2026-10-11 it said the page updated itself every N minutes
+  (`autoUpdateLong`, the cron's interval), because readers were reloading it. `syncWait`'s "15
+  minutos" is `REFRESH_MIN_INTERVAL_S`, read from `worker/plan.ts`; `src/lib/i18n.test.ts` holds the
+  footer to no interval and the wait to that number.
 - **The failed-ingest alert names no interval at all, and that is the settled answer.** It
   named the cron's own rate, in the one state where the fast lane has stood down and the
   cron's rate is wrong. It was changed to the wide tick's rate instead, and within the hour
-  the 410s began and the probe dropped to hourly, so that was wrong too. Three lane rules decide that number and the reader can act on none of them, so
-  `ingestFailedBody` promises a retry and stops there. What it must keep saying is "no hace
-  falta recargar"; `src/lib/i18n.test.ts` holds both halves. Do not put a number back.
-- **Three stand-down messages, three different truths.** `refreshWait` claims SGC answered
-  within the last five minutes, so it may only appear when nothing has failed;
-  `refreshStillFailing` replaces it beside the alert and must not tell the reader to press
-  again, because while SGC is refusing us the Worker's own wait is an hour (it says who is
-  retrying, "La página ya reintenta; no hace falta pulsar": it used to read "No se envió: ya hay un
-  reintento en camino", with no subject, to a reader who had pressed "Actualizar" and sent nothing
-  (issue #142). It is as short as it was on purpose: beside the button on a phone it is two lines, and
-  the first version, "La página ya reintenta la consulta; no hace falta pulsar de nuevo", was three); `refreshFailed`
-  is for the request from the *page* failing, which is a different thing again, and so names no SGC
-  ("No se pudo actualizar", not "No se pudo consultar al SGC": that request never reached it). While the data is
-  stale (`staleSince`), the stale line takes priority over all three: `refreshWait` would claim
-  fresh data, and `refreshFailed` blames SGC for what is usually the connection.
-- **The refresh button standing down is good news, not a countdown.** The throttle is the
-  cron's own period, so it refuses most presses, so `refreshWait` says the reader
-  already has the newest data instead of asking them to wait N minutes. It is a timed
-  factual claim, so it is hidden as soon as a run fails — otherwise it would sit on
-  screen asserting a recent successful query right beside the "la última consulta falló"
-  alert, and it sticks until the next press.
+  the 410s began and the probe dropped to hourly, so that was wrong too. Since 2026-10-11 nothing
+  retries by itself, so `ingestFailedBody` no longer promises a retry: "Se muestran los últimos datos
+  guardados. Vuelve a intentarlo más tarde con «Sincronizar ahora»; no hace falta recargar." The wait
+  that applies is on the line under the button after a press (`syncRetryIn`, below). What the alert
+  must keep saying is "no hace falta recargar"; `src/lib/i18n.test.ts` holds that, the button's
+  label and no number. Do not put a number back.
+- **Three answers to a press that did not sync, three different truths.** `syncWait` ("Ya está al
+  día: se sincronizó hace menos de 15 minutos.") claims the zone was synced inside the throttle, so it
+  appears only when the zone's own last run succeeded less than 15 minutes ago and the zone is caught
+  up. `syncRetryIn` ("Puedes volver a intentarlo en 15 min.") replaces it in every other stand-down:
+  the Worker is holding a wait for SGC's sake (a failed sync, a 429's cooldown or a refusal's hour, from
+  `retryAfterS`), and since 2026-10-11 nothing retries by itself, so the line gives that wait. Not
+  inferred from a failed run alone: SGC's health is read across zones, so a refusal of Chocó turns a
+  Chaparral press away too, and "Ya está al día" would then be false (code review, 2026-10-11). Until then it was `refreshStillFailing`, "La página ya
+  reintenta; no hace falta pulsar", which was true while a cron retried and would now be false. It is
+  short on purpose: beside the button on a phone it must stay within two lines. `syncFailed` is for
+  the request from the *page* failing, which is a different thing again, and so names no SGC ("No se
+  pudo sincronizar", not "No se pudo consultar al SGC": that request never reached it). While the data
+  is stale (`staleSince`), the stale line takes priority over all three: `syncWait` would claim fresh
+  data, and `syncFailed` blames the sync for what is usually the connection.
+- **A press standing down inside the throttle is good news, not a countdown.** `syncWait` says the
+  zone is up to date instead of asking the reader to wait N minutes. It is a timed factual claim, so
+  it is hidden as soon as a run fails — otherwise it would sit on screen asserting a recent sync right
+  beside the "La última sincronización con el SGC falló" alert — and it sticks until the next press.
+  Until 2026-10-11 the throttle was the cron's own period, so it refused most presses.
 - **Decimal point everywhere** ("M7.4", "Mc = 2.0"), matching SGC, the CSV and every
   computed number. Never mix in decimal commas.
 - Terms: "sismo" only for the mainshock, "evento" for catalogue entries, "valor b",
@@ -1222,8 +1245,9 @@ colour, motion). Keep to them:
   (M 2.5)", place first and all of it one link to SGC's page for the event, with how long ago and
   the date under it.
   Then "Eventos" and "Sismo principal". "Última consulta al SGC" is no longer a stat: it is the
-  line under the refresh button, which it concerns, in the place of "Se actualiza sola cada N
-  minutos" (the footer still says that): how long ago, and from `sm` up the clock time too.
+  line under the button, which it concerns, in the place of "Se actualiza sola cada N minutos": how
+  long ago, and from `sm` up the date and time too. Since 2026-10-11 it reads "Última
+  sincronización" (see "Synced on demand" above).
   - **The hint under "Eventos" says what the total is the total of, and only while a filter narrows
     the count** (issue #142, 2026-10-01): "de 1037 en el catálogo" / "of 1,037 in the catalogue", as the
     scope bar's "Mostrando 639 de 786 eventos" says it (it was a bare "/ 1037": of what?). On a phone it
@@ -1277,9 +1301,10 @@ colour, motion). Keep to them:
     it competed with the b-value's own large figure just below, and the b-value leads the page. C
     listed the three newest events; on Tolima all three read "Chaparral, Tolima", and it cost 29 px
     on a phone.
-  - **While a run has failed**, the note says "Última consulta correcta al SGC" ("Consulta
-    correcta" on a phone): its time is the last query that worked, and "Última consulta al SGC:
-    hace 2 horas" beside "La última consulta al SGC falló" read as a contradiction. The line stays
+  - **While a run has failed**, the note says "Última sincronización correcta" ("Última correcta" on
+    a phone; "Última consulta correcta al SGC" until 2026-10-11): its time is the last sync that
+    worked, and "Última consulta al SGC: hace 2 horas" beside "La última consulta al SGC falló" read
+    as a contradiction. The line stays
     shown, unlike the old cadence note, which went quiet because it promised a cadence that had
     stopped. It is outside the live region: it changes every minute and would be read out as news.
 - **The status bar is a grid on a phone and one wrapping row from `sm` up** (owner's call,
@@ -1291,8 +1316,8 @@ colour, motion). Keep to them:
   - **On a phone** the newest event spans both columns, since a place such as "El Litoral del San
     Juan (Docordo), Choco" needs the width, and "Eventos" and "Sismo principal" share the row under
     it. The time under the event leads with how long ago, in `relativeTimeShort` ("hace ~2 h"),
-    then the clock time, with the day only when it was not today (`fmtClock`). The last-query note
-    sits beside the button ("Consulta al SGC: hace 7 min"). A **hint** may wrap inside its column
+    then the clock time, with the day only when it was not today (`fmtClock`). The last-sync note
+    sits beside the button ("Sincronizado: hace 7 min"). A **hint** may wrap inside its column
     (the mainshock's does, "el mayor, solo +0.3 sobre el 2.º"). Measured against `main` on
     2026-09-28, 120 renders: both languages, both zones, the real place and the four long ones, at
     320, 390, 640, 768, 1024 and 1280 px. The link never passes the card's edge, and the card is
@@ -1951,8 +1976,14 @@ colour, motion). Keep to them:
 - **One alert at a time** (`src/lib/page-alert.ts`, 2026-09-26). The monitor used to stack the
   back-fill notice, the failed-ingest alert and the load error, which left the reader to work out
   which one was current. It now shows only the most serious: a failed load, then a failed SGC
-  query (which stalls the back-fill), then the back-fill's progress. The b card's "Historial
-  incompleto" badge keeps the incomplete-history caveat when the notice gives way. /insights has
+  query (which stalls the back-fill), then a gap in the history. The b card's "Historial
+  incompleto" badge keeps the incomplete-history caveat when the notice gives way. **Since 2026-10-11
+  a gap is `backfill.gaps > 0`, never the days since the last sync**, which would have kept the notice
+  up nearly always ([the science](science.md)): "Faltan 3 días por cargar · La última sincronización
+  se detuvo antes de terminar…", with "Cargar lo que falta", which runs the same sync. The title counts
+  the gaps alone, not every chunk the zone is behind by (code review, 2026-10-11). Notice and badge
+  are both hidden while a press is catching up, so they do not come and go under the reader with each
+  chunk; the line under the button says where the press is. /insights has
   only the back-fill notice and the load error, and already shows one or the other.
 - **The load error offers a retry, not a reload** (`load-error.tsx`, both pages). The page cannot tell
   a dropped connection from a failing server, so the copy blames neither; "Reintentar" refetches
@@ -1961,7 +1992,7 @@ colour, motion). Keep to them:
   that fails keeps what is drawn, with no alert, and the next refetch tries again. The button stays
   focusable while it retries (`aria-disabled`), and a retry parked offline counts as running. An
   `aria-disabled` `Button` takes no pointer events; while it is also `aria-busy` it keeps its full
-  colour: the retry and refresh buttons say they are busy in their label or spinner, and 50 % would
+  colour: the retry and sync buttons say they are busy in their label or spinner, and 50 % would
   take "Reintentando…" under AA. One that is only `aria-disabled` is off, and dims like `disabled`.
 - **The monitor says it is struggling from the first failed request** (`retryAttempt` in
   `load-failed.ts`, owner's call, 2026-09-29). A 503 comes back in a fraction of a second, but the load
@@ -1991,9 +2022,9 @@ colour, motion). Keep to them:
   minutos" with every request failing, and only "Última consulta al SGC: hace N min" grew, blaming
   SGC for the reader's connection. Offline, TanStack parks the refetch rather than failing it, so
   nothing failed at all; `staleSince` counts a parked refetch too. On the monitor the line under the
-  refresh button then says since when the figures are ("No se pudieron actualizar las cifras: son de
+  sync button then says since when the figures are ("No se pudieron actualizar las cifras: son de
   las 12:35. Se actualizarán solas."; `fmtClock`, with the day only when it was not today), in the
-  slot of what is now the last-query note (then "Se actualiza sola cada N minutos"), as a caution: neutral text with a warning icon, never
+  slot of what is now the last-sync note (then "Se actualiza sola cada N minutos"), as a caution: neutral text with a warning icon, never
   red, inside the live region. It names no interval and no reload, and blames neither the connection
   nor the server any more than the load error does. **The time is when the figures were fetched, and
   the copy says only that**: a first version read "Sin conexión con el servidor desde las 08:00",
@@ -2059,22 +2090,22 @@ colour, motion). Keep to them:
   request that fails is not waited for through its retries.
   - **A status that never loaded fills nothing in** (2026-09-29, found with `/api/*` answering 503).
     The newest event reads "—", like the catalogue's two stats, rather than a placeholder that
-    shimmered for good, and the last-query note says the time is unknown ("desconocida"): "nunca"
+    shimmered for good, and the last-sync note says the time is unknown ("desconocida"): "nunca"
     claimed SGC had never been queried, which the page cannot know. "nunca" stays for a status that
     loaded with no successful run.
-- **"Actualizar ahora" rests after a failed press, for longer each time** (`src/lib/refresh-backoff.ts`,
+- **"Sincronizar ahora" (then "Actualizar ahora") rests after a failed press, for longer each time** (`src/lib/refresh-backoff.ts`,
   owner's call, 2026-09-29). Unlimited, a reader pressed it about 40 times in a minute through an
   outage, each a request to a Worker that was already failing. Now each failed press dims the button
   (`aria-disabled`, so it keeps focus) for 5 s, then 10, 20, 40 and at most 60 s, the status poll's own
-  interval, and the line under it counts down: "No se pudo actualizar. Inténtalo de nuevo en 20 s."
+  interval, and the line under it counts down: "No se pudo sincronizar. Inténtalo de nuevo en 20 s."
   The countdown is drawn only (`aria-hidden`); a screen reader hears the whole wait once in words, since
   a live region that changed every second would be read out every second. A refresh that works ends the
   run, and so do two quiet minutes between failures, so a tab left open overnight starts again from
   5 s. A status answer does not: a first version forgot the failures whenever a status poll answered,
   but `GET /api/status` can answer from D1 while `POST /api/refresh` fails (an ingest killed for CPU,
   2026-09-20), and then the backoff restarted at 5 s every minute and "No se pudo actualizar" vanished
-  while every press was still failing (code review, 2026-09-29). Only presses count: a refresh the page started on a return to the tab rests
-  nothing, and none starts while the button rests. The countdown outranks the stale-data line, since it
+  while every press was still failing (code review, 2026-09-29). Only presses count (until 2026-10-11
+  a refresh the page started on a return to the tab rested nothing; there are none now). The countdown outranks the stale-data line, since it
   is what explains the dimmed button. **A five-press lock came first and was dropped** (owner's call):
   off after five failures until the next status answer, its line had to promise when the button would
   return ("…volverá solo cuando la página pueda cargar datos de nuevo"), which the owner did not like; a
@@ -2352,7 +2383,7 @@ a pointer to this section. What they ask, and how this page answers them:
     a 44 px hit area, while "Quitar filtros" and the group buttons kept 12 px text and `sm`'s
     56 px hit area. They now share the language button's values, so on touch those three buttons
     changed. Both set their icons to 16 px, 20 on touch, so a caller passes no icon size.
-    `default-touch` is `default` growing the same way (the status bar's "Actualizar ahora").
+    `default-touch` is `default` growing the same way (the status bar's "Sincronizar ahora").
   - `Button` variant `floating` and size `icon-round` are the insights page's back-to-top button:
     opaque primary with a shadow, and a 44 px circle that clips what travels through its edge.
   - `Button` size `header` is the sortable column header (`sm` with the table's 14 px text);

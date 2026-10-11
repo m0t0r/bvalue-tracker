@@ -2,6 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import type { SeismicEvent } from "../../core/types.ts";
 import type { ZoneId } from "../../core/zones.ts";
 import DETAIL from "../../test/fixtures/usgs-us6000tjl2-detail-2026-09-24.json?raw";
@@ -10,15 +11,14 @@ import MARINE from "../../test/fixtures/open-meteo-marine-2026-09-26.json?raw";
 import MATCH from "../../test/fixtures/usgs-us6000tjl2-match-2026-09-24.json?raw";
 import OAF_FORECAST from "../../test/fixtures/usgs-us6000tjl2-oaf-forecast-2026-09-24.json?raw";
 import PAGER_CITIES from "../../test/fixtures/usgs-us6000tjl2-pager-cities-2026-09-24.json?raw";
-import WRANGLER from "../../wrangler.jsonc?raw";
 import type { ContextResponse } from "../api-types.ts";
 import { insertStmt } from "../db.ts";
-import { PRODUCTS_CRON } from "../external.ts";
+import { refreshProducts } from "../external.ts";
 import worker from "../index.ts";
-import { INGEST_CRON } from "../plan.ts";
+import { silentLogger } from "../log.ts";
 
 /**
- * The daily USGS job, end to end: the cron that runs it and the route that serves what it stored.
+ * The USGS job, end to end: the sync that runs it and the route that serves what it stored.
  * USGS is answered from files captured on 2026-09-24 for the M7.4 (us6000tjl2). Nothing else is
  * served, and an unhandled request is an error, so the job can never reach SGC or a live USGS.
  */
@@ -36,13 +36,16 @@ const FILES: Record<string, string> = {
 
 /**
  * USGS as it answered on 2026-09-24. `match` stands in for the search's answer; returns every URL asked for.
- * The same daily run also asks Open-Meteo for the sea state (`worker/sea.ts`, tested in `sea.test.ts`);
- * here it is answered from its captured reply, so a run fails only for USGS's reasons.
+ * A sync also asks Open-Meteo for the sea state (`worker/sea.ts`, tested in `sea.test.ts`); here it is
+ * answered from its captured reply, and recorded with the rest, so a run fails only for USGS's reasons.
  */
 function usgs({ match = () => HttpResponse.text(MATCH) }: { match?: () => Response } = {}): URL[] {
   const asked: URL[] = [];
   server.use(
-    http.get("https://marine-api.open-meteo.com/v1/marine", () => HttpResponse.text(MARINE)),
+    http.get("https://marine-api.open-meteo.com/v1/marine", ({ request }) => {
+      asked.push(new URL(request.url));
+      return HttpResponse.text(MARINE);
+    }),
     http.get(FDSN, ({ request }) => {
       const url = new URL(request.url);
       asked.push(url);
@@ -98,9 +101,9 @@ async function chocoWithMainshock() {
   await put({ id: "SGC2026smalla", mag: 4.9 });
 }
 
-/** Fires the daily job the way Cloudflare does. */
+/** Runs the USGS job as of `at`, the instant it stores as `checked_at`. */
 async function runProducts(at = Date.UTC(2026, 8, 24, 11, 7)) {
-  await worker.scheduled!({ cron: PRODUCTS_CRON, scheduledTime: at, noRetry() {} }, env);
+  await refreshProducts({ db: env.DB, log: silentLogger, now: new Date(at) });
 }
 
 /** Calls the Worker as the page does: same-origin, which /api/* requires. */
@@ -118,7 +121,7 @@ beforeEach(async () => {
 });
 afterEach(() => server.resetHandlers());
 
-describe("the daily USGS job", () => {
+describe("the USGS job", () => {
   it("finds the zone's mainshock in USGS's catalogue and stores its three digests for /api/context", async () => {
     await chocoWithMainshock();
     const asked = usgs();
@@ -186,7 +189,7 @@ describe("the daily USGS job", () => {
 
     server.resetHandlers();
     usgs({ match: () => new HttpResponse(null, { status: 503 }) });
-    // The invocation still fails, so Cloudflare's own record of the cron says so.
+    // The job still throws, so a caller can tell this run from one that worked.
     await expect(runProducts(Date.UTC(2026, 8, 25, 11, 7))).rejects.toThrow(/503/);
 
     const ctx = await context();
@@ -274,20 +277,110 @@ describe("the daily USGS job", () => {
   });
 });
 
-describe("which job a cron runs", () => {
-  it("is decided by the two patterns wrangler.jsonc declares, and no others", () => {
-    const crons = /"crons":\s*(\[[^\]]*\])/.exec(WRANGLER)?.[1];
-    expect(JSON.parse(crons!)).toEqual([INGEST_CRON, PRODUCTS_CRON]);
+/**
+ * USGS and the sea forecast ride on a sync (until 2026-10-11 a daily cron ran them). The page asks for
+ * them on the first request of a press only (`context=1`), and the Worker runs them after answering,
+ * when either was last checked longer ago than the sync throttle. SGC answers 503, which records a
+ * failed run and changes no event: an empty page would retire the test's own mainshock.
+ */
+describe("on a sync", () => {
+  /** A press of "Sincronizar ahora", as the page sends it; waits for what it left running. */
+  async function press(query = "context=1") {
+    server.use(http.post(SEISCOMP_ENDPOINT, () => new HttpResponse(null, { status: 503 })));
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request(`https://x.test/api/refresh?zone=choco&${query}`, {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-origin" },
+      }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(res.status).toBe(200);
+  }
+  const usgsAsked = (asked: URL[]) => asked.filter((u) => u.hostname === "earthquake.usgs.gov");
+  const seaAsked = (asked: URL[]) => asked.filter((u) => u.hostname === "marine-api.open-meteo.com");
+
+  beforeEach(async () => {
+    await env.DB.batch([env.DB.prepare("DELETE FROM ingest_runs"), env.DB.prepare("DELETE FROM sea_forecast")]);
   });
 
-  it("does nothing for a pattern it does not know: no ingest, so no request to SGC", async () => {
-    await env.DB.prepare("DELETE FROM ingest_runs").run();
+  it("asks USGS and Open-Meteo when nothing is stored, and serves what they answered", async () => {
+    await chocoWithMainshock();
     const asked = usgs();
-    await worker.scheduled!({ cron: "0 0 * * *", scheduledTime: Date.UTC(2026, 8, 24), noRetry() {} }, env);
+    await press();
 
+    expect(usgsAsked(asked).length).toBeGreaterThan(0);
+    expect(seaAsked(asked)).toHaveLength(1);
+    expect((await context()).dyfi?.sgcEventId).toBe("SGC2026pqqmro");
+    const sea = await env.DB.prepare("SELECT fetched_at FROM sea_forecast").first<{ fetched_at: string }>();
+    expect(sea).not.toBeNull();
+  });
+
+  it("asks neither again while both are fresher than the sync throttle", async () => {
+    await chocoWithMainshock();
+    usgs();
+    await press();
+
+    server.resetHandlers();
+    const asked = usgs();
+    await press();
     expect(asked).toEqual([]);
-    const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM ingest_runs").first<{ n: number }>();
-    expect(runs?.n).toBe(0);
+  });
+
+  it("asks again once they are older than the sync throttle", async () => {
+    await chocoWithMainshock();
+    usgs();
+    await press();
+    const old = new Date(Date.now() - 16 * 60_000).toISOString();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE external_products SET checked_at = ?").bind(old),
+      env.DB.prepare("UPDATE sea_forecast SET fetched_at = ?").bind(old),
+      // The first press's run, so the second is not turned away by the throttle (see the next test).
+      env.DB.prepare("DELETE FROM ingest_runs"),
+    ]);
+
+    server.resetHandlers();
+    const asked = usgs();
+    await press();
+    expect(usgsAsked(asked).length).toBeGreaterThan(0);
+    expect(seaAsked(asked)).toHaveLength(1);
+  });
+
+  // USGS and the sea follow the press's own ingest, so a press the Worker turned away asks them nothing,
+  // however old they are: a failing USGS is not asked again on every repeated or parallel press.
+  it("asks neither on a press that stands down", async () => {
+    await chocoWithMainshock();
+    usgs();
+    await press();
+    const old = new Date(Date.now() - 16 * 60_000).toISOString();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE external_products SET checked_at = ?").bind(old),
+      env.DB.prepare("UPDATE sea_forecast SET fetched_at = ?").bind(old),
+    ]);
+
+    server.resetHandlers();
+    const asked = usgs();
+    await press();
+    expect(asked).toEqual([]);
+  });
+
+  // The page's later requests in a catch-up, and anything else that posts here, carry no context=1.
+  it("asks neither on a request without context=1", async () => {
+    await chocoWithMainshock();
+    const asked = usgs();
+    await press("");
+    expect(asked).toEqual([]);
+  });
+
+  // Answered already, so nothing is left to fail: the press is a 200 whatever USGS did.
+  it("still answers the press when USGS is down, and leaves the sea to run", async () => {
+    await chocoWithMainshock();
+    const asked = usgs({ match: () => new HttpResponse(null, { status: 503 }) });
+    await press();
+    expect(seaAsked(asked)).toHaveLength(1);
+    expect(await context()).toEqual({ dyfi: null, pager: null, forecast: null });
   });
 });
 

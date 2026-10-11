@@ -1,10 +1,11 @@
 # Deployment
 
-The app is one Cloudflare Worker (`bvalue-tracker`) with a D1 database (`sgc-swarm`), an Analytics
-Engine dataset (`sgc_ingest`) and two Cron Triggers: the ingest every 15 minutes and the daily USGS
-job ([Ingest](ingest.md#the-daily-usgs-job)). It runs on the Workers **free plan**, which allows 5
-Cron Triggers **per account**, so a fork sharing an account with other Workers should count them
-first (the Workers dashboard lists each Worker's triggers).
+The app is one Cloudflare Worker (`bvalue-tracker`) with a D1 database (`sgc-swarm`) and an Analytics
+Engine dataset (`sgc_ingest`). It has **no Cron Triggers** since 2026-10-11, when the project moved to
+syncing on demand ([Ingest](ingest.md#on-demand-only)): `wrangler.jsonc` states `"triggers": { "crons":
+[] }`, and the first deploy carrying it removed the two that ran until then (the ingest every 15
+minutes and the daily USGS job). Keep the empty list rather than deleting the key: a deploy with no
+`triggers` key leaves whatever crons are in place. It runs on the Workers **free plan**.
 The `sgc-swarm` names predate the project's rename to bvalue-tracker and are kept, because
 renaming a D1 database means migrating its data.
 
@@ -39,8 +40,8 @@ reset can be noticed and a fork can copy it. As set on 2026-10-02, everything on
 | Analytics | Web Analytics, *Enable with JS Snippet installation* (the snippet is in the pages) | see [Operations](operations.md#the-domains-analytics) |
 | Observability | Traces on, 10% sampled, persisted in Cloudflare | see [Operations](operations.md#the-domains-analytics) |
 
-`.github/workflows/ci.yml` and `ingest-health.yml` read `PRODUCTION_URL`, which is
-`https://bvalue.site`.
+`.github/workflows/ci.yml` (the smoke test) and `ingest-health.yml` (run by hand) read
+`PRODUCTION_URL`, which is `https://bvalue.site`.
 
 ## The old URLs
 
@@ -145,12 +146,19 @@ Dependabot update or a production fix.
 
 ## Scheduled checks
 
-`sgc-canary.yml` runs the live SGC test daily so a change to their form is noticed.
 `security-txt.yml` fails weekly once `public/.well-known/security.txt`'s `Expires` is under 30
 days away ([Security](security.md)).
-`ingest-health.yml` asks production every half hour how stale the catalogue is, and fails —
-which is to say, emails you — when it has gone an hour without a successful ingest. It needs
-`PRODUCTION_URL` and nothing else.
+
+Two checks lost their schedules on 2026-10-11 and run only by hand (`workflow_dispatch`); the
+workflows are kept, and each says in its header what would put its schedule back:
+
+- `sgc-canary.yml` runs the live SGC test, so a change to their form is noticed. It ran daily, which
+  was a request to SGC no reader had asked for. Run it after a sync fails, to tell a change on SGC's
+  side from a fault on ours.
+- `ingest-health.yml` asks production how stale the catalogue is, and fails when a zone has gone an
+  hour without a successful ingest. It ran every half hour and emailed on failure; with syncs on
+  demand a catalogue hours or days old is normal, so it would fail on every run. Run it right after a
+  sync to confirm it landed. It needs `PRODUCTION_URL` and nothing else.
 
 ## Propagation
 
