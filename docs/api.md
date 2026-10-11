@@ -109,9 +109,10 @@ checked before anything else the route does, and its refusals are all `no-store`
 | Answer | When | Counted |
 |---|---|---|
 | 401 `{ error: "sync code required" }` | no header (a tab from before the guard) | no |
+| 401 `{ error: "sync code changed" }` | the code from before the owner's last change (a page still holding it) | no |
 | 400 `{ error: "sync code must be 4 digits" }` | anything but four ASCII digits | no |
 | 403 `{ error: "wrong sync code", attemptsLeft }` | a wrong code | yes |
-| 429 `{ error: "too many wrong sync codes", retryAfterS }` and `retry-after` | the caller is locked out: three wrong codes in a row lock it for 15 minutes, and the right code is refused too until then | no |
+| 429 `{ error: "too many wrong sync codes", retryAfterS }` and `retry-after` | the caller (an IPv4 address, or an IPv6 /48) is locked out: three wrong codes in a row lock it for 15 minutes, and the right code is refused too until then | no |
 | 503 `{ error: "sync code not set" }` | the owner has not set one ([Deployment](deployment.md#the-sync-code)) | no |
 
 The rate limit's own 429 is `{ error: "rate limited" }`, so a caller tells the two apart by the body.

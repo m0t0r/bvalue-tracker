@@ -159,9 +159,11 @@ const es = {
     wrong: (left: number) =>
       `Código incorrecto. Revísalo e inténtalo de nuevo: ${left === 1 ? "te queda 1 intento" : `te quedan ${left} intentos`}.`,
     /** Three wrong codes in a row lock this connection out for 15 minutes, the right code included. */
-    locked: (min: number) => `Demasiados códigos incorrectos. Inténtalo de nuevo en ${min} min.`,
+    locked: (min: number) => `Demasiados códigos incorrectos. Inténtalo de nuevo en ${min}\u00A0min.`,
     /** No code has been set on the server yet: nothing the reader types can work. */
     unset: "La sincronización aún no está disponible. Inténtalo más tarde.",
+    /** The page held the code from before the owner changed it: nothing was counted, the new one is needed. */
+    changed: "El código ha cambiado. Escribe el nuevo.",
   },
   ingestFailed: "La última sincronización con el SGC falló",
   ingestFailedBody:
@@ -489,8 +491,9 @@ const en: Dict = {
     submit: "Sync",
     close: "Close",
     wrong: (left) => `Wrong code. Check it and try again: ${left === 1 ? "1 attempt" : `${left} attempts`} left.`,
-    locked: (min) => `Too many wrong codes. Try again in ${min} min.`,
+    locked: (min) => `Too many wrong codes. Try again in ${min}\u00A0min.`,
     unset: "Syncing is not available yet. Try again later.",
+    changed: "The code has changed. Enter the new one.",
   },
   ingestFailed: "The last sync with SGC failed",
   ingestFailedBody: "Showing the most recent stored data. Try again later with “Sync now”; there is no need to reload.",

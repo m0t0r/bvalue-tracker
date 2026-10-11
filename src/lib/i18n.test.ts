@@ -370,3 +370,13 @@ describe("the back-fill notice", () => {
     expect(dicts[lang].backfillAction).toMatch(/lo que falta|the rest/);
   });
 });
+
+/**
+ * The sync dialog's lock message gives a wait in minutes. docs/frontend.md: a figure and its unit never
+ * part at a line break, and the dialog is 313 px wide on a 360 px phone.
+ */
+describe("the sync code's lock message", () => {
+  it.each(langs)("keeps the minutes with their unit, in %s", (lang) => {
+    expect(dicts[lang].syncCode.locked(14)).toContain("14 min");
+  });
+});

@@ -13,7 +13,6 @@ import type {
   SeaForecast,
   StatusResponse,
   StoredEvent,
-  SyncRefusal,
   ZoneHealth,
 } from "./api-types.ts";
 import { lastRun, toStored, zoneMainshockRow, type EventRow } from "./db.ts";
@@ -403,28 +402,23 @@ async function refreshContext(env: Env, now: Date): Promise<void> {
 }
 
 /**
- * A sync the code turned away (worker/sync-guard.ts): its status, `no-store`, and what the page needs to
- * say why. A lock also carries `retry-after`. A wrong code and a lock set are warnings, with the caller's
- * hash and never the code; a missing code is a tab from before the guard and is not logged; no code set
- * is an error, since nobody can sync until the owner sets one.
+ * A sync the code turned away (worker/sync-guard.ts): its status and body, `no-store`, and on a lock
+ * `retry-after`. A wrong code and a lock set are warnings, with the caller's hash and never the code,
+ * and a lock is logged once, by the request that set it. No code set is a warning too, not an error:
+ * any caller can send it, and it would bury real failures under `pnpm logs --level error` (code
+ * review). A missing or stale code is a tab from before the guard or the last change, and is not logged.
  */
 function refuseSync(c: Context<{ Bindings: Env }>, v: Exclude<Verdict, { ok: true }>, l: Logger) {
   c.header("cache-control", "no-store");
-  switch (v.status) {
-    case 403:
-      l.warn({ ipHash: v.ipHash, attemptsLeft: v.attemptsLeft }, "sync code refused");
-      return c.json({ error: v.error, attemptsLeft: v.attemptsLeft } satisfies SyncRefusal, 403);
-    case 429:
-      if (v.lockedNow) l.warn({ ipHash: v.ipHash, lockoutS: LOCKOUT_S }, "sync locked out");
-      else l.info({ ipHash: v.ipHash, retryAfterS: v.retryAfterS }, "sync refused while locked out");
-      c.header("retry-after", String(v.retryAfterS));
-      return c.json({ error: v.error, retryAfterS: v.retryAfterS } satisfies SyncRefusal, 429);
-    case 503:
-      l.error({}, "sync code not set");
-      return c.json({ error: v.error } satisfies SyncRefusal, 503);
-    default:
-      return c.json({ error: v.error } satisfies SyncRefusal, v.status);
+  const b = v.body;
+  if (b.error === "wrong sync code") l.warn({ ipHash: v.ipHash, attemptsLeft: b.attemptsLeft }, "sync code refused");
+  if (b.error === "too many wrong sync codes") {
+    if (v.lockedNow) l.warn({ ipHash: v.ipHash, lockoutS: LOCKOUT_S }, "sync locked out");
+    else l.info({ ipHash: v.ipHash, retryAfterS: b.retryAfterS }, "sync refused while locked out");
+    c.header("retry-after", String(b.retryAfterS));
   }
+  if (b.error === "sync code not set") l.warn({}, "sync code not set");
+  return c.json(b, v.status);
 }
 
 /**
@@ -445,7 +439,8 @@ app.post("/api/refresh", async (c) => {
   // The code first, before anything reads the run history (worker/sync-guard.ts). Never logged.
   const verdict = await checkSyncCode(db, c.req.header(SYNC_CODE_HEADER), c.req.header("cf-connecting-ip"), now);
   if (!verdict.ok) return refuseSync(c, verdict, l);
-  c.executionCtx.waitUntil(purgeIdleCallers(db, now));
+  // Once a press, on its first request, not on each step of a catch-up (code review).
+  if (q.context === "1") c.executionCtx.waitUntil(purgeIdleCallers(db, now));
 
   const standDown = async (retryAfterS: number, why: string) => {
     // Not a warning: a second press inside the throttle stands down by design. It is logged because

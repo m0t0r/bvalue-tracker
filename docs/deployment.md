@@ -109,7 +109,9 @@ read -rs "CODE?Sync code (4 digits): "; echo; pnpm exec wrangler d1 execute sgc-
 ```
 
 (`read -rs "CODE?…"` is zsh; in bash, `read -rsp "Sync code (4 digits): " CODE`.) A changed code takes
-effect at once: a page holding the old one is refused at its next press and asks again.
+effect at once: a page holding the old one is refused at its next press and asks for the new one,
+without counting it as a wrong code. Only the code just replaced gets that; one from two changes back
+counts as any wrong guess does.
 
 Lift every lock and forget every caller's wrong codes, for an owner who has locked themselves out:
 
