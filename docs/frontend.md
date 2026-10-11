@@ -1112,7 +1112,8 @@ colour, motion). Keep to them:
   loop by itself). Under it the standing note is the **last sync**, which is the date every figure on
   the page is as of: "Last sync: 17 days ago · 24 Sept, 13:02" from `sm` up, "Sincronizado: hace ~17 d"
   on a phone (both read off the page, 2026-10-11). While a zone is behind, one press loads it chunk by
-  chunk, up to 31 requests (`syncZone`, `src/lib/sync.ts`), and the live line counts them
+  chunk, up to 31 requests 15 s apart, so a long gap takes minutes (`syncZone`, `src/lib/sync.ts`),
+  and the live line counts them
   ("Sincronizando: día 3 de 12…", "semana" on Chocó, the count held together with no-break spaces so
   "17…" never wraps alone); a press that stops at that cap says "Queda historial por cargar: vuelve a
   pulsar para seguir.", and one a cooldown turns away part-way gives the wait ("Puedes volver a

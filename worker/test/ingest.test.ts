@@ -10,7 +10,7 @@ import WRANGLER from "../../wrangler.jsonc?raw";
 import { ABANDONED_ERROR, insertStmt, lastRun, runInFlight, sgcHealth } from "../db.ts";
 import worker from "../index.ts";
 import { backfillProgress, ingest, ingestSweep, sweepChunks } from "../ingest.ts";
-import { IN_FLIGHT_MS } from "../plan.ts";
+import { IN_FLIGHT_MS, SGC_REQUEST_GAP_S } from "../plan.ts";
 
 // The fixture covers 2026-08-10 .. 2026-09-18 22:08 UTC.
 const FROM = new Date("2026-08-10T00:00:00Z");
@@ -182,6 +182,17 @@ beforeEach(async () => {
 afterEach(() => server.resetHandlers());
 
 /** Marks every history chunk of every zone as swept, as a finished back-fill would. */
+/**
+ * Moves every recorded run `SGC_REQUEST_GAP_S` and a second into the past: what a test does in place of
+ * waiting out the gap every request to SGC keeps from the one before (worker/plan.ts).
+ */
+const afterGap = () =>
+  env.DB.prepare(
+    "UPDATE ingest_runs SET started_at = strftime('%Y-%m-%dT%H:%M:%fZ', started_at, ?1), finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', finished_at, ?1)",
+  )
+    .bind(`-${SGC_REQUEST_GAP_S + 1} seconds`)
+    .run();
+
 async function completeBackfill() {
   const old = "2026-01-01T00:00:00.000Z";
   await env.DB.batch(
@@ -251,6 +262,30 @@ describe("ingest", () => {
     expect(won[0]).toMatchObject({ ok: true, error: null });
     expect(await count()).toBe(786);
     expect(await runCount()).toBe(1);
+  });
+
+  // Never parallel (the claim above), and not back to back either: a press inside the gap stands down
+  // with what is left of it, for any zone, and the claim itself holds the gap (owner's request).
+  it("keeps every request to SGC the gap away from the one before, whoever sends it", async () => {
+    await completeBackfill();
+    const calls = serving(FULL);
+    expect(((await (await call("/api/refresh?zone=tolima", { method: "POST" })).json()) as any).refreshed).toBe(true);
+    const soon = (await (await call("/api/refresh?zone=choco", { method: "POST" })).json()) as any;
+    expect(soon.refreshed).toBe(false);
+    expect(soon.retryAfterS).toBeGreaterThan(0);
+    expect(soon.retryAfterS).toBeLessThanOrEqual(SGC_REQUEST_GAP_S);
+    const claimed = await ingest(
+      { db: env.DB, fetchOptions: FETCH_FAST, guard: { gapS: SGC_REQUEST_GAP_S } },
+      FROM,
+      TO,
+      "manual",
+      { zone: "choco" },
+    );
+    expect(claimed).toBeNull();
+    await afterGap();
+    expect(((await (await call("/api/refresh?zone=choco", { method: "POST" })).json()) as any).refreshed).toBe(true);
+    expect(calls.tolima()).toBeGreaterThan(0);
+    expect(calls()).toBeGreaterThan(0);
   });
 
   it("keeps a burst of concurrent refreshes down to a single press's requests", async () => {
@@ -663,6 +698,7 @@ describe("API", () => {
 
     const starts: string[] = [];
     for (let i = 1; i <= total; i++) {
+      if (i > 1) await afterGap();
       const res = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
       expect(res.refreshed).toBe(true);
       // Until it has caught up, what is still missing lies before the run that just succeeded.
@@ -673,7 +709,8 @@ describe("API", () => {
     expect(starts).toEqual(sweepChunks(new Date()).map((c) => c.start.toISOString()));
     expect(calls()).toBe(total);
 
-    // The last chunk already reaches today, so the next press is inside the throttle.
+    // The last chunk already reaches today, so the next press, past the gap, is inside the throttle.
+    await afterGap();
     const next = (await (await call("/api/refresh", { method: "POST" })).json()) as any;
     expect(next.refreshed).toBe(false);
     expect(next.retryAfterS).toBeGreaterThan(0);
@@ -941,6 +978,7 @@ describe("a sync once the zone is caught up", () => {
     expect(tolima.results.map((r) => r.trigger)).toEqual(["manual", "sweep"]);
     expect(tolima.results[0]!.window_start).toBe(expectedWindowStart(tolima.results[0]!.started_at!, 1));
 
+    await afterGap();
     await press("choco");
     const choco = await env.DB.prepare(
       "SELECT trigger, window_start, started_at FROM ingest_runs WHERE zone = 'choco' AND finished_at > ? ORDER BY id",
@@ -1529,6 +1567,7 @@ describe("two zones", () => {
     await completeBackfill();
     const calls = serving(FULL);
     expect(((await (await call("/api/refresh", { method: "POST" })).json()) as any).refreshed).toBe(true);
+    await afterGap();
     const res = (await (await call("/api/refresh?zone=tolima", { method: "POST" })).json()) as any;
     expect(res.refreshed).toBe(true);
     expect((await latestRun("tolima")).trigger).toBe("sweep");

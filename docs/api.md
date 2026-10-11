@@ -86,13 +86,14 @@ preloaded. Credit Open-Meteo, with its link, wherever a figure from it is shown 
 
 **`POST /api/refresh` is "Sincronizar ahora", the one route that reaches SGC** (from 2026-10-11 the
 only thing that does: there is no cron; [Ingest](ingest.md#on-demand-only)). One request runs one plan:
-one missing history chunk while the zone is behind, with no throttle while SGC answers; once it has
+one missing history chunk while the zone is behind, with no throttle while SGC answers, only the 15 s
+every request to SGC keeps from the one before, from anyone (`SGC_REQUEST_GAP_S`); once it has
 caught up, the trailing window, at most once per 15 minutes counted from the zone's last run, plus one
 revision chunk when the zone has had no sweep for an hour. A plan stops at a failed first step, so the
 failure is the last run the answer reports. It answers the zone's status (as `/api/status` does) plus `refreshed`, whether SGC was
 queried, and on a stand-down `retryAfterS`, the seconds until a press is worth anything: 5 while
-another run is in flight, else what is left of the throttle, of a 429/503's cooldown or of a
-refusal's hour. The page repeats it while the answer is still behind (at most 31 times per press).
+another run is in flight, else what is left of the gap, of the throttle, of a 429/503's cooldown or
+of a refusal's hour. The page repeats it while the answer is still behind (at most 31 times per press).
 `context=1` additionally refreshes USGS's products and the sea forecast when they are due (the sea
 missing or older than 15 minutes, or product rows older than that), under `waitUntil` once the
 press's own ingest has finished; a press that stands down asks them nothing. The page sends it on the

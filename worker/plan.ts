@@ -41,6 +41,15 @@ export const REFRESH_MIN_INTERVAL_S = 900;
  */
 const REVISION_SWEEP_EVERY_S = 3600;
 
+/**
+ * The least time between two requests to SGC, from anyone, for any zone, counted from when the last one
+ * left. Requests were never parallel (the claim allows one in flight at a time); this spaces them, so a
+ * catch-up after a quiet spell loads gradually, about four chunks a minute at most, rather than as fast
+ * as SGC answers (owner's request, 2026-10-11). It holds in the atomic claim as well as here, so neither
+ * two readers nor a script calling the route can close it up. The page waits it out between steps.
+ */
+export const SGC_REQUEST_GAP_S = 15;
+
 /** How long a visitor is asked to wait when another run is already in flight. */
 const IN_FLIGHT_RETRY_S = 5;
 
@@ -183,8 +192,8 @@ function sinceS(startedAt: string | null | undefined, now: Date): number {
  * `runPlan`.
  *
  * - **Behind** (history chunks not yet loaded: every day without a sync adds one): one chunk per
- *   request, oldest first, with no throttle while SGC is answering. The page asks again until the
- *   zone has caught up, one request at a time.
+ *   request, missing chunks first, with no throttle while SGC is answering, only the gap every request
+ *   keeps (`SGC_REQUEST_GAP_S`). The page asks again until the zone has caught up, one request at a time.
  * - **Caught up**: the trailing window with removals, at most once per `REFRESH_MIN_INTERVAL_S` counted
  *   from the zone's last run, then, if no sweep of the zone has run for an hour, one older chunk for
  *   SGC's late revisions.
@@ -204,8 +213,10 @@ export function dueNow(now: Date, history: IngestHistory, zone: ZoneId): IngestP
   const refusing = sgcRefusing(history.health, now);
   const sinceLastS = refusing ? sinceS(history.lastSent, now) : sinceS(history.lastRun?.startedAt, now);
   const waitS = refusing ? REFUSED_RETRY_S : REFRESH_MIN_INTERVAL_S;
-  const leftS = Math.max(waitS - sinceLastS, cooldownLeftS(history.health, now));
-  if (!catchUp && leftS > 0) return { steps: [], retryAfterS: Math.ceil(leftS), minIntervalS: null };
+  const throttleLeftS = catchUp ? 0 : Math.max(waitS - sinceLastS, cooldownLeftS(history.health, now));
+  // The gap from the last request of any zone holds for every press, the catch-up's included.
+  const leftS = Math.max(throttleLeftS, SGC_REQUEST_GAP_S - sinceS(history.lastSent, now));
+  if (leftS > 0) return { steps: [], retryAfterS: Math.ceil(leftS), minIntervalS: null };
 
   const revision = sinceS(history.lastSweepAt, now) >= REVISION_SWEEP_EVERY_S;
   const steps: IngestStep[] = behind
