@@ -140,6 +140,10 @@ covers `dependencies` only, the code that ships in the Worker or the page. An ad
 dev tooling shows up as a Dependabot alert instead: it reaches neither, and one with no
 upstream fix would keep a check red for weeks (on 2026-09-24, `sharp` under
 `@cloudflare/vitest-pool-workers`, the Workers test package's old name, was exactly that).
+**`shadcn` is a dev dependency** (from 2026-10-11): the page uses only its CSS (`@import
+"shadcn/tailwind.css"`), which Vite bundles at build time, and nothing of its Node dependencies
+ships. As a runtime dependency it failed this check with three high advisories under its CLI
+(`@modelcontextprotocol/sdk`, `source-map-js`, and `braces`, which has no fix).
 It is a separate workflow so that it flags without blocking. Auto-merge follows CI's
 conclusion and the deploy needs CI's tests, and a new advisory must not hold back every
 Dependabot update or a production fix.
