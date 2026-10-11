@@ -27,6 +27,10 @@ describe("a press the sync code turned away", () => {
     expect(refusalOf(refused(503, { error: "sync code not set" }))).toEqual({ kind: "unset" });
   });
 
+  it("is a changed code, when the page held the one from before the owner's last change", () => {
+    expect(refusalOf(refused(401, { error: "sync code changed" }))).toEqual({ kind: "changed" });
+  });
+
   it("is a code to ask for again, when none went or it was not four digits", () => {
     expect(refusalOf(refused(401, { error: "sync code required" }))).toEqual({ kind: "ask" });
     expect(refusalOf(refused(400, { error: "sync code must be 4 digits" }))).toEqual({ kind: "ask" });

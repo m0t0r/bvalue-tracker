@@ -10,6 +10,8 @@ export type Refusal =
   | { kind: "wrong"; attemptsLeft: number }
   | { kind: "locked"; minutes: number }
   | { kind: "unset" }
+  /** The page held the code from before the owner's last change: asked for the new one, not counted. */
+  | { kind: "changed" }
   | { kind: "ask" };
 
 export function refusalOf(err: unknown): Refusal | null {
@@ -24,6 +26,8 @@ export function refusalOf(err: unknown): Refusal | null {
         : null;
     case "sync code not set":
       return { kind: "unset" };
+    case "sync code changed":
+      return { kind: "changed" };
     case "sync code required":
     case "sync code must be 4 digits":
       return { kind: "ask" };

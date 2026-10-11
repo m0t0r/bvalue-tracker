@@ -185,6 +185,8 @@ export const SYNC_CODE_HEADER = "x-sync-code";
 export type SyncRefusal =
   /** 401: no code sent. Not counted. */
   | { error: "sync code required" }
+  /** 401: the code before the owner's last change, from a page that still holds it. Not counted. */
+  | { error: "sync code changed" }
   /** 400: not four digits. Not counted. */
   | { error: "sync code must be 4 digits" }
   /** 403: a wrong code, counted. */

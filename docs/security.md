@@ -271,7 +271,8 @@ refused with a 503**: the guard fails closed.
   through in minutes. **Three wrong codes in a row from one caller lock that caller out for 15
   minutes, and the right code is refused too until then** (owner's call: per caller, not the whole
   sync; "block the sync" came first and was changed). That is at most 3 guesses every 15 minutes, 288
-  a day, so one caller needs about 17 days for an even chance at the code and 35 to be sure of it. A
+  a day, so one caller (an IPv4 address, or an IPv6 /48) needs about 17 days for an even chance at the
+  code and 35 to be sure of it. A
   right code puts the count back to 0, and so does setting a lock, so after the 15 minutes three more
   count afresh. Guesses sent while locked count nothing and do not lengthen the lock.
   - **What it does not stop is many callers.** Each address has its own three tries, so a thousand
@@ -279,24 +280,43 @@ refused with a 503**: the guard fails closed.
     lock would let any one person turn sync off for everyone. If guessing ever shows up in the logs
     (`sync code refused`, `sync locked out`, each with the caller's hash), changing the code is one
     command, and a longer code is a migration and a dialog with more slots.
-  - **An IPv6 caller counts by its /64**, not its address (`callerKey`). A subscriber usually holds a
-    whole /64, and per address it could walk 2^64 of them, each with three fresh tries.
+  - **An IPv6 caller counts by its /48**, not its address (`callerKey`; owner's call after the code
+    review). Per address a subscriber's /64 alone is 2^64 callers. Per /64, as first written, a /48,
+    which a tunnel broker hands out free, was 65,536 callers with three tries each: every code within
+    one lock's 15 minutes, from one host. The cost is the one IPv4 already pays behind a NAT: callers
+    who share a /48 share a lockout.
+  - **The flip side: whoever shares the owner's address can lock the owner out.** Behind a carrier's
+    NAT (or in one /48), three wrong codes every 15 minutes keep that address locked for as long as
+    someone bothers, and the owner's right code is refused with it. Known and accepted with the
+    per-caller choice (code review); the remedy is syncing from another network, or lifting the locks
+    by hand ([below](#the-sync-code-2026-10-11)).
   - **Refusals that are not a guess count nothing**: no header (a tab left open from before the
-    deploy sends none, and must not lock anyone out), a header that is not four ASCII digits, and any
-    code while none is set (so setting one later finds nobody locked out).
+    deploy sends none, and must not lock anyone out), a header that is not four ASCII digits, any
+    code while none is set (so setting one later finds nobody locked out), and **the code from before
+    the owner's last change**. A page keeps an accepted code for its life and sends it again at the
+    next press, so after a change every open tab on one network would have spent one of its three
+    tries, and three tabs locked the owner out before any dialog showed (code review). `sync_code`
+    keeps `previous_code`, set by a trigger so the owner's command is unchanged, and that code gets a
+    401 `sync code changed`: the page asks for the new one. Only the one code before is kept; older
+    ones count as wrong, as any guess does.
 - **One statement decides, so a burst cannot outrun the counter.** The lock check, the comparison and
   the counter's move are a single upsert into `sync_lockouts` with `RETURNING`, and D1 runs statements
   one at a time. Read-then-write would let eight parallel guesses each be compared at 0 failures, the
   same race the refresh claim had ([above](#security-decisions)). Tested: eight wrong codes in
   parallel get two 403s and six 429s, and a burst that hides the right code among wrong ones from a
-  locked caller gets three 429s and asks SGC nothing (`worker/test/sync-guard.test.ts`).
+  locked caller gets three 429s and asks SGC nothing (`worker/test/sync-guard.test.ts`). The request
+  whose code set the lock writes its own random id into `locked_by`, and only it logs `sync locked
+  out`: comparing the lock's end with its own named every request of that millisecond (code review).
 - **The caller is stored and logged as a hash, never as its address**: the first 32 hex characters of
   SHA-256 over `cf-connecting-ip` (its /64 for IPv6), the header the rate limiter already keys on. It
   is pseudonymous, not anonymous: an IPv4 hash can be reversed by hashing all 2^32 addresses, so the
   hash keeps addresses out of the table, a D1 export and the log at a glance, and nothing more. Rows
-  are deleted once a caller has sent no code for a day and is not locked (`purgeIdleCallers`, run after
-  each accepted code, under `waitUntil`). Nothing schedules it: the site has no cron, a lock ends by its
-  own time whether or not the row is deleted, and an idle row is a hash and a counter.
+  are deleted once a caller has sent no code for a day and is not locked (`purgeIdleCallers`, run under
+  `waitUntil` on the first request of a press whose code is accepted, not on each step of its
+  catch-up). Nothing schedules it: the site has no cron, a lock ends by its own time whether or not the
+  row is deleted, and an idle row is a hash and a counter.
+- **No code set is logged at `warn`, not `error`**: any caller can send it, and at error level a script
+  could bury real failures under `pnpm logs --level error` (code review).
 - **The code is never logged.** `refuseSync` writes the caller's hash, the tries left and the lock's
   length; a test sends wrong and right codes through every path and holds every line to containing
   neither code nor the address. **Not checked yet**: whether Cloudflare's own invocation log or its

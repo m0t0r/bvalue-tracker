@@ -5,7 +5,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { SEISCOMP_ENDPOINT } from "../../core/seiscomp.ts";
 import EMPTY from "../../test/fixtures/seiscomp-empty.html?raw";
 import worker from "../index.ts";
-import { TEST_SYNC_CODE } from "./sync-code.ts";
+import { checkSyncCode } from "../sync-guard.ts";
+import { TEST_SYNC_CODE, setSyncCode } from "./sync-code.ts";
 
 /**
  * The code that guards "Sincronizar ahora" (worker/sync-guard.ts). Every code here is made up: the
@@ -39,21 +40,18 @@ beforeEach(async () => {
   ]);
 });
 
-/** The owner's command (docs/deployment.md, "The sync code"). */
-const setCode = (code: string) =>
-  env.DB.prepare(
-    "INSERT INTO sync_code (id, code, updated_at) VALUES (1, ?, datetime('now')) ON CONFLICT(id) DO UPDATE SET code = excluded.code, updated_at = excluded.updated_at",
-  )
-    .bind(code)
-    .run();
+const setCode = setSyncCode;
 
-/** One press as the page sends it, from `ip`, with `code` in the header (none when undefined). */
-async function refresh(code: string | undefined, ip = "198.51.100.7") {
+/**
+ * One request as the page sends it, from `ip`, with `code` in the header (none when undefined): a step
+ * of a catch-up, or with `first` the opening request of a press (`context=1`).
+ */
+async function refresh(code: string | undefined, ip = "198.51.100.7", { first = false } = {}) {
   const ctx = createExecutionContext();
   const headers = new Headers({ "sec-fetch-site": "same-origin", "cf-connecting-ip": ip });
   if (code !== undefined) headers.set("x-sync-code", code);
   const res = await worker.fetch(
-    new Request("https://x.test/api/refresh?zone=tolima", { method: "POST", headers }),
+    new Request(`https://x.test/api/refresh?zone=tolima${first ? "&context=1" : ""}`, { method: "POST", headers }),
     env,
     ctx,
   );
@@ -116,6 +114,27 @@ describe("the sync code", () => {
     expect(sgcCalls).toBe(0);
   });
 
+  // Every open tab holds the old code after the owner changes it, and would otherwise spend one of the
+  // network's three tries at its next press (code review).
+  it("asks a page holding the code before the owner's last change for the new one, without counting it", async () => {
+    await setCode(OTHER);
+    await setCode(CODE);
+    for (let i = 0; i < 4; i++) {
+      const res = await refresh(OTHER);
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: "sync code changed" });
+    }
+    expect((await refresh("1111")).body.attemptsLeft).toBe(2);
+    expect((await refresh(CODE)).status).toBe(200);
+  });
+
+  it("counts the code from two changes back as a wrong one", async () => {
+    await setCode("1111");
+    await setCode(OTHER);
+    await setCode(CODE);
+    expect((await refresh("1111")).status).toBe(403);
+  });
+
   it("counts wrong codes in a row: a right one starts the count again", async () => {
     await setCode(CODE);
     await refresh(OTHER);
@@ -163,13 +182,15 @@ describe("the lockout", () => {
     expect((await refresh(CODE, "203.0.113.20")).status).toBe(200);
   });
 
-  it("counts an IPv6 caller by its /64, so walking the addresses of one subscriber's block gets nowhere", async () => {
+  // A /48 comes free with a tunnel broker: keyed by /64 it was 65,536 callers with three tries each,
+  // every code within one lock's time (code review).
+  it("counts an IPv6 caller by its /48, so walking the /64s of one tunnel broker's block gets nowhere", async () => {
     await setCode(CODE);
     await refresh(OTHER, "2001:db8:1:2::1");
-    await refresh(OTHER, "2001:db8:1:2:aaaa::7");
-    expect((await refresh(OTHER, "2001:0db8:0001:0002:ffff:ffff:ffff:fffe")).status).toBe(429);
-    expect((await refresh(CODE, "2001:db8:1:2::9")).status).toBe(429);
-    expect((await refresh(CODE, "2001:db8:1:3::1")).status).toBe(200);
+    await refresh(OTHER, "2001:db8:1:ffff:aaaa::7");
+    expect((await refresh(OTHER, "2001:0db8:0001:abcd:ffff:ffff:ffff:fffe")).status).toBe(429);
+    expect((await refresh(CODE, "2001:db8:1::9")).status).toBe(429);
+    expect((await refresh(CODE, "2001:db8:2::1")).status).toBe(200);
   });
 
   it("ends after 15 minutes, and the next three wrong codes count afresh", async () => {
@@ -226,14 +247,44 @@ describe("what the guard keeps and writes", () => {
     expect(rows[0]!.ip_hash).not.toContain("198.51.100.7");
   });
 
-  it("forgets a caller who has sent no code for a day, once anyone's code is accepted", async () => {
+  it("forgets a caller who has sent no code for a day, at the next press whose code is accepted", async () => {
+    // The press's first request also asks USGS and Open-Meteo, which answer nothing useful here.
+    server.use(
+      http.get(/earthquake\.usgs\.gov|marine-api\.open-meteo\.com/, () => new HttpResponse(null, { status: 503 })),
+    );
     await setCode(CODE);
     await refresh(OTHER, "198.51.100.7");
     await env.DB.prepare("UPDATE sync_lockouts SET updated_at = ?")
       .bind(new Date(Date.now() - 25 * 3600 * 1000).toISOString())
       .run();
+    const count = async () =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM sync_lockouts").first<{ n: number }>())!.n;
+    // A later step of a catch-up does not purge: once a press is enough (code review).
     await refresh(CODE, "203.0.113.20");
-    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM sync_lockouts").first<{ n: number }>();
-    expect(n!.n).toBe(1);
+    expect(await count()).toBe(2);
+    await refresh(CODE, "203.0.113.20", { first: true });
+    expect(await count()).toBe(1);
+  });
+
+  // Through the route the requests of a burst land on different milliseconds; the guard itself is given
+  // one, which is the case that once made every request after the lock claim to have set it (code review).
+  it("says a lock was set by one request alone, however many arrive in the same millisecond", async () => {
+    await setCode(CODE);
+    const now = new Date();
+    const verdicts = await Promise.all(
+      Array.from({ length: 8 }, () => checkSyncCode(env.DB, OTHER, "198.51.100.7", now)),
+    );
+    expect(verdicts.filter((v) => !v.ok && v.lockedNow)).toHaveLength(1);
+    expect(verdicts.filter((v) => !v.ok && v.status === 429)).toHaveLength(6);
+  });
+
+  it("logs no code set as a warning, not an error, since any caller can send it", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warns: string[] = [];
+    vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => void warns.push(JSON.stringify(args)));
+    await refresh(CODE);
+    expect(errors).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+    expect(warns.some((l) => l.includes("sync code not set"))).toBe(true);
   });
 });

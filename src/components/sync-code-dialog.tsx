@@ -83,7 +83,9 @@ function CodeForm({
         ? t.syncCode.wrong(refusal.attemptsLeft)
         : refusal.kind === "locked"
           ? t.syncCode.locked(refusal.minutes)
-          : t.syncCode.unset;
+          : refusal.kind === "changed"
+            ? t.syncCode.changed
+            : t.syncCode.unset;
   const complete = code.length === SLOTS.length;
   const submit = (e: FormEvent) => {
     e.preventDefault();

@@ -1139,8 +1139,9 @@ colour, motion). Keep to them:
     the input `aria-invalid` and described by it): a wrong code with the tries left ("te quedan 2
     intentos", "te queda 1 intento"), a lock with the minutes left, rounded up ("Demasiados códigos
     incorrectos. Inténtalo de nuevo en 14 min."), no code set yet ("La sincronización aún no está
-    disponible."). A 401 or 400 asks again with nothing to say. Any refusal forgets the kept code, so a
-    code changed by the owner is asked for at the next press. **A refusal never rests the button**
+    disponible."), a code the owner has since changed ("El código ha cambiado. Escribe el nuevo.",
+    not counted against the reader). A plain 401 or 400 asks again with nothing to say. Any refusal
+    forgets the kept code. The lock's "14 min" keeps a no-break space (`i18n.test.ts`). **A refusal never rests the button**
     (`refresh-backoff.ts`) and never shows "No se pudo sincronizar" under it: nothing failed.
     `refusalOf` tells it from the rate limit's own 429 (`{ error: "rate limited" }`) and from an outage,
     which still rest it (`src/lib/sync-code.test.ts`).
