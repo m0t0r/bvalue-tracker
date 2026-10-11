@@ -23,7 +23,7 @@ END;
 
 -- One row per caller that has sent a code: wrong codes in a row, and the lock they earn.
 CREATE TABLE sync_lockouts (
-  -- SHA-256 of the caller's address (its /64 for IPv6), hex, first 32 characters. Never the address.
+  -- SHA-256 of the caller's address (its /48 for IPv6), hex, first 32 characters. Never the address.
   ip_hash TEXT PRIMARY KEY,
   -- Wrong codes in a row. Back to 0 on a right code, and when a lock is set, so the next three count afresh.
   failures INTEGER NOT NULL DEFAULT 0,

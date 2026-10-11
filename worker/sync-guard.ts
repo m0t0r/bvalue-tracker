@@ -54,7 +54,12 @@ export function callerKey(ip: string | undefined): string {
   const left = head === "" ? [] : head.split(":");
   const right = tail === undefined || tail === "" ? [] : tail.split(":");
   // An embedded IPv4 tail (`::ffff:192.0.2.1`) or anything else unexpected: key it whole.
-  if ([...left, ...right].some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return ip.toLowerCase();
+  // Too many groups for its `::` is malformed too.
+  if (
+    [...left, ...right].some((g) => !/^[0-9a-f]{1,4}$/.test(g)) ||
+    (tail === undefined ? left.length !== 8 : left.length + right.length > 7)
+  )
+    return ip.toLowerCase();
   const groups = tail === undefined ? left : [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
   return `${groups
     .slice(0, 3)
