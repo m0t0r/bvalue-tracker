@@ -1,27 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { SHARE_META } from "../../core/zone-pages.ts";
 import { ZONE_IDS } from "../../core/zones.ts";
-import { CADENCE, updateEveryMin } from "../../worker/plan.ts";
+import { REFRESH_MIN_INTERVAL_S } from "../../worker/plan.ts";
 import { dicts, type Lang } from "./i18n.tsx";
 import { browserLang } from "./startup.ts";
-
-/** The cron in wrangler.jsonc, in minutes. Chocó is asked on every tick, and the page quotes it. */
-const CRON_EVERY_MIN = 15;
 
 const langs = Object.keys(dicts) as Lang[];
 const each = langs.flatMap((lang) => ZONE_IDS.map((zone) => [lang, zone] as const));
 
 /**
- * The page used to quote the cron's five minutes in the failed-ingest alert, which is the
- * one state where the fast lane has stood down and five minutes is wrong (2026-09-20). It
- * was changed to fifteen, and then SGC started refusing us and the probe dropped to an
- * hour, so fifteen was wrong too. A cadence the reader cannot act on is not worth a number
- * that has to be kept in step with three lane rules: the alert says it retries by itself
- * and stops there. The ordinary cadence is stated once, in the footer (`autoUpdateLong`).
+ * The failed-ingest alert names no interval: three rules decide the Worker's wait (the throttle, a
+ * refusal's hour, a 429's cooldown) and the line under the button gives the one that applies
+ * (`syncRetryIn`). Since syncs are on demand nothing retries by itself, so the alert no longer promises
+ * a retry: it says how to try again, and still that there is no need to reload.
  */
 describe("the failed-ingest alert", () => {
-  it.each(langs)("promises a retry without naming an interval, in %s", (lang) => {
+  it.each(langs)("names no interval, in %s", (lang) => {
     expect(dicts[lang].ingestFailedBody).not.toMatch(/\d+\s*(min|minut)/i);
+  });
+
+  it.each(langs)("says how to try again, by the button's own label, in %s", (lang) => {
+    expect(dicts[lang].ingestFailedBody).toContain(dicts[lang].sync);
+    expect(dicts[lang].ingestFailedBody).not.toMatch(/automátic|by itself|solo|sola/i);
   });
 
   it.each(langs)("still tells the reader not to reload, in %s", (lang) => {
@@ -30,56 +30,65 @@ describe("the failed-ingest alert", () => {
 });
 
 /**
- * The note under the refresh button gives the last query that worked. Beside "La última consulta al
+ * The note under the button gives the last sync that worked. Beside "La última sincronización con el
  * SGC falló" it must say so, or the two lines read as a contradiction.
  */
-describe("the last-query note while a run has failed", () => {
-  it.each(langs)("says the query it dates was the one that worked, at both widths, in %s", (lang) => {
-    for (const label of [dicts[lang].lastUpdateOk, dicts[lang].lastUpdateOkShort])
+describe("the last-sync note while a run has failed", () => {
+  it.each(langs)("says the sync it dates was the one that worked, at both widths, in %s", (lang) => {
+    for (const label of [dicts[lang].lastSyncOk, dicts[lang].lastSyncOkShort])
       expect(label).toMatch(/correcta|successful|good/i);
   });
 });
 
-describe("the update interval in the footer", () => {
-  // The interval is the Worker's, read from worker/plan.ts, never written into the copy.
-  it("quotes the cron's own interval for Chaparral, and the wide tick's for Chocó", () => {
-    expect(updateEveryMin("tolima")).toBe(CRON_EVERY_MIN);
-    expect(updateEveryMin("choco")).toBe(30);
+/**
+ * Nothing reads SGC on a schedule any more (docs/ingest.md, "On demand only"), and the footer says so
+ * rather than quoting a cadence: no interval, and the button by its own label.
+ */
+describe("the footer's note on how the data arrives", () => {
+  it.each(langs)("names no interval and no real-time tracking, in %s", (lang) => {
+    expect(dicts[lang].syncNote).not.toMatch(/\d+\s*(min|minut)/i);
+    expect(dicts[lang].syncNote).toMatch(/no sigue la actividad en tiempo real|does not track activity in real time/);
   });
 
-  it.each(each)("names the zone's interval, in %s for %s", (lang, zone) => {
-    expect(dicts[lang].autoUpdateLong(updateEveryMin(zone))).toMatch(new RegExp(`\\b${updateEveryMin(zone)} min`));
+  it.each(langs)("names the button as it is labelled, in %s", (lang) => {
+    expect(dicts[lang].syncNote).toContain(dicts[lang].sync);
   });
 });
 
 /**
- * Three stand-down messages, three different truths. refreshWait claims SGC answered in the
- * last five minutes, so it must never appear beside the failure alert; refreshStillFailing
- * is what replaces it there, and must not tell the reader to try again — while SGC is
- * refusing us the Worker's own wait is an hour.
+ * Two stand-down answers, two different truths. syncWait claims the zone was synced inside the
+ * throttle, so it may only appear while nothing has failed; syncRetryIn replaces it while the last sync
+ * has failed, and gives the Worker's own wait, since nothing retries by itself.
  */
 describe("the stand-down messages", () => {
-  // It names the visitor throttle, which is the zone's own period: the two are one number so
-  // that a press coincides with a run that was going to happen anyway.
-  it.each(ZONE_IDS)("hold %s's throttle to its own update interval", (zone) => {
-    expect(CADENCE[zone].refreshMinIntervalS / 60).toBe(updateEveryMin(zone));
-  });
-
-  it.each(each)("keep refreshWait's claim of a recent successful query, in %s for %s", (lang, zone) => {
-    const min = CADENCE[zone].refreshMinIntervalS / 60;
-    for (const wait of [dicts[lang].refreshWait, dicts[lang].refreshWaitShort])
+  it.each(langs)("keep syncWait's claim of a recent sync, with the throttle's own number, in %s", (lang) => {
+    const min = REFRESH_MIN_INTERVAL_S / 60;
+    for (const wait of [dicts[lang].syncWait, dicts[lang].syncWaitShort])
       expect(wait(min)).toMatch(new RegExp(`\\b${min}\\smin`));
   });
 
-  it.each(langs)("do not ask the reader to press again while SGC is failing, in %s", (lang) => {
-    expect(dicts[lang].refreshStillFailing).not.toMatch(/inténtalo|intenta de nuevo|try again/i);
+  it.each(langs)("say how long the Worker waits while the last sync has failed, in %s", (lang) => {
+    expect(dicts[lang].syncRetryIn(15)).toMatch(/15\smin/);
+    expect(dicts[lang].syncRetryIn(15)).not.toMatch(/SGC/);
   });
 
-  // It sits directly above the alert, which already owns "it retries by itself until SGC
-  // answers". Checked in a browser: saying that twice, thirty pixels apart, reads as the
-  // page repeating itself. This one says what the press did.
-  it.each(langs)("say what the press did rather than repeating the alert, in %s", (lang) => {
-    expect(dicts[lang].refreshStillFailing.length).toBeLessThan(dicts[lang].ingestFailedBody.length / 2);
+  // It sits directly above the alert. Checked in a browser: saying the alert's sentence again, thirty
+  // pixels apart, reads as the page repeating itself. This one says what the press came to.
+  it.each(langs)("say what the press came to rather than repeating the alert, in %s", (lang) => {
+    expect(dicts[lang].syncRetryIn(15).length).toBeLessThan(dicts[lang].ingestFailedBody.length / 2);
+  });
+});
+
+/** A catch-up's progress names the zone's own chunk, which is a week on Chocó and a day on Chaparral. */
+describe("the line under the button while a sync catches up", () => {
+  it.each(langs)("counts weeks on Chocó and days on Chaparral, in %s", (lang) => {
+    expect(dicts[lang].zones.choco.syncStep(3, 12)).toMatch(/semana\s3\sde\s12|week\s3\sof\s12/);
+    expect(dicts[lang].zones.tolima.syncStep(3, 12)).toMatch(/día\s3\sde\s12|day\s3\sof\s12/);
+  });
+
+  // On a phone the line is two lines beside the button; "17…" alone on the second read as a stray number.
+  it.each(langs)("keeps the count in one piece, in %s", (lang) => {
+    expect(dicts[lang].zones.tolima.syncStep(2, 17)).toMatch(/\S+ 2 \S+ 17…/);
   });
 });
 
@@ -291,26 +300,26 @@ describe("the language a first visit opens in", () => {
  * connection or the Worker (an SGC failure comes back as a 200 with a failed run). The old copy, "No se
  * pudo consultar al SGC", blamed SGC for it.
  */
-describe("a failed press on the refresh button", () => {
+describe("a failed press on the sync button", () => {
   it.each(langs)("does not blame SGC, in %s", (lang) => {
-    expect(dicts[lang].refreshFailed).not.toMatch(/SGC/);
+    expect(dicts[lang].syncFailed).not.toMatch(/SGC/);
   });
 
   // The button rests after a failure (`refresh-backoff.ts`); the line says for how long, on screen as a
   // countdown and to a screen reader once, in words it does not read as a letter ("s").
   it.each(langs)("says how long the button rests, without blaming SGC, in %s", (lang) => {
-    for (const line of [dicts[lang].refreshCooldown(20), dicts[lang].refreshCooldownSr(20)]) {
+    for (const line of [dicts[lang].syncCooldown(20), dicts[lang].syncCooldownSr(20)]) {
       expect(line).toContain("20");
       expect(line).not.toMatch(/SGC|recarga|reload/i);
     }
-    expect(dicts[lang].refreshCooldownSr(20)).toMatch(/segundos|seconds/);
+    expect(dicts[lang].syncCooldownSr(20)).toMatch(/segundos|seconds/);
   });
 });
 
-/** With no status the page does not know when SGC was last queried; "nunca" claimed it never was. */
-describe("the last-query note without a status", () => {
+/** With no status the page does not know when the zone was last synced; "nunca" claimed it never was. */
+describe("the last-sync note without a status", () => {
   it.each(langs)("does not say never, in %s", (lang) => {
-    expect(dicts[lang].lastUpdateUnknown).not.toBe(dicts[lang].never);
+    expect(dicts[lang].lastSyncUnknown).not.toBe(dicts[lang].never);
   });
 });
 
@@ -338,36 +347,26 @@ describe("the events hint under the count", () => {
 });
 
 /**
- * The back-fill notice says its history is loading, and its button used to say "Cargar ahora": not
- * whether the page was already doing it, or what a press added (issue #142). Both are true to the code:
- * the page starts the back-fill itself and the Worker's cron carries it on, and the button asks for the
- * rest straight away, as `/insights` words the first half ("Se completa solo").
+ * The notice for a gap in the history. Nothing fills it but a sync (docs/ingest.md, "On demand only"),
+ * so it says so in the words /insights uses, and its button names what a press loads.
  */
 describe("the back-fill notice", () => {
-  it.each(langs)("says it completes by itself, in the words /insights uses, in %s", (lang) => {
-    expect(dicts[lang].completesItself).toMatch(/completa solo|completes by itself/);
+  it.each(langs)("says the next sync completes it, in the words /insights uses, in %s", (lang) => {
+    expect(dicts[lang].completesOnSync).toMatch(/próxima sincronización|next sync/);
     for (const zone of ZONE_IDS) {
-      expect(dicts[lang].zones[zone].backfillBody).toContain(dicts[lang].completesItself);
+      expect(dicts[lang].zones[zone].backfillBody).toContain(dicts[lang].completesOnSync);
     }
   });
 
-  it.each(langs)("names what the button asks for, not only when, in %s", (lang) => {
-    expect(dicts[lang].backfillAction).toMatch(/lo que falta|what is missing/);
-  });
-});
-
-/**
- * The stand-down line under the refresh button has to say who is retrying, since the reader pressed
- * "Actualizar" and nothing was "sent" in any sense they know. It keeps its two rules above: no "try
- * again" asked of the reader, no interval.
- */
-describe("the line under the button while a retry is on the way", () => {
-  it.each(langs)("says the page is retrying, and that pressing is not needed, in %s", (lang) => {
-    expect(dicts[lang].refreshStillFailing).toMatch(/página.*reintent|page.*retrying/i);
-    expect(dicts[lang].refreshStillFailing).toMatch(/no hace falta pulsar|no need to press/);
+  it.each(langs)("counts what is still to load, singular and plural, in %s", (lang) => {
+    for (const zone of ZONE_IDS) {
+      expect(dicts[lang].zones[zone].backfillTitle(1)).toMatch(/\b1\b/);
+      expect(dicts[lang].zones[zone].backfillTitle(4)).toMatch(/\b4\b/);
+      expect(dicts[lang].zones[zone].backfillTitle(1)).not.toMatch(/semanas|días|weeks|days/);
+    }
   });
 
-  it.each(langs)("names no interval, in %s", (lang) => {
-    expect(dicts[lang].refreshStillFailing).not.toMatch(/\d/);
+  it.each(langs)("names what the button loads, in %s", (lang) => {
+    expect(dicts[lang].backfillAction).toMatch(/lo que falta|the rest/);
   });
 });

@@ -313,8 +313,8 @@ const TERMS: Record<TermId, TermEntry> = {
     kind: "term",
     term: { es: "Automático y revisado", en: "Automatic and reviewed" },
     definition: {
-      es: "Un evento automático es la primera ubicación y magnitud que calcula el sistema del SGC, en minutos. Uno revisado ya lo comprobó un analista, y su lugar o su magnitud pueden haber cambiado. Esta página recoge esas revisiones a lo largo del día.",
-      en: "An automatic event is the first location and magnitude SGC's system works out, within minutes. A reviewed one has been checked by an analyst, and its place or magnitude may have changed. This page picks up those revisions through the day.",
+      es: "Un evento automático es la primera ubicación y magnitud que calcula el sistema del SGC, en minutos. Uno revisado ya lo comprobó un analista, y su lugar o su magnitud pueden haber cambiado. Esta página recoge esas revisiones cada vez que alguien la sincroniza.",
+      en: "An automatic event is the first location and magnitude SGC's system works out, within minutes. A reviewed one has been checked by an analyst, and its place or magnitude may have changed. This page picks up those revisions whenever someone syncs it.",
     },
   },
   mainshock: {

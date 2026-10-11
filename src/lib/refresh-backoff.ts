@@ -1,5 +1,5 @@
 /**
- * How long "Actualizar ahora" rests after a press whose request failed (the Worker or the
+ * How long "Sincronizar ahora" rests after a press whose request failed (the Worker or the
  * connection, never SGC: an SGC failure is a 200 with a failed run). Each failure in a row doubles
  * the wait, from 5 s up to a minute, so a reader pressing on through an outage sends a handful of
  * requests rather than one a second to a server that is already failing. A refresh that works ends

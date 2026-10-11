@@ -12,13 +12,14 @@ name: Ingest health
 # It calls /api/health, which is the one route open to a caller with no same-origin
 # signal; every other /api/ route answers 403 to curl by design.
 
-# Switched off 2026-09-20 while the Worker was being refused with 410 — the cause was known
-# and a failing run every half hour said nothing new — and back on 2026-09-22 once ingest had
-# been succeeding for a day. If it has to go off again, write down the condition for turning
-# it back on, and check that condition: it stayed off for a day after this one was met.
+# Switched off 2026-09-20 while the Worker was being refused with 410, and back on 2026-09-22.
+#
+# Switched off again on 2026-10-11, for good this time: the site went to on-demand syncing (the
+# Worker has no cron, and SGC is read only when a reader presses "Sincronizar ahora"), so a
+# catalogue an hour old is the normal state and this job would fail on every run. The schedule is
+# gone and the job is kept for a run by hand, right after a sync, to confirm it landed. The
+# condition for turning the schedule back on: the Worker reading SGC on a cron again.
 on:
-  schedule:
-    - cron: "7,37 * * * *"
   workflow_dispatch:
 
 permissions:

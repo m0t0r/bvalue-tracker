@@ -31,8 +31,19 @@ export interface StatusResponse {
   newestEvent: Pick<StoredEvent, "id" | "time" | "mag" | "region"> | null;
   lastRun: IngestRun | null;
   lastSuccessfulRun: IngestRun | null;
-  /** 7-day history chunks loaded so far. Statistics are not representative until done === total. */
-  backfill: { done: number; total: number };
+  /**
+   * History chunks (`SWEEP_CHUNK_DAYS`) loaded so far, of every chunk from the zone's start to now. With
+   * syncs on demand, every day without one adds a chunk not yet done. `gaps` counts the missing chunks
+   * that begin before the last successful sync: holes in what is shown as synced, which make the
+   * statistics unrepresentative (docs/science.md). Days after the last sync are not gaps.
+   */
+  backfill: { done: number; total: number; gaps: number };
+  /**
+   * Where the synced data stops, which the page's "last 7 days" and every /insights claim end at
+   * (`asOf`): the oldest gap's start while there is one, else the last successful run's end. null
+   * before any sync.
+   */
+  syncedThrough: string | null;
   /** Present on POST /api/refresh: whether SGC was actually queried. */
   refreshed?: boolean;
   /** Seconds until a manual refresh will query SGC again. */

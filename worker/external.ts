@@ -1,10 +1,8 @@
 /**
- * The daily USGS job: what USGS publishes about each zone's mainshock, fetched once a day on its own
- * cron and stored as a small digest in D1 for `GET /api/context` (docs/ingest.md, "The daily USGS
- * job").
- *
- * It is its own invocation, never part of an ingest tick: those already run over the free plan's
- * 10 ms CPU, and nothing here may add to them. It never talks to SGC.
+ * The USGS job: what USGS publishes about each zone's mainshock, fetched when a reader syncs (at most
+ * once per sync throttle, after the sync has been answered) and stored as a small digest in D1 for
+ * `GET /api/context` (docs/ingest.md, "USGS and the sea, on a sync"). Until 2026-10-11 it ran once a
+ * day on its own cron. It never talks to SGC.
  *
  * - **Which USGS event: matched, never pinned.** The zone's mainshock is detected from SGC's
  *   catalogue (`zoneMainshock`, state "found" only), and USGS is searched for one event within a
@@ -14,7 +12,7 @@
  *   URL is the one stored is not downloaded again; the row only records that it was checked.
  * - **A failure keeps what was there.** USGS down, a product missing or a file that does not parse
  *   leaves the stored digest as it was, and the route serves it with its age. The rest still runs,
- *   and then the first error is rethrown, so the invocation is recorded as failed.
+ *   and then the first error is rethrown for the caller.
  * - **A digest leaves with its mainshock.** Rows matched from any event other than the zone's found
  *   mainshock are deleted on every run, so no reader can show the M7.4's figures for a later event.
  */
@@ -23,14 +21,6 @@ import type { ContextResponse, ExternalProduct } from "./api-types.ts";
 import { zoneMainshockRow, type MainshockRow } from "./db.ts";
 import type { Logger } from "./log.ts";
 import { DIGEST_VERSION, digestDyfi, digestForecast, digestPager } from "./usgs.ts";
-
-/**
- * Once a day, at 11:07 UTC: off the ingest's quarter hours, so the two never share an invocation
- * and this one has its own CPU. Felt reports grow slowly six weeks after the M7.4 and the forecast
- * is updated about weekly, so a day is soon enough. Must match `triggers.crons` in wrangler.jsonc.
- * Defined in `core/products.ts`, because the insights page times its forecast rechecks by it.
- */
-export { PRODUCTS_CRON } from "../core/products.ts";
 
 export const USGS_SEARCH = "https://earthquake.usgs.gov/fdsnws/event/1/query";
 const USGS_HOST = "earthquake.usgs.gov";
@@ -204,8 +194,7 @@ async function refreshZone({ db, log, now }: ProductsDeps, zone: ZoneId): Promis
 
 /**
  * Every zone, one after another. A zone or product that fails is logged and the rest still run; then
- * the first failure is rethrown, as the ingest's scheduled() does, so Cloudflare records the
- * invocation as failed rather than a job that has been broken for weeks looking "ok".
+ * the first failure is rethrown, so a caller can tell a run that failed from one that did not.
  */
 export async function refreshProducts(deps: ProductsDeps): Promise<void> {
   let failed: unknown = null;

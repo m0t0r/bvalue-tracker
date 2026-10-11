@@ -122,7 +122,7 @@ export function insertStmt(db: D1Database, e: SeismicEvent, now: string, zone: Z
       `INSERT INTO events (id, time, lat, lon, depth_km, mag, mag_type, phases, rms_s, gap_deg,
          err_lat_km, err_lon_km, err_depth_km, region, status, solution_stamp, first_seen_at, updated_at, removed_at, zone)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-       -- Two runs can overlap (cron + a visitor's refresh); the loser must update, not fail.
+       -- Two runs can overlap (two readers syncing at once); the loser must update, not fail.
        ON CONFLICT(id) DO UPDATE SET
          time = excluded.time, lat = excluded.lat, lon = excluded.lon, depth_km = excluded.depth_km,
          mag = excluded.mag, mag_type = excluded.mag_type, phases = excluded.phases, rms_s = excluded.rms_s,
@@ -357,7 +357,8 @@ export interface MainshockRow {
  * for, which would drop "the largest of this range" (docs/ingest.md) — or null unless one is found.
  * Only the two largest events decide it (`zoneMainshock`), so this reads two rows' worth of answer.
  * Unindexed on `mag`, it walks the zone's rows to find them. Its callers are `excludeMainshock=1`,
- * which the page never sends, and the daily USGS job, once a day, so it is not worth an index.
+ * which the page never sends, and the USGS job, at most once per sync throttle, so it is not worth
+ * an index.
  */
 export async function zoneMainshockRow(db: D1Database, zone: ZoneId): Promise<MainshockRow | null> {
   const { results } = await db

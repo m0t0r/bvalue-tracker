@@ -1,12 +1,12 @@
 /**
  * The sea state the 3D block draws: Open-Meteo's marine forecast for one point in the block's Pacific,
- * fetched once a day by the daily job (`PRODUCTS_CRON`, after USGS's products) and stored as one small
- * row for `GET /api/sea` (docs/ingest.md, "The daily sea-state job").
+ * fetched when a reader syncs (after USGS's products, at most once per sync throttle) and stored as one
+ * small row for `GET /api/sea` (docs/ingest.md, "USGS and the sea, on a sync"). Until 2026-10-11 a daily
+ * cron fetched it.
  *
- * - **Once a day, 72 hours ahead.** The wave models behind it update every 6–12 hours and the drawing
- *   is illustrative, so one request a day is plenty; three days of hours mean one failed run still
- *   leaves the page the current hour. The page picks the hour it is in and draws nothing from the data
- *   once the stored hours have run out.
+ * - **72 hours ahead.** The wave models behind it update every 6–12 hours and the drawing is
+ *   illustrative; three days of hours mean a sync leaves the page the current hour for three days. The
+ *   page picks the hour it is in and draws nothing from the data once the stored hours have run out.
  * - **Never on a reader's request**, like `/api/context`: the route is one primary-key read. Cloudflare's
  *   Cache API would not have done it: it does nothing on `workers.dev`.
  * - **One model, named**: Météo-France's MFWAM (`meteofrance_wave`), so the page can say whose model

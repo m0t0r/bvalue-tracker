@@ -9,7 +9,7 @@ const esCommon = {
   magTypes:
     "Las magnitudes mezclan {types} (MLr, MLv, Mw, M), y eso mueve b más que su margen de error. La tarjeta del valor b permite comparar el cálculo con todos los tipos y con uno solo.",
   revisions:
-    "Los eventos recientes pueden ser {automatic} y cambiar tras la revisión de un analista. La página vuelve a consultar todo el historial a lo largo del día para recoger esos cambios.",
+    "Los eventos recientes pueden ser {automatic} y cambiar tras la revisión de un analista. Cada sincronización vuelve a leer una parte del historial para recoger esos cambios.",
   /** The rule `core/mainshock.ts` applies, in one sentence a reader can check against the table. */
   mainshockRule:
     "La página llama sismo principal al evento más grande solo si un analista del SGC lo ha revisado y supera en al menos 1 unidad de magnitud a todos los demás, comparando las magnitudes tal como las publica el SGC. Es una etiqueta a posteriori: si después llegara un evento mayor, el anterior pasaría a ser un sismo premonitor.",
@@ -17,10 +17,10 @@ const esCommon = {
   afterMainshock:
     "Justo después del sismo principal se pierden eventos pequeños; las primeras ventanas son las menos fiables.",
   /**
-   * What a notice about an unfinished history promises on both pages: the page starts it and the cron
-   * carries it on. It does not say "nothing to do": the monitor's notice has a button that asks for it now.
+   * What a notice about an unfinished history says on both pages: nothing completes it but a sync
+   * (docs/ingest.md, "On demand only"). The monitor's notice has the button beside it.
    */
-  completesItself: "Se completa solo.",
+  completesOnSync: "Se completa con la próxima sincronización.",
 };
 
 /**
@@ -50,8 +50,11 @@ const es = {
       docTitle: "Secuencia sísmica del Chocó · valor b",
       title: "Secuencia sísmica del Chocó",
       subtitle: "Secuencia posterior al sismo M7.4 de San José del Palmar (10 de agosto de 2026). Datos del {sgc}.",
-      backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} semanas`,
-      backfillBody: `Todavía faltan semanas desde el 10 de agosto. El valor b y los gráficos no son representativos hasta que termine. ${esCommon.completesItself}`,
+      /** The notice while history has a gap (`backfill.gaps`): how many chunks are still to load. */
+      backfillTitle: (n: number) => (n === 1 ? "Falta 1 semana por cargar" : `Faltan ${n} semanas por cargar`),
+      backfillBody: `La última sincronización se detuvo antes de terminar. El valor b y los gráficos no son representativos hasta que se cargue todo. ${esCommon.completesOnSync}`,
+      /** The line under the button while a press catches up, one chunk per request. "día 2 de 17" stays whole. */
+      syncStep: (i: number, n: number) => `Sincronizando: semana\u00A0${i}\u00A0de\u00A0${n}…`,
       caveats: (m: CaveatState) => [
         esCommon.notForecast,
         esCommon.floor,
@@ -68,8 +71,9 @@ const es = {
       docTitle: "Enjambre sísmico de Chaparral (Tolima) · valor b",
       title: "Enjambre sísmico de Chaparral (Tolima)",
       subtitle: "Enjambre de eventos en Chaparral, Tolima, desde el 20 de septiembre de 2026. Datos del {sgc}.",
-      backfillTitle: (a: number, b: number) => `Cargando el historial: ${a} de ${b} días`,
-      backfillBody: `Todavía faltan días desde el 20 de septiembre. El valor b y los gráficos no son representativos hasta que termine. ${esCommon.completesItself}`,
+      backfillTitle: (n: number) => (n === 1 ? "Falta 1 día por cargar" : `Faltan ${n} días por cargar`),
+      backfillBody: `La última sincronización se detuvo antes de terminar. El valor b y los gráficos no son representativos hasta que se cargue todo. ${esCommon.completesOnSync}`,
+      syncStep: (i: number, n: number) => `Sincronizando: día\u00A0${i}\u00A0de\u00A0${n}…`,
       caveats: (m: CaveatState) => [
         "El valor b describe el enjambre: cuánto pesan los eventos grandes frente a los pequeños. No es un pronóstico ni una alerta.",
         esCommon.floor,
@@ -88,9 +92,7 @@ const es = {
           : ["Mientras el SGC no la describa de otra forma, esta página la sigue llamando enjambre."]),
         ...(m === "found" ? [esCommon.afterMainshock] : []),
         "El SGC plantea como hipótesis preliminar que el sismo M7.4 del 10 de agosto en el Chocó cambió los esfuerzos en la corteza y favoreció que se reactivaran fallas de la zona de Chaparral. Es una hipótesis, no una conclusión.",
-        // Not `esCommon.revisions`: with one-day chunks and one sweep an hour, "todo el historial a lo
-        // largo del día" stops being true once the swarm is 24 days old.
-        "Los eventos recientes pueden ser {automatic} y cambiar tras la revisión de un analista. La página vuelve a consultar el historial por partes, un día de eventos cada hora, para recoger esos cambios.",
+        esCommon.revisions,
         esCommon.mainshockRule,
       ],
     },
@@ -104,18 +106,20 @@ const es = {
   eventsOfCatalogue: (n: string) => `de ${n} en el catálogo`,
   eventsOfCatalogueShort: (n: string) => `de ${n} en total`,
   newestEvent: "Evento más reciente",
-  lastUpdate: "Última consulta al SGC",
-  /** The last-query note beside the refresh button on a phone (`*Short` below `sm`). */
-  lastUpdateShort: "Consulta al SGC",
-  /** The same note while the last run has failed: the time is the last query that worked. */
-  lastUpdateOk: "Última consulta correcta al SGC",
-  lastUpdateOkShort: "Consulta correcta",
+  /** The note under "Sincronizar ahora": when the zone was last synced. */
+  lastSync: "Última sincronización",
+  /** The same note beside the button on a phone (`*Short` below `sm`). */
+  lastSyncShort: "Sincronizado",
+  /** The same note while the last run has failed: the time is the last sync that worked. */
+  lastSyncOk: "Última sincronización correcta",
+  lastSyncOkShort: "Última correcta",
   never: "nunca",
   /** The note's value while `/api/status` has failed: the page does not know, and "nunca" would claim it. */
-  lastUpdateUnknown: "desconocida",
-  refresh: "Actualizar ahora",
+  lastSyncUnknown: "desconocida",
+  /** The one way the page reads SGC (docs/ingest.md, "On demand only"). */
+  sync: "Sincronizar ahora",
   /**
-   * Replaces the last-query note under the refresh button while a refetch over data on screen has failed or waits offline
+   * Replaces the last-sync note under the button while a refetch over data on screen has failed or waits offline
    * (`staleSince`). It dates the figures, which is all the page knows: the time is when they were
    * fetched, not when anything was lost (a status poll may still be answering), and `day` is set only
    * when that was not today. It blames neither the connection nor the server. No interval and no
@@ -124,19 +128,26 @@ const es = {
   staleSince: (time: string, day: string | null) =>
     `No se pudieron actualizar las cifras: son ${day === null ? "de las" : `del ${day} a las`} ${time}. Se actualizarán solas.`,
   loading: "Cargando…",
-  refreshing: "Consultando al SGC…",
-  refreshWait: (min: number) => `Ya tienes los datos más recientes: el SGC se consultó hace menos de ${min} minutos.`,
-  refreshWaitShort: (min: number) => `Ya está al día: el SGC se consultó hace <${min}\u00A0min.`,
+  syncing: "Sincronizando con el SGC…",
+  /** A press inside the throttle while nothing has failed: the zone was synced moments ago. */
+  syncWait: (min: number) => `Ya está al día: se sincronizó hace menos de ${min} minutos.`,
+  syncWaitShort: (min: number) => `Al día: sincronizado hace <${min}\u00A0min.`,
   /** A press whose request failed. It never reached SGC, so it names neither SGC nor a cause. */
-  refreshFailed: "No se pudo actualizar. Inténtalo de nuevo.",
+  syncFailed: "No se pudo sincronizar. Inténtalo de nuevo.",
   /** The same, while the button rests after it (`refresh-backoff.ts`): a countdown, drawn only. */
-  refreshCooldown: (s: number) => `No se pudo actualizar. Inténtalo de nuevo en ${s} s.`,
+  syncCooldown: (s: number) => `No se pudo sincronizar. Inténtalo de nuevo en ${s} s.`,
   /** What a screen reader hears instead, once: the countdown would be read out every second. */
-  refreshCooldownSr: (s: number) => `No se pudo actualizar. Inténtalo de nuevo en ${s} segundos.`,
-  refreshStillFailing: "La página ya reintenta; no hace falta pulsar.",
-  ingestFailed: "La última consulta al SGC falló",
+  syncCooldownSr: (s: number) => `No se pudo sincronizar. Inténtalo de nuevo en ${s} segundos.`,
+  /**
+   * A press the Worker turned away while the last sync has failed: it waits before asking SGC again
+   * (`dueNow`), and says how long. Nothing retries by itself any more, so it names the wait.
+   */
+  syncRetryIn: (min: number) => `Puedes volver a intentarlo en ${min}\u00A0min.`,
+  /** A catch-up that stopped at its cap with chunks still missing: the next press goes on. */
+  syncMore: "Queda historial por cargar: vuelve a pulsar para seguir.",
+  ingestFailed: "La última sincronización con el SGC falló",
   ingestFailedBody:
-    "Se muestran los últimos datos guardados. La consulta se repetirá automáticamente hasta que el SGC vuelva a responder; no hace falta recargar.",
+    "Se muestran los últimos datos guardados. Vuelve a intentarlo más tarde con «Sincronizar ahora»; no hace falta recargar.",
   technicalDetail: "Detalle técnico",
   loadFailed: "No se pudieron cargar los datos",
   loadFailedBody: "Puede ser la conexión o el servidor. Vuelve a intentarlo en un momento.",
@@ -150,8 +161,8 @@ const es = {
   loadStrugglingBody: "La página lo vuelve a intentar sola.",
   /** Drawn only: read out, the count would be news at every retry. */
   loadAttempt: (n: number, of: number) => `Intento ${n} de ${of}`,
-  completesItself: esCommon.completesItself,
-  backfillAction: "Cargar lo que falta ahora",
+  completesOnSync: esCommon.completesOnSync,
+  backfillAction: "Cargar lo que falta",
   backfillShort: "Historial incompleto",
   scopeTitle: (shown: string, total: string) => `Mostrando ${shown} de ${total} eventos`,
   scopeShort: (shown: string, total: string) => `${shown} de ${total}`,
@@ -353,8 +364,9 @@ const es = {
     "Amplía las fechas, baja la magnitud mínima o usa «Quitar filtros», arriba, para volver al catálogo completo.",
   caveatsTitle: "Cómo leer estas cifras",
   source: "Fuente oficial: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: (min: number) =>
-    `El catálogo se consulta al SGC cada ${min} minutos. Mientras esta página esté abierta, las cifras, los gráficos y el mapa se actualizan solos, sin recargar.`,
+  /** The footer's line on how the data arrives (docs/ingest.md, "On demand only"). */
+  syncNote:
+    "Esta página no sigue la actividad en tiempo real. Los datos se cargan del SGC solo cuando alguien pulsa «Sincronizar ahora».",
   /**
    * The footer both pages share (`SiteFooter`): what the page is, and the one place the zone of every
    * time on it is stated. The monitor adds the CSV line, since it is the page that downloads them.
@@ -374,11 +386,11 @@ const enCommon = {
   magTypes:
     "Magnitudes mix several {types} (MLr, MLv, Mw, M), and that moves b by more than its margin of error. The b-value card lets you compare all types against a single one.",
   revisions:
-    "Recent events may be {automatic} and can change after analyst review. The page re-reads the whole history over the course of each day to pick up those changes.",
+    "Recent events may be {automatic} and can change after analyst review. Each sync re-reads part of the history to pick up those changes.",
   mainshockRule:
     "The page calls the largest event the mainshock only if an SGC analyst has reviewed it and it exceeds every other event by at least 1 magnitude unit, comparing magnitudes as SGC publishes them. The label is retrospective: if a larger event came later, the earlier one would become a foreshock.",
   afterMainshock: "Right after the mainshock small events are missed; the earliest windows are the least reliable.",
-  completesItself: "It completes by itself.",
+  completesOnSync: "The next sync completes it.",
 };
 
 const en: Dict = {
@@ -392,8 +404,9 @@ const en: Dict = {
       docTitle: "Chocó earthquake sequence · b-value",
       title: "Chocó earthquake sequence",
       subtitle: "Sequence following the M7.4 San José del Palmar earthquake (10 August 2026). Data from the {sgc}.",
-      backfillTitle: (a, b) => `Loading history: ${a} of ${b} weeks`,
-      backfillBody: `Weeks since 10 August are still missing. The b-value and charts are not representative until this finishes. ${enCommon.completesItself}`,
+      backfillTitle: (n) => (n === 1 ? "1 week still to load" : `${n} weeks still to load`),
+      backfillBody: `The last sync stopped before it finished. The b-value and charts are not representative until everything has loaded. ${enCommon.completesOnSync}`,
+      syncStep: (i, n) => `Syncing: week\u00A0${i}\u00A0of\u00A0${n}…`,
       caveats: (m) => [
         enCommon.notForecast,
         enCommon.floor,
@@ -409,8 +422,9 @@ const en: Dict = {
       docTitle: "Chaparral earthquake swarm (Tolima) · b-value",
       title: "Chaparral earthquake swarm (Tolima)",
       subtitle: "Swarm of events at Chaparral, Tolima, since 20 September 2026. Data from the {sgc}.",
-      backfillTitle: (a, b) => `Loading history: ${a} of ${b} days`,
-      backfillBody: `Days since 20 September are still missing. The b-value and charts are not representative until this finishes. ${enCommon.completesItself}`,
+      backfillTitle: (n) => (n === 1 ? "1 day still to load" : `${n} days still to load`),
+      backfillBody: `The last sync stopped before it finished. The b-value and charts are not representative until everything has loaded. ${enCommon.completesOnSync}`,
+      syncStep: (i, n) => `Syncing: day\u00A0${i}\u00A0of\u00A0${n}…`,
       caveats: (m) => [
         "The b-value describes the swarm: how much the large events weigh against the small ones. It is not a forecast or an alert.",
         enCommon.floor,
@@ -423,7 +437,7 @@ const en: Dict = {
         ...(m === "none" ? [] : ["Until SGC describes it differently, this page keeps calling it a swarm."]),
         ...(m === "found" ? [enCommon.afterMainshock] : []),
         "SGC's preliminary hypothesis is that the M7.4 of 10 August in Chocó changed the stresses in the crust and helped reactivate faults around Chaparral. It is a hypothesis, not a conclusion.",
-        "Recent events may be {automatic} and can change after analyst review. The page re-reads the history in parts, one day of events each hour, to pick up those changes.",
+        enCommon.revisions,
         enCommon.mainshockRule,
       ],
     },
@@ -432,26 +446,26 @@ const en: Dict = {
   eventsOfCatalogue: (n) => `of ${n} in the catalogue`,
   eventsOfCatalogueShort: (n) => `of ${n} in total`,
   newestEvent: "Newest event",
-  lastUpdate: "Last SGC query",
-  lastUpdateShort: "Last SGC query",
-  lastUpdateOk: "Last successful SGC query",
-  lastUpdateOkShort: "Last good query",
+  lastSync: "Last sync",
+  lastSyncShort: "Last sync",
+  lastSyncOk: "Last successful sync",
+  lastSyncOkShort: "Last good sync",
   never: "never",
-  lastUpdateUnknown: "unknown",
-  refresh: "Refresh now",
+  lastSyncUnknown: "unknown",
+  sync: "Sync now",
   staleSince: (time, day) =>
     `The figures could not be updated: they are from ${time}${day === null ? "" : ` on ${day}`}. They will update by themselves.`,
   loading: "Loading…",
-  refreshing: "Querying SGC…",
-  refreshWait: (min) => `You already have the latest data: SGC was queried less than ${min} minutes ago.`,
-  refreshWaitShort: (min) => `Up to date: SGC was queried <${min}\u00A0min ago.`,
-  refreshFailed: "Could not refresh. Try again.",
-  refreshCooldown: (s) => `Could not refresh. Try again in ${s} s.`,
-  refreshCooldownSr: (s) => `Could not refresh. Try again in ${s} seconds.`,
-  refreshStillFailing: "The page is retrying; no need to press.",
-  ingestFailed: "The last SGC query failed",
-  ingestFailedBody:
-    "Showing the most recent stored data. The page retries by itself until SGC answers again; there is no need to reload.",
+  syncing: "Syncing with SGC…",
+  syncWait: (min) => `Already up to date: synced less than ${min} minutes ago.`,
+  syncWaitShort: (min) => `Up to date: synced <${min}\u00A0min ago.`,
+  syncFailed: "Could not sync. Try again.",
+  syncCooldown: (s) => `Could not sync. Try again in ${s} s.`,
+  syncCooldownSr: (s) => `Could not sync. Try again in ${s} seconds.`,
+  syncRetryIn: (min) => `You can try again in ${min}\u00A0min.`,
+  syncMore: "Some history is still to load: sync again to continue.",
+  ingestFailed: "The last sync with SGC failed",
+  ingestFailedBody: "Showing the most recent stored data. Try again later with “Sync now”; there is no need to reload.",
   technicalDetail: "Technical detail",
   loadFailed: "Could not load the data",
   loadFailedBody: "It may be the connection or the server. Try again in a moment.",
@@ -460,8 +474,8 @@ const en: Dict = {
   loadStruggling: "Could not load the data yet",
   loadStrugglingBody: "The page is trying again by itself.",
   loadAttempt: (n, of) => `Attempt ${n} of ${of}`,
-  completesItself: enCommon.completesItself,
-  backfillAction: "Load what is missing now",
+  completesOnSync: enCommon.completesOnSync,
+  backfillAction: "Load the rest",
   backfillShort: "History incomplete",
   scopeTitle: (shown, total) => `Showing ${shown} of ${total} events`,
   scopeShort: (shown, total) => `${shown} of ${total}`,
@@ -640,8 +654,8 @@ const en: Dict = {
     "Widen the dates, lower the minimum magnitude, or use “Clear filters” above to see the whole catalogue.",
   caveatsTitle: "How to read these numbers",
   source: "Authoritative source: Servicio Geológico Colombiano, Consulta Experta SeisComP.",
-  autoUpdateLong: (min) =>
-    `The catalogue is read from SGC every ${min} minutes. While this page is open, the figures, charts and map update by themselves, with no reload.`,
+  syncNote:
+    "This page does not track activity in real time. Data is loaded from SGC only when someone selects “Sync now”.",
   disclaimer:
     "An independent page, not affiliated with SGC. The figures this page computes describe what has already happened and are not a forecast. For official information, consult the Servicio Geológico Colombiano.",
   timeNote: "Dates and times are Colombia time (UTC−5).",

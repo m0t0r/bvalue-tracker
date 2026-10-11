@@ -6,6 +6,61 @@ since 2026-09-20. Zones are named by department, as SGC's daily bulletin names t
 box covers only the swarm near Chaparral, which is why its heading names the town. Below,
 "Chaparral" is the swarm and `tolima` the zone id. Every event and every run carries its zone.
 
+<a id="on-demand-only"></a>
+## On demand only (from 2026-10-11)
+
+**Nothing reads SGC, USGS or Open-Meteo on a schedule.** On 2026-10-11 the owner moved the project to
+support mode: no real-time tracking, and data loaded or updated only when a reader asks. The Worker has
+no Cron Triggers and no `scheduled()` handler. `wrangler.jsonc` states `"triggers": { "crons": [] }`
+rather than leaving the key out, because an empty list is what removes the crons a deploy finds in
+place (the 15-minute ingest and the daily USGS job until that date); a missing key would have left them
+firing at a handler that no longer exists. `worker/test/ingest.test.ts` holds the list empty.
+
+**The one way in is "Sincronizar ahora" ("Sync now"), which is `POST /api/refresh`.** Each request runs
+one plan from `dueNow(now, history, zone)` in `worker/plan.ts`:
+
+| The zone's state | What one request does |
+|---|---|
+| Another run in flight (any zone) | Stands down with `retryAfterS: 5`. The claim is atomic, so a burst of presses still sends one SGC request. |
+| **Behind**: `backfill.done < total` | One history chunk (`SWEEP_CHUNK_DAYS`: a day of Chaparral, a week of Chocó), **missing chunks first**: never attempted before attempted, oldest first, and only then a loaded one. **No throttle** while SGC is answering. Least recently attempted alone sent a catch-up back to loaded chunks while one that had just failed waited behind them, so a press could spend its 31 requests loading nothing (code review, 2026-10-11). Every day without a sync adds a chunk to `total`, so after a quiet spell a zone is behind by that many chunks. |
+| **Caught up** | The trailing window with removals (`SYNC_WINDOW_DAYS`: 1 day for Chaparral, 3 for Chocó), at most once per `REFRESH_MIN_INTERVAL_S` (900 s, both zones), counted from the zone's last run. Then, if the zone has had no sweep for an hour (`REVISION_SWEEP_EVERY_S`), one more chunk, the least recently attempted, for SGC's late revisions. A failed trailing read ends the plan there, so the failure is the last run and the last sync does not move (code review, 2026-10-11). |
+| SGC failing (the zone's last run failed, or a 429/503 cooldown) | The catch-up closes: every request waits the throttle, then runs as above. A 429 or 503's cooldown (`Retry-After`, clamped to 5 min–6 h, 30 min without one) is honoured by the request itself when it is longer than the throttle: with no cron, nothing else would (code review, 2026-10-11). |
+| SGC refusing (401/403/410/451) for an hour or more | A request waits an hour from the last request of **any** zone: it is one door. A younger refusal waits only the throttle. |
+
+**The page repeats the request while the zone is behind** (`syncZone` in `src/lib/sync.ts`, tested
+in `sync.test.ts`, run by `StatusBar`). One press sends one request, and while the answer says the zone is
+still behind it sends the next, one at a time and at most `MAX_SYNC_STEPS` (31) per press: a month of
+Chaparral's days, or as many of Chocó's weeks. The line under the button counts them ("Sincronizando:
+día 3 de 12…"). It waits out an in-flight stand-down of up to 30 s (`IN_FLIGHT_WAIT_MAX_S`), and stops
+on a failed run (the alert says so) or on any longer wait. A press that stops at the cap says
+"Queda historial por cargar: vuelve a pulsar para seguir." The first request of a press carries
+`context=1`, which also refreshes USGS and the sea (see [below](#usgs-and-the-sea-on-a-sync)).
+
+**Nothing else on the page reaches SGC.** No request on load, none on returning to the tab (the
+focus-triggered refresh, `useReturnToTab`, is gone), and none for history left to load (the page used
+to start the back-fill loop by itself when status said history was incomplete). `refetchOnWindowFocus`
+is off on both pages. What stays is the **one-minute `/api/status` poll** (owner's choice), which reads
+D1 only: it is how an open tab notices a sync another reader ran, and the page refetches `/api/events`
+when the poll reports a newer successful run, and after a failed background refetch on the next poll
+that answers.
+
+**Behind is not broken.** `/api/status` reports `backfill: { done, total, gaps }`. `gaps` counts only the
+missing chunks that begin before the zone's last successful run started: holes in what has been synced,
+from a press that stopped part-way or a database still filling. Those make the statistics
+unrepresentative, and the page warns about them (docs/science.md). The days since the last sync are not
+gaps; the page dates them with "Última sincronización" under the button instead.
+
+**What bounds the load on SGC now** is presses, not readers or a schedule: a caught-up zone costs at most
+one request per 15 minutes plus one revision chunk an hour (10 an hour for both zones at worst), and a
+catch-up one request per missing chunk, in sequence, at most 31 per press. See [the request budget](sgc-data-source.md#sgc-rate-limits-and-the-request-budget).
+
+## Until 2026-10-11: the cron lanes
+
+Everything from here to "Concurrency and failure lessons" describes the Cron Trigger the Worker ran
+until 2026-10-11, kept for its reasoning and its measurements. None of it runs any more:
+`TICK_MS`, `INGEST_CRON`, `tickMinute`, `WIDE_TICK_EVERY_MIN`, `CADENCE`, `updateEveryMin` and the fast
+lane are gone from `worker/plan.ts`.
+
 **Which zone gets every lane follows the activity** (`CADENCE` in `worker/plan.ts`). Until
 2026-09-25 it was Chocó, with Chaparral on the wide ticks only; that day the two swapped, because
 the Chocó sequence had quietened six weeks after its M7.4 and the swarm had not. The swap moved no
@@ -35,7 +90,7 @@ below is Chaparral's; Chocó differs as follows (`SWEEP_CHUNK_DAYS` in `worker/i
   Chaparral response lacks every Chocó event; without that, the 20% guard would be the only thing
   standing between it and retiring the whole of Chocó, and the guard would only log a note.
 
-| Trigger | What it does |
+| Trigger (until 2026-10-11) | What it did |
 |---|---|
 | Cron `*/15 * * * *`, tick minute not divisible by 30 | **The fast lane.** Re-reads the trailing 1 day (`TRAILING_FAST_DAYS`), inserts and updates only. It never retires an event: a 1-day window holds a handful of events, too few for the `MAX_REMOVAL_SHARE` guard to engage, so one short response could retire real ones. It also stands down entirely while SGC is unwell — see [rate limits](sgc-data-source.md#sgc-rate-limits-and-the-request-budget). |
 | Cron `*/15 * * * *`, tick minute divisible by 30 | Re-reads the trailing day, with removals. |
@@ -44,18 +99,21 @@ below is Chaparral's; Chocó differs as follows (`SWEEP_CHUNK_DAYS` in `worker/i
 | Returning to the open tab | The page sends `POST /api/refresh` itself, through TanStack Query's focus signal (`focusManager.subscribe`), but only when the last SGC query is older than the throttle. The Worker's own limit is what protects SGC, whatever the number of visitors. |
 | The open page | Re-reads `/api/status` every minute and whenever the tab becomes visible again (polling pauses in a hidden tab). Re-reads `/api/events` as soon as status reports a newer successful ingest, and on focus when older than a minute. "Última consulta al SGC" in the status bar is the last successful ingest; the page shows no second "checked at" time, which was tried and confused the reader. |
 
-The tick's own minute is `tickMinute(scheduledTime)`, which snaps to the nearest tick —
+The tick's own minute was `tickMinute(scheduledTime)`, which snapped to the nearest tick —
 never to the nearest minute, because the dispatch is not punctual and that mistake cost a
-day of wide ticks. `TICK_MS` in `worker/plan.ts` must equal the cron above. See [the lane note](#concurrency-and-failure-lessons).
+day of wide ticks. See [the lane note](#concurrency-and-failure-lessons).
 
 Ingest upserts by event id, only touches rows whose data changed, marks events
 SGC stops returning as removed (never deletes), and changes nothing when the
 fetch or parse fails. A response that would retire more than 20% of a window's
-events is not trusted for removals.
+events is not trusted for removals. All of this holds for a sync exactly as it did for a tick:
+both are the same `ingest()`.
 
 ## Concurrency and failure lessons
 
-Each of these was a real bug in production or in review:
+Each of these was a real bug in production or in review. Most still hold, since a sync is the same
+`ingest()` and the same claim; the ones about the cron's lanes and ticks are history since 2026-10-11,
+and say so.
 
 - Cron and a visitor's refresh can ingest the same window at once. Inserts are
   therefore **upserts** (`ON CONFLICT(id) DO UPDATE`), and `/api/refresh` stands
@@ -121,7 +179,7 @@ Each of these was a real bug in production or in review:
   atomic claim that actually holds.
 - The sweep orders chunks by last **attempt**, not last success. Otherwise one
   chunk that keeps failing is retried forever and starves the rest.
-- **There is exactly one *ingest* cron pattern, and a second one cannot be added safely.** (The
+- **(Cron era.) There was exactly one *ingest* cron pattern, and a second one could not be added safely.** (The
   daily USGS job has a pattern of its own, `7 11 * * *`, which is safe because it never claims a
   run or talks to SGC; see [the daily USGS job](#the-daily-usgs-job).) Every
   lane hangs off the one cron and is chosen by `scheduledTime`'s minute. At the 5-minute
@@ -133,8 +191,8 @@ Each of these was a real bug in production or in review:
   5-minute change, where the sweep sat on its own `7 * * * *`. The sweep now runs in the wide
   tick's own invocation, in sequence, which is race-free by construction. Two ingests in one
   invocation is already proven here: the back-fill path has always done it.
-- **The lane is snapped to the nearest tick, not the nearest minute** (`tickMinute` in
-  `worker/plan.ts`). `controller.scheduledTime` is **not** the round minute: production
+- **(Cron era.) The lane was snapped to the nearest tick, not the nearest minute** (`tickMinute`,
+  then in `worker/plan.ts`). `controller.scheduledTime` is **not** the round minute: production
   dispatches this Worker's five-minute cron at **:45 past**, verified in `wrangler tail`
   (`scheduledTime` 12:55:45.000Z, 13:00:45.000Z). Rounding that to the nearest *minute* read
   every tick as the minute after — and for a five-minute cron the minute after is never a
@@ -146,8 +204,9 @@ Each of these was a real bug in production or in review:
   410 above stopped the Worker talking to SGC at all, and the only thing still reaching it
   was a reader pressing the button. `Math.round(t / 300_000) * 5 % 60` leaves 2.5 minutes of
   slack either side of the dispatch instead of 30 seconds. `tick()` in
-  `worker/test/ingest.test.ts` dispatches at :45 by default so every lane test runs against
-  the shape production sends; `plan.test.ts` walks a whole hour at four different offsets.
+  `worker/test/ingest.test.ts` dispatched at :45 by default so every lane test ran against
+  the shape production sent, and `plan.test.ts` walked a whole hour at four different offsets;
+  both went with the cron.
 - **Never let an error response be cached.** A 500 once went out with
   `cache-control: max-age`, and browsers kept showing it after the API recovered.
   Errors are `no-store`; `/api/events` is `no-cache` because the page refetches it
@@ -169,8 +228,9 @@ The account is on the **Workers free plan**, whose ceilings are 100,000 requests
 5,000,000 D1 rows read/day, 100,000 D1 rows written/day, 50 subrequests and 50 D1 queries
 per invocation, and **10 ms CPU per invocation** — wall time is not the limit, and runs
 finish in 1–13 s of it. 96 cron invocations a day, and the ~70k D1 rows read measured at
-312, are nowhere near the daily allowances; 10 ms CPU is the one that could bite, and **the
-cadence decides whether it does** — see [the CPU budget](#the-cpu-budget).
+312, were nowhere near the daily allowances; with no cron since 2026-10-11, the reads are the page's
+own and the presses'. 10 ms CPU is the one that could bite, and **how often it is overrun decides
+whether it does** — see [the CPU budget](#the-cpu-budget).
 
 That ~70k only holds because `ingest_runs` is indexed for it. **Do not add a hot query
 over `ingest_runs` without an index**: the table grows ~120 rows/day, and the four queries
@@ -226,7 +286,13 @@ call); the mainshock lookup sorts the zone by `mag`, which runs about twice a da
 <a id="the-cpu-budget"></a>
 ### The CPU budget
 
-**Measured 2026-09-20, and it is the most serious thing in this file.** `$workers.cpuTimeMs`
+**Since 2026-10-11 there are no cron ticks.** A sync runs in the press's own fetch invocation, under
+`waitUntil`, and does what a tick did: one chunk while the zone is behind, or a trailing window and a
+chunk once it has caught up, the work of the hourly wide tick that was tolerated at up to 170 ms. What
+the tolerance tracked was frequency, and presses are rare, but it is **not yet measured**: read
+`pnpm logs cpu` for `POST /api/refresh` after the first syncs. Everything below is from the cron era.
+
+**Measured 2026-09-20, and it was the most serious thing in this file.** `$workers.cpuTimeMs`
 over 24 hours of production, 878 invocations — taken while the cron was still `*/5`, so the
 counts are ~2.6× what `*/15` now produces. **The per-invocation figures below are unaffected
 by the cadence**: they are what one tick costs, and one tick does the same work either way.
@@ -286,10 +352,10 @@ has been profiled, and the wide tick does two ingests in one invocation while th
 parses the largest chunk (`SWEEP_CHUNK_DAYS`). `pnpm logs lanes` plus the new `lane` field
 is what makes that attributable, now that a tick says which lane it took.
 
-Nothing has been done about it yet. Until something is, the Worker keeps running over the
-limit and the 2026-09-20 outage can repeat at any time, with the only warning being
-`reaped abandoned runs` in the logs and the stale-catalogue alarm in
-`.github/workflows/ingest-health.yml`.
+Nothing was done about it before the cron went (2026-10-11). A sync killed for CPU leaves a run
+open, and the next press's `readHistory` reaps it with a `reaped abandoned runs` warning, as a tick's
+did. The stale-catalogue alarm in `.github/workflows/ingest-health.yml` runs only by hand now, since
+an old catalogue is the normal state.
 
 `pnpm logs cpu --since 24h` gives the figures behind the table above, one row per route and per
 cron pattern rather than the table's `scheduled` and `fetch`; the successful-only row needs the
@@ -304,15 +370,40 @@ calculation comes back full.
 That figure is **per trigger and not per lane**. A trigger is the route for a request
 (`GET /api/events`) and the cron pattern for a tick, so each route gets its own row. No query gets
 per-lane out of it: `cpuTimeMs` is on the invocation log, `lane` is on the lines the Worker
-writes, and all three lanes hang off the one `*/15` cron, so they share a trigger. The
+writes, and all three lanes hung off the one `*/15` cron, so they shared a trigger. A sync's
+`wide` and `sweep` share `POST /api/refresh` the same way. The
 sweep is the lane worth isolating, since it is the one with a `SWEEP_CHUNK_DAYS` knob;
 `pnpm logs lanes` gives its ticks, and their invocations can be matched by timestamp.
 Note that nothing inside the Worker can measure this: `Date.now()` does not advance between
 I/O operations in workerd, so a span with no `await` in it always reads 0 ms. Wall time we
 can measure and do (`durationMs`, `sgcMs`); CPU time only the runtime can see.
 
+<a id="usgs-and-the-sea-on-a-sync"></a>
+## USGS and the sea, on a sync (from 2026-10-11)
+
+The two jobs below ran once a day on their own cron, `7 11 * * *` (`PRODUCTS_CRON`, in a
+`core/products.ts` that is gone), until 2026-10-11. Now a sync carries them: the first request of a
+press sends `context=1`, and `POST /api/refresh` then runs `refreshProducts` and, after it,
+`refreshSea`, under `waitUntil`, once the press's own ingest has finished (`refreshContext` in
+`worker/index.ts`). A press that stands down asks them nothing. Not beside the ingest: the old daily job
+had its own invocation so that its parsing never shared an ingest's CPU, and a press that runs them
+after its ingest is the nearest a request can come to that (code review, 2026-10-11).
+
+- **Only when due** (`contextDue`): when the sea row is missing or older than 900 s (the sync throttle,
+  `CONTEXT_MAX_AGE_MS`), or when USGS's product rows exist and the oldest `checked_at` is older than
+  that. No product rows means no zone has a matched mainshock yet, which is not staleness: the sea's
+  age decides then, and the run it starts looks for a new mainshock too. Counting an empty table as
+  stale fetched the sea on every press (code review, 2026-10-11).
+- **Neither touches SGC**, and neither holds up the press: the answer has gone before they start.
+  Each writes its own log lines (`usgs: …`, `sea: …`); a failure is swallowed after that, since there is
+  no invocation left to mark failed. A failure keeps the stored row and its old time, so a failing USGS
+  is asked once per accepted press, never by a press the Worker turned away.
+- **What the pages show is unchanged**: the questions tab hides the forecast on its own age, and the 3D
+  block draws its usual sea once the stored hours run out. The insights page asks `/api/context` once
+  per load; the recheck on returning to the tab (`context-refresh.ts`) went with the daily job.
+
 <a id="the-daily-usgs-job"></a>
-## The daily USGS job (from 2026-09-24)
+## The USGS job (from 2026-09-24)
 
 `worker/external.ts` fetches what USGS publishes about each zone's mainshock and stores a small
 digest in D1 (`external_products`, `migrations/0007`) for `GET /api/context`
@@ -320,18 +411,14 @@ digest in D1 (`external_products`, `migrations/0007`) for `GET /api/context`
 forecast (plan Parts A and D). All three are on the insights page's questions tab: DYFI and PAGER in
 "¿Qué tan fuerte se sintió?", the forecast in "¿Viene uno más grande?".
 
-- **Its own cron, `7 11 * * *`, once a day, and its own invocation.** The pattern lives in
-  `core/products.ts` with `lastProductsRun`, because the insights page asks for USGS's next forecast
-  only once a run could have stored it; change the pattern and the run time there together.
-  `scheduled()` branches on
-  `controller.cron`: `INGEST_CRON` (`worker/plan.ts`) runs the ingest, `PRODUCTS_CRON` runs this,
-  and any other pattern is logged as `unknown cron pattern` and runs **nothing**. Without that
-  guard a mistyped pattern would have been an extra ingest, and so an extra request to SGC, at a
-  minute the lanes were never designed for. `worker/test/external.test.ts` holds both constants to
-  `triggers.crons` in `wrangler.jsonc`. The claim-window rule above does not apply: this job claims
-  no ingest run and never talks to SGC. Minute 7 keeps it off the quarter hours anyway.
-- **Once a day is enough.** Six weeks after the M7.4 its felt reports grow slowly, and the forecast
-  is updated about weekly (`nextForecastTime` in the file).
+- **(Until 2026-10-11.) Its own cron, `7 11 * * *`, once a day, and its own invocation.** The pattern lived in
+  `core/products.ts` with `lastProductsRun`, because the insights page asked for USGS's next forecast
+  only once a run could have stored it. `scheduled()` branched on `controller.cron`: `INGEST_CRON`
+  ran the ingest, `PRODUCTS_CRON` ran this, and any other pattern was logged as `unknown cron pattern`
+  and ran **nothing**, so a mistyped pattern could not become an extra request to SGC. All of it went
+  with the crons on 2026-10-11.
+- **A sync is often enough** (once a day was, until 2026-10-11). Six weeks after the M7.4 its felt
+  reports grow slowly, and the forecast is updated about weekly (`nextForecastTime` in the file).
 - **Which USGS event: matched, never pinned.** For each zone whose mainshock is **found**
   (`zoneMainshock`, the rule in [the science](science.md#the-mainshock-detected-from-the-catalogue-never-pinned-from-2026-09-24)),
   one FDSN search within ±60 s, 100 km and one magnitude unit below SGC's own time, place and size.
@@ -350,14 +437,15 @@ forecast (plan Parts A and D). All three are on the insights page's questions ta
   leaves that row as it was, with its old `checked_at`, and the other products and zones still run.
   Each digest throws rather than guessing: a DYFI cell that is not a `Polygon`, or a PAGER city
   without numeric coordinates, would otherwise read as "nobody in Pereira answered" and overwrite a
-  real figure. **Then the first error is rethrown**, as the ingest's `scheduled()` does, so
-  Cloudflare records the invocation as failed; a job that swallowed its errors would look "ok" for
-  weeks. Every outcome is also a log line ([Operations](operations.md)).
+  real figure. **Then the first error is rethrown**, so a caller can tell a run that failed from one
+  that did not; on its cron that made Cloudflare record the invocation as failed. A sync's
+  `refreshContext` swallows it after the log lines, since the press has been answered by then. Every
+  outcome is a log line ([Operations](operations.md)).
 - **A digest leaves with its mainshock.** Each row names the SGC mainshock it was matched from
   (`sgc_event_id`), and every run first deletes the zone's rows matched from any other event, or all
   of them when the zone has no found mainshock, so no reader can show the M7.4's felt reports or
-  forecast for a later, larger event. That happens before anything that can fail. Within the day
-  before the next run the page still checks `sgcEventId` against the mainshock it detects itself.
+  forecast for a later, larger event. That happens before anything that can fail. Until the next run
+  the page still checks `sgcEventId` against the mainshock it detects itself.
 - **A change to a digest reaches stored rows.** Each row carries `digest_version`
   (`DIGEST_VERSION` in `worker/usgs.ts`); a row from older code is rebuilt although USGS's URL has not
   changed. Bump it whenever a digest's shape or rules change: PAGER for the M7.4 is final, so its URL
@@ -367,30 +455,33 @@ forecast (plan Parts A and D). All three are on the insights page's questions ta
   on a day when every product changed, **3–4 ms**; warm 0.7 ms. An ordinary day parses only the
   search and the 70 kB detail, **~0.2 ms**, and its unchanged rows' `checked_at` move in one batch. The largest file is DYFI's 208 kB of 10 km cells.
   Production's `pnpm logs cpu` after the first run is the real check.
-- **Cost**: one cron invocation a day, up to five subrequests, a few D1 rows written, and one read
-  of at most three rows per `/api/context` call. Against the free plan's allowances above, nothing.
+- **Cost**: at most one run per 15 minutes of syncing, up to five subrequests per zone, a few D1 rows
+  written, and one read of at most three rows per `/api/context` call. Against the free plan's
+  allowances above, nothing.
 - **Tests**: `worker/test/usgs.test.ts` (each digest against the captured files, figures recomputed
-  in Python) and `worker/test/external.test.ts` (the cron and the route end to end, USGS stubbed by
+  in Python) and `worker/test/external.test.ts` (the job and the route end to end, USGS stubbed by
   MSW: one, none and several matches, the unchanged-URL skip, a row from older digest code, USGS
   down, a redirect, a malformed file, one zone failing before the next, a mainshock replaced, a zone
-  with no mainshock, an unknown cron pattern).
+  with no mainshock; and the sync hook: `context=1` asks USGS and Open-Meteo when nothing is stored or
+  it is old, not while both are fresh, never without `context=1`, and the press still answers when
+  USGS is down).
 
 <a id="the-daily-sea-state-job"></a>
-## The daily sea-state job (from 2026-09-26)
+## The sea-state job (from 2026-09-26)
 
 `worker/sea.ts` fetches Open-Meteo's marine forecast for one point in the 3D block's Pacific and stores
 it as one row in D1 (`sea_forecast`, `migrations/0008`) for `GET /api/sea` ([API](api.md)). The 3D
 block draws its swell from it ([the science](science.md#the-3d-tabs-rules-from-2026-09-25)).
 
-- **It rides on the daily USGS job's invocation**, after USGS (`PRODUCTS_CRON`, `7 11 * * *`), so it
-  adds no cron pattern and never shares an ingest tick's CPU. Either failing leaves the other to run;
-  then the first failure is rethrown, as the USGS job does. It never talks to SGC.
-- **Once a day, 72 hours ahead.** Météo-France's MFWAM (`models=meteofrance_wave`), which Open-Meteo
+- **It rides on the USGS job's invocation**, after USGS: a sync's since 2026-10-11 ([above](#usgs-and-the-sea-on-a-sync)),
+  the daily cron's (`7 11 * * *`) before. Either failing leaves the other to run. It never talks to SGC.
+- **72 hours ahead, on a sync** (once a day until 2026-10-11). Météo-France's MFWAM (`models=meteofrance_wave`), which Open-Meteo
   updates every 12 hours, for 4.3° N, 78.3° W (open sea: the model is poor at the coast), hourly
   heights, directions and periods of the main swell, the second swell and the wind's waves. The page
-  draws the hour the reader's clock is in; three days of hours mean one missed run still leaves it
-  the current hour, and after that it draws its usual sea and states no figure. The owner asked for
-  sparing requests over precision ("balance"): one request a day serves every reader.
+  draws the hour the reader's clock is in; three days of hours mean a sync leaves it the current hour
+  for three days, and after that it draws its usual sea and states no figure. The owner asked for
+  sparing requests over precision ("balance"): one request per sync serves every reader, and none is
+  sent while the stored one is under 15 minutes old.
 - **Stored, not cached**: Cloudflare's Cache API does nothing on a `workers.dev` host, so a request-
   time fetch would have been one per reader.
 - **Only that one URL is fetched** (`SEA_URL`), with a 20 s timeout, and a redirect is a failure.
@@ -401,7 +492,7 @@ block draws its swell from it ([the science](science.md#the-3d-tabs-rules-from-2
   one outside 0–30 m, 0–360° or 0–30 s (code review, 2026-09-26): one bad value dropped that hour's
   train, not the day's forecast, which a throw would have lost day after day while the model kept it. Each row
   carries `SEA_DIGEST_VERSION`, and one from older code is not served.
-- **Cost**: one subrequest a day and one row of ~11 kB. The answer is ~7 kB of JSON; parsing it is
+- **Cost**: one subrequest per sync at most once per 15 minutes, and one row of ~11 kB. The answer is ~7 kB of JSON; parsing it is
   well under a millisecond.
 - **Licence**: Open-Meteo's data is CC BY 4.0 and needs its link wherever it is shown: the key and
   the block's credit line both carry it.

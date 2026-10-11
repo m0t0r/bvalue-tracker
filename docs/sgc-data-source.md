@@ -112,7 +112,9 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
   measured limit, but no claim here that a cadence is "known safe" has evidence behind it.
   The cost is median detection going from ~5 min back to ~10. Revisit it
   only once per-tick CPU is under 10 ms (see [the CPU budget](ingest.md#the-cpu-budget)), and change the three constants
-  together (see the budget below).
+  together (see the budget below). Since 2026-10-11 there is no cadence at all: the Worker reads SGC
+  only when a reader syncs ([Ingest](ingest.md#on-demand-only)). The rules above are for a cron, if one
+  ever comes back.
 - Analyst-revised events can appear hours late — two events from 00:43 and 00:55 were
   first seen at 05:45 and 06:15. No polling rate fixes that; it is what the sweep is for.
 
@@ -155,7 +157,17 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
 
 - We send an identifying `user-agent` (`sgc-swarm-research/0.1`) and query with the
   bounding box and the narrowest window that answers the question.
-- **With two zones the budget is ~192 requests/day, 8 an hour**: one zone on every lane (120),
+- **Since 2026-10-11 nothing is scheduled, and presses are the whole budget**
+  ([Ingest](ingest.md#on-demand-only)). A caught-up zone costs at most one request per
+  `REFRESH_MIN_INTERVAL_S` (15 minutes), its trailing window, whoever presses, plus one revision chunk
+  an hour (`REVISION_SWEEP_EVERY_S`): 5 an hour per zone and 10 for both at worst, under the 12 an hour
+  that preceded the refusal below. A revision chunk on every press would have made it 16 (code review,
+  2026-10-11);
+  a zone that is behind costs one request per missing chunk (a day of Chaparral, a week of Chocó),
+  sent one after another, at most 31 per press. A day without a sync costs nothing. The bullets below,
+  down to "Visitors do not add to that", are the cron's budget until that date, kept for the
+  measurements.
+- **With two zones the budget was ~192 requests/day, 8 an hour** (cron era): one zone on every lane (120),
   the other on the wide ticks and the hourly sweep (48 + 24) — under the 12 an hour that ran for
   ~20 h before the 2026-09-20 refusal, but not by a wide margin. That is why only one zone has a
   fast lane: on every lane the two would send 10 an hour. **Which one has it follows the
@@ -186,12 +198,11 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   at four dispatch offsets and counts what it sends.
   For reference, the 5-minute cadence we ran for one day was **~312/day, ~29 MB/day**, and
   the original 15-minute one **~120/day, ~16 MB/day**.
-- Visitors do not add to that. `REFRESH_MIN_INTERVAL_S` counts *any* run, cron included,
-  and **it is set to the cron's own period** so a press nearly always coincides with a tick
-  that was going to happen anyway. That is what makes this bullet true rather than hopeful:
-  drop the throttle below the cron and a reader with a fast finger adds requests the budget
-  above never counted. **That number, not the number of people with the page open, is what
-  bounds our load on SGC.**
+- Visitors did not add to that, in the cron era. `REFRESH_MIN_INTERVAL_S` counted *any* run, cron
+  included, and **it was set to the cron's own period** so a press nearly always coincided with a tick
+  that was going to happen anyway. With no cron it still counts any run of the zone, and **that
+  number, not the number of people with the page open, still bounds a caught-up zone's load on SGC**;
+  the catch-up has no throttle, and its bound is the number of missing chunks.
 - **Only a 5xx other than 503 is ever retried** (`retryableStatus` in `core/seiscomp.ts`).
   The retry loop exists for a flaky connection, and a status line is not one: SGC answered.
   429 and 503 are SGC asking us to stop, and retrying is the one thing that makes being rate
@@ -200,21 +211,25 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   `Retry-After` (seconds or HTTP date) is honoured.
 - The status is stored on the run (`ingest_runs.http_status`, `retry_after_s`), not parsed
   back out of `error`, so rewording a message cannot quietly disable the back-off.
-- `sgcUnwell` (`worker/plan.ts`) then stands the fast lanes down, on two independent rules. **Any** failed
-  run holds it down until one succeeds — an HTTP status is no weaker a signal than a
-  timeout, so 403 and 500 must not get a *bounded* wait where a timeout gets an open-ended
-  one. A 429 or 503 additionally holds it down for `Retry-After` or 30 minutes **even once
-  a later run has succeeded**, because being answered is not being welcome. The wide tick
-  and the sweep keep running throughout, and are what let the fast lane back in.
+- `sgcUnwell` (`worker/plan.ts`) then closes the catch-up (the fast lanes, in the cron era), on two
+  independent rules. **Any** failed run holds it shut until one succeeds — an HTTP status is no weaker
+  a signal than a timeout, so 403 and 500 must not get a *bounded* wait where a timeout gets an
+  open-ended one. A 429 or 503 additionally holds it shut for `Retry-After` or 30 minutes **even once
+  a later run has succeeded**, because being answered is not being welcome. While it is shut, every
+  press waits the throttle and then runs, which is what lets it open again; and since 2026-10-11 a
+  press also waits out whatever is left of a 429 or 503's cooldown when that is longer than the
+  throttle, since no cron lane is left to honour it (code review).
 - **A refusal thins the probe out; it never stops it** (`sgcRefusing` in `worker/plan.ts`).
   `sgcUnwell` above gates only the fast lanes, and the wide tick deliberately never stands
   down — so when **410 Gone** began coming back to the Worker on 2026-09-20 there was
   nothing in the back-off that covered it, and the probe would have knocked on a closed door
   **96 times a day, indefinitely**. 401, 403, 410 and 451 are a door held shut rather than a
   bad day: once one of them has persisted for `REFUSAL_GRACE_S` — **two wide ticks, derived
-  from `WIDE_TICK_EVERY_MIN` and never written down** — the wide tick drops to one probe an
-  hour, and so does the refresh button, since a press is the same request from the same
-  address and the rule lives in `plan.ts` once rather than being restated at a caller.
+  from `WIDE_TICK_EVERY_MIN` and never written down**, in the cron era — the wide tick dropped to one
+  probe an hour, and so did the button, since a press is the same request from the same
+  address and the rule lives in `plan.ts` once rather than being restated at a caller. Since
+  2026-10-11 there are no ticks to derive it from: `REFUSAL_GRACE_S` is 3600 s, and a press during a
+  refusal that old waits an hour from the last request of any zone.
   Writing that number down is how it broke: left at a literal 1800 s when the wide tick went
   to 30 minutes, the first tick after a failure landed exactly *on* the boundary, so the
   grace was unreachable and one transient 410 bought 90 minutes of silence — the freeze the
@@ -226,12 +241,12 @@ not a licence to hammer it — it means the Worker has to notice a limit if one 
   429 and 503 stay out of that list; they have their own cooldown, which SGC itself names.
   A 5xx is their bad day and keeps the full rate, because the probe is what recovers from it.
 - **The health rule reads a bounded window of runs** (`HEALTH_WINDOW_RUNS` = 12 in
-  `worker/db.ts`, an hour of ticks). It is what tells one bad answer from a streak, and it is
+  `worker/db.ts`, an hour of ticks when it was written). It is what tells one bad answer from a streak, and it is
   a fixed count on purpose: this is a hot query over a table that gains ~312 rows a day.
 - **The cooldown is clamped to 5 minutes … 6 hours.** Both ends are load-bearing.
   `Retry-After: 0` — which an already-elapsed HTTP date parses to, and clock skew makes
   reachable — would otherwise compute a zero-length cooldown and switch the back-off off in
   precisely the case it exists for. At the other end `Number()` happily reads `"1e9"`, which
   would hold the lane down for decades.
-- So an SGC rate limit we have never seen would throttle us back to the old 15-minute
-  cadence or slower by itself, with nobody deploying a fix.
+- So an SGC rate limit we have never seen would hold presses to its own wait, or to the 15-minute
+  throttle, by itself, with nobody deploying a fix.

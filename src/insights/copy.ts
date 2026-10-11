@@ -165,12 +165,19 @@ const es = {
   subtitle:
     "Los sismos que se sienten en el Eje Cafetero desde el 10 de agosto, explicados en palabras sencillas con los datos del {sgc}.",
   sgcName: "Servicio Geológico Colombiano",
-  back: "Ver los datos en vivo",
+  back: "Ver los datos y gráficos",
   tabsLabel: "Forma de verlo",
   tabs: { story: "La historia", questions: "Preguntas", "3d": "En 3D" },
   loading: "Cargando los catálogos…",
-  incompleteTitle: "Todavía se está cargando el historial",
-  incompleteBody: `Aún faltan eventos por cargar. Hasta que estén todos, las cifras de esta página y lo que se dice de ellas no son representativas. ${dicts.es.completesItself}`,
+  incompleteTitle: "Falta historial por cargar",
+  incompleteBody: `Aún faltan eventos por cargar. Hasta que estén todos, las cifras de esta página y lo que se dice de ellas no son representativas. ${dicts.es.completesOnSync}`,
+  /**
+   * Once the last sync is a day old (`SYNC_NOTICE_AFTER_MS`): every claim on the page is made as of that
+   * sync (`asOf`), so "los últimos 7 días" are the seven before it, and the page says so.
+   */
+  asOfTitle: "Cifras hasta la última sincronización",
+  asOfBody: (at: number, lang: Lang) =>
+    `Las cifras describen la secuencia hasta el ${fmtDayLong(at, lang)}, la última vez que se sincronizaron los datos con el SGC. Para traer lo más reciente, usa «Sincronizar ahora» en la página de datos.`,
   /** The monitor's line in its own words (`staleSince` in `src/lib/i18n.tsx`), with what it means here. */
   staleTitle: "Los datos no se están actualizando",
   /** `at`: when the oldest data on screen was fetched; the time alone when that was today. */
@@ -311,12 +318,15 @@ const en: Copy = {
   subtitle:
     "The earthquakes felt in Colombia's coffee region since 10 August, explained in plain words with data from the {sgc}.",
   sgcName: "Colombian Geological Survey (SGC)",
-  back: "See the live data",
+  back: "See the data and charts",
   tabsLabel: "How to look at it",
   tabs: { story: "The story", questions: "Questions", "3d": "In 3D" },
   loading: "Loading the catalogues…",
-  incompleteTitle: "The history is still loading",
-  incompleteBody: `Some events have not loaded yet. Until they all have, the figures on this page and what is said about them are not representative. ${dicts.en.completesItself}`,
+  incompleteTitle: "Some history is still to load",
+  incompleteBody: `Some events have not loaded yet. Until they all have, the figures on this page and what is said about them are not representative. ${dicts.en.completesOnSync}`,
+  asOfTitle: "Figures as of the last sync",
+  asOfBody: (at, lang) =>
+    `The figures describe the sequence up to ${fmtDayLong(at, lang)}, when the data was last synced with SGC. To bring in the latest, use “Sync now” on the data page.`,
   staleTitle: "The data is not updating",
   staleBody: (at, now, lang) => {
     const { time, day } = since(at, now, lang);

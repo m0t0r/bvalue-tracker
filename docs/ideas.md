@@ -22,6 +22,6 @@
 - Per-cluster depth over time; migration plots; cumulative
   seismic moment; filtering by RMS/GAP/location error; a view of SGC's revisions,
   which our database records and SGC does not publish.
-- Notifications (for example M ≥ 4.5) are a small addition to the cron. Do not
-  alert on b itself: it invites reading it as a warning.
+- Notifications (for example M ≥ 4.5) would need a schedule again: since 2026-10-11 the Worker has
+  no cron and syncs only on demand. Do not alert on b itself: it invites reading it as a warning.
 - Cross-check against the USGS and ISC catalogues for the same box.

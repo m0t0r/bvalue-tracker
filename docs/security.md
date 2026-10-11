@@ -133,22 +133,26 @@ A full source audit was run on 2026-09-19. What it changed here, and why:
   (`src/lib/prerender.ts`). Before that, a press on the monitor's link in `/insights` that slid off it
   started the back-fill loop and posted `/api/refresh` from a page nobody saw, 151 ms after the press;
   and opening a prerendered monitor counted as a return to the tab, so it sent a focus refresh an
-  ordinary load never sends. Two rules now, each at the one place it can hold:
+  ordinary load never sends. Two rules, each at the one place it could hold:
   - **`postRefresh` waits for activation** (`whenActivated`), whoever calls it, so no caller, present
-    or future, can send the request from an unopened page. The back-fill starts on a prerendered page
-    and its first request leaves when the reader opens it, as on an ordinary load.
-  - **A return to the tab is the tab shown again after being hidden** (`useReturnToTab`). Opening a
-    prerendered page makes it visible, which TanStack Query reports as focus, but no hide came first.
-    A first version subscribed to the focus signal only from the render after `prerenderingchange`,
-    which held in Chrome 153 (checked) but only because of the order Chrome sends the two events in;
-    the code review (2026-09-29) had it rest on nothing instead.
+    or future, can send the request from an unopened page. Since 2026-10-11 nothing on the page calls
+    it but a press of "Sincronizar ahora" (the self-starting back-fill and the focus refresh are gone,
+    [Ingest](ingest.md#on-demand-only)), which an unopened page cannot receive, so this is the guard
+    for a caller added later.
+  - **(Until 2026-10-11.) A return to the tab was the tab shown again after being hidden**
+    (`useReturnToTab`). Opening a prerendered page makes it visible, which TanStack Query reports as
+    focus, but no hide came first. A first version subscribed to the focus signal only from the render
+    after `prerenderingchange`, which held in Chrome 153 (checked) but only because of the order Chrome
+    sends the two events in; the code review (2026-09-29) had it rest on nothing instead. The hook went
+    with the focus refresh.
   A prerender's other requests are reads, and carry `Sec-Fetch-Site: same-origin` like the page's own
   (every one answered 200), within the same 120-a-minute limit. **Declined in the code review:**
   *holding back the page's own error reports* (`POST /api/client-error`) until activation: a prerender
   that fails is the same bug on the same code, the report writes a log line and nothing else, and one
   held back would be lost whenever the reader slid off the link. *Not refetching `/api/status` on
-  opening* (its `refetchOnWindowFocus: "always"` fires then): it is 0.3 kB, and it keeps the line under
-  the refresh button current when the prerender is older than a press.
+  opening* (its `refetchOnWindowFocus: "always"` fired then): it was 0.3 kB, and kept the line under the
+  button current when the prerender was older than a press. Since 2026-10-11 nothing refetches on
+  focus; the one-minute status poll does that job.
 - **The response headers are the two files below, and nothing else sets them**
   (`test/headers.test.ts` and one case in `worker/test/ingest.test.ts` hold the set):
 

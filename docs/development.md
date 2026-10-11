@@ -23,7 +23,8 @@ pnpm install
 pnpm db:migrate:local     # once, and again whenever database_id in wrangler.jsonc changes (see Tooling gotchas)
 pnpm dev                  # page + Worker + local D1 on one port
 
-# fill the local database: each call loads one missing week (6 calls on a fresh DB).
+# fill the local database: each call loads one missing chunk, a week of Chocó (the default
+# zone); add ?zone=tolima for a day of Chaparral. It is one step of "Sincronizar ahora".
 # The header is required: /api/* refuses a caller with no same-origin signal (see docs/api.md).
 curl -X POST -H 'Sec-Fetch-Site: same-origin' http://localhost:5173/api/refresh
 
@@ -84,11 +85,11 @@ refuses to run if it does not. `test/relief.test.ts` holds the committed file to
   PIFSC's ERDDAP (one ~6 MB request, no key). ERDDAP's grid is 0–360° east with latitude listed north
   to south; a query with negative longitudes answers an opaque 404 or 500. The script writes one line,
   which `pnpm format` then spreads out. Redo it for another box or a newer span of years.
-- **Its swell** comes from `/api/sea`, which is empty in a fresh local database until the daily job
-  has run. Apply the migrations (`pnpm db:migrate:local`), then run the job once against `pnpm dev`:
-  `curl 'http://localhost:5173/cdn-cgi/handler/scheduled?cron=7+11+*+*+*'` (the port is `pnpm dev`'s).
-  That is one request to Open-Meteo and USGS's daily run; **it never reaches SGC**. Without it the
-  block draws its usual sea and the key says no forecast is at hand.
+- **Its swell** comes from `/api/sea`, which is empty in a fresh local database until a sync has
+  stored it. Since 2026-10-11 there is no daily job to run by hand (the `cdn-cgi/handler/scheduled`
+  route this used to call answers nothing now): the sea is fetched by `POST /api/refresh?context=1`,
+  which is also an SGC request. Without it the block draws its usual sea and the key says no forecast
+  is at hand, which is enough for most checks.
 - **A camera anywhere, for a headless check**: in `pnpm dev` only, `?cam=x,y,z,tx,ty,tz` on
   `/insights?tab=3d` puts the viewer's camera at `x,y,z` looking at `tx,ty,tz` (km, x east, z south,
   y up; `?cam=-30,45,120,-170,0,10` is low over the open sea). `agent-browser`'s mouse wheel does not
@@ -359,8 +360,8 @@ file on 2026-10-02):
   plugin applies `not_found_handling` in dev too, and it builds its request from
   `req.originalUrl`, so a middleware that rewrites `req.url` changes nothing. The zone pages'
   dev middleware serves the HTML itself through `server.transformIndexHtml`.
-- **`test/live.test.ts` must stay unmocked.** It is the daily canary against the real SGC
-  form. `pnpm test:live` runs that file alone, so no MSW server is ever loaded in it.
+- **`test/live.test.ts` must stay unmocked.** It is the canary against the real SGC form
+  (`sgc-canary.yml`, run by hand since 2026-10-11). `pnpm test:live` runs that file alone, so no MSW server is ever loaded in it.
 - `wrangler.test.jsonc` exists because the real config has `assets` without a
   directory (the Vite plugin supplies it), which the test pool rejects.
 - **MapLibre GL 6 ships its worker as a separate module** that imports a shared
@@ -431,23 +432,21 @@ file on 2026-10-02):
 - TypeScript is split into `tsconfig.app.json` (DOM), `tsconfig.worker.json`
   (Workers types) and `tsconfig.node.json`, because DOM and Workers globals conflict.
   Run `pnpm types` after changing `wrangler.jsonc`.
-- **Refetch on focus is TanStack Query's built-in `refetchOnWindowFocus`**, left at its
-  default. Do not add a custom `focusManager` listener. In v5 "focus" means the tab
-  becoming visible (`visibilitychange`); returning from another window or app while
-  the tab stayed visible refetches nothing, by the library's design. Identical
-  refetched data re-renders nothing (structural sharing), so relative times need
-  their own clock: `useNow`.
-- **Cron Triggers do not fire under `pnpm dev`.** Locally the data only changes when
-  the refresh button or `POST /api/refresh` is used. The daily USGS job never runs locally either,
-  so `/api/context` answers all `null` there until a test or a stub says otherwise.
-- **`scheduled()` runs only the patterns it knows** (`INGEST_CRON`, `PRODUCTS_CRON`); any other
-  logs `unknown cron pattern` and does nothing, on purpose (an unplanned ingest would be an
-  unplanned request to SGC). So `wrangler dev --test-scheduled` needs the pattern:
-  `/__scheduled?cron=*/15+*+*+*+*` for an ingest tick, which reaches the real SGC, and
-  `/__scheduled?cron=7+11+*+*+*` for the USGS job. A bare `/__scheduled` does nothing.
+- **No refetch on returning to the tab** (from 2026-10-11): `refetchOnWindowFocus` is `false` in both
+  pages' `QueryClient`, since the data changes only when someone syncs. The one-minute `/api/status`
+  poll (`refetchInterval`) pauses in a hidden tab and resumes when it is shown, and that is what
+  notices a sync. Do not add a custom `focusManager` listener either; the monitor's old one
+  (`useReturnToTab`, which sent `POST /api/refresh` on a return) is gone with the rest of the
+  automatic refreshing. Identical refetched data re-renders nothing (structural sharing), so
+  relative times need their own clock: `useNow`.
+- **Nothing is scheduled, locally or in production** (from 2026-10-11). The Worker has no
+  `scheduled()` handler and `wrangler.jsonc` declares no crons, so the old `/__scheduled?cron=…`
+  and `cdn-cgi/handler/scheduled` routes have nothing to run. The data changes only when the sync
+  button or `POST /api/refresh` is used, and `/api/context` answers all `null` until a sync with
+  `context=1` has run (or a test or a stub says otherwise).
 - **A worker test reads a non-code file with `?raw`** (`*.html?raw`, `*.json?raw`, `*.jsonc?raw`,
   declared in `worker/test/env.d.ts`): the Workers pool has no filesystem, and this is how
-  `external.test.ts` reads `wrangler.jsonc` to hold the cron patterns to the code.
+  `ingest.test.ts` reads `wrangler.jsonc` to hold its cron list empty.
 - Tailwind 4 already wraps `hover:` in `@media (hover: hover)`; do not add that guard.
 - **Tailwind 4's `outline-none` sets `--tw-outline-style: none`**, so a later
   `focus-visible:outline-2` on the same element draws nothing. Leave `outline-none` off an element
@@ -490,34 +489,35 @@ file on 2026-10-02):
   by selector.
   **Give it data without touching SGC.** Copy a populated `.wrangler/` from another
   checkout, then, in the copy only, close the refresh guard and complete the back-fill:
-  - **The guard is two checks, both counted over the zone's `refreshMinIntervalS` (15 min).**
-    `refreshPlan` measures it from the newest run's `started_at`, the claim in `ingest()` from any
+  - **The guard is two checks, both counted over `REFRESH_MIN_INTERVAL_S` (15 min).**
+    `dueNow` measures it from the zone's newest run's `started_at`, the claim in `ingest()` from any
     run's `finished_at`. Setting `finished_at` to now (the old advice here) holds for fifteen
-    minutes and then lets a focus refresh through to SGC. For a session, put both columns of each
+    minutes and then lets a press through to SGC. For a session, put both columns of each
     zone's newest row a month ahead (`started_at` a second before `finished_at`). The line under
-    the refresh button then reads "Última consulta al SGC: dentro de N días" ("Consulta al SGC:
-    dentro de ~N d" on a phone), which is the copy saying so. For screenshots with a realistic
+    the sync button then reads "Última sincronización: dentro de N días" ("Sincronizado: dentro de
+    ~N d" on a phone), which is the copy saying so. For screenshots with a realistic
     time, answer `/api/status` through `fault.js` with the real body and `finishedAt` moved back.
     Its rules are set from `localStorage`, so an init script that sets them and then runs
     `fault.js` (both in one file) needs no `eval`.
   - **A copy goes stale by itself.** `backfill.total` counts sweep chunks from the zone's start
     to *now* (`sweepChunks`; Chaparral's are one day), so a copy that was complete yesterday is
-    `done < total` today, and opening the page starts the back-fill loop against SGC. An empty
-    database is the extreme case: the page back-fills on load, in a loop, with no wait between
-    requests. In the copy, give every missing chunk a successful `sweep` row with no events
+    `done < total` today. Since 2026-10-11 opening the page no longer starts anything, but a zone that
+    is behind skips the throttle (the catch-up), so one press then loops against SGC, up to 31
+    requests with no wait between them. In the copy, give every missing chunk a successful `sweep` row with no events
     (`sweepChunks(<a month ahead>, zone)` lists the windows), future-dated like the row above.
     The page is then missing the days the copy never had, which no layout or timing check cares
     about.
   Check `/api/status?zone=` for **every** zone and confirm `backfill.done == backfill.total`
-  before opening a browser on it, and again on another day. Do not click the refresh button in
+  before opening a browser on it, and again on another day. Do not click the sync button in
   a loop.
   **A state the database will not produce is stubbed at the network, not faked in D1.**
   `agent-browser network route '**/api/status*' --body <json>` puts the page in any state
-  — a failed last run, `backfill.done < total` — without touching the Worker. Stub
-  `**/api/refresh` in the *same* session and before the first `open`: an incomplete
-  back-fill makes `StatusBar`'s effect start the back-fill loop by itself, up to 40
-  `POST /api/refresh` calls with no wait, and that is the one path that reaches SGC. This
-  is how the back-fill and failure alerts were finally looked at (2026-09-20).
+  — a failed last run, `backfill.gaps > 0` — without touching the Worker. Stub
+  `**/api/refresh` in the *same* session and before the first `open`: any press, including the
+  notice's "Cargar lo que falta", is the one path that reaches SGC, and while a zone is behind one
+  press sends up to 31 requests with no wait. (Until 2026-10-11 the page also started the back-fill
+  loop by itself on an incomplete back-fill, with no press at all.) This is how the back-fill and
+  failure alerts were finally looked at (2026-09-20).
   **Profiling: Chrome DevTools MCP and `agent-browser` on one browser** (2026-09-26). The MCP
   server (`chrome-devtools-mcp`) gives performance traces with DevTools' own insights (LCP
   breakdown, layout-shift culprits, request chains, forced reflows) that `agent-browser` does not.
@@ -539,9 +539,9 @@ file on 2026-10-02):
   (`Runtime.runIfWaitingForDebugger`) before enabling anything on it: `Network.enable` on a paused
   one never answered, and the click waited for it. To fake a state, answer `/api/status` and
   `/api/refresh` with the `Fetch` domain on every session, the prerender's included, before it runs.
-  **Never make the back-fill incomplete in the copied D1 to test this**: an incomplete back-fill
-  skips the refresh throttle (`fastLane` in `worker/plan.ts`), so the closed guard above no longer
-  holds and a refresh goes to SGC.
+  **Never make the back-fill incomplete in the copied D1 to test this**: a zone that is behind
+  skips the throttle (the catch-up in `dueNow`, `worker/plan.ts`), so the closed guard above no
+  longer holds and a press goes to SGC.
   **`getComputedStyle` returns `oklch()` here, not `rgb()`**, so anything parsing it for
   channel numbers silently reads the lightness as a red channel and reports nonsense
   ratios. Rasterise instead: `ctx.fillStyle = <colour>; ctx.fillRect(0,0,1,1)` on a 1×1

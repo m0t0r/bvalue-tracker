@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { FlowNumber } from "@/components/flow-number";
 import { Explain } from "@/components/explainer/explain";
 import { TechnicalDetail } from "@/components/technical-detail";
@@ -8,9 +8,8 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { postRefresh, type StatusResponse, type StoredEvent } from "@/lib/api";
-import { CADENCE } from "../../worker/plan.ts";
+import { REFRESH_MIN_INTERVAL_S } from "../../worker/plan.ts";
 import {
   fmtClock,
   fmtDateTime,
@@ -23,14 +22,14 @@ import {
 } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { pageAlert } from "@/lib/page-alert";
-import { useReturnToTab } from "@/lib/prerender";
 import { recordFailure, retryAt } from "@/lib/refresh-backoff";
+import { behind, syncZone } from "@/lib/sync";
 import { useNow } from "@/lib/use-now";
 import { useZone } from "@/lib/zone";
 import type { ZoneMainshock } from "../../core/mainshock";
 
-/** A wait the reader should not sit through: the cron will do the work instead. */
-const LONG_WAIT_S = 60;
+/** The mutation key of one zone's sync, so the page can tell a sync under way (`useIsMutating`). */
+export const syncKey = (zone: string) => ["sync", zone] as const;
 
 /**
  * The phone's form below `sm` and the wider one from `sm` up. The two-by-two grid on a phone needs
@@ -180,21 +179,18 @@ export function StatusBar({
   const zone = useZone().id;
   const qc = useQueryClient();
   const now = useNow();
-  /**
-   * The Worker refuses a refresh sooner than this after the zone's last SGC query, so asking
-   * earlier is a request that can only be turned away. Read from the Worker's own constant rather
-   * than copied: as a copy it was left at five minutes when the throttle moved to fifteen, which
-   * made two thirds of every cron period a refresh the page sent and the Worker refused.
-   */
-  const autoRefreshAfterMs = CADENCE[zone].refreshMinIntervalS * 1000;
-  // The server stands down whenever SGC was queried in the last five minutes, which with a
-  // five-minute cron is most of the time. That is good news, not a countdown, so the message
-  // says the reader already has the newest data rather than asking them to wait.
-  const [stoodDown, setStoodDown] = useState(false);
+  const copy = t.zones[zone];
+  // What the last press came to, beside the button, until the next press. `stoodDown` is the wait the
+  // Worker answered with when the press sent nothing; `more` that a catch-up stopped at its cap with
+  // history still to load.
+  const [stoodDown, setStoodDown] = useState<number | null>(null);
+  const [more, setMore] = useState(false);
+  // Where a catch-up is: the request under way, out of how many the zone was behind.
+  const [step, setStep] = useState<{ i: number; n: number } | null>(null);
   // When the reader's presses failed. After each, the button rests for a wait that doubles with every
   // failure in a row (`refresh-backoff.ts`): pressing on through an outage only adds to it. Only a
-  // refresh that works clears them; a status answer does not, since status can answer while the
-  // refresh route fails (code review, 2026-09-29).
+  // sync that works clears them; a status answer does not, since status can answer while the
+  // sync route fails (code review, 2026-09-29).
   const [failures, setFailures] = useState<number[]>([]);
   const until = retryAt(failures);
   // The countdown's own clock, a second at a time and only while the button rests; `useNow` ticks every
@@ -219,92 +215,82 @@ export function StatusBar({
   const restS = until === null ? 0 : Math.max(0, Math.ceil((until - clockMs) / 1000));
   const resting = restS > 0;
 
-  // `auto` is a refresh the page started by itself on return to the tab. If the server stands down
-  // because SGC was queried recently, that is the expected outcome and is not reported to the reader.
-  const refresh = useMutation({
-    mutationFn: (_vars: { auto: boolean }) => postRefresh(zone),
-    // Only a press rests the button: the reader should not wait out a request they did not make.
-    onError: (_err, { auto }) => {
-      if (auto) return;
+  /**
+   * "Sincronizar ahora", the one way the page reads SGC (docs/ingest.md, "On demand only"). Nothing
+   * starts it but a press: not loading the page, not returning to the tab, not history left to load.
+   * `syncZone` catches a zone up one chunk per request and says which chunk it is on; the first request
+   * also asks for USGS's products and the sea forecast (`context`), which the Worker fetches when due.
+   */
+  const sync = useMutation({
+    mutationKey: syncKey(zone),
+    mutationFn: (pendingAtPress: number) =>
+      syncZone(pendingAtPress, {
+        post: (first) => postRefresh(zone, { context: first }),
+        answer: (res: StatusResponse) => qc.setQueryData(["status", zone], res),
+        step: (i, n) => setStep({ i, n }),
+      }),
+    onMutate: () => {
+      setStoodDown(null);
+      setMore(false);
+    },
+    // Only a press rests the button, and only one whose request failed: SGC failing is a 200 with a
+    // failed run, which the alert reports.
+    onError: () => {
       const at = Date.now();
       setFailures((f) => recordFailure(f, at));
       setClockMs(at);
     },
-    onSuccess: (res, { auto }) => {
+    onSuccess: ({ res, progressed }) => {
       setFailures([]);
-      setStoodDown(!res.refreshed && !auto);
-      // Events follow by themselves: App refetches them when status reports a newer successful ingest.
-      qc.setQueryData(["status", zone], res);
+      // The last answer decides: a press that loaded chunks and was then turned away for longer than a
+      // run in flight (a 429's cooldown) says how long, like one turned away at once. `more` is only the
+      // cap: the last answer loaded a chunk and history is still missing.
+      setStoodDown(res.refreshed ? null : (res.retryAfterS ?? null));
+      setMore(progressed && res.refreshed === true && behind(res) > 0 && res.lastRun?.ok !== false);
+    },
+    onSettled: () => {
+      setStep(null);
+      // Status is already the last answer's; events follow it here rather than a poll later.
+      void qc.invalidateQueries({ queryKey: ["events", zone] });
     },
   });
-
-  // A fresh database fills itself one week per request; keep going until history is whole.
-  const backfill = useMutation({
-    mutationFn: async () => {
-      let res = await postRefresh(zone);
-      qc.setQueryData(["status", zone], res);
-      for (let i = 0; i < 40 && res.backfill.done < res.backfill.total; i++) {
-        // Another run is in flight (cron, or someone else's page): wait for it rather than race it.
-        // A wait longer than a tick is not a wait, it is a stand-down: the cron carries the
-        // back-fill on from here. Sleeping through it would hold this mutation — and with it
-        // `busy`, which disables the focus refresh — for hours.
-        if ((res.retryAfterS ?? 0) > LONG_WAIT_S) break;
-        if (!res.refreshed) await new Promise((r) => setTimeout(r, (res.retryAfterS ?? 5) * 1000));
-        res = await postRefresh(zone);
-        qc.setQueryData(["status", zone], res);
-        // SGC is failing: stop asking. The cron will resume the back-fill later.
-        if (res.refreshed && res.lastRun && !res.lastRun.ok) break;
-      }
-      return res;
-    },
-    onSettled: () => void qc.invalidateQueries({ queryKey: ["events", zone] }),
-  });
-  const incomplete = !!status && status.backfill.done < status.backfill.total;
-  // On a prerendered page this starts too, and its first request waits until the reader opens the page
-  // (`postRefresh`), so the back-fill begins where it would on an ordinary load.
-  const started = useRef(false);
-  const startBackfill = backfill.mutate;
-  useEffect(() => {
-    if (incomplete && !started.current) {
-      started.current = true;
-      startBackfill();
-    }
-  }, [incomplete, startBackfill]);
+  const pending = sync.isPending;
+  const startSync = () => {
+    if (pending || resting) return;
+    // The pixel background answers the press with a ring of pixels (src/backdrop/pixels.ts).
+    window.dispatchEvent(new Event("backdrop:ripple"));
+    sync.mutate(status ? behind(status) : 0);
+  };
 
   const ok = status?.lastSuccessfulRun ?? null;
-
-  // Coming back to the tab asks SGC again, through the library's own focus signal. Only when the last
-  // query is older than the server's five-minute limit, so a return never costs a pointless request;
-  // the server enforces the same limit for everyone, which is what protects SGC. Not while the button
-  // rests after a failed press: the page would send what it has just asked the reader to wait for.
-  const lastQueryMs = ok?.finishedAt ? Date.parse(ok.finishedAt) : null;
-  const busy = refresh.isPending || backfill.isPending || incomplete || resting;
-  // A return is the tab shown again after being hidden: opening a prerendered page is not one, and a load
-  // asks SGC nothing (`useReturnToTab`).
-  useReturnToTab(() => {
-    if (!busy && lastQueryMs !== null && Date.now() - lastQueryMs > autoRefreshAfterMs) refresh.mutate({ auto: true });
-  });
-
   const failed = status?.lastRun && !status.lastRun.ok ? status.lastRun : null;
+  // A hole in what has been synced, not days since the last sync, which only the note dates
+  // (`backfill.gaps`, docs/science.md). Not while a press is catching up: its own line says where it is.
+  const incomplete = !!status && status.backfill.gaps > 0 && !pending;
   const alert = pageAlert({ catalogueFailed, ingestFailed: failed !== null, incomplete });
-  // `stoodDown` sticks until the next press, but the claim it makes — SGC was queried in
-  // the last five minutes — stops being true the moment a run fails. The alert below says
-  // so; this must not contradict it.
-  // Standing down means something different in each state, and saying the wrong one is worse
-  // than saying nothing: while SGC is failing the press really did reach nothing, and while
-  // SGC is being refused outright the Worker's own wait is an hour, so "press again" would be
-  // bad advice. refreshWait's claim — SGC answered in the last five minutes — is only true
-  // when nothing has failed.
+  // A press the Worker turned away says why, and the two reasons are different truths. When this zone's
+  // own last run succeeded inside the throttle, the zone is up to date: good news, not a countdown.
+  // Anything else is a wait the Worker is holding for SGC's sake (a failed sync, a refusal's hour, a
+  // 429's cooldown, read across zones), and the line gives it; nothing retries by itself any more.
+  // Not inferred from `failed` alone: a refusal of the other zone turns this one away too, and
+  // "Ya está al día" would then be false (code review, 2026-10-11).
+  const recentRun = status?.lastRun;
+  const syncedRecently =
+    !!recentRun &&
+    recentRun.ok &&
+    now - Date.parse(recentRun.startedAt) < REFRESH_MIN_INTERVAL_S * 1000 &&
+    !!status &&
+    behind(status) === 0;
   // Inside the live region a screen reader always has the long form, and the short one is only drawn:
   // with `ByWidth`, turning a phone past `sm` would add the other span to the region, and it would be
   // read out again as news.
-  const waitMin = CADENCE[zone].refreshMinIntervalS / 60;
+  const waitMin = REFRESH_MIN_INTERVAL_S / 60;
   const wait = (
     <>
       <span aria-hidden="true" className="sm:hidden">
-        {t.refreshWaitShort(waitMin)}
+        {t.syncWaitShort(waitMin)}
       </span>
-      <span className="sr-only sm:not-sr-only">{t.refreshWait(waitMin)}</span>
+      <span className="sr-only sm:not-sr-only">{t.syncWait(waitMin)}</span>
     </>
   );
   // The countdown is drawn only: inside the live region it would be read out every second. A screen
@@ -313,36 +299,35 @@ export function StatusBar({
   const cooldown =
     until === null || lastFailure === undefined ? null : (
       <>
-        <span aria-hidden="true">{t.refreshCooldown(restS)}</span>
-        <span className="sr-only">{t.refreshCooldownSr(Math.round((until - lastFailure) / 1000))}</span>
+        <span aria-hidden="true">{t.syncCooldown(restS)}</span>
+        <span className="sr-only">{t.syncCooldownSr(Math.round((until - lastFailure) / 1000))}</span>
       </>
     );
-  const message: ReactNode = refresh.isPending
-    ? t.refreshing
+  const message: ReactNode = pending
+    ? step
+      ? copy.syncStep(step.i, step.n)
+      : t.syncing
     : resting && cooldown
       ? cooldown
-      : refresh.isError
-        ? t.refreshFailed
-        : stoodDown && failed
-          ? // It explains itself only beside "La última consulta al SGC falló"; with the load error
-            // shown instead (`pageAlert`), a retry "already on the way" would have no context.
-            alert === "ingest"
-            ? t.refreshStillFailing
-            : ""
-          : stoodDown
+      : sync.isError
+        ? t.syncFailed
+        : stoodDown !== null && !syncedRecently
+          ? t.syncRetryIn(Math.max(1, Math.ceil(stoodDown / 60)))
+          : stoodDown !== null
             ? wait
-            : "";
+            : more
+              ? t.syncMore
+              : "";
 
   // While a refetch over the figures has failed, the line says since when they are, and that outranks
-  // every answer to a press but a request under way: "Ya tienes los datos más recientes" would be stale
-  // itself, and "No se pudo consultar al SGC" blames SGC for what is the connection as often as not.
-  // A press parked offline (`isPaused`) is not under way, so "Consultando al SGC…" does not sit there
+  // every answer to a press but a sync under way: "Ya está al día" would be stale itself, and
+  // "No se pudo sincronizar" blames the sync for what is the connection as often as not.
+  // A press parked offline (`isPaused`) is not under way, so "Sincronizando…" does not sit there
   // for as long as the connection is down. A button resting after a failed press outranks it too: the
   // line is then what says why the button is off, and for how long.
   const stale = staleSince === null ? null : fmtClock(staleSince, lang, now);
-  const staleNote = stale !== null && !resting && !(refresh.isPending && !refresh.isPaused);
+  const staleNote = stale !== null && !resting && !(pending && !sync.isPaused);
   const live = staleNote ? t.staleSince(stale.time, stale.day) : message;
-  const pending = refresh.isPending || backfill.isPending;
 
   // The newest event is where and how strong, "Chaparral, Tolima (M 2.5)", all one link to SGC's own
   // page for it (readers asked for the place and the size, not the time). When it happened is
@@ -384,14 +369,14 @@ export function StatusBar({
       />
     </span>
   );
-  // The last query to SGC is the note under the button: when the figures were last checked is what
-  // the button is about. The footer says how often that happens. It is the last query that
-  // succeeded, and says so while a run has failed, or it would contradict "La última consulta al SGC
-  // falló" beside it. From `sm` up it adds the clock time, which an outage makes worth having; beside
+  // The last sync is the note under the button: when the figures were last brought in from SGC is
+  // what the button is about, and with syncs on demand it is the date every figure on the page is as
+  // of. It is the last sync that succeeded, and says so while a run has failed, or it would contradict
+  // "La última sincronización con el SGC falló" beside it. From `sm` up it adds the date and time; beside
   // the button on a phone there is room for how long ago only.
-  const lastQuery = (
+  const lastSync = (
     <>
-      <ByWidth phone={failed ? t.lastUpdateOkShort : t.lastUpdateShort} wide={failed ? t.lastUpdateOk : t.lastUpdate} />
+      <ByWidth phone={failed ? t.lastSyncOkShort : t.lastSyncShort} wide={failed ? t.lastSyncOk : t.lastSync} />
       {": "}
       {ok?.finishedAt ? (
         <ByWidth
@@ -401,7 +386,7 @@ export function StatusBar({
       ) : status ? (
         t.never
       ) : (
-        t.lastUpdateUnknown
+        t.lastSyncUnknown
       )}
     </>
   );
@@ -462,24 +447,14 @@ export function StatusBar({
             {/* One label and one icon: the button keeps its width while it works. `aria-disabled`, not
                 `disabled`: a disabled button drops the keyboard focus it holds to the page. Busy, it
                 keeps its colour and spins; off after failed presses, it dims (`aria-busy` in `Button`). */}
-            <Button
-              size="default-touch"
-              aria-disabled={pending || resting}
-              aria-busy={pending}
-              onClick={() => {
-                if (pending || resting) return;
-                // The pixel background answers the press with a ring of pixels (src/backdrop/pixels.ts).
-                window.dispatchEvent(new Event("backdrop:ripple"));
-                refresh.mutate({ auto: false });
-              }}
-            >
-              <RefreshCwIcon data-icon="inline-start" className={refresh.isPending ? "animate-spin" : undefined} />
-              {t.refresh}
+            <Button size="default-touch" aria-disabled={pending || resting} aria-busy={pending} onClick={startSync}>
+              <RefreshCwIcon data-icon="inline-start" className={pending ? "animate-spin" : undefined} />
+              {t.sync}
             </Button>
-            {/* One line is always reserved. The live region announces refresh results, and figures
-                that could not be updated: a caution, so neutral with a warning icon, not red (nothing
-                the reader did failed, and the figures stay).
-                The standing note, the last SGC query, sits outside it: it changes every minute, and
+            {/* One line is always reserved. The live region announces what a press came to, a
+                catch-up's progress, and figures that could not be updated: a caution, so neutral with a
+                warning icon, not red (nothing the reader did failed, and the figures stay).
+                The standing note, the last sync, sits outside it: it changes every minute, and
                 would be read out each time as if it were news. The line stays, so nothing moves. */}
             <span
               aria-live="polite"
@@ -493,23 +468,23 @@ export function StatusBar({
               {live}
             </span>
             {live === "" ? (
-              <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">{lastQuery}</span>
+              <span className="min-h-4 text-start text-xs text-muted-foreground lg:text-end">{lastSync}</span>
             ) : null}
           </div>
         </CardContent>
       </Card>
+      {/* Hidden while a press catches up, so it does not come and go under the reader with each chunk;
+          the line under the button says where the press is. Its action is the same sync. */}
       {alert === "backfill" && status ? (
         <Alert variant="caution" role="status">
-          {backfill.isPending ? <Spinner aria-label={t.backfillShort} /> : <AlertTriangleIcon />}
-          <AlertTitle>{t.zones[zone].backfillTitle(status.backfill.done, status.backfill.total)}</AlertTitle>
-          <AlertDescription>{t.zones[zone].backfillBody}</AlertDescription>
-          {backfill.isPending ? null : (
-            <AlertAction>
-              <Button variant="outline" size="sm-touch" onClick={() => backfill.mutate()}>
-                {t.backfillAction}
-              </Button>
-            </AlertAction>
-          )}
+          <AlertTriangleIcon />
+          <AlertTitle>{copy.backfillTitle(status.backfill.gaps)}</AlertTitle>
+          <AlertDescription>{copy.backfillBody}</AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="sm-touch" aria-disabled={resting} onClick={startSync}>
+              {t.backfillAction}
+            </Button>
+          </AlertAction>
         </Alert>
       ) : null}
       {alert === "ingest" && failed ? (

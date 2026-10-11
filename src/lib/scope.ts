@@ -20,6 +20,7 @@
  */
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import type { StoredEvent } from "@/lib/api";
+import { asOf } from "@/lib/as-of";
 import {
   DEFAULT_FILTERS,
   activeFilterChips,
@@ -222,9 +223,15 @@ const NO_EVENTS: StoredEvent[] = [];
 
 /**
  * `zone` is read once, for the first scope. The page mounts one of these per zone and throws it
- * away on a switch, so one zone's filters never carry over to the other's catalogue.
+ * away on a switch, so one zone's filters never carry over to the other's catalogue. `syncedAt` is
+ * where the zone's synced data stops (`syncedThrough`), which "the last 7 days" ends at (`asOf`); null
+ * or unknown, the clock.
  */
-export function useScope(events: readonly StoredEvent[] | undefined, zone: ZoneId = DEFAULT_ZONE): PageScope {
+export function useScope(
+  events: readonly StoredEvent[] | undefined,
+  zone: ZoneId = DEFAULT_ZONE,
+  syncedAt: string | null = null,
+): PageScope {
   const [scope, setScope] = useState<Scope>(() => defaultScope(zone));
   const { from, to, minMag, manualOnly, excludeMainshock, mc } = scope.filters;
   const { cluster, magScope } = scope;
@@ -240,13 +247,13 @@ export function useScope(events: readonly StoredEvent[] | undefined, zone: ZoneI
     [events, from, to, minMag, manualOnly, excludeMainshock, mainshockEventId],
   );
   const sel = useMemo(() => selectShown(base, cluster), [base, cluster]);
-  // "The last 7 days" in the groups card is measured from the clock, not from the data: without a
-  // clock the count would freeze for as long as the events themselves did. An hour is fine enough.
+  // "The last 7 days" in the groups card ends at the zone's last sync (`asOf`), not at the clock: the
+  // catalogue grows only when someone syncs, so a week nobody synced would read as a quiet week. Not
+  // at the newest event either, which would hide a real lull. The clock, to the hour, while the sync
+  // is unknown or later.
   const hour = Math.floor(useNow() / 3_600_000) * 3_600_000;
-  const measured = useMemo(
-    () => measure(sel, { mc, cluster, magScope }, hour + 3_600_000),
-    [sel, mc, cluster, magScope, hour],
-  );
+  const end = asOf([syncedAt], hour + 3_600_000);
+  const measured = useMemo(() => measure(sel, { mc, cluster, magScope }, end), [sel, mc, cluster, magScope, end]);
   const view = useMemo(() => ({ ...sel, ...measured, mainshock }), [sel, measured, mainshock]);
 
   const deferred = {

@@ -25,7 +25,7 @@ const DAY_MS = 86_400_000;
  * How much history one sweep re-reads. Every request is padded by a day on each side (the form's
  * timezone is unverified) and its end date is inclusive, so a chunk of N days fetches N + 3 days
  * of events. Chocó's 7-day chunk is 10 days, ~170 rows at September's rate. The Chaparral swarm has
- * run ~130 a day: a week of it would be ~1,300 rows, ~1.3 MB of HTML to parse on a tick that is
+ * run ~130 a day: a week of it would be ~1,300 rows, ~1.3 MB of HTML to parse in an invocation that is
  * already over the free plan's 10 ms of CPU (docs/ingest.md, "The CPU budget"). One day fetches
  * four, ~520 rows at that rate — three Chocó chunks, and the smallest the padding allows. More
  * chunks means each is revisited less often — every N hours for N days of history — which late
@@ -52,9 +52,9 @@ export interface IngestDeps {
 
 export interface IngestOptions {
   /**
-   * Whether a response that lacks a known event may retire it. Off for the fast lane:
-   * its window holds only a handful of events, too few for MAX_REMOVAL_SHARE to engage,
-   * so one short response could retire real ones. The wide tick and the sweep still do it.
+   * Whether a response that lacks a known event may retire it. It was off for the cron's old fast
+   * lane, whose window held too few events for MAX_REMOVAL_SHARE to engage; every sync's window
+   * and sweep may retire.
    */
   allowRemovals?: boolean;
   /** Which rule chose this run. Carried into the log line and the analytics point. */
@@ -123,7 +123,7 @@ export async function ingest(
   });
   if (runId === null) {
     // Not a failure: another run holds the claim and this one must stand down. Worth a line
-    // anyway — a burst of these is how contention between the cron and the button looks.
+    // anyway — a burst of these is how two readers pressing at once looks.
     log.debug({ windowStart: from, windowEnd: to }, "ingest stood down: claim held");
     return null;
   }
@@ -298,45 +298,86 @@ export function sweepChunks(now: Date, zone: ZoneId = DEFAULT_ZONE): { start: Da
 }
 
 /**
- * Re-check one older chunk per call, least recently attempted first, so late
- * revisions are picked up while every invocation stays small.
+ * What the zone's sweep runs say about each history chunk, keyed by its start: whether any sweep of it
+ * succeeded, and when one was last attempted. One covering read of the zone's sweep rows
+ * (`ingest_runs_sweep`), which serves the back-fill count, the next chunk's choice and the hourly
+ * revision sweep alike.
+ */
+async function sweepState(db: D1Database, zone: ZoneId): Promise<Map<string, { ok: boolean; last: string }>> {
+  const { results } = await db
+    .prepare(
+      "SELECT window_start AS s, MAX(ok) AS ok, MAX(started_at) AS last FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' GROUP BY window_start",
+    )
+    .bind(zone)
+    .all<{ s: string; ok: number | null; last: string }>();
+  return new Map(results.map((r) => [r.s, { ok: r.ok === 1, last: r.last }]));
+}
+
+/**
+ * Read one history chunk. **Missing chunks first**, never attempted before attempted, then by last
+ * attempt; only once none is missing, the least recently attempted loaded chunk, for SGC's late
+ * revisions. Missing first, or a catch-up re-reads loaded chunks while one that failed waits behind
+ * them, and a press spends its 31 requests loading nothing (code review, 2026-10-11). By last
+ * ATTEMPT, not last success, within each group: a chunk that keeps failing goes to the back instead
+ * of being retried forever while the rest starve. Ties keep the chunks' own order, oldest first.
  */
 export async function ingestSweep(deps: IngestDeps, zone: ZoneId = DEFAULT_ZONE): Promise<IngestRun | null> {
   const now = deps.now ?? new Date();
-  const { results } = await deps.db
-    // Ordered by last ATTEMPT, not last success: a chunk that keeps failing goes to the back
-    // of the queue instead of being retried forever while every other chunk starves.
-    .prepare(
-      "SELECT window_start AS s, MAX(started_at) AS last FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' GROUP BY window_start",
-    )
-    .bind(zone)
-    .all<{ s: string; last: string }>();
-  const last = new Map(results.map((r) => [r.s, r.last]));
+  const state = await sweepState(deps.db, zone);
+  const key = (c: { start: Date }) => {
+    const st = state.get(c.start.toISOString());
+    return `${st?.ok ? 1 : 0}:${st?.last ?? ""}`;
+  };
   const chunks = sweepChunks(now, zone);
-  chunks.sort((a, b) => (last.get(a.start.toISOString()) ?? "").localeCompare(last.get(b.start.toISOString()) ?? ""));
+  chunks.sort((a, b) => key(a).localeCompare(key(b)));
   const next = chunks[0];
   // A zone whose sequence starts after `now` has no history yet, and nothing to sweep.
   if (next === undefined) return null;
   return ingest(deps, next.start, next.end, "sweep", { lane: "sweep", zone });
 }
 
+export interface BackfillProgress {
+  done: number;
+  total: number;
+  gaps: number;
+  /** The start of the oldest gap, which is where the synced data stops; null with no gap. */
+  oldestGap: string | null;
+  /** When any sweep of the zone was last attempted: the hourly revision sweep's clock. */
+  lastSweepAt: string | null;
+}
+
+/**
+ * How much of the zone's history is loaded, in `SWEEP_CHUNK_DAYS` chunks. With syncs on demand, every
+ * day without one adds a chunk to `total` that is not yet `done`: the zone is behind, which is not a
+ * fault. `gaps` counts the missing chunks that begin before `syncedAt`, the start of the zone's last
+ * successful run: holes in what the page shows as synced, from a catch-up that stopped part-way or a
+ * database still filling. Those, and only those, make the statistics unrepresentative
+ * (docs/science.md). Without `syncedAt` there is nothing synced to have a hole in, and `gaps` is 0.
+ */
 export async function backfillProgress(
   db: D1Database,
   now: Date,
   zone: ZoneId = DEFAULT_ZONE,
-): Promise<{ done: number; total: number }> {
+  syncedAt: string | null = null,
+): Promise<BackfillProgress> {
   const starts = sweepChunks(now, zone).map((c) => c.start.toISOString());
-  const { results } = await db
-    .prepare("SELECT DISTINCT window_start AS s FROM ingest_runs WHERE zone = ? AND trigger = 'sweep' AND ok = 1")
-    .bind(zone)
-    .all<{ s: string }>();
-  const swept = new Set(results.map((r) => r.s));
-  return { done: starts.filter((s) => swept.has(s)).length, total: starts.length };
+  const state = await sweepState(db, zone);
+  const missing = starts.filter((s) => !state.get(s)?.ok);
+  const holes = syncedAt === null ? [] : missing.filter((s) => s < syncedAt);
+  let lastSweepAt: string | null = null;
+  for (const { last } of state.values()) if (lastSweepAt === null || last > lastSweepAt) lastSweepAt = last;
+  return {
+    done: starts.length - missing.length,
+    total: starts.length,
+    gaps: holes.length,
+    oldestGap: holes[0] ?? null,
+    lastSweepAt,
+  };
 }
 
 /**
  * Everything the recorded runs say, in one snapshot, so the plan is decided from one
- * reading of the table rather than from four that can disagree mid-tick. SGC's health, what
+ * reading of the table rather than from four that can disagree mid-press. SGC's health, what
  * is in flight and when a request last left are across zones; the rest is `zone`'s (see
  * `IngestHistory`).
  */
@@ -360,12 +401,14 @@ export async function readHistory(
   // Refusals and rate limits are SGC's answer to this address, so they are read across zones; whether
   // the last run failed is this zone's (`SgcHealth.lastOk` says why).
   const health = await sgcHealth(db);
+  const backfill = await backfillProgress(db, now, zone);
   return {
     health: { ...health, lastOk: last === null ? null : last.ok },
     inFlight: await runInFlight(db, now),
     lastSent: (await lastRun(db, false, null))?.startedAt ?? null,
     lastRun: last,
-    backfill: await backfillProgress(db, now, zone),
+    backfill,
+    lastSweepAt: backfill.lastSweepAt,
   };
 }
 
@@ -382,18 +425,19 @@ export async function runPlan(
   let first: IngestRun | null = null;
   for (const [i, step] of plan.steps.entries()) {
     // The throttle guards the opening step only: a plan's own first run must not be what
-    // refuses its second (the wide tick's sweep).
+    // refuses its second (a caught-up sync's revision sweep).
     const d: IngestDeps = { ...deps, guard: { ...deps.guard, minIntervalS: i === 0 ? plan.minIntervalS : null } };
     const run =
       step.lane === "sweep"
         ? await ingestSweep(d, zone)
-        : await ingestTrailing(d, step.trigger, {
-            days: step.days,
-            allowRemovals: step.allowRemovals,
-            lane: step.lane,
-            zone,
-          });
-    if (i === 0) first = run;
+        : await ingestTrailing(d, "manual", { days: step.days, lane: "wide", zone });
+    if (i === 0) {
+      first = run;
+      // A first step that failed, or that another run's claim stopped, ends the plan: a revision
+      // sweep after a failed trailing read would become the last run and hide the failure, and move
+      // the last sync to a moment whose recent days were never read (code review, 2026-10-11).
+      if (run === null || !run.ok) break;
+    }
   }
   return first;
 }

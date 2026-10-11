@@ -12,9 +12,9 @@ followSystemTheme();
 installErrorReporting();
 
 const queryClient = new QueryClient({
-  // refetchOnWindowFocus is left at the library default (true): a stale query refetches when the tab
-  // becomes visible again. It was switched off here once, which left a background tab showing old data.
-  defaultOptions: { queries: { staleTime: 60_000, retry: shouldRetry } },
+  // No refetch on returning to the tab (from 2026-10-11): the data changes only when someone syncs, and
+  // the status poll, which resumes when the tab is shown, is what notices a sync and refetches events.
+  defaultOptions: { queries: { staleTime: 60_000, retry: shouldRetry, refetchOnWindowFocus: false } },
 });
 
 // The built page has the header in its HTML, and React adopts it (`src/lib/hydrate.ts`).

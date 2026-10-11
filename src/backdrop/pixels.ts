@@ -14,7 +14,7 @@
  *   the epicenter, with rings of pixels rolling out from it (the one motion of its own, slow, and
  *   only on screen). A scroll pushes the rings on and brightens them; a tap sends one strong ring, and
  *   on a line of the header switches it to the bitmap font for a moment.
- * - **"Actualizar ahora"** sends one ring out through the pattern from where it was pressed, lighting
+ * - **"Sincronizar ahora"** sends one ring out through the pattern from where it was pressed, lighting
  *   the swarm's events as it passes.
  *
  * **No card ever sits on a pixel.** The pattern fills the header, the page's side margins and the
@@ -831,7 +831,7 @@ export const pixels: BackdropFactory = (canvas, first) => {
     if (client || surgeGoal > 0 || waves) wake();
   };
   const shown = () => document.visibilityState === "visible" && wake();
-  // "Actualizar ahora": a ring from where it was just pressed, or from the focused button when it was
+  // "Sincronizar ahora": a ring from where it was just pressed, or from the focused button when it was
   // pressed from the keyboard. Only a press this last second counts: an older one, a click on a
   // chart before tabbing to the button, would send the ring from somewhere else (code review).
   const rippled = () => {
