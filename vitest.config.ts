@@ -17,10 +17,17 @@ const offlineDom = {
   },
 };
 
+// Node 25 and later have a `localStorage` of their own, whose getter answers `undefined` unless
+// `--localstorage-file` is given, and Vitest leaves it in place of happy-dom's, so every test that
+// touches storage threw "Cannot read properties of undefined (reading 'clear')" on Node 26. Turning
+// Node's off lets happy-dom's through, as on Node 24. `core` takes it only to quiet the warning msw 2's
+// cookie store sets off by probing Node's storage when it loads.
+const noNodeStorage = ["--no-experimental-webstorage"];
+
 export default defineConfig({
   test: {
     projects: [
-      { test: { name: "core", include: ["test/**/*.test.ts"] } },
+      { test: { name: "core", include: ["test/**/*.test.ts"], execArgv: noNodeStorage } },
       // The seismology library, on synthetic catalogues only: it knows nothing about SGC or a zone.
       { test: { name: "seismo", include: ["packages/seismo/test/**/*.test.ts"] } },
       {
@@ -33,6 +40,7 @@ export default defineConfig({
           include: ["packages/charts/test/**/*.test.ts"],
           environment: "happy-dom",
           environmentOptions: offlineDom,
+          execArgv: noNodeStorage,
         },
         plugins: [reactCompiler()],
       },
@@ -53,6 +61,7 @@ export default defineConfig({
           include: ["src/**/*.test.{ts,tsx}"],
           environment: "happy-dom",
           environmentOptions: offlineDom,
+          execArgv: noNodeStorage,
         },
         // The pages ship compiled by React Compiler (vite.config.ts), so that is what these tests
         // run: the build's own plugin.

@@ -332,13 +332,31 @@ file on 2026-10-02):
   (ICU 77) and "12 – 18 Sept" on CI's Node 24.21 (2026-09-26, PR #81). `fmtDayRange` builds the range
   from `fmtDay` and a bare day number instead. Pieces formatted one at a time (`format`, not
   `formatRange`) have been stable here.
-- **`vitest` is held at 4.x**: `@cloudflare/vitest-plugin` (renamed from
-  `@cloudflare/vitest-pool-workers` in its 1.0; the old name gets no releases) does not
-  support 5 in 1.x. Support is [workers-sdk#15500](https://github.com/cloudflare/workers-sdk/pull/15500),
-  due as its 2.0, which also moves the Worker tests to workerd's new module registry. Vite+
-  1.0 pins Vitest 5, so moving to it waits for that too. `.github/dependabot.yml` ignores
-  vitest majors for this reason; drop that rule when the plugin supports 5. Everything else
-  is on latest.
+- **`vitest` is on 4.x, and 5 is next**: `@cloudflare/vitest-plugin` (renamed from
+  `@cloudflare/vitest-pool-workers` in its 1.0; the old name gets no releases) accepts vitest
+  `^4.1.0 || ^5.0.0` from its 1.5.0 (2026-11-02). That release was inside the 7-day cooldown
+  when the 2026-11-05 maintenance pass ran, so both stayed on 4.x, and `.github/dependabot.yml`
+  no longer ignores vitest majors: the vitest 5 PR is a major, and waits for a person. Take it
+  together with the plugin at 1.5 or later. Vite+ 1.0 pins Vitest 5, so it can follow.
+- **`msw` is held at 2.x.** msw 3's Node interceptors read `llhttp.wasm` from disk when
+  `msw/node` is imported, and the Worker tests run inside workerd, which has no filesystem:
+  every file under `worker/test` failed to load (`no such file or directory, readAll
+  '…/@mswjs/interceptors/lib/node/llhttp/llhttp.wasm'`; tried with 3.0.3 on 2026-11-05).
+  `.github/dependabot.yml` ignores its majors; lift that when msw can be loaded in workerd. When
+  moving, rename `onUnhandledRequest` to `onUnhandledFrame` in every `server.listen`: msw 3 renamed
+  it, and its default is `warn`, so without the rename an unhandled request would pass with a
+  warning instead of failing the test, which is what keeps tests off SGC.
+- **Node 25 and later have a `localStorage` of their own** (Web Storage, on by default), whose
+  getter answers `undefined` unless `--localstorage-file` is given, and Vitest 4 leaves it in place
+  of happy-dom's: on Node 26 every page test that touches storage threw `Cannot read properties of
+  undefined (reading 'clear')`. The happy-dom projects (and `core`, only to quiet msw 2's cookie
+  store probing it) run with `--no-experimental-webstorage` (`execArgv` in `vitest.config.ts`).
+- **The Worker's entry module (`worker/index.ts`) exports only handlers and functions.** miniflare 5
+  refuses to start a Worker whose entry exports anything else (`Incorrect type for map entry
+  'READ_ROW_CEILING': the provided value is not of type 'function or ExportedHandler'`), so a
+  constant exported from it broke `pnpm preview` and `pnpm dev` from the 2026-10 Dependabot
+  updates until 2026-11-05, while production went on accepting it. Keep a constant a test needs in
+  a module of its own.
 - **`compatibility_date` cannot be newer than the test plugin's bundled runtime.** On the old
   pool (runtime 2026-08-15) 2026-09-01 errored. The plugin's 1.3.0 bundles 2026-09-26, and
   the Worker tests pass with that date (2026-09-28); the configs still say 2026-08-20.

@@ -13,8 +13,14 @@ name: Dependabot auto-merge
 #
 # workflow_run runs the copy of this file on main, never the PR's, so a PR cannot
 # change what this job does.
+#
+# zizmor flags workflow_run as a dangerous trigger, because it runs with write access after a
+# workflow a PR controlled. It is safe here, and suppressed on that line, because this job checks
+# out nothing and runs nothing from the PR: it reads the PR through the API, acts only when every
+# commit is Dependabot's own signed one, only greps the commit message, and passes every value
+# through env. Re-check those four if this job changes.
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI]
     types: [completed]
 
