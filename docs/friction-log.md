@@ -57,3 +57,5 @@ paths outside the repo and anything personal.
 - 2026-10-11: shadcn add stops at an overwrite prompt outside a TTY, exits 0, and leaves a component unwritten (#187)
 - 2026-11-05: operations.md: no token-free route to Workers Logs (cf CLI works), and the tail command names the redirect Worker (#197)
 - 2026-11-05: operations.md still says the 09-20 refusal came from Cloudflare, and has no entry for a 522 from SGC (#198)
+- 2026-11-05: pnpm preview and pnpm dev fail to start the Worker on main: miniflare 5 refuses a constant exported from the entry module (#201)
+- 2026-11-05: development.md said the vitest plugin does not support vitest 5, and kept vitest majors ignored after it did (#202)
