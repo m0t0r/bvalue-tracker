@@ -192,8 +192,11 @@ function parseZone(q: Record<string, string>): ZoneId {
  * 20,000 is ~18 times Tolima's 1,109 events of 2026-10-02, and holds a request to ~30 MB of the
  * isolate's 128 (~1.4 KB a row as rows, events and JSON, measured in V8). The CPU budget meets a
  * catalogue first: see docs/security.md.
+ *
+ * Not exported: this is the Worker's entry module, and miniflare 5 refuses to start a Worker whose
+ * entry exports anything but a handler or a function ("Incorrect type for map entry").
  */
-export const READ_ROW_CEILING = 20_000;
+const READ_ROW_CEILING = 20_000;
 
 /** A read past `READ_ROW_CEILING`, answered by `onError` with a 500 that says so. */
 class CatalogueTooLarge extends Error {
