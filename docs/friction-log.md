@@ -55,3 +55,5 @@ paths outside the repo and anything personal.
 - 2026-10-11: verify: no local data to run the page with, and the events fixture lacks fields the page reads (#184)
 - 2026-10-11: Pushing over HTTPS hangs on a hidden prompt, and the gh token cannot update workflow files (#186)
 - 2026-10-11: shadcn add stops at an overwrite prompt outside a TTY, exits 0, and leaves a component unwritten (#187)
+- 2026-11-05: operations.md: no token-free route to Workers Logs (cf CLI works), and the tail command names the redirect Worker (#197)
+- 2026-11-05: operations.md still says the 09-20 refusal came from Cloudflare, and has no entry for a 522 from SGC (#198)

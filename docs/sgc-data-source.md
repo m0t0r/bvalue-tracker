@@ -94,6 +94,11 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
     mod_perl/2.0.4 Perl/v5.10.0`, `X-Powered-By: PHP/5.2.9`, 7,351 bytes of form page — and
     not one `cf-*` header. SGC's own server is healthy and has no Cloudflare in front of it,
     so the 410 and the 200 are two different machines answering the same URL.
+- **The server can also stop answering everyone** (from 2026-11-01, open when written). The Worker
+  got Cloudflare's 522, and the canary and the repo owner's own connection timed out on connect, on
+  the same evening. That is an outage on SGC's side, not a refusal, and nothing here can route round
+  it. How to tell the two apart: [Operations](operations.md#symptom--what-to-ask) and the
+  [2026-11-01 postmortem](incidents/2026-11-01-sgc-unreachable.md).
 - The per-event page `https://www.sgc.gov.co/detallesismo/<id>/resumen` exists but
   returns 403 to `curl` without a browser user-agent.
 - **SGC publishes an event about 2–5 minutes after it happens** (measured 2026-09-19

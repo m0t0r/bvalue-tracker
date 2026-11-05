@@ -16,7 +16,9 @@ Written-up incidents live in `docs/incidents/`. The one to read first is
 outage and the SGC refusal that followed it, with the measurements behind both — including
 why this Worker has never fitted the free plan's 10 ms per-invocation CPU limit. Then
 [2026-09-30](incidents/2026-09-30-sgc-refusal-returns.md): both faults a second time, and why
-the rules the first write-up drew from them did not hold.
+the rules the first write-up drew from them did not hold. And
+[2026-11-01](incidents/2026-11-01-sgc-unreachable.md): SGC's server answering nobody, which is told
+from a refusal in three checks.
 
 ### The four places to look
 
@@ -41,7 +43,17 @@ served to every visitor. Nothing this project runs in the browser needs a secret
 
 **None of this is needed to read the logs**, only to read them from a terminal: the
 Worker's *Observability* tab in the dashboard queries the same data over an ordinary
-browser login, and is the faster route for a one-off incident.
+browser login, and is the faster route for a one-off incident. **From a terminal without a token**,
+Cloudflare's `cf` CLI reads the same stored logs after `cf auth login` (verified 2026-11-05); the
+body is the shape `scripts/logs-query.ts` builds, with times in Unix milliseconds:
+
+```sh
+cf observability telemetry query --body '{"queryId":"adhoc","view":"events","limit":20,
+  "timeframe":{"from":<ms>,"to":<ms>},
+  "parameters":{"filters":[
+    {"key":"$metadata.service","operation":"eq","type":"string","value":"bvalue-tracker"},
+    {"key":"msg","operation":"includes","type":"string","value":"ingest failed"}]}}'
+```
 
 ```sh
 pnpm logs                                  # the last hour, oldest first
@@ -49,7 +61,7 @@ pnpm logs --since 12h --level error        # just the failures
 pnpm logs --since 3d --msg "ingest failed"
 pnpm logs lanes --since 24h                # how many runs each lane made
 pnpm logs cpu --since 24h                  # median/p90/p99/max CPU per route (and per cron, before 2026-10-11)
-pnpm exec wrangler tail choco --format json  # live, for something happening now
+pnpm exec wrangler tail bvalue-tracker --format json  # live, for something happening now
 ```
 
 ### Every line the Worker writes
@@ -86,10 +98,25 @@ them now. The Analytics Engine point carries the zone in `blob7`.
   old as the last press, and the note under the button says when that was. `curl
   $PRODUCTION_URL/api/health`: `ingestAgeS` says how long ago the last sync succeeded, and `zones`
   which catalogue. If a press did not bring it up to date, `pnpm logs --since 6h --level error`. An
-  `ingest failed` line with `httpStatus` means we were refused — read `sgcHeaders` before
-  saying by whom; the 2026-09-20 refusal came from Cloudflare, not from SGC — and the next press waits
-  as the back-off says. **No error lines at all after a press is the worse case**: look for `reaped
-  abandoned runs`, which means invocations are being killed rather than failing.
+  `ingest failed` line with `httpStatus` means SGC's end did not serve us (a 522 is the next bullet),
+  and the next press waits as the back-off says. `server: cloudflare` and `cf-ray` on it say nothing
+  about who wrote it: Cloudflare adds them to everything a Worker fetches (the
+  [header test of 2026-09-30](incidents/2026-09-30-sgc-refusal-returns.md#who-writes-the-refusal-sgcs-side-not-cloudflare),
+  which withdrew this bullet's old "the 2026-09-20 refusal came from Cloudflare"). **No error lines
+  at all after a press is the worse case**: look for `reaped abandoned runs`, which means
+  invocations are being killed rather than failing.
+- **"Every sync fails with 522"** (or the run's `error` says the fetch timed out). A 522 with
+  `sgcBody` `error code: 522` and Cloudflare's error-page headers (`expires: Thu, 01 Jan 1970`, no
+  `cf-cache-status`) is Cloudflare saying it could not open a connection to SGC: nobody answered,
+  where a 410 is SGC refusing us. Three checks tell an SGC outage from a block of Cloudflare, one
+  request each and none repeated: the log line above; `gh workflow run sgc-canary.yml`, which
+  reaches SGC from GitHub's network; and the repo owner's own
+  `! curl -sS -m 30 -D - -o /dev/null https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php`
+  (the agent may not curl SGC). All three timing out is SGC down, and there is nothing to fix here
+  ([2026-11-01](incidents/2026-11-01-sgc-unreachable.md)). Only the Worker failing is a block of
+  Cloudflare's addresses, and the off-network fetch deferred in the
+  [2026-09-30 postmortem](incidents/2026-09-30-sgc-refusal-returns.md#action-items) is the decision
+  to reopen.
 - **"Invocations are being killed."** That is the 2026-09-20 fault, and `reaped` is the
   only signal for it. The invocation log for the killed tick or press carries the outcome and
   `$workers.cpuTimeMs`; `exceededCpu` there means the 10 ms limit, and the fix is the paid
