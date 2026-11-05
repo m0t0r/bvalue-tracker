@@ -1,4 +1,4 @@
-# Postmortem — 2026-11-01: SGC's catalogue server stops answering anyone
+# Postmortem — 2026-11-01: SGC's catalogue server stops answering, from every network we have
 
 | | |
 |---|---|
@@ -8,7 +8,7 @@
 | **Data loss** | None expected. The first press after SGC returns loads the missing chunks |
 | **Authors** | Maintainer, with a Claude Code session |
 | **Blameless** | Yes |
-| **Earlier incidents** | [2026-09-20](2026-09-20-ingest-outage-and-sgc-refusal.md), [2026-09-30](2026-09-30-sgc-refusal-returns.md). Unlike both, this is not a refusal of Cloudflare: nothing gets an answer |
+| **Earlier incidents** | [2026-09-20](2026-09-20-ingest-outage-and-sgc-refusal.md), [2026-09-30](2026-09-30-sgc-refusal-returns.md). Unlike both, this is not a refusal of Cloudflare: no network we tried gets an answer |
 
 ---
 
@@ -17,9 +17,11 @@
 Every "Sincronizar ahora" since 2026-11-01 has failed with **HTTP 522**: Cloudflare could not open a
 TCP connection to `bdrsnc.sgc.gov.co`. The same host also timed out from GitHub's runners (the canary)
 and from the maintainer's own connection, all on the evening of 2026-11-05. Three
-unrelated networks failing the same way is SGC's server, or the path to it, being down. It is not a
-block of Cloudflare's addresses, which is what the 410s of September were. Nothing on our side caused
-it, and there is nothing on our side to fix.
+unrelated networks failing the same way rules out a block aimed at Cloudflare, which is what the 410s
+of September were. It does **not** yet tell an outage from SGC dropping traffic from outside Colombia:
+Cloudflare's request left from Miami, GitHub's runners are in the US, and a firewall that drops foreign
+packets times out exactly like a server that is down. A check from a Colombian connection is the one
+that separates them. Nothing in our code caused it.
 
 ---
 
@@ -49,7 +51,8 @@ SGC's own /26 at LACNIC. No announcement of an outage or a move was found on SGC
    [09-30 postmortem](2026-09-30-sgc-refusal-returns.md#who-writes-the-refusal-sgcs-side-not-cloudflare).
    SGC never answered.
 2. **It is not a Cloudflare-only fault.** The canary (GitHub, Azure addresses) and a residential
-   connection time out on connect too.
+   connection time out on connect too. That residential connection got a 200 from SGC on 2026-09-20,
+   so it was not blocked then.
 3. **The back-off did what it should.** Each press sent one request, retried once (522 is a 5xx other
    than 503, so `retryableStatus` retries it), recorded the failure and stopped. Six presses in five
    days is twelve connection attempts in all. Each press took the next never-attempted chunk, which is
@@ -61,8 +64,9 @@ SGC's own /26 at LACNIC. No announcement of an outage or a move was found on SGC
 
 - When it began. Nothing reached SGC for three weeks before the first failure, so the start is
   anywhere in that span.
-- Whether SGC is down or unreachable along a path all three networks share. From here the two look the
-  same.
+- **Whether SGC is down or refusing traffic from abroad.** None of the three vantage points is known
+  to be in Colombia, and a timeout looks the same either way. If a Colombian connection gets an
+  answer, the catalogue can still be fetched from inside Colombia, and waiting is not the only option.
 
 ---
 
@@ -70,21 +74,24 @@ SGC's own /26 at LACNIC. No announcement of an outage or a move was found on SGC
 
 | # | Action | Type | Priority | Status |
 |---|---|---|---|---|
+| 0 | Check the form page once from a Colombian connection (a person there, a VPN exit, or a cloud region in Colombia), to tell an outage from a block of foreign traffic | Investigate | **P1** | Open |
 | 1 | Write to SGC with the window above. The 09-30 postmortem's item 3 is the same contact | Investigate | P2 | Open |
 | 2 | Recheck SGC from off Cloudflare every few days: the canary, or the maintainer's `curl`. Not a loop: one request each | Close | P1 | Open |
 | 3 | When a press succeeds again, record the date here and close this | Close | P1 | Open |
 | 4 | A 522 / connect-timeout entry in [Operations](../operations.md), so the next one takes three checks instead of an investigation | Detect | P2 | Done (this write-up) |
 
-If SGC comes back for everyone but the Worker, that is a block of Cloudflare's addresses, and the
-off-network fetch deferred on 09-30 (item 1 there) is the decision to reopen. GitHub Actions is still
-out for it, for the reasons given on 09-30.
+If SGC answers from Colombia but not from abroad, or comes back for everyone but the Worker, the
+off-network fetch deferred on 09-30 (item 1 there) is the decision to reopen, from inside Colombia in
+the first case. GitHub Actions is still out for it, for the reasons given on 09-30.
 
 ## Lessons
 
-1. **A 522 and a 410 are different questions.** A 410 is SGC refusing us; a 522 is nobody answering.
+1. **A 522 and a 410 are different questions.** A 410 is SGC refusing us; a 522 is nobody answering us, which is not yet nobody answering.
    The 522 kept from 09-29 is what made that a one-minute read.
-2. **Three vantage points settle "us or them"**: the Worker's log line, the canary, and one request from
-   the maintainer's own connection. All three are in [Operations](../operations.md) now.
+2. **Vantage points need to differ in the dimension being tested.** The Worker, the canary and the
+   maintainer's connection settle "Cloudflare or everyone", but if all three are abroad they cannot
+   settle "everyone or everyone abroad". One check from inside Colombia does. All four are in
+   [Operations](../operations.md) now.
 
 ## Evidence
 
