@@ -17,8 +17,8 @@ outage and the SGC refusal that followed it, with the measurements behind both â
 why this Worker has never fitted the free plan's 10 ms per-invocation CPU limit. Then
 [2026-09-30](incidents/2026-09-30-sgc-refusal-returns.md): both faults a second time, and why
 the rules the first write-up drew from them did not hold. And
-[2026-11-01](incidents/2026-11-01-sgc-unreachable.md): SGC's server answering nobody, which is told
-from a refusal in three checks.
+[2026-11-01](incidents/2026-11-01-sgc-unreachable.md): SGC's server answering nobody outside
+Colombia, and the checks that tell an outage from a refusal.
 
 ### The four places to look
 
@@ -112,11 +112,14 @@ them now. The Analytics Engine point carries the zone in `blob7`.
   request each and none repeated: the log line above; `gh workflow run sgc-canary.yml`, which
   reaches SGC from GitHub's network; and the repo owner's own
   `! curl -sS -m 30 -D - -o /dev/null https://bdrsnc.sgc.gov.co/paginas1/catalogo/Consulta_Experta_Seiscomp/consultaexperta.php`
-  (the agent may not curl SGC). All three timing out is SGC down, and there is nothing to fix here
-  ([2026-11-01](incidents/2026-11-01-sgc-unreachable.md)). Only the Worker failing is a block of
-  Cloudflare's addresses, and the off-network fetch deferred in the
-  [2026-09-30 postmortem](incidents/2026-09-30-sgc-refusal-returns.md#action-items) is the decision
-  to reopen.
+  (the agent may not curl SGC). Only the Worker failing is a block of Cloudflare's addresses. All
+  three timing out is **not yet** "SGC is down": Cloudflare and GitHub reach SGC from abroad, and a
+  firewall dropping foreign traffic times out the same way. Unless the owner's connection is in
+  Colombia, a fourth check from a Colombian connection (a person there, a VPN exit, a cloud region in
+  Colombia) settles it ([2026-11-01](incidents/2026-11-01-sgc-unreachable.md)). Timing out from Colombia
+  too is an outage, and waiting is the remedy; an answer from Colombia, or only the Worker failing,
+  reopens the off-network fetch deferred in the
+  [2026-09-30 postmortem](incidents/2026-09-30-sgc-refusal-returns.md#action-items).
 - **"Invocations are being killed."** That is the 2026-09-20 fault, and `reaped` is the
   only signal for it. The invocation log for the killed tick or press carries the outcome and
   `$workers.cpuTimeMs`; `exceededCpu` there means the 10 ms limit, and the fix is the paid
