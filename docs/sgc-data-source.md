@@ -94,12 +94,12 @@ form-encoded, no auth, cookies or CSRF token. Field names are in `buildFormBody`
     mod_perl/2.0.4 Perl/v5.10.0`, `X-Powered-By: PHP/5.2.9`, 7,351 bytes of form page — and
     not one `cf-*` header. SGC's own server is healthy and has no Cloudflare in front of it,
     so the 410 and the 200 are two different machines answering the same URL.
-- **The server can also stop answering from every network we have** (from 2026-11-01, open when
-  written). The Worker got Cloudflare's 522, and the canary and the repo owner's own connection timed
-  out on connect, on the same evening. That rules out a block of Cloudflare alone, but not a block of
-  traffic from outside Colombia, which times out the same way; only a check from a Colombian
-  connection separates that from an outage. See [Operations](operations.md#symptom--what-to-ask) and
-  the [2026-11-01 postmortem](incidents/2026-11-01-sgc-unreachable.md).
+- **The server can also go down** (from 2026-11-01, open when written). The Worker got Cloudflare's
+  522, and the canary and an off-cloud connection in Colombia timed out on connect, on the same
+  evening. That is an outage, neither a block of Cloudflare nor of traffic from abroad, which would
+  have answered from Colombia; nothing here can route round it. How to tell the three apart:
+  [Operations](operations.md#symptom--what-to-ask) and the
+  [2026-11-01 postmortem](incidents/2026-11-01-sgc-unreachable.md).
 - The per-event page `https://www.sgc.gov.co/detallesismo/<id>/resumen` exists but
   returns 403 to `curl` without a browser user-agent.
 - **SGC publishes an event about 2–5 minutes after it happens** (measured 2026-09-19
