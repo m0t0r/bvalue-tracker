@@ -162,7 +162,7 @@ flowchart LR
 
 ## Getting started
 
-Requires Node.js 24 or later and [pnpm](https://pnpm.io) 12.
+Requires Node.js 26 or later and [pnpm](https://pnpm.io) 12.
 
 ```sh
 pnpm install

@@ -20,8 +20,9 @@ updates:
         # runs `pnpm tsx scripts/react-compiler.ts skips` on it (docs/development.md, "React Compiler").
         exclude-patterns: ["babel-plugin-react-compiler"]
     ignore:
-      # @cloudflare/vitest-plugin does not support vitest 5 yet (docs/development.md).
-      - dependency-name: vitest
+      # msw 3's Node interceptors read a .wasm file from disk when imported, and the Worker tests run
+      # in workerd, which has no filesystem, so every Worker test file fails to load (docs/development.md).
+      - dependency-name: msw
         update-types: [version-update:semver-major]
       # babel-plugin-react-compiler 1.0 on Babel 8 silently skips every component with a
       # defaulted prop (docs/development.md, "React Compiler"), with no error, so do not propose

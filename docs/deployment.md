@@ -145,8 +145,9 @@ They are settings, not files, so a fork has to turn them on itself. Until that d
 off, which meant nothing reported a known vulnerability and the "security updates skip it"
 above never happened. Patch and minor
 updates come as one grouped PR per ecosystem. Majors come one PR each. Majors are ignored
-for `vitest` (held at 4.x, see [development.md](development.md#tooling-gotchas)) and
-`@types/node` (tracks the Node LTS in CI and `engines.node`).
+for `msw` (held at 2.x, see [development.md](development.md#tooling-gotchas)), `@babel/core`
+(held at 7 for React Compiler, same place) and `@types/node` (tracks the Node LTS in CI and
+`engines.node`, Node 26 since 2026-11-05).
 
 `dependabot-automerge.yml` merges a Dependabot PR **and deploys it** when all of these hold:
 CI passed on its head commit, every commit on it is Dependabot's own signed commit, and
