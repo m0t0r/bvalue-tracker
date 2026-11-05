@@ -17,8 +17,8 @@ outage and the SGC refusal that followed it, with the measurements behind both â
 why this Worker has never fitted the free plan's 10 ms per-invocation CPU limit. Then
 [2026-09-30](incidents/2026-09-30-sgc-refusal-returns.md): both faults a second time, and why
 the rules the first write-up drew from them did not hold. And
-[2026-11-01](incidents/2026-11-01-sgc-unreachable.md): SGC's server answering nobody outside
-Colombia, and the checks that tell an outage from a refusal.
+[2026-11-01](incidents/2026-11-01-sgc-unreachable.md): SGC's server down, and the checks that
+tell an outage from a refusal.
 
 ### The four places to look
 
